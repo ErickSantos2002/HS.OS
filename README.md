@@ -1,115 +1,58 @@
-# Remix of [OFICIAL] dn.os - Plataforma de super agentes da dn.ia
+# TeamsHS
 
-Crie um Mission Control para gerenciar agentes de IA via OpenClaw Gateway API.
+Plataforma de gestão de agentes de IA da Health & Safety — um "Mission Control" para
+agentes que rodam num **OpenClaw Gateway** hospedado em VPS.
 
-CONTEXTO TÉCNICO:
+Originalmente um remix do `dn.os` (dn.ia), em processo de virar produto próprio:
+rebrand, Postgres no servidor da HS e deploy em VPS própria. O prompt original que
+gerou o projeto está preservado em [`docs/ORIGEM-PROMPT-LOVABLE.md`](docs/ORIGEM-PROMPT-LOVABLE.md).
 
-- OpenClaw Gateway roda em VPS (acesso via túnel SSH ou subdomínio Cloudflare)
+## Estrutura
 
-- API REST disponível em: http://localhost:18789
+```
+frontend/      React 18 + TypeScript + Vite + Tailwind/shadcn-ui
+backend/
+  app/         API FastAPI + asyncpg — em construção
+  migrations/  SQL numerado do Postgres próprio
+  supabase/    Edge Functions do backend atual (fonte da portagem)
+docs/          auditoria de estabilidade e resumos herdados do dn.os
+```
 
-- Autenticação: Bearer token no header Authorization
+## Rodando
 
-- Dados locais em SQLite no servidor
+**Frontend** — http://localhost:8080
 
-FUNCIONALIDADES (em ordem de prioridade):
-
-1. DASHBOARD PRINCIPAL
-
-- Status do gateway (online/offline)
-
-- Lista de agentes ativos com status
-
-- Métricas: tokens usados, sessões ativas, uptime
-
-2. CHAT COM AGENTES
-
-- Sidebar com lista de agentes
-
-- Interface de chat por agente
-
-- Histórico de conversas
-
-- Indicador de qual canal está usando (Telegram, WhatsApp, etc.)
-
-3. GERENCIAMENTO DE AGENTES
-
-- Criar novo agente (nome, system prompt, modelo, canais)
-
-- Editar agente existente
-
-- Ativar/desativar agente
-
-- Definir permissões por membro da equipe
-
-4. CONTROLE DE TIMES
-
-- Cadastro de membros (nome, email, cargo)
-
-- Atribuir agentes a membros
-
-- Níveis de acesso: Admin (eu) e Operador (equipe DN.IA)
-
-5. GESTÃO DE ARQUIVOS
-
-- Upload de arquivos para workspace dos agentes
-
-- Visualizar arquivos por agente
-
-- Deletar arquivos
-
-DESIGN:
-
-- Dark mode como padrão
-
-- Sidebar esquerda com navegação
-
-- Cores: laranja/âmbar como accent (referência à marca DN.IA)
-
-- Interface profissional, densa, sem floreios
-
-TECH STACK:
-
-- React + TypeScript
-
-- Tailwind CSS
-
-- Conexão com OpenClaw via fetch() para a API REST
-
-- Estado global com Zustand ou Context API
-
-- Configuração de URL base e token na tela de Settings
-
-TELA DE SETTINGS (obrigatória):
-
-- Campo: Gateway URL (ex: https://agentes.dnia.ai)
-
-- Campo: Bearer Token
-
-- Botão: Testar conexão
-
-- Salvar em localStorage
-
-
-use o mesmo design system da área de /analytics e crm/funil de @project:f334bd90-8806-49b0-8de4-1f06503aa80a:"Nexus AI"
-
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/42055871-1cf6-4998-a33e-c74d8b1f2031).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+```bash
+cd frontend
+cp .env.example .env
+npm install
 npm run dev
 ```
+
+**Backend** — http://localhost:8000 (docs em `/docs`)
+
+```bash
+cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn app.main:app --reload --port 8000
+```
+
+Sem `DATABASE_URL` preenchido o backend sobe assim mesmo — `/health` e `/docs` funcionam,
+e os endpoints de dados respondem 503. É o estado esperado enquanto o Postgres próprio
+não existe.
+
+**Stack completa em Docker:**
+
+```bash
+docker compose up -d --build
+```
+
+## Estado atual
+
+O backend em produção ainda é o Supabase (banco + 73 Edge Functions, em `backend/supabase/`).
+A API própria em `backend/app/` é o destino da migração e hoje é só esqueleto.
+
+Arquitetura, armadilhas do caminho crítico do chat e o mapa do rebrand estão no
+[`CLAUDE.md`](CLAUDE.md).
