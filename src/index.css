@@ -1,0 +1,885 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Design System - OpenClaw Mission Control
+  Baseado no Design System dn.ia
+  Primary: Azul #3D61FF | Accent: Vermelho #E41A11
+*/
+
+@layer base {
+  :root {
+    --background: 220 33% 98%;
+    --foreground: 224 28% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 28% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 28% 12%;
+
+    /* Primary: Azul Elétrico dn.ia */
+    --primary: 231 100% 62%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary */
+    --secondary: 220 25% 93%;
+    --secondary-foreground: 224 28% 18%;
+
+    /* Muted */
+    --muted: 220 20% 94%;
+    --muted-foreground: 220 10% 42%;
+
+    /* Accent: Vermelho Energia dn.ia */
+    --accent: 4 87% 48%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Destructive */
+    --destructive: 4 87% 48%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Success */
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 100%;
+
+    /* Warning */
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 4%;
+
+    /* Info */
+    --info: 231 100% 62%;
+    --info-foreground: 0 0% 100%;
+
+    /* Utilities */
+    --border: 220 16% 86%;
+    --input: 220 20% 92%;
+    --ring: 231 100% 62%;
+    --radius: 0.375rem;
+
+    /* Agent message accent (distinct from user blue) */
+    --agent-accent: 160 84% 45%;
+
+    /* Charts */
+    --chart-1: 231 100% 62%;
+    --chart-2: 160 84% 39%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 262 83% 58%;
+    --chart-5: 4 87% 48%;
+
+    /* Sidebar */
+    --sidebar-background: 220 25% 97%;
+    --sidebar-foreground: 224 28% 12%;
+    --sidebar-primary: 231 100% 62%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 92%;
+    --sidebar-accent-foreground: 224 28% 12%;
+    --sidebar-border: 220 16% 86%;
+    --sidebar-ring: 231 100% 62%;
+
+    /* Brand gradients */
+    --brand-primary: 4 87% 48%;
+    --brand-accent: 231 100% 62%;
+
+    /* Agent indicator */
+    --agent-indicator-surface: 223 30% 16%;
+    --agent-indicator-surface-border: 223 26% 23%;
+    --agent-indicator-base: 231 100% 62%;
+    --agent-indicator-light: 0 0% 100%;
+    --agent-indicator-border: 223 26% 23%;
+    --agent-indicator-glow: 231 96% 72%;
+
+    /* Glass */
+    --glass-bg: hsl(0 0% 100% / 0.72);
+    --glass-border: hsl(220 16% 86% / 0.9);
+  }
+
+  .dark {
+    /* Premium Glass Navy — dn.ia DS */
+    --background: 222 55% 3%;
+    --foreground: 0 0% 98%;
+    --card: 222 45% 7%;
+    --card-foreground: 0 0% 98%;
+    --popover: 222 45% 7%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 231 100% 62%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 224 40% 11%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 224 40% 11%;
+    --muted-foreground: 220 18% 70%;
+    --accent: 4 87% 48%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 4 87% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 160 84% 39%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 4%;
+    --info: 231 100% 62%;
+    --info-foreground: 0 0% 100%;
+    --border: 225 32% 20%;
+    --input: 224 40% 10%;
+    --ring: 231 100% 62%;
+    --agent-accent: 160 84% 55%;
+    --chart-1: 231 100% 62%;
+    --chart-2: 160 84% 39%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 262 83% 58%;
+    --chart-5: 4 87% 48%;
+    --sidebar-background: 222 50% 4%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 231 100% 62%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 45% 9%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 225 32% 18%;
+    --sidebar-ring: 231 100% 62%;
+    --brand-primary: 4 87% 48%;
+    --brand-accent: 231 100% 62%;
+    --agent-indicator-surface: 226 58% 14%;
+    --agent-indicator-surface-border: 231 60% 30%;
+    --agent-indicator-base: 231 100% 68%;
+    --agent-indicator-light: 0 0% 100%;
+    --agent-indicator-border: 231 60% 30%;
+    --agent-indicator-glow: 231 100% 74%;
+    --glass-bg: hsl(231 100% 62% / 0.05);
+    --glass-border: hsl(231 100% 62% / 0.20);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  /* Premium Glass Navy — ambient mesh gradient (dark only) */
+  .dark body::before {
+    content: "";
+    position: fixed;
+    top: -25%;
+    right: -20%;
+    width: 75vw;
+    height: 75vw;
+    max-width: 1100px;
+    max-height: 1100px;
+    background: radial-gradient(circle, hsl(var(--primary) / 0.22), transparent 65%);
+    filter: blur(90px);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .dark body::after {
+    content: "";
+    position: fixed;
+    bottom: -30%;
+    left: -20%;
+    width: 55vw;
+    height: 55vw;
+    max-width: 800px;
+    max-height: 800px;
+    background: radial-gradient(circle, hsl(231 100% 50% / 0.08), transparent 60%);
+    filter: blur(110px);
+    pointer-events: none;
+    z-index: 0;
+  }
+}
+
+@layer components {
+  .wiki-editor-content {
+    color: hsl(var(--foreground));
+  }
+
+  .wiki-editor-content h1,
+  .wiki-editor-content h2,
+  .wiki-editor-content h3 {
+    font-family: Rajdhani, sans-serif;
+    font-weight: 700;
+    line-height: 1.12;
+    color: hsl(var(--foreground));
+    margin: 1.25rem 0 0.65rem;
+  }
+
+  .wiki-editor-content h1 { font-size: 2.25rem; }
+  .wiki-editor-content h2 { font-size: 1.75rem; }
+  .wiki-editor-content h3 { font-size: 1.35rem; }
+
+  .wiki-editor-content p { margin: 0.65rem 0; }
+  .wiki-editor-content a { color: hsl(var(--primary)); text-decoration: underline; }
+  .wiki-editor-content .wiki-file-attachment {
+    display: inline-flex;
+    max-width: min(100%, 34rem);
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: hsl(var(--secondary) / 0.55);
+    color: hsl(var(--foreground));
+    text-decoration: none;
+    vertical-align: middle;
+  }
+  .wiki-editor-content .wiki-file-attachment:hover {
+    border-color: hsl(var(--primary) / 0.45);
+    background: hsl(var(--secondary) / 0.8);
+  }
+  .wiki-editor-content .wiki-file-attachment strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.88rem;
+    font-weight: 600;
+  }
+  .wiki-editor-content .wiki-file-attachment small {
+    flex: none;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.72rem;
+  }
+  .wiki-editor-content ul,
+  .wiki-editor-content ol { padding-left: 1.5rem; margin: 0.75rem 0; }
+  .wiki-editor-content ul { list-style: disc; }
+  .wiki-editor-content ol { list-style: decimal; }
+  .wiki-editor-content li { margin: 0.25rem 0; }
+  .wiki-editor-content hr { border-color: hsl(var(--border)); margin: 1.5rem 0; }
+
+  .wiki-editor-content table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+    margin: 1rem 0;
+    overflow: hidden;
+    border: 1px solid hsl(var(--border));
+    border-radius: calc(var(--radius) - 2px);
+  }
+  .wiki-editor-content table td,
+  .wiki-editor-content table th {
+    border: 1px solid hsl(var(--border));
+    padding: 0.55rem 0.7rem;
+    vertical-align: top;
+    position: relative;
+    min-width: 2rem;
+  }
+  .wiki-editor-content table th {
+    background: hsl(var(--secondary) / 0.6);
+    font-weight: 600;
+    text-align: left;
+  }
+  .wiki-editor-content table .selectedCell:after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: hsl(var(--primary) / 0.15);
+    pointer-events: none;
+  }
+  .wiki-editor-content table .column-resize-handle {
+    position: absolute;
+    right: -2px;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: hsl(var(--primary));
+    cursor: col-resize;
+  }
+  .wiki-editor-content .tableWrapper {
+    overflow-x: auto;
+  }
+
+  .wiki-image-node {
+    display: block;
+    position: relative;
+    max-width: 100%;
+    margin: 0.75rem 0;
+  }
+
+  .wiki-image-node img {
+    display: block;
+    height: auto;
+    border-radius: var(--radius);
+    border: 1px solid hsl(var(--border));
+  }
+
+  .wiki-image-node.is-selected img {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+  }
+
+  .wiki-image-controls {
+    position: absolute;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: hsl(var(--card) / 0.92);
+    box-shadow: 0 10px 24px hsl(var(--background) / 0.35);
+  }
+
+  .wiki-image-controls button {
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: calc(var(--radius) - 2px);
+    color: hsl(var(--foreground));
+    background: hsl(var(--secondary));
+  }
+
+  .wiki-image-resize-handle {
+    width: 1.1rem;
+    height: 1.75rem;
+    cursor: ew-resize;
+    border-left: 1px solid hsl(var(--border));
+  }
+
+  /* Floating action toolbar shared by image/video/attachment nodes */
+  .wiki-media-actions {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.2rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: hsl(var(--card) / 0.95);
+    box-shadow: 0 8px 20px hsl(var(--background) / 0.35);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 2;
+  }
+  .wiki-image-node,
+  .wiki-video-node,
+  .wiki-attachment-node {
+    position: relative;
+  }
+  .wiki-image-node:hover .wiki-media-actions,
+  .wiki-video-node:hover .wiki-media-actions,
+  .wiki-attachment-node:hover .wiki-media-actions,
+  .wiki-image-node.is-selected .wiki-media-actions {
+    opacity: 1;
+  }
+  .wiki-media-actions button {
+    width: 1.6rem;
+    height: 1.6rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: calc(var(--radius) - 2px);
+    color: hsl(var(--foreground));
+    background: hsl(var(--secondary));
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .wiki-media-actions button:hover {
+    background: hsl(var(--primary) / 0.15);
+    color: hsl(var(--primary));
+  }
+  .wiki-media-actions button[title="Deletar"]:hover {
+    background: hsl(var(--destructive) / 0.15);
+    color: hsl(var(--destructive));
+  }
+
+  .wiki-video-node {
+    display: block;
+    margin: 0.75rem 0;
+  }
+  .wiki-video-node video {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .wiki-attachment-node {
+    margin: 0.75rem 0;
+  }
+  .wiki-attachment-card {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius);
+    background: hsl(var(--secondary) / 0.55);
+    max-width: min(100%, 36rem);
+  }
+  .wiki-attachment-card:hover {
+    border-color: hsl(var(--primary) / 0.45);
+    background: hsl(var(--secondary) / 0.8);
+  }
+  .wiki-attachment-card button {
+    width: 1.6rem;
+    height: 1.6rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: calc(var(--radius) - 2px);
+    color: hsl(var(--muted-foreground));
+    background: transparent;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .wiki-attachment-card button:hover {
+    background: hsl(var(--primary) / 0.15);
+    color: hsl(var(--primary));
+  }
+  .wiki-attachment-card button[title="Deletar"]:hover {
+    background: hsl(var(--destructive) / 0.15);
+    color: hsl(var(--destructive));
+  }
+
+  /* Glass card */
+  .glass-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    transition: border-color 0.15s ease;
+  }
+  .glass-card:hover {
+    border-color: hsl(var(--primary) / 0.25);
+  }
+
+  /* Glass card with glow */
+  .glass-card-glow {
+    position: relative;
+    overflow: hidden;
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    transition: all 0.2s ease;
+  }
+  .glass-card-glow:hover {
+    border-color: hsl(var(--primary) / 0.3);
+    box-shadow: 0 0 24px -6px hsl(var(--primary) / 0.2);
+  }
+  .glass-card-glow-effect {
+    position: absolute;
+    top: -40px;
+    right: -40px;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, hsl(var(--brand-primary)), hsl(var(--brand-accent)));
+    opacity: 0.15;
+    filter: blur(28px);
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .glass-card-glow:hover .glass-card-glow-effect {
+    opacity: 0.3;
+  }
+
+  /* Glow variants */
+  .glass-card-glow.glow-accent .glass-card-glow-effect {
+    background: linear-gradient(135deg, hsl(var(--brand-accent)), hsl(var(--primary) / 0.5));
+  }
+  .glass-card-glow.glow-success .glass-card-glow-effect {
+    background: linear-gradient(135deg, hsl(var(--success)), hsl(var(--success) / 0.5));
+  }
+  .glass-card-glow.glow-destructive .glass-card-glow-effect {
+    background: linear-gradient(135deg, hsl(var(--accent)), hsl(var(--accent) / 0.5));
+  }
+
+  /* Status pulse */
+  .status-online {
+    @apply relative;
+  }
+  .status-online::after {
+    content: '';
+    @apply absolute inset-0 rounded-full;
+    background: hsl(var(--success));
+    animation: pulse-status 2s ease-in-out infinite;
+  }
+  @keyframes pulse-status {
+    0%, 100% { opacity: 0.4; transform: scale(1); }
+    50% { opacity: 0; transform: scale(2); }
+  }
+
+  /* Status badges */
+  .status-attention {
+    @apply bg-primary/20 text-primary border-primary/30;
+  }
+
+  /* Typing dots animation */
+  @keyframes typing-dot {
+    0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+    30% { opacity: 1; transform: translateY(-4px); }
+  }
+
+  @keyframes agent-working-pulse {
+    0%, 100% {
+      opacity: 0.72;
+      transform: scale(1);
+      box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.035);
+      box-shadow: 0 0 28px -14px hsl(var(--primary) / 0.55);
+    }
+  }
+
+  @keyframes agent-indicator-pulse {
+    0%, 100% {
+      transform: scale(1);
+      color: hsl(var(--agent-indicator-base));
+      background: hsl(var(--agent-indicator-surface));
+      border-color: hsl(var(--agent-indicator-surface-border));
+      box-shadow: inset 0 1px 0 hsl(var(--primary-foreground) / 0.03);
+    }
+    50% {
+      transform: scale(1.03);
+      color: hsl(var(--agent-indicator-light));
+      background: hsl(var(--agent-indicator-surface));
+      border-color: hsl(var(--agent-indicator-surface-border));
+      box-shadow: inset 0 1px 0 hsl(var(--primary-foreground) / 0.05);
+    }
+  }
+
+  @keyframes agent-working-fade {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 1; }
+  }
+
+  .agent-working-pulse {
+    animation: agent-working-pulse 2.4s ease-in-out infinite;
+    transform-origin: center;
+    will-change: transform, opacity, box-shadow;
+  }
+
+  .agent-working-fade {
+    animation: agent-working-fade 2.4s ease-in-out infinite;
+  }
+
+  .agent-list-avatar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 1rem;
+    overflow: hidden;
+    border: 1px solid hsl(var(--border));
+    background:
+      radial-gradient(circle at 28% 22%, hsl(var(--primary) / 0.18), transparent 56%),
+      linear-gradient(145deg, hsl(var(--card)), hsl(var(--secondary) / 0.92));
+    color: hsl(var(--primary));
+    box-shadow:
+      inset 0 1px 0 hsl(var(--background) / 0.7),
+      0 10px 24px -18px hsl(var(--primary) / 0.4);
+  }
+
+  .agent-list-avatar-badge {
+    position: absolute;
+    right: -0.125rem;
+    bottom: -0.125rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 9999px;
+    border: 1.5px solid hsl(var(--card));
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--brand-accent)));
+    color: hsl(var(--primary-foreground));
+    box-shadow: 0 6px 14px -10px hsl(var(--primary) / 0.8);
+  }
+
+  .agent-list-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid hsl(var(--border));
+    background: linear-gradient(180deg, hsl(var(--card)), hsl(var(--secondary) / 0.88));
+    color: hsl(var(--agent-indicator-base));
+    border-radius: 9999px;
+    box-shadow: inset 0 1px 0 hsl(var(--background) / 0.8);
+  }
+
+  .agent-list-indicator-working {
+    animation: agent-indicator-pulse 3.6s ease-in-out infinite;
+    transform-origin: center;
+    will-change: transform, color;
+  }
+
+  /* Mono text */
+  .text-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Gradient border */
+  .gradient-border {
+    position: relative;
+    background: hsl(var(--card));
+    border-radius: var(--radius);
+  }
+  .gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.3), hsl(var(--accent) / 0.2));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+
+  /* Safe area for bottom nav */
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* Safe area for top (status bar in PWA standalone) */
+  .mobile-safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+    box-sizing: content-box;
+  }
+
+  /* Mobile bottom nav total height: nav + safe area */
+  .mobile-bottom-offset {
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Chat page on mobile: main fills viewport completely; the composer
+     reserves space for the bottom nav inside its own padding. This avoids
+     a visible gap between the composer and the bottom nav on iOS PWA. */
+  .mobile-chat-bottom {
+    padding-bottom: 0 !important;
+  }
+
+  /* Mobile touch targets */
+  @media (max-width: 767px) {
+    .touch-target {
+      min-height: 48px;
+      min-width: 44px;
+    }
+
+    /* Prevent iOS zoom on input focus */
+    input, textarea, select {
+      font-size: 16px !important;
+    }
+  }
+
+  /* Pull to refresh indicator */
+  .pull-refresh-indicator {
+    @apply flex items-center justify-center py-3 text-xs text-muted-foreground;
+  }
+
+  /* Horizontal scroll chips */
+  .chips-scroll {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 0 1rem;
+  }
+  .chips-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-scroll-region {
+    min-height: 0;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  .mobile-chat-composer {
+    position: relative;
+    z-index: 10;
+  }
+
+  /* Force text selection ONLY on message content, not actions/meta */
+  .chat-message-content-selectable,
+  .chat-message-content-selectable * {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+    -webkit-touch-callout: default !important;
+    cursor: text;
+  }
+
+  .chat-message-content-selectable button,
+  .chat-message-content-selectable a {
+    cursor: pointer;
+  }
+
+  [data-selection-lock="true"] .chat-message-content-selectable:not([data-selection-active="true"]),
+  [data-selection-lock="true"] .chat-message-content-selectable:not([data-selection-active="true"]) * {
+    -webkit-user-select: none !important;
+    user-select: none !important;
+  }
+
+  /* Prevent selection on action buttons and metadata */
+  .chat-message-actions,
+  .chat-message-meta {
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    cursor: default;
+  }
+}
+
+/* ── Aurora / Stitch Chat Design ──────────────────────── */
+
+@layer components {
+  /* Aurora glow for headers */
+  .aurora-glow {
+    position: relative;
+    overflow: hidden;
+  }
+  .aurora-glow::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--primary) / 0.06) 0%,
+      hsl(180 60% 50% / 0.04) 40%,
+      hsl(260 70% 60% / 0.05) 70%,
+      transparent 100%
+    );
+    pointer-events: none;
+  }
+
+  /* Glass pill input container */
+  .glass-input {
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 1.75rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .glass-input:focus-within {
+    border-color: hsl(var(--primary) / 0.3);
+    box-shadow: 0 0 20px -6px hsl(var(--primary) / 0.15);
+  }
+
+  /* Search result highlight (scroll-to-message) */
+  .msg-highlight {
+    animation: msgHighlightPulse 2.4s ease-out;
+    border-radius: 1rem;
+  }
+  @keyframes msgHighlightPulse {
+    0%   { box-shadow: 0 0 0 0 hsl(var(--primary) / 0.0), 0 0 0 0 hsl(var(--primary) / 0.0); background-color: hsl(var(--primary) / 0.18); }
+    20%  { box-shadow: 0 0 0 3px hsl(var(--primary) / 0.55), 0 0 30px hsl(var(--primary) / 0.35); background-color: hsl(var(--primary) / 0.22); }
+    100% { box-shadow: 0 0 0 0 hsl(var(--primary) / 0); background-color: transparent; }
+  }
+
+  /* Rich text composer (contentEditable) */
+  .rich-composer:empty::before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+  }
+  .rich-composer p,
+  .rich-composer div {
+    margin: 0;
+  }
+  .rich-composer ul,
+  .rich-composer ol {
+    margin: 0.15rem 0;
+    padding-left: 1.5rem;
+  }
+  .rich-composer ul {
+    list-style: disc outside;
+  }
+  .rich-composer ol {
+    list-style: decimal outside;
+  }
+  .rich-composer li {
+    display: list-item;
+  }
+
+  .rich-composer code {
+    background: hsl(var(--muted) / 0.6);
+    padding: 0.05rem 0.3rem;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85em;
+  }
+  .rich-composer a {
+    color: hsl(var(--primary));
+    text-decoration: underline;
+  }
+
+
+
+
+  /* User message bubble */
+  .bubble-user {
+    background: linear-gradient(
+      135deg,
+      hsl(var(--primary)) 0%,
+      hsl(260 70% 55%) 100%
+    );
+    color: hsl(var(--primary-foreground));
+    border-radius: 1rem;
+    border-top-right-radius: 0.25rem;
+  }
+
+  /* Typing glass pill */
+  .typing-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 9999px;
+  }
+
+  /* Gradient circular send button */
+  .btn-send-gradient {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 9999px;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(260 70% 55%));
+    color: white;
+    border: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    flex-shrink: 0;
+  }
+  .btn-send-gradient:hover:not(:disabled) {
+    opacity: 0.9;
+    transform: scale(1.05);
+  }
+  .btn-send-gradient:disabled {
+    opacity: 0.35;
+  }
+}
+
+/* React Flow animated edges — energy flow */
+@keyframes dash-flow {
+  to { stroke-dashoffset: -20; }
+}
+.react-flow__edge-path.animated-edge,
+.react-flow__edge.animated-edge path {
+  stroke-dasharray: 6 4;
+  animation: dash-flow 0.8s linear infinite;
+}
+
+/* Agent activity card shimmer */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* Trash icon: white on hover for any button/trigger containing a lucide trash icon */
+button:hover svg[class*="lucide-trash"],
+[role="menuitem"]:hover svg[class*="lucide-trash"],
+a:hover svg[class*="lucide-trash"] {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}

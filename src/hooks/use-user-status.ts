@@ -1,0 +1,153 @@
+import { useCallback, useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuthContext } from "@/contexts/auth-context";
+import { toast } from "sonner";
+import {
+  ackExpiry,
+  isExpiryAcked,
+  setSelfStatusCache,
+  type ActiveStatus,
+  type UserStatusPreset,
+} from "@/lib/user-status";
+
+const ALERT_AFTER_MS = 90 * 60 * 1000; // 1h30
+const CHECK_INTERVAL_MS = 5 * 60 * 1000; // every 5 min
+
+interface ProfileStatusRow {
+  custom_status: string | null;
+  custom_status_emoji: string | null;
+  custom_status_set_at: string | null;
+}
+
+/**
+ * Manages the current user's custom status:
+ * - Reads from `profiles` on mount
+ * - Provides setStatus / clearStatus
+ * - Triggers a toast + push alert once the status is older than 90 min
+ */
+export function useUserStatus() {
+  const { user } = useAuthContext();
+  const [status, setStatus] = useState<ActiveStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Load initial status
+  useEffect(() => {
+    if (!user?.id) {
+      setStatus(null);
+      setSelfStatusCache(null);
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("custom_status, custom_status_emoji, custom_status_set_at")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (!error && data) {
+        const row = data as unknown as ProfileStatusRow;
+        const active: ActiveStatus | null =
+          row.custom_status && row.custom_status_emoji && row.custom_status_set_at
+            ? { label: row.custom_status, emoji: row.custom_status_emoji, setAt: row.custom_status_set_at }
+            : null;
+        setStatus(active);
+        setSelfStatusCache(active);
+      }
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  const setUserStatus = useCallback(
+    async (preset: UserStatusPreset) => {
+      if (!user?.id) return;
+      const nowIso = new Date().toISOString();
+      const next: ActiveStatus = { label: preset.label, emoji: preset.emoji, setAt: nowIso };
+      setStatus(next);
+      setSelfStatusCache(next);
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          custom_status: preset.label,
+          custom_status_emoji: preset.emoji,
+          custom_status_set_at: nowIso,
+          updated_at: nowIso,
+        } as any)
+        .eq("id", user.id);
+      if (error) {
+        toast.error("Não foi possível atualizar seu status.");
+      } else {
+        toast.success(`Status atualizado: ${preset.emoji} ${preset.label}`);
+      }
+    },
+    [user?.id]
+  );
+
+  const clearUserStatus = useCallback(async () => {
+    if (!user?.id) return;
+    setStatus(null);
+    setSelfStatusCache(null);
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        custom_status: null,
+        custom_status_emoji: null,
+        custom_status_set_at: null,
+        updated_at: new Date().toISOString(),
+      } as any)
+      .eq("id", user.id);
+    if (error) {
+      toast.error("Não foi possível remover seu status.");
+    } else {
+      toast.success("Status removido.");
+    }
+  }, [user?.id]);
+
+  // 1h30 expiry alert (toast + push)
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const check = () => {
+      const current = status;
+      if (!current) return;
+      const elapsed = Date.now() - new Date(current.setAt).getTime();
+      if (elapsed < ALERT_AFTER_MS) return;
+      if (isExpiryAcked(current.setAt)) return;
+      ackExpiry(current.setAt);
+
+      // In-app toast with actions
+      toast(`Você ainda está em ${current.emoji} ${current.label}?`, {
+        description: "Seu status já dura mais de 1h30.",
+        duration: 15000,
+        action: {
+          label: "Limpar",
+          onClick: () => {
+            void clearUserStatus();
+          },
+        },
+      });
+
+      // Browser/PWA push via existing send-push function
+      void supabase.functions
+        .invoke("send-push", {
+          body: {
+            user_id: user.id,
+            title: `Você ainda está em ${current.emoji} ${current.label}?`,
+            body: "Seu status já dura mais de 1h30. Toque para atualizar.",
+            url: "/settings?tab=profile",
+          },
+        })
+        .catch(() => undefined);
+    };
+
+    check();
+    const id = setInterval(check, CHECK_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [status, user?.id, clearUserStatus]);
+
+  return { status, loading, setUserStatus, clearUserStatus };
+}

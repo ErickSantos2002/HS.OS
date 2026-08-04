@@ -1,0 +1,271 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+
+import { Toaster as Sonner } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AppLayout } from "@/components/AppLayout";
+import { AuthProvider } from "@/components/AuthGuard";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { OnboardingGate } from "@/components/OnboardingGate";
+import { ThemeProvider } from "@/components/theme-provider";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { FileSystemProvider } from "@/contexts/FileSystemContext";
+import { setQueryClientForSender } from "@/lib/chat-sender";
+import { useVersionCheck } from "@/hooks/use-version-check";
+
+import ChatPage from "./pages/ChatPage";
+import AgentsPage from "./pages/AgentsPage";
+import AgentDetailPage from "./pages/AgentDetailPage";
+import TeamsPage from "./pages/TeamsPage";
+
+import SessionsPage from "./pages/SessionsPage";
+import SettingsPage from "./pages/SettingsPage";
+import SkillsPage from "./pages/SkillsPage";
+import ClawHubPage from "./pages/ClawHubPage";
+import ArenasPage from "./pages/ArenasPage";
+import ArenaCreatePage from "./pages/ArenaCreatePage";
+import ArenaViewPage from "./pages/ArenaViewPage";
+import LoginPage from "./pages/LoginPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
+import SetupPage from "./pages/SetupPage";
+import ResultsPage from "./pages/ResultsPage";
+import KnowledgeBasePage from "./pages/KnowledgeBasePage";
+import DashboardPage from "./pages/DashboardPage";
+import TasksPage from "./pages/TasksPage";
+import AutomacoesPage from "./pages/AutomacoesPage";
+import { useIsMobile } from "@/hooks/use-mobile";
+import WikiHtmlPreviewPage from "./pages/WikiHtmlPreviewPage";
+import MonitoringPage from "./pages/MonitoringPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import WarRoomPage from "./pages/WarRoomPage";
+import PublicArtifactPage from "./pages/PublicArtifactPage";
+import ArtifactsPage from "./pages/ArtifactsPage";
+import PublicLiveArtifactPage from "./pages/PublicLiveArtifactPage";
+
+// ProfilePage removed – merged into SettingsPage
+// ChannelsPage merged into ChatPage
+import NotFound from "./pages/NotFound";
+
+const queryClient = new QueryClient();
+setQueryClientForSender(queryClient);
+
+// Home: redirect everyone to /chat as the default entry point
+function HomePage() {
+  return <Navigate to="/chat" replace />;
+}
+
+const App = () => {
+  useVersionCheck();
+  return (
+  <QueryClientProvider client={queryClient}>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AuthProvider>
+              <FileSystemProvider>
+              <Routes>
+                {/* Public routes */}
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
+                <Route path="/artifact/:id" element={<PublicArtifactPage />} />
+                <Route path="/p/:slug" element={<PublicLiveArtifactPage />} />
+                <Route path="/wiki-html-preview" element={<WikiHtmlPreviewPage />} />
+
+                {/* War room — exige login como qualquer tela, mas sem
+                    AppLayout: é uma tela cheia para espelhar na TV. */}
+                <Route
+                  path="/warroom"
+                  element={
+                    <ProtectedRoute>
+                      <WarRoomPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Setup wizard — auth required, no AppLayout, no gate */}
+                <Route
+                  path="/setup"
+                  element={
+                    <ProtectedRoute allowedRoles={["super_admin"]}>
+                      <SetupPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Protected routes inside layout */}
+                <Route
+                  path="/*"
+                  element={
+                    <ProtectedRoute>
+                      <OnboardingGate>
+                        <AppLayout>
+                        <Routes>
+                          <Route path="/" element={<HomePage />} />
+                          <Route path="/chat" element={<ChatPage />} />
+                          <Route path="/tasks" element={<TasksPage />} />
+                          <Route
+                            path="/agents"
+                            element={
+                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                                <AgentsPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/agents/:agentId"
+                            element={
+                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                                <AgentDetailPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/teams"
+                            element={
+                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                                <TeamsPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          
+                          <Route
+                            path="/sessions"
+                            element={
+                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                                <SessionsPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/skills"
+                            element={
+                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                                <SkillsPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/skills/clawhub"
+                            element={
+                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                                <ClawHubPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/arenas"
+                            element={
+                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                                <ArenasPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/arenas/new"
+                            element={
+                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                                <ArenaCreatePage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/arenas/:arenaId"
+                            element={
+                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                                <ArenaViewPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/settings"
+                            element={
+                              <ProtectedRoute>
+                                <SettingsPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/results"
+                            element={
+                              <ProtectedRoute>
+                                <ResultsPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/base-de-conhecimento"
+                            element={
+                              <ProtectedRoute>
+                                <KnowledgeBasePage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/automacoes"
+                            element={
+                              <ProtectedRoute>
+                                <AutomacoesPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/artefatos"
+                            element={
+                              <ProtectedRoute>
+                                <ArtifactsPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/artefatos/:id"
+                            element={
+                              <ProtectedRoute>
+                                <ArtifactsPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route path="/dnos" element={<Navigate to="/settings?tab=dnos" replace />} />
+
+                          <Route
+                            path="/monitoring"
+                            element={
+                              <ProtectedRoute allowedRoles={["super_admin"]}>
+                                <MonitoringPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/analytics"
+                            element={
+                              <ProtectedRoute allowedRoles={["super_admin"]}>
+                                <AnalyticsPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route path="/documentation" element={<Navigate to="/settings?tab=documentation" replace />} />
+                          <Route path="/mission-control" element={<Navigate to="/settings?tab=dnos" replace />} />
+                          <Route path="/users" element={<Navigate to="/settings?tab=users" replace />} />
+                          <Route path="/profile" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+                          <Route path="*" element={<NotFound />} />
+                        </Routes>
+                      </AppLayout>
+                      </OnboardingGate>
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
+              </FileSystemProvider>
+            </AuthProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
+  </QueryClientProvider>
+  );
+};
+
+export default App;

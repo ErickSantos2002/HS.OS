@@ -1,0 +1,378 @@
+/* War room — tela de parede do escritório.
+ *
+ * Escuro por padrão — é uma parede ligada 24/7, não um documento que segue a
+ * preferência do leitor. A troca para claro fica à mão (sala com sol batendo
+ * na TV), e a escolha é lembrada no navegador.
+ *
+ * Tokens do Design System dn.ia V3, escopados em .wr-raiz para não vazarem
+ * para o resto do app.
+ */
+.wr-raiz {
+  --wr-canvas:    #04070F;
+  --wr-section:   #060A14;
+  --wr-surface:   rgba(255,255,255,0.02);
+  --wr-line:      rgba(210,220,255,0.16);
+  --wr-line-soft: rgba(210,220,255,0.08);
+  --wr-text:      #F0F4FF;
+  --wr-muted:     #A8B3C7;
+  --wr-faint:     #748198;
+  --wr-blue:      #3D61FF;
+  --wr-blue-deep: #2F4FD1;
+  --wr-ink:       #7D97FF;
+  --wr-green:     #20A878;
+  --wr-amber:     #E0A82E;
+
+  /* Grafo. Estas cores viviam fixas no componente e por isso o tema claro
+     herdava as do escuro: linha branca a 7% sobre fundo warm some. */
+  --wr-g-linha:    rgba(210,220,255,0.07);
+  --wr-g-viva:     rgba(125,151,255,0.60);
+  --wr-g-viva-h:   rgba(43,196,214,0.60);
+  --wr-g-trilho:   rgba(210,220,255,0.08);
+  --wr-g-corpo:    #0B1120;
+  --wr-g-corpo-h:  #080D18;
+  --wr-g-anel:     rgba(210,220,255,0.16);
+  --wr-humano:     #2BC4D6;
+  --wr-humano-off: #1A5C66;
+
+  position: fixed;
+  inset: 0;
+  background: var(--wr-canvas);
+  background-image:
+    radial-gradient(1200px 700px at 18% 0%, rgba(61,97,255,0.10), transparent 60%),
+    radial-gradient(900px 600px at 92% 100%, rgba(47,79,209,0.08), transparent 60%);
+  color: var(--wr-text);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  overflow: hidden;
+  z-index: 60;
+}
+
+.wr-tv {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: clamp(10px, 1.1vh, 18px);
+  padding: clamp(14px, 1.6vh, 26px) clamp(16px, 1.6vw, 32px);
+}
+
+.wr-topo {
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  border-bottom: 1px solid var(--wr-line-soft);
+  padding-bottom: clamp(8px, 1vh, 14px);
+}
+.wr-marca { display: flex; align-items: baseline; gap: 14px; }
+.wr-marca b {
+  font-family: Rajdhani, Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(22px, 2.3vw, 38px); font-weight: 700; letter-spacing: -0.02em;
+}
+.wr-marca span, .wr-eyebrow {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: clamp(9px, 0.75vw, 13px);
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--wr-faint);
+}
+.wr-topo-dir { display: flex; align-items: center; gap: clamp(14px, 1.6vw, 30px); }
+.wr-sinal {
+  display: flex; align-items: center; gap: 8px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: clamp(10px, 0.8vw, 14px);
+  color: var(--wr-muted); text-transform: uppercase; letter-spacing: 0.1em;
+}
+.wr-batida {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--wr-green);
+  animation: wr-pulso 2.4s ease-out infinite;
+}
+@keyframes wr-pulso {
+  0%   { box-shadow: 0 0 0 0 rgba(32,168,120,0.45); }
+  70%  { box-shadow: 0 0 0 12px rgba(32,168,120,0); }
+  100% { box-shadow: 0 0 0 0 rgba(32,168,120,0); }
+}
+.wr-relogio {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: clamp(22px, 2.3vw, 38px);
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+}
+
+.wr-palco {
+  display: grid;
+  grid-template-columns: 1fr clamp(280px, 26vw, 460px);
+  gap: clamp(12px, 1.2vw, 24px);
+  min-height: 0;
+}
+.wr-painel {
+  background: linear-gradient(180deg, var(--wr-section) 0%, rgba(6,10,20,0.55) 100%);
+  border: 1px solid var(--wr-line-soft);
+  border-radius: 16px;
+  position: relative; overflow: hidden; min-height: 0;
+}
+.wr-painel > header {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: clamp(10px, 1.2vh, 18px) clamp(14px, 1.2vw, 22px);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: clamp(9px, 0.72vw, 12px);
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--wr-faint);
+  z-index: 3; pointer-events: none;
+}
+/* Eyebrow do DS: traço de 26px antes do rótulo */
+.wr-painel > header > span:first-child::before {
+  content: ""; display: inline-block; width: 26px; height: 1px;
+  background: var(--wr-line); margin-right: 10px; vertical-align: 4px;
+}
+
+.wr-mapa { width: 100%; height: 100%; display: block; }
+.wr-nome {
+  font-family: Rajdhani, Inter, ui-sans-serif, sans-serif;
+  font-weight: 650; letter-spacing: -0.01em; fill: var(--wr-text);
+}
+.wr-tarefa, .wr-satelite {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  fill: var(--wr-muted); letter-spacing: 0.02em;
+}
+.wr-crono {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  fill: var(--wr-faint); font-variant-numeric: tabular-nums;
+}
+
+.wr-fluxo {
+  height: 100%;
+  padding: clamp(38px, 4.4vh, 56px) clamp(12px, 1vw, 18px) clamp(12px, 1.2vh, 18px);
+  display: flex; flex-direction: column; gap: clamp(6px, 0.7vh, 10px); overflow: hidden;
+}
+.wr-evento {
+  display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start;
+  padding: clamp(7px, 0.85vh, 12px) clamp(9px, 0.8vw, 14px);
+  border-radius: 12px; background: var(--wr-surface);
+  border-left: 2px solid var(--wr-line);
+  animation: wr-entra 420ms cubic-bezier(.2,.7,.3,1) both;
+}
+@keyframes wr-entra {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: none; }
+}
+.wr-evento.autonomo { border-left-color: var(--wr-ink); }
+.wr-evento.entrega  { border-left-color: var(--wr-green); }
+.wr-hora {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: clamp(9px, 0.72vw, 12px); color: var(--wr-faint);
+  font-variant-numeric: tabular-nums; padding-top: 2px;
+}
+.wr-txt { font-size: clamp(11px, 0.92vw, 16px); line-height: 1.35; color: var(--wr-text); }
+.wr-txt b { font-weight: 700; }
+.wr-selo {
+  display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: 999px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: clamp(8px, 0.62vw, 10px); letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--wr-ink); background: rgba(125,151,255,0.12);
+  border: 1px solid rgba(125,151,255,0.32); vertical-align: 1px;
+}
+
+.wr-base {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(10px, 1vw, 20px);
+  border-top: 1px solid var(--wr-line-soft); padding-top: clamp(10px, 1.2vh, 18px);
+}
+.wr-numero { display: flex; flex-direction: column; gap: 2px; }
+.wr-rotulo {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: clamp(9px, 0.7vw, 12px); letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--wr-faint);
+}
+.wr-valor {
+  font-family: Rajdhani, Inter, ui-sans-serif, sans-serif;
+  font-size: clamp(28px, 3.3vw, 58px); font-weight: 700;
+  letter-spacing: -0.035em; font-variant-numeric: tabular-nums; line-height: 1;
+}
+.wr-nota {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: clamp(9px, 0.7vw, 12px); color: var(--wr-muted);
+}
+
+.wr-momento {
+  position: fixed; left: 50%; bottom: clamp(90px, 13vh, 160px);
+  transform: translate(-50%, 24px);
+  background: linear-gradient(135deg, rgba(61,97,255,0.24), rgba(47,79,209,0.20));
+  border: 1px solid rgba(125,151,255,0.45);
+  box-shadow: 0 24px 70px -20px rgba(61,97,255,0.55);
+  border-radius: 16px;
+  padding: clamp(12px, 1.4vh, 20px) clamp(20px, 2vw, 34px);
+  display: flex; align-items: center; gap: 16px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 420ms ease, transform 420ms cubic-bezier(.2,.7,.3,1);
+  z-index: 70;
+}
+.wr-momento.on { opacity: 1; transform: translate(-50%, 0); }
+.wr-momento-icone {
+  width: clamp(30px, 3vw, 46px); height: clamp(30px, 3vw, 46px);
+  border-radius: 12px; display: grid; place-items: center;
+  background: rgba(61,97,255,0.2); border: 1px solid rgba(125,151,255,0.4);
+}
+.wr-momento-titulo {
+  font-family: Rajdhani, Inter, ui-sans-serif, sans-serif;
+  font-size: clamp(16px, 1.5vw, 28px); font-weight: 700; letter-spacing: -0.02em;
+}
+.wr-momento-sub {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: clamp(9px, 0.75vw, 13px); color: var(--wr-ink);
+  letter-spacing: 0.2em; text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wr-raiz *, .wr-raiz *::before, .wr-raiz *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* Logo da marca na faixa de identidade */
+.wr-logo {
+  height: clamp(20px, 2vw, 34px);
+  width: auto;
+  display: block;
+}
+
+/* Controles: presentes, mas quietos — a parede é para ser olhada, não operada */
+.wr-controles { display: flex; align-items: center; gap: 6px; }
+.wr-controles > *:not(.wr-zoom) {
+  display: grid; place-items: center;
+  width: 34px; height: 34px;
+  border-radius: 999px;
+  border: 1px solid var(--wr-line-soft);
+  background: var(--wr-surface);
+  color: var(--wr-faint);
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+.wr-controles > *:not(.wr-zoom):hover { color: var(--wr-text); border-color: var(--wr-line); }
+.wr-controles > *:focus-visible {
+  outline: 2px solid var(--wr-blue);
+  outline-offset: 2px;
+}
+
+/* ── Tema claro (sala com sol batendo na TV) ──────────────────────
+ * Superfícies Neutral Warm do DS V3. O azul continua sendo o único
+ * destaque; muda o chão, não a lógica de cor.
+ */
+.wr-raiz.wr-claro {
+  --wr-canvas:    #FCFBF8;
+  --wr-section:   #FFFFFF;
+  --wr-surface:   #F7F5F0;
+  --wr-line:      #DDD8CE;
+  --wr-line-soft: #E7E3DA;
+  --wr-text:      #17191D;
+  --wr-muted:     #686A70;
+  --wr-faint:     #8A8C92;
+  --wr-blue:      #2F4FD1;   /* azul deep — o que o DS valida sobre warm */
+  --wr-ink:       #2F4FD1;
+  --wr-green:     #20A878;
+  --wr-amber:     #B57F14;
+
+  /* No claro a lógica inverte: o traço escurece em vez de clarear, e o corpo
+     do nó vira branco — nó escuro sobre fundo warm ficaria um borrão. */
+  --wr-g-linha:    rgba(23,25,29,0.16);
+  --wr-g-viva:     rgba(47,79,209,0.55);
+  --wr-g-viva-h:   rgba(11,124,140,0.60);
+  --wr-g-trilho:   rgba(23,25,29,0.10);
+  --wr-g-corpo:    #FFFFFF;
+  --wr-g-corpo-h:  #FFFFFF;
+  --wr-g-anel:     #C9C3B6;
+  --wr-humano:     #0B7C8C;
+  --wr-humano-off: #A9B9BC;
+
+  background-image:
+    radial-gradient(1200px 700px at 18% 0%, rgba(61,97,255,0.07), transparent 60%),
+    radial-gradient(900px 600px at 92% 100%, rgba(47,79,209,0.05), transparent 60%);
+}
+.wr-raiz.wr-claro .wr-painel {
+  background: var(--wr-section);
+  border-color: var(--wr-line-soft);
+  box-shadow: 0 1px 2px rgba(23,25,29,0.04);
+}
+.wr-raiz.wr-claro .wr-momento {
+  background: linear-gradient(135deg, rgba(47,79,209,0.10), rgba(61,97,255,0.06));
+  border-color: rgba(47,79,209,0.28);
+  box-shadow: 0 24px 70px -20px rgba(23,25,29,0.18);
+}
+
+/* Aviso de consulta falha: presente para quem procura, invisível de longe.
+   A parede nunca deve mentir dizendo que está tudo bem quando não carregou. */
+.wr-aviso {
+  position: fixed; right: 14px; bottom: 10px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px; letter-spacing: 0.1em;
+  color: var(--wr-amber); opacity: 0.7; z-index: 80;
+}
+
+/* Modo de organizar: arrastar nós e dar zoom. Só aparece quando pedido —
+   a parede é para ser olhada, não operada. */
+.wr-mapa.wr-editando { cursor: grab; }
+.wr-mapa.wr-editando:active { cursor: grabbing; }
+.wr-controles .wr-ativo {
+  color: var(--wr-blue);
+  border-color: var(--wr-blue);
+  background: rgba(61,97,255,0.12);
+}
+.wr-controles .wr-salvar {
+  color: var(--wr-green);
+  border-color: rgba(32,168,120,0.5);
+  background: rgba(32,168,120,0.12);
+}
+.wr-controles button:disabled { opacity: 0.4; cursor: default; }
+.wr-zoom {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px; color: var(--wr-muted);
+  font-variant-numeric: tabular-nums; min-width: 38px; text-align: center;
+}
+
+/* ── Grafo: tudo por token, para o tema claro não herdar cor do escuro ──
+   CSS vence atributo de apresentação do SVG, então classe basta. */
+.wr-linha             { stroke: var(--wr-g-linha); }
+.wr-linha.wr-viva     { stroke: var(--wr-g-viva); }
+.wr-linha.wr-viva-h   { stroke: var(--wr-g-viva-h); }
+.wr-trilho            { stroke: var(--wr-g-trilho); }
+.wr-corpo             { fill: var(--wr-g-corpo); }
+.wr-corpo-h           { fill: var(--wr-g-corpo-h); }
+.wr-nucleo-anel       { stroke: var(--wr-g-viva); }
+.wr-nucleo-ponto      { fill: var(--wr-blue); }
+.wr-hex               { stroke: var(--wr-humano-off); }
+.wr-hex.wr-viva       { stroke: var(--wr-humano); }
+.wr-hex-halo          { stroke: var(--wr-humano); }
+.wr-inicial           { fill: var(--wr-faint); }
+.wr-inicial.wr-viva   { fill: var(--wr-humano); }
+.wr-anel              { stroke: var(--wr-g-anel); }
+.wr-anel.wr-pensando  { stroke: var(--wr-ink); }
+.wr-anel.wr-longo     { stroke: var(--wr-amber); }
+.wr-sigla             { fill: var(--wr-faint); }
+.wr-sigla.wr-pensando { fill: var(--wr-ink); }
+.wr-sigla.wr-longo    { fill: var(--wr-amber); }
+.wr-ctx               { stroke: var(--wr-blue); }
+.wr-ctx.wr-longo      { stroke: var(--wr-amber); }
+.wr-sat-ponto         { fill: var(--wr-ink); }
+
+/* ── Vida em repouso ────────────────────────────────────────────────────
+   Uma parede parada lê como tela congelada. O respiro é lento e de baixa
+   amplitude de propósito: percebe-se de longe como "está vivo", não como
+   animação piscando. Cada nó entra numa fase diferente para o conjunto
+   ondular em vez de pulsar em bloco. */
+@keyframes wr-respira {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+.wr-anel.wr-ocioso,
+.wr-hex:not(.wr-viva) { animation: wr-respira 5.5s ease-in-out infinite; }
+
+/* O núcleo emite: duas ondas saindo devagar, uma atrasada em relação à
+   outra. É o dn.os — se algo na tela tem que parecer ligado, é ele. */
+@keyframes wr-onda {
+  0%   { transform: scale(0.55); opacity: 0.55; }
+  100% { transform: scale(2.1);  opacity: 0; }
+}
+.wr-nucleo-onda { stroke: var(--wr-g-viva); animation: wr-onda 4.2s ease-out infinite; }
+.wr-nucleo-onda.wr-atraso { animation-delay: 2.1s; }
+.wr-nucleo-rotulo {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase;
+  fill: var(--wr-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wr-anel.wr-ocioso, .wr-hex:not(.wr-viva), .wr-nucleo-onda { animation: none; }
+}
