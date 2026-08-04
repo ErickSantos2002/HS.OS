@@ -1,73 +1,115 @@
-# Welcome to your Lovable project
+# Remix of [OFICIAL] dn.os - Plataforma de super agentes da dn.ia
 
-## Project info
+Crie um Mission Control para gerenciar agentes de IA via OpenClaw Gateway API.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+CONTEXTO TÉCNICO:
 
-## How can I edit this code?
+- OpenClaw Gateway roda em VPS (acesso via túnel SSH ou subdomínio Cloudflare)
 
-There are several ways of editing your application.
+- API REST disponível em: http://localhost:18789
 
-**Use Lovable**
+- Autenticação: Bearer token no header Authorization
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- Dados locais em SQLite no servidor
 
-Changes made via Lovable will be committed automatically to this repo.
+FUNCIONALIDADES (em ordem de prioridade):
 
-**Use your preferred IDE**
+1. DASHBOARD PRINCIPAL
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+- Status do gateway (online/offline)
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+- Lista de agentes ativos com status
 
-Follow these steps:
+- Métricas: tokens usados, sessões ativas, uptime
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+2. CHAT COM AGENTES
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+- Sidebar com lista de agentes
 
-# Step 3: Install the necessary dependencies.
-npm i
+- Interface de chat por agente
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+- Histórico de conversas
 
-**Edit a file directly in GitHub**
+- Indicador de qual canal está usando (Telegram, WhatsApp, etc.)
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+3. GERENCIAMENTO DE AGENTES
 
-**Use GitHub Codespaces**
+- Criar novo agente (nome, system prompt, modelo, canais)
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- Editar agente existente
 
-## What technologies are used for this project?
+- Ativar/desativar agente
 
-This project is built with:
+- Definir permissões por membro da equipe
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
+4. CONTROLE DE TIMES
+
+- Cadastro de membros (nome, email, cargo)
+
+- Atribuir agentes a membros
+
+- Níveis de acesso: Admin (eu) e Operador (equipe DN.IA)
+
+5. GESTÃO DE ARQUIVOS
+
+- Upload de arquivos para workspace dos agentes
+
+- Visualizar arquivos por agente
+
+- Deletar arquivos
+
+DESIGN:
+
+- Dark mode como padrão
+
+- Sidebar esquerda com navegação
+
+- Cores: laranja/âmbar como accent (referência à marca DN.IA)
+
+- Interface profissional, densa, sem floreios
+
+TECH STACK:
+
+- React + TypeScript
+
 - Tailwind CSS
 
-## How can I deploy this project?
+- Conexão com OpenClaw via fetch() para a API REST
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+- Estado global com Zustand ou Context API
 
-## Can I connect a custom domain to my Lovable project?
+- Configuração de URL base e token na tela de Settings
 
-Yes, you can!
+TELA DE SETTINGS (obrigatória):
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+- Campo: Gateway URL (ex: https://agentes.dnia.ai)
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- Campo: Bearer Token
+
+- Botão: Testar conexão
+
+- Salvar em localStorage
+
+
+use o mesmo design system da área de /analytics e crm/funil de @project:f334bd90-8806-49b0-8de4-1f06503aa80a:"Nexus AI"
+
+This project was built with [Lovable](https://lovable.dev).
+
+## Build with Lovable
+
+Continue developing this project in the [Lovable editor](https://lovable.dev/projects/42055871-1cf6-4998-a33e-c74d8b1f2031).
+
+- **Ship faster**: describe what you want to build and Lovable handles the code.
+- **Stay in sync**: every change made in Lovable is committed straight to this repository.
+- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+
+## Development
+
+Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+
+```sh
+git clone <this-repository-url>
+cd <repository-name>
+npm i
+npm run dev
+```
