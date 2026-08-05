@@ -8,12 +8,19 @@ Atualizar este arquivo conforme os lotes forem fechando.
 
 ## Placar
 
+Duas medidas diferentes, e a distância entre elas importa: ter o endpoint no
+backend não é o mesmo que a tela usar o endpoint.
+
 | | Feito | Total |
 |---|---|---|
-| Edge functions portadas | 9 | 73 |
+| Edge functions **com substituto no backend** | 5 | 73 |
+| Edge functions **que o front já parou de chamar** | 2 | 73 |
 | Arquivos do front sem Supabase | 10 | 113 |
 | `supabase.from()` restantes | — | 71 |
 | `functions.invoke()` restantes | — | 48 |
+
+Um lote só fecha quando as duas linhas andam. Hoje o backend do gateway está
+pronto e a tela ainda chama o Supabase — ver Lote 1.
 
 Medir com:
 
@@ -64,7 +71,7 @@ Endpoints: `/health`, `/auth/{status,login,me,bootstrap-admin}`, `/branding`, `/
 
 ---
 
-## ✅ Lote 1 — Gateway (concluído em 05/08/2026)
+## 🟡 Lote 1 — Gateway (backend feito em 05/08/2026, frontend pendente)
 
 **7 functions · ~1.360 linhas** — `get-gateway-status`, `test-gateway-connection`,
 `gateway-models`, `gateway-files-proxy`, `list-openclaw-workspaces`,
@@ -90,6 +97,15 @@ O vazamento do token foi fechado: `/gateway/config` devolve `{url, tem_token, co
 nunca o valor. Verificado varrendo as respostas dos 5 endpoints.
 
 Endpoints: `/gateway/{config,status,models,agents,sessions}`.
+
+**Falta fechar o lote:**
+- Trocar no front as chamadas a `get-gateway-status`, `test-gateway-connection` e
+  `gateway-models` pelos endpoints novos — hoje a tela ainda invoca as edge functions.
+- Remover o `admin_token` de `lib/gateway.ts`, que ainda o carrega para o navegador.
+  Enquanto isso não acontecer, o vazamento continua existindo no caminho antigo,
+  mesmo com o backend correto.
+- Portar as 4 restantes: `gateway-files-proxy`, `list-openclaw-workspaces`,
+  `configure-instance-vault`, `save-install-block`.
 
 ## Lote 2 — Agentes
 
