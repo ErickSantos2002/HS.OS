@@ -34,3 +34,6 @@ __pycache__/
 *.njsproj
 *.sln
 *.sw?
+
+# Artefatos do Playwright MCP
+.playwright-mcp/

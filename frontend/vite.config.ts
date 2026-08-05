@@ -27,6 +27,16 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    // Espelha o que o nginx faz em produção: /api → backend. Assim
+    // VITE_API_URL=/api vale nos dois ambientes, sem CORS no navegador.
+    // 8002 porque 8000 é do taskhs-backend e 8001 do gestorhs-backend.
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:8002",
+        changeOrigin: true,
+        rewrite: (caminho) => caminho.replace(/^\/api/, ""),
+      },
+    },
   },
   plugins: [
     react(),

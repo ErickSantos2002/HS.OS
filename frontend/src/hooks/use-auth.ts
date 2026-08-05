@@ -1,13 +1,21 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { supabase } from "@/integrations/supabase/client";
-import type { Session, User } from "@supabase/supabase-js";
+import { api, ErroApi, EVENTO_SESSAO_ENCERRADA, gravarToken, lerToken } from "@/lib/api";
+import type { AuthSession, AuthUser } from "@/contexts/auth-context";
 
 export type AppRole = "super_admin" | "member" | "user";
 
+interface RespostaMe {
+  id: string;
+  email: string;
+  nome: string | null;
+  papel: AppRole;
+  avatar_url: string | null;
+}
+
 interface AuthState {
-  session: Session | null;
-  user: User | null;
+  session: AuthSession | null;
+  user: AuthUser | null;
   role: AppRole | null;
   profile: { full_name: string; email: string; status: string; avatar_url: string | null } | null;
   loading: boolean;
@@ -22,15 +30,14 @@ const CALL_TIMEOUT_MS = 10000;
 function withTimeout<T>(promise: Promise<T>, ms = CALL_TIMEOUT_MS): Promise<T> {
   return Promise.race([
     promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("TIMEOUT")), ms)
-    ),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), ms)),
   ]);
 }
 
 function isTransientError(err: unknown): boolean {
   if (!err) return false;
-  const msg = String((err as any)?.message ?? err).toLowerCase();
+  if (err instanceof ErroApi) return err.indisponivel;
+  const msg = String((err as { message?: string })?.message ?? err).toLowerCase();
   return (
     msg.includes("failed to fetch") ||
     msg.includes("timeout") ||
@@ -42,207 +49,89 @@ function isTransientError(err: unknown): boolean {
   );
 }
 
-export function useAuth() {
-  const [state, setState] = useState<AuthState>({
-    session: null,
-    user: null,
-    role: null,
-    profile: null,
-    loading: true,
-    needsPasswordSetup: false,
-    authError: null,
-    isServiceUnavailable: false,
-  });
+const DESLOGADO: AuthState = {
+  session: null,
+  user: null,
+  role: null,
+  profile: null,
+  loading: false,
+  needsPasswordSetup: false,
+  authError: null,
+  isServiceUnavailable: false,
+};
 
+export function useAuth() {
+  const [state, setState] = useState<AuthState>({ ...DESLOGADO, loading: true });
   const retryCountRef = useRef(0);
 
-  const fetchRoleAndProfile = useCallback(async (userId: string) => {
-    const [roleRes, profileRes] = await withTimeout(
-      Promise.all([
-        supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", userId)
-          .order("role")
-          .limit(1)
-          .maybeSingle(),
-        supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
-      ])
-    );
-
-    const role = (roleRes.data?.role as AppRole) ?? "user";
-    const profile = profileRes.data
-      ? {
-          full_name: profileRes.data.full_name ?? "",
-          email: profileRes.data.email ?? "",
-          status: profileRes.data.status ?? "active",
-          avatar_url: (profileRes.data as any).avatar_url ?? null,
-        }
-      : null;
-
-    return { role, profile };
-  }, []);
-
+  /** Restaura a sessão a partir do token guardado, validando-o contra a API. */
   const initAuth = useCallback(async () => {
+    const token = lerToken();
+    if (!token) {
+      setState({ ...DESLOGADO });
+      return;
+    }
+
     setState((prev) => ({ ...prev, loading: true, authError: null, isServiceUnavailable: false }));
 
     try {
-      const { data: { session } } = await withTimeout(supabase.auth.getSession());
-
-      if (session?.user) {
-        try {
-          const { role, profile } = await fetchRoleAndProfile(session.user.id);
-          const needsPw = profile?.status === "pending" || window.location.hash.includes("type=invite");
-          setState({
-            session,
-            user: session.user,
-            role,
-            profile,
-            loading: false,
-            needsPasswordSetup: needsPw,
-            authError: null,
-            isServiceUnavailable: false,
-          });
-        } catch (profileErr) {
-          console.warn("[auth] Profile fetch failed, using fallback:", profileErr);
-          const unavailable = isTransientError(profileErr);
-          const needsPw = window.location.hash.includes("type=invite");
-          setState({
-            session,
-            user: session.user,
-            role: "user",
-            profile: null,
-            loading: false,
-            needsPasswordSetup: needsPw,
-            authError: unavailable ? "Serviço temporariamente indisponível" : null,
-            isServiceUnavailable: unavailable,
-          });
-        }
-      } else {
-        setState({
-          session: null,
-          user: null,
-          role: null,
-          profile: null,
-          loading: false,
-          needsPasswordSetup: false,
-          authError: null,
-          isServiceUnavailable: false,
-        });
-      }
-    } catch (err) {
-      console.warn("[auth] getSession failed:", err);
-      const unavailable = isTransientError(err);
+      const eu = await withTimeout(api<RespostaMe>("/auth/me"));
+      const user: AuthUser = { id: eu.id, email: eu.email };
       setState({
-        session: null,
-        user: null,
-        role: null,
-        profile: null,
+        session: { access_token: token, user },
+        user,
+        role: eu.papel,
+        profile: {
+          full_name: eu.nome ?? "",
+          email: eu.email,
+          status: "active",
+          avatar_url: eu.avatar_url,
+        },
         loading: false,
         needsPasswordSetup: false,
-        authError: unavailable ? "Serviço temporariamente indisponível" : String((err as any)?.message ?? "Erro desconhecido"),
-        isServiceUnavailable: unavailable,
+        authError: null,
+        isServiceUnavailable: false,
+      });
+    } catch (err) {
+      // Um 401 já limpou o token dentro do cliente HTTP; aqui só decidimos a
+      // mensagem. Falha transitória preserva o token, para o retry funcionar.
+      const indisponivel = isTransientError(err);
+      if (!indisponivel) gravarToken(null);
+      setState({
+        ...DESLOGADO,
+        authError: indisponivel ? "Serviço temporariamente indisponível" : null,
+        isServiceUnavailable: indisponivel,
       });
     }
-  }, [fetchRoleAndProfile]);
+  }, []);
 
   useEffect(() => {
-    // Auth state change listener
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        setState((prev) => ({
-          ...prev,
-          session,
-          user: session.user,
-          // loading:true só quando o USUÁRIO muda de verdade. TOKEN_REFRESHED
-          // (renovação silenciosa, disparada por qualquer chamada com sessão
-          // envelhecida) virava tela de loading do app inteiro — parecia um
-          // F5 fantasma e engolia o resultado do que o usuário tinha clicado
-          // (flagrado no Testar de conexões, 29/07).
-          loading: prev.user?.id === session.user.id ? prev.loading : true,
-          authError: null,
-          isServiceUnavailable: false,
-        }));
-
-        // Defer to avoid auth lock deadlock
-        setTimeout(async () => {
-          try {
-            const { role, profile } = await withTimeout(fetchRoleAndProfile(session.user.id));
-            const needsPw = profile?.status === "pending" || window.location.hash.includes("type=invite");
-            setState({
-              session,
-              user: session.user,
-              role,
-              profile,
-              loading: false,
-              needsPasswordSetup: needsPw,
-              authError: null,
-              isServiceUnavailable: false,
-            });
-          } catch (error) {
-            console.warn("[auth] Failed to fetch role/profile after auth change:", error);
-            const unavailable = isTransientError(error);
-            const needsPw = window.location.hash.includes("type=invite");
-            setState({
-              session,
-              user: session.user,
-              role: "user",
-              profile: null,
-              loading: false,
-              needsPasswordSetup: needsPw,
-              authError: unavailable ? "Serviço temporariamente indisponível" : null,
-              isServiceUnavailable: unavailable,
-            });
-          }
-
-          if (event === "SIGNED_IN") {
-            supabase.from("access_logs").insert({
-              user_id: session.user.id,
-              action: "login",
-              metadata: {},
-            }).then(() => {}, () => {});
-          }
-        }, 0);
-      } else {
-        setState({
-          session: null,
-          user: null,
-          role: null,
-          profile: null,
-          loading: false,
-          needsPasswordSetup: false,
-          authError: null,
-          isServiceUnavailable: false,
-        });
-      }
-    });
-
-    // Initial session restore
     initAuth();
 
-    // Hard cap: never loading for more than 8s
-    const maxLoadingTimer = setTimeout(() => {
-      setState((prev) => {
-        if (prev.loading) {
-          console.warn("[auth] Max loading timeout reached (8s)");
-          return {
-            ...prev,
-            loading: false,
-            authError: prev.authError || "Serviço temporariamente indisponível",
-            isServiceUnavailable: true,
-          };
-        }
-        return prev;
-      });
+    // O cliente HTTP avisa quando o servidor rejeita o token (expirado ou
+    // revogado). Sem isto, o usuário ficaria numa tela que falha em silêncio.
+    const aoEncerrar = () => setState({ ...DESLOGADO });
+    window.addEventListener(EVENTO_SESSAO_ENCERRADA, aoEncerrar);
+
+    // Teto rígido: nunca ficar carregando por mais de 8s.
+    const timer = setTimeout(() => {
+      setState((prev) =>
+        prev.loading
+          ? {
+              ...prev,
+              loading: false,
+              authError: prev.authError || "Serviço temporariamente indisponível",
+              isServiceUnavailable: true,
+            }
+          : prev,
+      );
     }, MAX_LOADING_MS);
 
     return () => {
-      subscription.unsubscribe();
-      clearTimeout(maxLoadingTimer);
+      window.removeEventListener(EVENTO_SESSAO_ENCERRADA, aoEncerrar);
+      clearTimeout(timer);
     };
-  }, [fetchRoleAndProfile, initAuth]);
+  }, [initAuth]);
 
   const retryAuth = useCallback(async () => {
     retryCountRef.current += 1;
@@ -250,25 +139,49 @@ export function useAuth() {
   }, [initAuth]);
 
   const signOut = useCallback(async () => {
-    if (state.user) {
-      await supabase.from("access_logs").insert({
-        user_id: state.user.id,
-        action: "logout",
-        metadata: {},
-      }).then(() => {}, () => {});
-    }
-    await supabase.auth.signOut().catch(() => {});
-  }, [state.user]);
+    gravarToken(null);
+    setState({ ...DESLOGADO });
+  }, []);
 
   const hasAccess = useCallback(
-    (allowedRoles: AppRole[]) => {
-      if (!state.role) return false;
-      return allowedRoles.includes(state.role);
-    },
-    [state.role]
+    (allowedRoles: AppRole[]) => (state.role ? allowedRoles.includes(state.role) : false),
+    [state.role],
   );
 
   return { ...state, signOut, hasAccess, retryAuth };
 }
 
 export { isTransientError, withTimeout };
+
+/**
+ * Autentica e guarda o token. A tela de login chama isto e em seguida recarrega
+ * a rota, o que faz o `useAuth` remontar já com sessão.
+ */
+export async function entrar(email: string, senha: string): Promise<void> {
+  const r = await api<{ access_token: string }>("/auth/login", {
+    method: "POST",
+    body: { email, senha },
+    autenticar: false,
+  });
+  gravarToken(r.access_token);
+}
+
+/** Cria o primeiro administrador de uma instalação zerada e já autentica. */
+export async function criarPrimeiroAdmin(
+  email: string,
+  senha: string,
+  nome: string,
+): Promise<void> {
+  const r = await api<{ access_token: string }>("/auth/bootstrap-admin", {
+    method: "POST",
+    body: { email, senha, nome },
+    autenticar: false,
+  });
+  gravarToken(r.access_token);
+}
+
+/** Diz se a instalação ainda não tem nenhum usuário. */
+export async function precisaBootstrap(): Promise<boolean> {
+  const r = await api<{ precisa_bootstrap: boolean }>("/auth/status", { autenticar: false });
+  return r.precisa_bootstrap;
+}

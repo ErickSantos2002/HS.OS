@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
+import { criarPrimeiroAdmin, entrar, precisaBootstrap } from "@/hooks/use-auth";
+import { ErroApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, AlertTriangle, Eye, EyeOff, Zap, Mail, Lock, RefreshCw, WifiOff, User } from "lucide-react";
+import { Loader2, AlertTriangle, Eye, EyeOff, Mail, Lock, RefreshCw, WifiOff, User } from "lucide-react";
 import { useBranding, useThemedLogo } from "@/hooks/use-branding";
 import { isTransientError } from "@/hooks/use-auth";
 
@@ -22,7 +23,8 @@ function withTimeout<T>(promise: Promise<T>, ms = LOGIN_TIMEOUT_MS): Promise<T> 
 }
 
 export default function LoginPage() {
-  const { user, loading: authLoading, isServiceUnavailable, authError, retryAuth } = useAuthContext();
+  const { user, loading: authLoading, isServiceUnavailable, authError, retryAuth } =
+    useAuthContext();
   const { branding, loaded: brandingLoaded } = useBranding();
   const themedLogo = useThemedLogo();
 
@@ -34,8 +36,10 @@ export default function LoginPage() {
   const [serviceDown, setServiceDown] = useState(false);
   const [attempts, setAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
-  const [mode, setMode] = useState<"login" | "forgot" | "bootstrap">("login");
-  const [forgotSent, setForgotSent] = useState(false);
+  // Sem "esqueci minha senha": o HS.OS é interno e as senhas são definidas
+  // pelo setor de TI. Recuperação por e-mail seria um caminho de acesso a mais
+  // para manter seguro, sem resolver um problema que a gente tenha.
+  const [mode, setMode] = useState<"login" | "bootstrap">("login");
   const [remember, setRemember] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -49,25 +53,18 @@ export default function LoginPage() {
     (async () => {
       try {
         // Timeout curto: a checagem NUNCA deve bloquear o login (página crítica).
-        const { data, error } = await withTimeout(
-          supabase.functions.invoke("bootstrap-first-admin", { body: { action: "check" } }),
-          4000,
-        );
-
-        // 404 é o sintoma de instalação incompleta: o Lovable sincroniza o
-        // código das edge functions pelo GitHub mas NÃO faz o deploy delas.
-        // Sem este aviso, o remix novo caía no login comum, a pessoa criava
-        // conta pelo cadastro normal e virava 'user' em vez de 'super_admin' —
-        // e só descobria depois, item por item, que não tinha permissão para
-        // nada. O erro precisa aparecer aqui, ligado à causa.
-        if (!cancelled && (error as { context?: Response })?.context?.status === 404) {
+        const precisa = await withTimeout(precisaBootstrap(), 4000);
+        if (!cancelled && precisa) setMode("bootstrap");
+      } catch (err) {
+        // A API não respondeu. Antes isto detectava um 404 das edge functions
+        // (o Lovable sincronizava o código mas não fazia o deploy); agora o
+        // sintoma equivalente é o backend fora do ar. Sem o aviso, a pessoa cai
+        // no login comum e não entende por que nenhuma senha funciona.
+        if (!cancelled && err instanceof ErroApi && err.indisponivel) {
           setInstallIncomplete(true);
           return;
         }
-
-        if (!cancelled && data?.needsBootstrap) setMode("bootstrap");
-      } catch {
-        /* fail-safe: timeout ou rede → mostra o login normal, sem acusar deploy */
+        /* fail-safe: timeout ou rede → mostra o login normal */
       } finally {
         if (!cancelled) setCheckingBootstrap(false);
       }
@@ -112,61 +109,24 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const { error: signInError } = await withTimeout(
-        supabase.auth.signInWithPassword({ email, password })
-      );
-
-      if (signInError) {
-        if (isTransientError(signInError)) {
-          setServiceDown(true);
-          setError("Serviço temporariamente indisponível. Tente novamente em instantes.");
-        } else {
-          const newAttempts = attempts + 1;
-          setAttempts(newAttempts);
-          if (newAttempts >= MAX_ATTEMPTS) {
-            setLockedUntil(Date.now() + LOCKOUT_MS);
-            setError("Muitas tentativas. Conta bloqueada por 15 minutos.");
-          } else {
-            setError("Email ou senha incorretos.");
-          }
-        }
-      }
+      await withTimeout(entrar(email, password));
+      // O token está guardado; revalida para o contexto enxergar a sessão. Sem
+      // isto a tela ficaria parada, porque não há mais o onAuthStateChange do
+      // Supabase avisando a aplicação.
+      await retryAuth();
     } catch (err) {
       if (isTransientError(err)) {
         setServiceDown(true);
         setError("Serviço temporariamente indisponível. Tente novamente em instantes.");
-      } else {
-        setError("Erro inesperado. Tente novamente.");
-      }
-    }
-    setLoading(false);
-  };
-
-  const handleForgotPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setServiceDown(false);
-    setLoading(true);
-    try {
-      const { error: resetError } = await withTimeout(
-        supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/reset-password`,
-        })
-      );
-      if (resetError) {
-        if (isTransientError(resetError)) {
-          setServiceDown(true);
-          setError("Serviço temporariamente indisponível.");
+      } else if (err instanceof ErroApi && (err.status === 401 || err.status === 403)) {
+        const newAttempts = attempts + 1;
+        setAttempts(newAttempts);
+        if (newAttempts >= MAX_ATTEMPTS) {
+          setLockedUntil(Date.now() + LOCKOUT_MS);
+          setError("Muitas tentativas. Conta bloqueada por 15 minutos.");
         } else {
-          setError(resetError.message);
+          setError(err.status === 403 ? err.message : "Email ou senha incorretos.");
         }
-      } else {
-        setForgotSent(true);
-      }
-    } catch (err) {
-      if (isTransientError(err)) {
-        setServiceDown(true);
-        setError("Serviço temporariamente indisponível.");
       } else {
         setError("Erro inesperado. Tente novamente.");
       }
@@ -184,24 +144,19 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const { data, error: bootError } = await supabase.functions.invoke("bootstrap-first-admin", {
-        body: { action: "create", email, password, full_name: fullName },
-      });
-      if (bootError || data?.error) {
-        setError(data?.error ?? "Não foi possível criar a conta. Tente novamente.");
-        setLoading(false);
-        return;
-      }
-      // Loga com as credenciais recém-criadas; o OnboardingGate leva ao /setup.
-      const { error: signInError } = await withTimeout(
-        supabase.auth.signInWithPassword({ email, password })
-      );
-      if (signInError) {
-        setError("Conta criada, mas o login falhou. Tente entrar manualmente.");
+      // O bootstrap já devolve o token autenticado — não precisa de um login
+      // logo em seguida. O OnboardingGate leva ao /setup.
+      await withTimeout(criarPrimeiroAdmin(email, password, fullName));
+      await retryAuth();
+    } catch (err) {
+      if (err instanceof ErroApi && err.status === 409) {
+        setError("Esta instalação já tem um administrador. Entre com sua conta.");
         setMode("login");
+      } else if (err instanceof ErroApi && !err.indisponivel) {
+        setError(err.message);
+      } else {
+        setError("Erro inesperado ao criar a conta. Tente novamente.");
       }
-    } catch {
-      setError("Erro inesperado ao criar a conta. Tente novamente.");
     }
     setLoading(false);
   };
@@ -232,11 +187,6 @@ export default function LoginPage() {
             )}
           </div>
 
-          {mode === "forgot" && (
-            <h1 className="text-xl font-display font-semibold text-foreground">
-              Recuperar Senha
-            </h1>
-          )}
           {mode === "bootstrap" && (
             <>
               <h1 className="text-xl font-display font-semibold text-foreground">
@@ -368,7 +318,7 @@ export default function LoginPage() {
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Criar conta e continuar"}
             </Button>
           </form>
-        ) : mode === "login" ? (
+        ) : (
           <form onSubmit={handleLogin} className="space-y-5">
             {/* Email */}
             <div className="space-y-2">
@@ -434,68 +384,9 @@ export default function LoginPage() {
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Entrar"}
             </Button>
 
-            {/* Forgot */}
-            <button
-              type="button"
-              onClick={() => { setMode("forgot"); setError(""); setServiceDown(false); }}
-              className="text-xs text-muted-foreground hover:text-primary w-full text-center transition-colors"
-            >
-              Esqueci minha senha
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleForgotPassword} className="space-y-5">
-            {forgotSent ? (
-              <div className="text-center space-y-3 py-4">
-                <Mail className="h-10 w-10 text-primary mx-auto" />
-                <p className="text-sm text-foreground">
-                  Email de recuperação enviado para <strong>{email}</strong>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Verifique sua caixa de entrada.
-                </p>
-              </div>
-            ) : (
-              <>
-                <p className="text-sm text-muted-foreground text-center">
-                  Digite seu email para receber um link de recuperação.
-                </p>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="seu@email.com"
-                    className="w-full h-12 rounded-full border border-border bg-secondary/50 pl-11 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    required
-                  />
-                </div>
-
-                {error && !showServiceError && (
-                  <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 rounded-xl px-4 py-2.5">
-                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <Button
-                  type="submit"
-                  className="w-full h-12 rounded-full text-sm font-semibold uppercase tracking-wider"
-                  disabled={loading}
-                >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar Link"}
-                </Button>
-              </>
-            )}
-
-            <button
-              type="button"
-              onClick={() => { setMode("login"); setError(""); setForgotSent(false); setServiceDown(false); }}
-              className="text-xs text-muted-foreground hover:text-primary w-full text-center transition-colors"
-            >
-              Voltar ao login
-            </button>
+            <p className="text-xs text-muted-foreground w-full text-center">
+              Esqueceu a senha? Fale com o setor de TI.
+            </p>
           </form>
         )}
       </div>
