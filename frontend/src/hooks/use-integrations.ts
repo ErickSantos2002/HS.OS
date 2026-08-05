@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getGatewayConfig } from "@/lib/gateway";
+import { getGatewayConfig, gatewayNaoPortado } from "@/lib/gateway";
 
 export interface AgentIntegrations {
   agentId: string;
@@ -14,7 +14,7 @@ async function fetchAgentIntegrations(agentId: string): Promise<AgentIntegration
   const config = getGatewayConfig();
   try {
     const res = await fetch(`${config.url}/api/agents/${encodeURIComponent(agentId)}/integrations`, {
-      headers: { Authorization: `Bearer ${config.token}` },
+      headers: { Authorization: `Bearer ${gatewayNaoPortado("Integrações do gateway")}` },
     });
     if (!res.ok) return { agentId, integrations: [], connected: false };
     const data = await res.json();
@@ -30,7 +30,7 @@ async function fetchAgentIntegrations(agentId: string): Promise<AgentIntegration
 async function fetchAllIntegrations(): Promise<Record<string, AgentIntegrations>> {
   const config = getGatewayConfig();
   const res = await fetch(`${config.url}/api/agents/integrations`, {
-    headers: { Authorization: `Bearer ${config.token}` },
+    headers: { Authorization: `Bearer ${gatewayNaoPortado("Integrações do gateway")}` },
   });
   if (!res.ok) return {};
   return res.json();

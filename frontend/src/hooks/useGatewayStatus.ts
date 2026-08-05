@@ -1,5 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { api, lerToken } from "@/lib/api";
+
+/** Resposta de GET /gateway/status. */
+interface StatusApi {
+  conectado: boolean;
+  versao: string | null;
+  protocolo: number | null;
+  scopes: string[];
+  erro: string | null;
+}
 
 export interface GatewayStatusData {
   config: {
@@ -19,18 +28,29 @@ export function useGatewayStatus() {
   const [loading, setLoading] = useState(true);
 
   const refetch = useCallback(async () => {
-    // Sem sessão a função responde 401 e o erro sobe como "erro de runtime" no
-    // preview do Lovable — barulho por uma chamada que nunca teve chance de
-    // dar certo. Acontece no intervalo entre o app montar e a sessão existir,
-    // e a cada 60s enquanto a sessão estiver expirada.
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
+    // Sem token guardado a chamada responderia 401 sem ter chance de dar certo —
+    // acontece entre o app montar e a sessão existir, e a cada 60s enquanto ela
+    // estiver expirada. Melhor nem chamar.
+    if (!lerToken()) {
       setLoading(false);
       return;
     }
-    const { data: result, error } = await supabase.functions.invoke("get-gateway-status");
-    if (!error && result?.success) {
-      setData(result.data as GatewayStatusData);
+    try {
+      const s = await api<StatusApi>("/gateway/status");
+      // `latest_metrics` e `recent_history` vinham do heartbeat que a edge
+      // function agregava de `gateway_health`. Essa coleta é do Lote 6
+      // (monitoring); até lá o painel mostra só conectado/desconectado.
+      setData({
+        config: s.erro === "Gateway não configurado."
+          ? null
+          : { id: "", gateway_url: "", has_token: true, updated_at: "" },
+        connection_status: s.conectado ? "online" : "offline",
+        minutes_since_heartbeat: null,
+        latest_metrics: s.versao ? { version: s.versao, protocol: s.protocolo } : null,
+        recent_history: [],
+      });
+    } catch {
+      /* backend fora do ar — mantém o último estado conhecido */
     }
     setLoading(false);
   }, []);

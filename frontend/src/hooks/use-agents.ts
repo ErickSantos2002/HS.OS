@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { getGatewayConfig } from "@/lib/gateway";
+import { getGatewayConfig, gatewayNaoPortado } from "@/lib/gateway";
 import { useAuthContext } from "@/contexts/auth-context";
 import { getAgentDisplayNameById, getModelForAgent, getOfficialAgentIds, isManagedAgentRecord, isOfficialAgentId, normalizeAgentId } from "@/lib/active-agents";
 import { statusFromActivity } from "@/lib/agent-status";
@@ -201,7 +201,7 @@ async function fetchAgents(userId?: string, isAdmin?: boolean): Promise<GatewayA
         const config = getGatewayConfig();
         const res = await fetch(`${config.url}/v1/models`, {
           headers: {
-            Authorization: `Bearer ${config.token}`,
+            Authorization: `Bearer ${gatewayNaoPortado("Agentes do gateway")}`,
             "Content-Type": "application/json",
           },
           signal: controller.signal,
@@ -312,7 +312,7 @@ function startSSE(queryClient: any) {
 
   function connect() {
     const config = getGatewayConfig();
-    const url = `${config.url}/api/stream?token=${encodeURIComponent(config.token)}`;
+    const url = `${config.url}/api/stream?token=${encodeURIComponent(gatewayNaoPortado("Agentes do gateway"))}`;
     const es = new EventSource(url);
     sseInstance = es;
 

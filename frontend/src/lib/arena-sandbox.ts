@@ -1,3 +1,4 @@
+import { gatewayNaoPortado } from "@/lib/gateway";
 /**
  * Generates the sandbox HTML for rendering Arena React code in an iframe.
  */
@@ -19,7 +20,7 @@ export function buildSandboxHtml(reactCode: string, agents: string[]): string {
 <script>
   window.ARENA_CONFIG = {
     apiUrl: ${JSON.stringify(config.url)},
-    token: ${JSON.stringify(config.token)},
+    token: ${JSON.stringify(gatewayNaoPortado("Arena (sandbox)"))},
     agents: ${JSON.stringify(agents)}
   };
 <\/script>

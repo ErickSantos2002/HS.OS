@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { getGatewayConfig } from "@/lib/gateway";
+import { getGatewayConfig, gatewayNaoPortado } from "@/lib/gateway";
 
 export interface Skill {
   name: string;
@@ -95,7 +95,7 @@ export function useSkills() {
     setError(null);
     try {
       const res = await fetch(`${config.url}/api/skills`, {
-        headers: { Authorization: `Bearer ${config.token}` },
+        headers: { Authorization: `Bearer ${gatewayNaoPortado("Skills")}` },
       });
       if (!res.ok) throw new Error(`Erro ${res.status}`);
       const data = await res.json();
@@ -143,7 +143,7 @@ export function useAgentSkills(agentId: string | null) {
     setError(null);
     try {
       const res = await fetch(`${config.url}/api/skills/${agentId}`, {
-        headers: { Authorization: `Bearer ${config.token}` },
+        headers: { Authorization: `Bearer ${gatewayNaoPortado("Skills")}` },
       });
       if (!res.ok) throw new Error(`Erro ${res.status}`);
       const data = await res.json();

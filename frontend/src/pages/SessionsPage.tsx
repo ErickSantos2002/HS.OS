@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAgents } from "@/hooks/use-agents";
-import { getGatewayConfig } from "@/lib/gateway";
+import { getGatewayConfig, gatewayNaoPortado } from "@/lib/gateway";
 import { MessageSquare, Loader2, WifiOff, RefreshCw, ChevronRight, User, Bot, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -51,7 +51,7 @@ export default function SessionsPage() {
         agentsToFetch.map(async (agent) => {
           const shortId = stripPrefix(agent.id);
           const res = await fetch(`${config.url}/api/sessions/${shortId}`, {
-            headers: { Authorization: `Bearer ${config.token}` },
+            headers: { Authorization: `Bearer ${gatewayNaoPortado("Sessões do gateway")}` },
           });
           if (!res.ok) { if (res.status === 404) return []; throw new Error(`Erro ${res.status} ao buscar sessões de ${agent.name}`); }
           const data = await res.json();
@@ -85,7 +85,7 @@ export default function SessionsPage() {
     try {
       const shortId = stripPrefix(session.agentId);
       const res = await fetch(`${config.url}/api/sessions/${shortId}/${session.id}`, {
-        headers: { Authorization: `Bearer ${config.token}` },
+        headers: { Authorization: `Bearer ${gatewayNaoPortado("Sessões do gateway")}` },
       });
       if (!res.ok) throw new Error(`Erro ${res.status}`);
       const data = await res.json();
@@ -138,7 +138,7 @@ export default function SessionsPage() {
         try {
           const res = await fetch(`${config.url}/api/sessions/${shortId}/${encodeURIComponent(s.id)}`, {
             method: "DELETE",
-            headers: { Authorization: `Bearer ${config.token}` },
+            headers: { Authorization: `Bearer ${gatewayNaoPortado("Sessões do gateway")}` },
           });
           if (res.ok || res.status === 404) ok++; else fail++;
         } catch { fail++; }

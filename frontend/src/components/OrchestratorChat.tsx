@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { getGatewayConfig } from "@/lib/gateway";
+import { getGatewayConfig, gatewayNaoPortado } from "@/lib/gateway";
 import { type GatewayAgent } from "@/hooks/use-agents";
 import { X, Send, Bot, User, Loader2 } from "lucide-react";
 
@@ -47,7 +47,7 @@ export function OrchestratorChat({ agents, onClose }: OrchestratorChatProps) {
       const config = getGatewayConfig();
       const res = await fetch(`${config.url}/v1/responses`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${config.token}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${gatewayNaoPortado("Chat do orquestrador")}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: selectedAgent,
           input: `${ORCHESTRATOR_SYSTEM}\n\n${newMessages.map((m) => `${m.role}: ${m.content}`).join("\n")}`,

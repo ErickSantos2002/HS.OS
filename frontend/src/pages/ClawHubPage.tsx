@@ -32,7 +32,7 @@ import {
   Check,
   CheckCircle2,
 } from "lucide-react";
-import { getGatewayConfig } from "@/lib/gateway";
+import { getGatewayConfig, gatewayNaoPortado } from "@/lib/gateway";
 
 /* ── Platform helpers ─────────────────────────────────── */
 
@@ -164,7 +164,7 @@ function ActivateSkillModal({
 
       if (skill.requiresCredentials && credential.trim()) {
         const toolsRes = await fetch(`${config.url}/api/files/${agentIdClean}/TOOLS.md`, {
-          headers: { Authorization: `Bearer ${config.token}` },
+          headers: { Authorization: `Bearer ${gatewayNaoPortado("ClawHub")}` },
         });
         let toolsContent = "";
         if (toolsRes.ok) {
@@ -174,14 +174,14 @@ function ActivateSkillModal({
         const entry = `\n\n## ${skill.name}\nCredential: ${credential.trim()}`;
         await fetch(`${config.url}/api/files/${agentIdClean}`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${config.token}`, "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${gatewayNaoPortado("ClawHub")}`, "Content-Type": "application/json" },
           body: JSON.stringify({ filename: "TOOLS.md", content: toolsContent + entry }),
         });
       }
 
       await fetch(`${config.url}/api/skills/${agentIdClean}/request`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${config.token}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${gatewayNaoPortado("ClawHub")}`, "Content-Type": "application/json" },
         body: JSON.stringify({ skill: skill.name }),
       });
 
@@ -456,7 +456,7 @@ function AgentSkillsTab() {
     try {
       const config = getGatewayConfig();
       const filesRes = await fetch(`${config.url}/api/files/${selectedAgentId}`, {
-        headers: { Authorization: `Bearer ${config.token}` },
+        headers: { Authorization: `Bearer ${gatewayNaoPortado("ClawHub")}` },
       });
       let soulContent = "";
       if (filesRes.ok) {
@@ -465,7 +465,7 @@ function AgentSkillsTab() {
         if (soulFile) {
           const contentRes = await fetch(
             `${config.url}/api/files/${selectedAgentId}/SOUL.md`,
-            { headers: { Authorization: `Bearer ${config.token}` } }
+            { headers: { Authorization: `Bearer ${gatewayNaoPortado("ClawHub")}` } }
           );
           if (contentRes.ok) {
             const cData = await contentRes.json();
@@ -480,7 +480,7 @@ function AgentSkillsTab() {
       await fetch(`${config.url}/api/files/${selectedAgentId}`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${config.token}`,
+          Authorization: `Bearer ${gatewayNaoPortado("ClawHub")}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ filename: "SOUL.md", content: updated }),
@@ -501,7 +501,7 @@ function AgentSkillsTab() {
       const config = getGatewayConfig();
       const contentRes = await fetch(
         `${config.url}/api/files/${selectedAgentId}/SOUL.md`,
-        { headers: { Authorization: `Bearer ${config.token}` } }
+        { headers: { Authorization: `Bearer ${gatewayNaoPortado("ClawHub")}` } }
       );
       if (contentRes.ok) {
         const cData = await contentRes.json();
@@ -515,7 +515,7 @@ function AgentSkillsTab() {
         await fetch(`${config.url}/api/files/${selectedAgentId}`, {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${config.token}`,
+            Authorization: `Bearer ${gatewayNaoPortado("ClawHub")}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ filename: "SOUL.md", content }),

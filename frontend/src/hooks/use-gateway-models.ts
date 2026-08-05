@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { getModelLabel } from "@/lib/model-pricing";
 
 /**
@@ -46,8 +46,16 @@ async function fetchGatewayModels(): Promise<{
   /** agentId -> "provedor/modelo" configurado como padrão daquele agente. */
   agentDefaults: Record<string, string>;
 }> {
-  const { data, error } = await supabase.functions.invoke("gateway-models", { body: {} });
-  if (error || !data?.success || !Array.isArray(data.models) || data.models.length === 0) {
+  let data: { models?: GatewayModel[]; agentDefaults?: Record<string, string> };
+  try {
+    // `models.list` do gateway, via proxy do backend. O token nunca passa aqui.
+    data = await api<{ models?: GatewayModel[]; agentDefaults?: Record<string, string> }>(
+      "/gateway/models",
+    );
+  } catch {
+    return { models: FALLBACK_MODELS, isFallback: true, agentDefaults: {} };
+  }
+  if (!Array.isArray(data.models) || data.models.length === 0) {
     return { models: FALLBACK_MODELS, isFallback: true, agentDefaults: {} };
   }
   const agentDefaults: Record<string, string> =

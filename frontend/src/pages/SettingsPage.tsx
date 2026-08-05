@@ -202,9 +202,10 @@ export default function SettingsPage() {
       const config = await loadGatewayConfig();
       if (cancelled) return;
       setUrl(config.url);
-      // Never prefill the token input — keep it empty and show a masked placeholder
+      // O campo de token nunca é preenchido: o valor não chega mais ao
+      // navegador. `temToken` só diz que existe um gravado no servidor.
       setToken("");
-      setHasSavedToken(Boolean(config.token));
+      setHasSavedToken(config.temToken);
     })();
     return () => {
       cancelled = true;
@@ -225,26 +226,26 @@ export default function SettingsPage() {
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
-    const result = await testConnection({ url, token });
+    // O backend testa com a configuração já gravada — abre o WebSocket com o
+    // gateway e faz uma chamada real, não um ping.
+    const result = await testConnection();
     setTestResult(result.success ? "success" : "error");
     setTesting(false);
-    if (result.success) {
-      // Trigger one-time seed of default agents (idempotent server-side).
-      supabase.functions.invoke("seed-agents").catch(() => {});
-    }
   };
 
 
   const handleSaveGateway = async () => {
-    // If the user left the token field blank but a token is already saved,
-    // reuse the existing one (loadGatewayConfig already cached it server-side).
-    const effectiveToken = token.trim() ? token : getGatewayConfig().token;
-    const { error } = await saveGatewayConfig({ url, token: effectiveToken });
+    // Campo de token vazio = manter o que já está gravado. O navegador não tem
+    // como reenviar um segredo que nunca recebeu.
+    const { error } = await saveGatewayConfig({
+      url,
+      token: token.trim() ? token.trim() : undefined,
+    });
     if (error) {
       setSaved(false);
       return;
     }
-    setHasSavedToken(Boolean(effectiveToken));
+    if (token.trim()) setHasSavedToken(true);
     setToken("");
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);

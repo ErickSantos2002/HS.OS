@@ -13,14 +13,12 @@ backend não é o mesmo que a tela usar o endpoint.
 
 | | Feito | Total |
 |---|---|---|
-| Edge functions **com substituto no backend** | 5 | 73 |
-| Edge functions **que o front já parou de chamar** | 2 | 73 |
-| Arquivos do front sem Supabase | 10 | 113 |
-| `supabase.from()` restantes | — | 71 |
-| `functions.invoke()` restantes | — | 48 |
+| Edge functions **com substituto no backend** | 8 | 73 |
+| Edge functions **que o front já parou de chamar** | 8 | 73 |
+| Arquivos do front sem Supabase | 13 | 113 |
+| Functions distintas ainda invocadas | 26 | — |
 
-Um lote só fecha quando as duas linhas andam. Hoje o backend do gateway está
-pronto e a tela ainda chama o Supabase — ver Lote 1.
+Um lote só fecha quando as duas linhas andam.
 
 Medir com:
 
@@ -71,7 +69,7 @@ Endpoints: `/health`, `/auth/{status,login,me,bootstrap-admin}`, `/branding`, `/
 
 ---
 
-## 🟡 Lote 1 — Gateway (backend feito em 05/08/2026, frontend pendente)
+## ✅ Lote 1 — Gateway (concluído em 05/08/2026)
 
 **7 functions · ~1.360 linhas** — `get-gateway-status`, `test-gateway-connection`,
 `gateway-models`, `gateway-files-proxy`, `list-openclaw-workspaces`,
@@ -98,14 +96,23 @@ nunca o valor. Verificado varrendo as respostas dos 5 endpoints.
 
 Endpoints: `/gateway/{config,status,models,agents,sessions}`.
 
-**Falta fechar o lote:**
-- Trocar no front as chamadas a `get-gateway-status`, `test-gateway-connection` e
-  `gateway-models` pelos endpoints novos — hoje a tela ainda invoca as edge functions.
-- Remover o `admin_token` de `lib/gateway.ts`, que ainda o carrega para o navegador.
-  Enquanto isso não acontecer, o vazamento continua existindo no caminho antigo,
-  mesmo com o backend correto.
-- Portar as 4 restantes: `gateway-files-proxy`, `list-openclaw-workspaces`,
-  `configure-instance-vault`, `save-install-block`.
+**Frontend migrado.** `lib/gateway.ts` não conhece mais o token: expõe apenas
+`{url, temToken, configurado}`. `useGatewayStatus` e `use-gateway-models` passaram
+a chamar `/gateway/*`. Verificado no navegador — a aba Gateway mostra "Online",
+versão 2026.7.1-2 vinda do OpenClaw, e "Testar conexão" responde com sucesso.
+
+**O vazamento do token está fechado de ponta a ponta.** Os 8 arquivos que faziam
+`fetch` direto no gateway (`OrchestratorChat`, `use-agents`, `use-integrations`,
+`use-skills`, `arena-sandbox`, `ClawHubPage`, `SessionsPage`, `SettingsPage`)
+não têm mais acesso ao segredo. Eles chamavam a REST antiga do OpenClaw, que não
+existe mais — ou seja, já estavam quebrados. Agora falham alto via
+`gatewayNaoPortado()`, com o nome da área, em vez de devolver lista vazia e
+parecer que "não há nada". Cada um volta a funcionar no seu lote.
+
+**Sobraram do grupo, para lotes seguintes:** `list-openclaw-workspaces`
+(AddAgentDialog → Lote 2) e `gateway-files-proxy` (arquivos do chat → Lote 3).
+`configure-instance-vault` e `save-install-block` morreram com o wizard — só
+existem em `_legado`.
 
 ## Lote 2 — Agentes
 
