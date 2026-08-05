@@ -33,13 +33,49 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  global: {
-    fetch: createSupabaseFetch(SUPABASE_PUBLISHABLE_KEY),
-  },
-  auth: {
-    storage: typeof window !== 'undefined' ? localStorage : undefined,
-    persistSession: true,
-    autoRefreshToken: true,
-  }
-});
+function criarCliente() {
+  return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    global: {
+      fetch: createSupabaseFetch(SUPABASE_PUBLISHABLE_KEY),
+    },
+    auth: {
+      storage: typeof window !== 'undefined' ? localStorage : undefined,
+      persistSession: true,
+      autoRefreshToken: true,
+    }
+  });
+}
+
+/**
+ * O sistema está saindo do Supabase, e durante a travessia ele não pode morrer
+ * por causa dele.
+ *
+ * `createClient` lança "supabaseUrl is required" ainda no carregamento do módulo
+ * quando as variáveis não existem. Como ~100 arquivos importam este módulo, esse
+ * erro derrubava a aplicação inteira ANTES do React montar — tela preta, sem
+ * login, sem nada. Foi o que aconteceu no primeiro deploy, onde só
+ * `VITE_API_URL` foi passada no build.
+ *
+ * Com o proxy abaixo, a ausência de configuração só explode em quem realmente
+ * usa o Supabase, no momento do uso. As telas já portadas funcionam normalmente;
+ * as que faltam falham uma a uma, com motivo claro. Mesmo princípio de
+ * `gatewayNaoPortado()`: falhar alto e localizado, nunca em silêncio nem global.
+ *
+ * Quando a portagem terminar, este arquivo e a pasta `integrations/supabase/`
+ * somem inteiros.
+ */
+const configurado = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
+
+export const supabaseConfigurado = configurado;
+
+export const supabase: ReturnType<typeof criarCliente> = configurado
+  ? criarCliente()
+  : (new Proxy({} as ReturnType<typeof criarCliente>, {
+      get(_alvo, prop) {
+        throw new Error(
+          `Supabase não configurado (VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY ausentes) ` +
+            `e algo tentou usar "${String(prop)}". Esta tela ainda não foi portada para a API própria — ` +
+            `ver docs/ROADMAP.md.`,
+        );
+      },
+    }));
