@@ -34,14 +34,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-_frontend_origin = settings.FRONTEND_URL.rstrip("/")
+# Em produção o front vive em hsos.healthsafetytech.com e a API em
+# hsosapi.healthsafetytech.com — domínios diferentes, então toda chamada é
+# cross-origin e o CORS deixa de ser detalhe. `FRONTEND_URL` aceita uma lista
+# separada por vírgula para o caso de haver mais de uma origem legítima.
+#
+# A lista é explícita de propósito: com `allow_credentials=True` o navegador
+# recusa `allow_origins=["*"]`, e um curinga aqui seria convite para qualquer
+# site chamar a API com o token da vítima.
+_origens = [o.strip().rstrip("/") for o in settings.FRONTEND_URL.split(",") if o.strip()]
+_origens += ["http://localhost:8080", "http://localhost:5173"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        _frontend_origin,
-        "http://localhost:8080",
-        "http://localhost:5173",
-    ],
+    allow_origins=sorted(set(_origens)),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
