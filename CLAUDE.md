@@ -15,22 +15,20 @@ Isso explica as referências a `dn.ia` / `dnos` / `OpenClaw` espalhadas: são d�
 decisão de arquitetura.
 
 **Direção da migração — decisão tomada:** sair do Supabase por completo, para Postgres próprio na
-VPS da HS, igual aos outros sistemas. Hoje o backend ainda é Supabase; o alvo é a API FastAPI em
-`backend/app/`. Ao mexer em qualquer coisa, prefira a direção nova: não acrescente dependência do
-Supabase que depois vai ter que ser desfeita.
+VPS da HS, igual aos outros sistemas. Ao mexer em qualquer coisa, prefira a direção nova: não
+acrescente dependência do Supabase que depois vai ter que ser desfeita.
 
-Sair do Supabase é substituir **cinco** subsistemas, não só o banco — dimensione o trabalho por esta
-tabela, medida no código:
+Sair do Supabase é substituir **cinco** subsistemas, não só o banco:
 
-| Subsistema | Uso hoje no front | Destino |
+| Subsistema | Situação | Destino |
 |---|---|---|
-| Banco (via RLS, direto do browser) | 83 `supabase.from()` | endpoints FastAPI |
-| Edge Functions | 55 `functions.invoke()` | routers FastAPI |
-| Auth | 38 chamadas (`getSession`, `signInWithPassword`, …) | JWT próprio (PyJWT + bcrypt) |
-| Storage | 28 chamadas | `UPLOADS_DIR` na VPS ou S3 |
-| Realtime | 39 usos de `postgres_changes` | WebSocket ou polling |
+| Auth | ✅ portado | JWT próprio (PyJWT + bcrypt) |
+| Banco (via RLS, direto do browser) | 🟡 em andamento | endpoints FastAPI |
+| Edge Functions | 🟡 12 de 73 | routers FastAPI |
+| Storage | ❌ não começou | `UPLOADS_DIR` na VPS ou S3 |
+| Realtime (`postgres_changes`) | ❌ não começou | WebSocket ou polling |
 
-São **113 arquivos** de `frontend/src/` importando o client do Supabase.
+O placar atualizado e a forma de medi-lo estão em `docs/ROADMAP.md`.
 
 ## Estrutura
 
@@ -38,17 +36,22 @@ Monorepo `frontend/` + `backend/`, mesma convenção dos outros sistemas da HS
 (TalentHS, TaskHS, GestorHS):
 
 ```
-frontend/          React + Vite (o app inteiro de hoje)
+frontend/          React + Vite
 backend/
-  app/             API FastAPI — esqueleto, a preencher pela portagem
-  migrations/      000 (compat Supabase) + 001 (schema public) — validados
-  supabase/        as 73 Edge Functions: backend vivo hoje, fonte da portagem
-docs/              auditoria e resumos herdados do dn.os
-docker-compose.yml backend:8000 + frontend:80
+  app/             API FastAPI — auth, branding, profiles, gateway, agents
+  app/gateway/     cliente WebSocket do OpenClaw + resolução de config
+  migrations/      000 compat · 001 schema · 002 auth própria
+  supabase/        as 73 Edge Functions: fonte da portagem, não código que roda
+docs/              roadmap, deploy, auditoria herdada
+scripts/           túnel SSH para o OpenClaw
+docker-compose.yml backend:8002 + frontend:80
 ```
 
 **`backend/supabase/` é um placar.** Cada Edge Function portada para um endpoint FastAPI
 sai de lá. Quando a pasta esvaziar, a saída do Supabase acabou.
+
+**Retomando o trabalho? Comece por [`docs/CONTINUAR-AQUI.md`](docs/CONTINUAR-AQUI.md)** — estado
+atual, próximos passos em ordem de dependência e as armadilhas que custam uma tarde.
 
 **O plano da migração está em [`docs/ROADMAP.md`](docs/ROADMAP.md)** — lotes, ordem,
 dependências e decisões em aberto. Consultar antes de escolher o que portar, e atualizar
@@ -79,10 +82,25 @@ cd backend
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env                      # preencher DATABASE_URL e JWT_SECRET
-uvicorn app.main:app --reload --port 8000 # http://localhost:8000/docs
+uvicorn app.main:app --reload --port 8002 # http://localhost:8002/docs
 ```
 
-Stack completa: `docker compose up -d --build` na raiz.
+⚠️ **Porta 8002, não 8000 nem 8001** — nesta máquina o `taskhs-backend` ocupa a 8000 e o
+`gestorhs-backend` a 8001. O proxy `/api` do Vite aponta para a 8002.
+
+**O gateway exige um túnel SSH aberto** para a VPS do OpenClaw, senão tudo que depende dele responde
+`Connection refused`:
+
+```bash
+ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
+    -L 18789:127.0.0.1:18789 root@2.24.85.122
+```
+
+Sem o `ServerAliveInterval` o túnel morre em minutos de inatividade e o sintoma é confuso.
+
+Login de desenvolvimento: `ti@healthsafetytech.com` / `admin123`.
+
+Stack completa: `docker compose up -d --build` na raiz. Deploy: ver `docs/DEPLOY.md`.
 
 Testes ficam em `frontend/src/**/*.{test,spec}.{ts,tsx}`, setup em `frontend/src/test/setup.ts`
 (Testing Library + jest-dom). Hoje existe **apenas um teste** (`frontend/src/test/example.test.ts`) —
@@ -116,42 +134,56 @@ substitua por um config próprio antes de tentar rodar E2E.
 
 ## Arquitetura
 
-### Três camadas
+### O estado híbrido — leia isto antes de mexer em qualquer coisa
+
+O sistema está no meio da travessia e **as duas arquiteturas convivem**:
 
 ```
-React SPA (Vite)  ──►  Supabase  ──►  OpenClaw Gateway (VPS)
-                       Postgres          agentes + LLM (DeepSeek)
-                       73 Edge Functions
+                    ┌─► backend/app/  (FastAPI + Postgres próprio)   ← o alvo
+React SPA (Vite) ───┤        └─► OpenClaw Gateway (WebSocket, via túnel SSH)
+                    └─► Supabase      (o que ainda não foi portado)  ← em remoção
 ```
 
-**Regra de segurança do gateway — o alvo, e o que o código herdado realmente faz.**
+O que **já é nosso**: autenticação, marca, perfis, gateway e agentes (leitura, sync e edição de
+perfil). O resto ainda chama o Supabase.
 
-O alvo é: o navegador nunca recebe o `admin_token`; toda chamada ao gateway passa pelo backend, que
-guarda o token no `.env`. É assim que `backend/app/` deve ser construído.
+Telas não portadas **falham de forma visível e nomeada**, de propósito — some sem explicação é pior
+do que aparecer quebrado. Dois mecanismos fazem isso, e ambos devem ser respeitados ao portar:
 
-⚠️ **O código herdado viola isso.** `frontend/src/lib/gateway.ts` carrega `gateway_url` **e
-`admin_token`** de `public.vps_config` para a memória do navegador, e pelo menos quatro pontos fazem
-`fetch` direto no gateway com ele: `hooks/use-agents.ts`, `components/OrchestratorChat.tsx`,
-`hooks/use-skills.ts` e `lib/arena-sandbox.ts` — este último **embute o token no código que gera**.
-A RLS restringe `vps_config` a `super_admin`, então o vazamento é para o navegador de cada
-administrador, não de qualquer usuário. Ainda assim, quem obtiver esse token controla o VPS inteiro.
+- `gatewayNaoPortado("<área>")` em `frontend/src/lib/gateway.ts` — marca caminhos que falavam com o
+  gateway direto do navegador
+- O Proxy em `frontend/src/integrations/supabase/client.ts` — sem as variáveis do Supabase, o client
+  não é criado e lança no primeiro uso, em vez de derrubar a aplicação no boot
 
-Ao portar qualquer um desses caminhos, **não replique o padrão**: crie o endpoint proxy no backend e
-remova o `admin_token` do que o front recebe. `vps_config` deve devolver ao front apenas a URL e um
-booleano `tem_token`, nunca o valor — é o que a edge function `get-gateway-status` já fazia certo.
+### Gateway — protocolo e segurança
+
+⚠️ **O OpenClaw fala WebSocket com JSON-RPC, não REST.** O código herdado chama `${url}/api/health`
+e `${url}/v1/models`; esses caminhos **não existem mais** e devolvem 404 ou o HTML do painel. Não
+copie chamada de edge function antiga sem verificar. O cliente correto está em
+`backend/app/gateway/client.py`, e o contrato foi levantado testando ao vivo.
+
+⚠️ **A identidade do cliente concede a permissão.** Só `client.id="gateway-client"` +
+`client.mode="backend"` recebe `operator.read`/`operator.write`. Qualquer outra combinação **conecta
+com sucesso** e é negada em cada método com `missing scope` — um modo de falhar particularmente
+traiçoeiro.
+
+⚠️ **Só conexões que chegam no loopback do gateway recebem scopes.** Por isso produção usa um túnel
+SSH (`scripts/tunel-openclaw.sh`) e não o domínio público. Ver `docs/DEPLOY.md`.
+
+**O vazamento do token foi fechado (Lote 1).** `frontend/src/lib/gateway.ts` não conhece mais o
+`admin_token` — expõe só `{url, temToken, configurado}`. Toda chamada ao gateway passa por
+`/gateway/*` ou `/agents`. **Não reintroduza o token no front** ao portar os pontos que ainda usam
+`gatewayNaoPortado()`: crie o endpoint proxy no backend.
 
 ### Resolução da config do gateway
 
-Duas implementações espelhadas que precisam continuar concordando:
+`backend/app/gateway/config.py`: **o `.env` vence quando preenchido**, `public.vps_config` é o padrão
+para quem não define nada.
 
-- Front: `frontend/src/lib/gateway.ts`
-- Edge: `backend/supabase/functions/_shared/gateway-config.ts`
-
-Ambas seguem a mesma ordem: **tabela `public.vps_config` primeiro** (`gateway_url`, `admin_token`;
-configurável em Settings → Gateway, só `super_admin`), com as env `OPENCLAW_GATEWAY_URL` /
-`OPENCLAW_ADMIN_TOKEN` como fallback para quando a linha ainda não existe. Não há URL default
-hardcoded — instalação nova sem config recebe um 503 padronizado
-(`gatewayNotConfiguredResponse`).
+A ordem é invertida em relação ao dn.os (que lia o banco primeiro) e isso foi deliberado: existe
+**uma** linha em `vps_config` e ela não consegue valer para produção (`172.18.0.1`, bridge do Swarm)
+e para a máquina de desenvolvimento (`127.0.0.1`, túnel SSH local) ao mesmo tempo. `/gateway/config`
+devolve `fixado_por_env` para a tela não oferecer uma edição sem efeito.
 
 ### Caminho crítico do chat
 
