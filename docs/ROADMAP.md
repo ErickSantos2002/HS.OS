@@ -35,8 +35,17 @@ o `NOINHERIT` que não pega em associações já criadas no PG 16+, `app.current
 ser palavra reservada, `--no-acl` deixando o RLS inerte, superuser bypassando RLS,
 a `DATABASE_URL` em formato SQLAlchemy. Nenhum apareceria escrevendo mais código.
 
-**Não replicar o que estava errado.** A portagem é a oportunidade de corrigir os
-achados da auditoria e o vazamento do token do gateway. Ver os avisos no `CLAUDE.md`.
+**O código herdado é a especificação.** Não estamos inventando um sistema — estamos
+reconstruindo, em FastAPI e Postgres, um que já funcionava. Quando algo não bater,
+a primeira parada é ver **como o sistema fazia antes**: as 73 edge functions em
+`backend/supabase/functions/`, os hooks do front, e o que ficou em
+`frontend/src/_legado/`. Foi assim que o Lote 1 saiu — o `test-gateway-connection`
+mostrou que o contrato antigo era REST, o que provou que o protocolo tinha mudado e
+apontou o caminho.
+
+**Não replicar o que estava errado.** Ao mesmo tempo, herdar não é copiar: a portagem
+é a oportunidade de corrigir os achados da auditoria e o vazamento do token do
+gateway. Ver os avisos no `CLAUDE.md`. Reaproveitar o *contrato*, não os defeitos.
 
 **Construir ≠ liberar.** O sistema fica híbrido por semanas (parte Supabase, parte
 nossa). Isso é estado de obra, não de entrega — a equipe só entra quando estiver
