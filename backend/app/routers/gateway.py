@@ -24,6 +24,8 @@ class ConfigOut(BaseModel):
     url: str
     tem_token: bool
     configurado: bool
+    #: Quando true, o valor vem do `.env` do servidor e gravar não muda nada.
+    fixado_por_env: bool = False
 
 
 class ConfigIn(BaseModel):
@@ -54,7 +56,8 @@ async def _cliente():
 @router.get("/config", response_model=ConfigOut)
 async def ler_config(_: Usuario = Depends(exige_papel("super_admin"))):
     c = await cfg.carregar()
-    return ConfigOut(url=c.url, tem_token=bool(c.token), configurado=c.configurado)
+    return ConfigOut(url=c.url, tem_token=bool(c.token), configurado=c.configurado,
+                     fixado_por_env=c.fixado_por_env)
 
 
 @router.put("/config", response_model=ConfigOut)
@@ -64,7 +67,8 @@ async def gravar_config(
 ):
     await cfg.gravar(dados.url, dados.token)
     c = await cfg.carregar()
-    return ConfigOut(url=c.url, tem_token=bool(c.token), configurado=c.configurado)
+    return ConfigOut(url=c.url, tem_token=bool(c.token), configurado=c.configurado,
+                     fixado_por_env=c.fixado_por_env)
 
 
 @router.get("/status", response_model=StatusOut)

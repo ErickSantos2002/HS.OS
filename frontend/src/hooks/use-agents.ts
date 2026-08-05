@@ -1,7 +1,30 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { getGatewayConfig, gatewayNaoPortado } from "@/lib/gateway";
+
+/** Resposta de GET /agents — o backend já entrega no formato da tela. */
+interface RespostaAgentes {
+  agents: Array<{
+    id: string;
+    name: string;
+    status: string;
+    model: string;
+    channels: string[];
+    systemPrompt?: string;
+    tokensUsed?: number;
+    sessions?: number;
+    lastActive?: string | null;
+    lastChannel?: string;
+    emoji?: string | null;
+    avatarUrl?: string | null;
+    department?: string | null;
+  }>;
+  defaultId: string | null;
+  gatewayOnline: boolean;
+  gatewayErro: string | null;
+}
 import { useAuthContext } from "@/contexts/auth-context";
 import { getAgentDisplayNameById, getModelForAgent, getOfficialAgentIds, isManagedAgentRecord, isOfficialAgentId, normalizeAgentId } from "@/lib/active-agents";
 import { statusFromActivity } from "@/lib/agent-status";
@@ -152,143 +175,33 @@ const GATEWAY_TIMEOUT_MS = 4_000;
 
 /* ── Fetch: Gateway + RPC in parallel with timeout ───── */
 
-async function fetchAgents(userId?: string, isAdmin?: boolean): Promise<GatewayAgent[]> {
-  const officialAgentIds = getOfficialAgentIds();
+async function fetchAgents(_userId?: string, _isAdmin?: boolean): Promise<GatewayAgent[]> {
+  // Uma chamada só. A junção de `agent_profiles` com o `agents.list` do gateway,
+  // mais o controle de acesso por usuário, acontecem no servidor — antes eram
+  // quatro consultas paralelas daqui, uma delas batendo no gateway com o
+  // admin_token no navegador. Ver app/routers/agents.py.
+  const d = await api<RespostaAgentes>("/agents");
 
-  // First, pull custom agents from agent_profiles (status != 'inactive')
-  const { data: profileRows } = await supabase
-    .from("agent_profiles")
-    .select("agent_id, name, emoji, model, channels, status, access_type, allowed_user_ids")
-    .neq("status", "inactive");
-
-  // Build deny-set based on access control (admins bypass)
-  const denyIds = new Set<string>();
-  if (!isAdmin) {
-    for (const row of (profileRows ?? []) as any[]) {
-      const id = normalizeAgentId(row.agent_id ?? "");
-      if (!id) continue;
-      const at = row.access_type ?? "all";
-      if (at === "all") continue;
-      if (at === "admins_only") { denyIds.add(id); continue; }
-      if (at === "specific_users") {
-        const allowed: string[] = Array.isArray(row.allowed_user_ids) ? row.allowed_user_ids : [];
-        if (!userId || !allowed.includes(userId)) denyIds.add(id);
-      }
-    }
+  if (!d.gatewayOnline) {
+    // O banco ainda sabe quem existe; o que não dá para afirmar é quem está de
+    // pé. Melhor mostrar a lista com o aviso do que fingir que todos morreram.
+    console.warn("[agents] gateway indisponível:", d.gatewayErro);
   }
 
-  const officialSet = new Set(officialAgentIds);
-  const customAgentIds: string[] = [];
-  const customMeta = new Map<string, { name?: string | null; model?: string | null }>();
-  for (const row of (profileRows ?? []) as any[]) {
-    const id = normalizeAgentId(row.agent_id ?? "");
-    if (!id || officialSet.has(id)) continue;
-    if (denyIds.has(id)) continue;
-    customAgentIds.push(id);
-    customMeta.set(id, { name: row.name, model: row.model });
-  }
-
-  const allAgentIds = [...officialAgentIds.filter((id) => !denyIds.has(id)), ...customAgentIds];
-
-  // Run gateway fetch, RPC, and token snapshots in parallel
-  const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const [gatewayResult, rpcResult, tokensResult] = await Promise.allSettled([
-    // 1. Gateway fetch with timeout
-    (async () => {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), GATEWAY_TIMEOUT_MS);
-      try {
-        const config = getGatewayConfig();
-        const res = await fetch(`${config.url}/v1/models`, {
-          headers: {
-            Authorization: `Bearer ${gatewayNaoPortado("Agentes do gateway")}`,
-            "Content-Type": "application/json",
-          },
-          signal: controller.signal,
-        });
-        if (!res.ok) return new Map<string, GatewayAgent>();
-        const data = await res.json();
-        const list = Array.isArray(data) ? data : (data.data ?? data.agents ?? []);
-        const map = new Map<string, GatewayAgent>();
-        const allowed = new Set(allAgentIds);
-        for (const raw of list) {
-          if (!isManagedAgentRecord(raw)) continue;
-          const agent = parseAgentFromApi(raw);
-          if (!agent.id || !allowed.has(agent.id)) continue;
-          map.set(agent.id, agent);
-        }
-        return map;
-      } finally {
-        clearTimeout(timer);
-      }
-    })(),
-    // 2. Supabase RPC
-    (async () => {
-      const rpcParams: any = { _agent_ids: allAgentIds };
-      if (userId) rpcParams._user_id = userId;
-      const { data: activityRows } = await supabase.rpc("get_agents_last_activity", rpcParams);
-      const map = new Map<string, string>();
-      if (activityRows) {
-        for (const row of activityRows as any[]) {
-          map.set(row.agent_id, row.last_active);
-        }
-      }
-      return map;
-    })(),
-    // 3. Consumo MEDIDO por agente nos últimos 30 dias (task #19).
-    // Era agent_token_snapshots — tabela alimentada por relato, sem ninguém
-    // medindo; o ranking da lista comparava relatos, não fatos. Aqui cada
-    // linha é uma chamada de LLM real, então soma (o "sessions" vira a
-    // contagem de chamadas, que é o número que de fato existe).
-    (async () => {
-      const { data } = await supabase
-        .from("usage_events")
-        .select("agent_id, total_tokens")
-        .gte("ts", since30d)
-        .limit(20000);
-      const map = new Map<string, { tokens: number; sessions: number }>();
-      for (const row of (data ?? []) as any[]) {
-        const id = normalizeAgentId(row.agent_id);
-        const cur = map.get(id) ?? { tokens: 0, sessions: 0 };
-        cur.tokens += row.total_tokens ?? 0;
-        cur.sessions += 1;
-        map.set(id, cur);
-      }
-      return map;
-    })(),
-  ]);
-
-  const gatewayMap = gatewayResult.status === "fulfilled" ? gatewayResult.value : new Map<string, GatewayAgent>();
-  const activityMap = rpcResult.status === "fulfilled" ? rpcResult.value : new Map<string, string>();
-  const tokensMap = tokensResult.status === "fulfilled" ? tokensResult.value : new Map<string, { tokens: number; sessions: number }>();
-
-  // Merge
-  const agents: GatewayAgent[] = [];
-  for (const agentId of allAgentIds) {
-    let enriched = gatewayMap.get(agentId);
-    if (!enriched) {
-      enriched = createStubAgent(agentId);
-      const meta = customMeta.get(agentId);
-      if (meta?.name) enriched.name = meta.name;
-      if (meta?.model) enriched.model = meta.model;
-    }
-    const lastConv = activityMap.get(agentId);
-    const activityStatus = statusFromActivity(lastConv);
-    if (activityStatus) {
-      const rank: Record<string, number> = { active: 2, recent: 1, inactive: 0 };
-      if ((rank[activityStatus] ?? 0) > (rank[enriched.status] ?? 0)) {
-        enriched.status = activityStatus;
-      }
-    }
-    const tokAgg = tokensMap.get(agentId);
-    if (tokAgg) {
-      enriched.tokensUsed = tokAgg.tokens;
-      if (tokAgg.sessions > 0) enriched.sessions = tokAgg.sessions;
-    }
-    agents.push(enriched);
-  }
-
-  return agents.sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  return d.agents.map((a) => ({
+    id: a.id,
+    name: a.name,
+    status: a.status as AgentStatus,
+    model: a.model || getModelForAgent(a.id),
+    channels: a.channels ?? [],
+    channelConfigs: [],
+    tools: [],
+    systemPrompt: a.systemPrompt ?? "",
+    tokensUsed: a.tokensUsed ?? 0,
+    sessions: a.sessions ?? 0,
+    lastActive: a.lastActive ?? new Date().toISOString(),
+    lastChannel: a.lastChannel ?? "",
+  }));
 }
 
 

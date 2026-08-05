@@ -13,7 +13,7 @@ backend não é o mesmo que a tela usar o endpoint.
 
 | | Feito | Total |
 |---|---|---|
-| Edge functions **com substituto no backend** | 8 | 73 |
+| Edge functions **com substituto no backend** | 9 | 73 |
 | Edge functions **que o front já parou de chamar** | 8 | 73 |
 | Arquivos do front sem Supabase | 13 | 113 |
 | Functions distintas ainda invocadas | 26 | — |
@@ -126,7 +126,11 @@ Atenção: `fetchAgents` combina **duas fontes** — `agent_profiles` do banco e
 `/v1/models` do gateway. O endpoint novo precisa fazer essa junção no servidor.
 
 Sugestão de subdivisão, porque 18 de uma vez é grande demais:
-- **2a** — leitura: listar agentes (banco + gateway), perfil, avatar, permissões
+- **2a** — ✅ leitura: `GET /agents` junta `agent_profiles` com `agents.list` do
+  gateway no servidor, aplica o controle de acesso por `access_type`, e devolve
+  no formato que `use-agents.ts` consome. Agente no banco e ausente do gateway
+  aparece inativo em vez de sumir. Verificado: a tela de agentes mostra os 5
+  agentes reais, sem erro de dado. Falta: avatar e perfil individual.
 - **2b** — escrita: criar, editar, excluir, guardrails, acesso
 - **2c** — Loop Architecture: `agent-task`, `turn-reconciler`, `collect-agent-stats`
 

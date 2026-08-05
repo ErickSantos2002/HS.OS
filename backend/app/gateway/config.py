@@ -16,6 +16,8 @@ from app.database import sessao
 class ConfigGateway:
     url: str
     token: str
+    #: A URL veio do `.env`, então a tela não deve oferecer edição.
+    fixado_por_env: bool = False
 
     @property
     def configurado(self) -> bool:
@@ -23,20 +25,34 @@ class ConfigGateway:
 
 
 async def carregar() -> ConfigGateway:
-    url = ""
-    token = ""
-    async with sessao(role="service_role") as conn:
-        linha = await conn.fetchrow(
-            "SELECT gateway_url, admin_token FROM public.vps_config LIMIT 1"
-        )
-    if linha:
-        url = (linha["gateway_url"] or "").strip()
-        token = (linha["admin_token"] or "").strip()
+    """Ordem: `.env` primeiro, `vps_config` depois.
 
-    return ConfigGateway(
-        url=url or settings.OPENCLAW_GATEWAY_URL.strip(),
-        token=token or settings.OPENCLAW_ADMIN_TOKEN.strip(),
-    )
+    A herança do dn.os era o inverso — banco primeiro, env como fallback — e isso
+    quebra com mais de um ambiente: existe UMA linha em `vps_config` e ela não
+    consegue valer para produção e para a máquina de desenvolvimento ao mesmo
+    tempo. Produção alcança o gateway em `172.18.0.1` (bridge do Swarm) e o
+    desenvolvimento em `127.0.0.1` (túnel SSH local); com o banco vencendo, um
+    dos dois sempre aponta para um endereço inalcançável.
+
+    Com o `.env` vencendo, cada ambiente fixa o seu e a tabela continua servindo
+    de padrão para quem não define nada. `/gateway/config` avisa quando o valor
+    está fixado pelo ambiente, para a tela não oferecer uma edição que não teria
+    efeito.
+    """
+    url = settings.OPENCLAW_GATEWAY_URL.strip()
+    token = settings.OPENCLAW_ADMIN_TOKEN.strip()
+    fixado = bool(url)
+
+    if not (url and token):
+        async with sessao(role="service_role") as conn:
+            linha = await conn.fetchrow(
+                "SELECT gateway_url, admin_token FROM public.vps_config LIMIT 1"
+            )
+        if linha:
+            url = url or (linha["gateway_url"] or "").strip()
+            token = token or (linha["admin_token"] or "").strip()
+
+    return ConfigGateway(url=url, token=token, fixado_por_env=fixado)
 
 
 async def gravar(url: str, token: str | None) -> None:
