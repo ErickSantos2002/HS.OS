@@ -168,6 +168,80 @@ async def listar(usuario: Usuario = Depends(usuario_atual)):
     )
 
 
+class PerfilCompletoOut(BaseModel):
+    """Perfil inteiro de um agente — o que a tela de edição precisa.
+
+    Separado do `AgenteOut` da lista de propósito: a lista carrega 5 agentes e
+    não deveria arrastar persona, skills e crons de cada um. Aqui vem tudo,
+    porque é uma tela por vez.
+    """
+
+    agent_id: str
+    name: str = ""
+    emoji: str | None = None
+    specialty: str | None = None
+    model: str | None = None
+    persona_description: str | None = None
+    skills_description: str | None = None
+    skills_tags: list[str] = []
+    crons_description: str | None = None
+    description: str | None = None
+    department: str | None = None
+    color: str | None = None
+    avatar_url: str | None = None
+    workspace: str | None = None
+    is_leader: bool = False
+    leader_id: str | None = None
+    access_type: str = "all"
+    allowed_user_ids: list[str] = []
+    status: str = "active"
+
+
+@router.get("/{agent_id}", response_model=PerfilCompletoOut)
+async def obter(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            """
+            SELECT agent_id, name, emoji, specialty, model, persona_description,
+                   skills_description, skills_tags, crons_description, description,
+                   department, color, avatar_url, workspace, is_leader, leader_id,
+                   access_type, allowed_user_ids, status
+            FROM public.agent_profiles WHERE agent_id = $1
+            """,
+            agent_id,
+        )
+    if linha is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+
+    d = dict(linha)
+    if not _pode_ver(d, usuario.id, usuario.papel == "super_admin"):
+        # 404 e não 403: quem não pode ver o agente também não deveria descobrir
+        # que ele existe.
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+
+    return PerfilCompletoOut(
+        agent_id=d["agent_id"],
+        name=d.get("name") or d["agent_id"],
+        emoji=d.get("emoji"),
+        specialty=d.get("specialty"),
+        model=d.get("model"),
+        persona_description=d.get("persona_description"),
+        skills_description=d.get("skills_description"),
+        skills_tags=[str(t) for t in (d.get("skills_tags") or [])],
+        crons_description=d.get("crons_description"),
+        description=d.get("description"),
+        department=d.get("department"),
+        color=d.get("color"),
+        avatar_url=d.get("avatar_url"),
+        workspace=d.get("workspace"),
+        is_leader=bool(d.get("is_leader")),
+        leader_id=d.get("leader_id"),
+        access_type=d.get("access_type") or "all",
+        allowed_user_ids=[str(u) for u in (d.get("allowed_user_ids") or [])],
+        status=d.get("status") or "active",
+    )
+
+
 class SincronizacaoOut(BaseModel):
     criados: int
     atualizados: int

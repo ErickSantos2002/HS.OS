@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Loader2, X, Crown, Link2, Bot, Globe, Lock, Users as UsersIcon, Camera, RefreshCw, Sparkles, AlertTriangle, CheckCircle2, XCircle, Zap } from "lucide-react";
+import { api } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAgentAvatar } from "@/hooks/use-agent-avatar";
@@ -133,20 +134,16 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
     let cancelled = false;
     setLoading(true);
     (async () => {
-      const [profileRes, usersRes, agentsRes, avatarsRes] = await Promise.all([
-        supabase
-          .from("agent_profiles")
-          .select(
-            "name, emoji, specialty, model, persona_description, skills_description, skills_tags, crons_description, is_leader, leader_id, access_type, allowed_user_ids, status",
-          )
-          .eq("agent_id", agent.agent_id)
-          .maybeSingle(),
-        supabase.from("profiles").select("id, full_name, email").order("full_name", { ascending: true }),
-        supabase.from("agent_profiles").select("agent_id, name, emoji, is_leader").order("name"),
-        supabase.from("agent_avatars").select("agent_id, avatar_url"),
+      // Três chamadas à nossa API no lugar de quatro consultas diretas ao
+      // Supabase. `allSettled` porque uma lista de apoio que falha não deve
+      // impedir a edição do agente em si.
+      const [perfilRes, usuariosRes, agentesRes] = await Promise.allSettled([
+        api<any>(`/agents/${encodeURIComponent(agent.agent_id)}`),
+        api<PlatformUser[]>("/profiles"),
+        api<{ agents: Array<{ id: string; name: string; emoji?: string | null; isLeader?: boolean; avatarUrl?: string | null }> }>("/agents"),
       ]);
       if (cancelled) return;
-      const p: any = profileRes.data ?? {};
+      const p: any = perfilRes.status === "fulfilled" ? perfilRes.value : {};
       setForm({
         name: p.name ?? agent.name ?? "",
         emoji: p.emoji ?? agent.emoji ?? "🤖",
@@ -164,18 +161,18 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
       setAllowedUsers(Array.isArray(p.allowed_user_ids) ? p.allowed_user_ids : []);
       setHasLeader(!!p.leader_id);
       setPreviousLeaderId(p.leader_id ?? null);
-      setAllUsers((usersRes.data ?? []) as PlatformUser[]);
-      const avatarsMap = new Map<string, string>();
-      ((avatarsRes.data ?? []) as any[]).forEach((a) => {
-        if (a.avatar_url) avatarsMap.set(a.agent_id, a.avatar_url);
-      });
+      setAllUsers(usuariosRes.status === "fulfilled" ? usuariosRes.value : []);
+      const listaAgentes =
+        agentesRes.status === "fulfilled" ? agentesRes.value.agents ?? [] : [];
       setAllAgents(
-        ((agentsRes.data ?? []) as any[]).map((a) => ({
-          agent_id: a.agent_id,
-          name: a.name ?? a.agent_id,
+        listaAgentes.map((a: any) => ({
+          agent_id: a.id,
+          name: a.name ?? a.id,
           emoji: a.emoji ?? "🤖",
-          avatar_url: avatarsMap.get(a.agent_id) ?? null,
-          is_leader: !!a.is_leader,
+          // O avatar vem junto na lista agora — antes era uma quarta consulta
+          // só para montar um mapa de agent_id → url.
+          avatar_url: a.avatarUrl ?? null,
+          is_leader: !!a.isLeader,
         })),
       );
       setLoading(false);
