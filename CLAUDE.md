@@ -50,6 +50,10 @@ docker-compose.yml backend:8000 + frontend:80
 **`backend/supabase/` é um placar.** Cada Edge Function portada para um endpoint FastAPI
 sai de lá. Quando a pasta esvaziar, a saída do Supabase acabou.
 
+**O plano da migração está em [`docs/ROADMAP.md`](docs/ROADMAP.md)** — lotes, ordem,
+dependências e decisões em aberto. Consultar antes de escolher o que portar, e atualizar
+o placar de lá quando um lote fechar.
+
 ## Comandos
 
 Frontend — rodar sempre a partir de `frontend/`:
@@ -120,9 +124,21 @@ React SPA (Vite)  ──►  Supabase  ──►  OpenClaw Gateway (VPS)
                        73 Edge Functions
 ```
 
-**Regra central de segurança: o navegador nunca fala com o gateway usando o token.** Todas as chamadas
-ao gateway passam por Edge Functions que guardam o token do lado servidor. `frontend/src/lib/gateway.ts` só
-lê/grava configuração e faz cache — não é um cliente HTTP do gateway.
+**Regra de segurança do gateway — o alvo, e o que o código herdado realmente faz.**
+
+O alvo é: o navegador nunca recebe o `admin_token`; toda chamada ao gateway passa pelo backend, que
+guarda o token no `.env`. É assim que `backend/app/` deve ser construído.
+
+⚠️ **O código herdado viola isso.** `frontend/src/lib/gateway.ts` carrega `gateway_url` **e
+`admin_token`** de `public.vps_config` para a memória do navegador, e pelo menos quatro pontos fazem
+`fetch` direto no gateway com ele: `hooks/use-agents.ts`, `components/OrchestratorChat.tsx`,
+`hooks/use-skills.ts` e `lib/arena-sandbox.ts` — este último **embute o token no código que gera**.
+A RLS restringe `vps_config` a `super_admin`, então o vazamento é para o navegador de cada
+administrador, não de qualquer usuário. Ainda assim, quem obtiver esse token controla o VPS inteiro.
+
+Ao portar qualquer um desses caminhos, **não replique o padrão**: crie o endpoint proxy no backend e
+remova o `admin_token` do que o front recebe. `vps_config` deve devolver ao front apenas a URL e um
+booleano `tem_token`, nunca o valor — é o que a edge function `get-gateway-status` já fazia certo.
 
 ### Resolução da config do gateway
 
