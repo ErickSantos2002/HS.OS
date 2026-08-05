@@ -4,8 +4,9 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: hsos-backend
+    # 8002 no host: 8000 é do taskhs-backend e 8001 do gestorhs-backend.
     ports:
-      - "8000:8000"
+      - "8002:8000"
     env_file:
       - ./backend/.env
     restart: unless-stopped

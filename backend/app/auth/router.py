@@ -1,0 +1,122 @@
+"""Autenticação — substitui o `supabase.auth` e a edge function bootstrap-first-admin.
+
+Uma conta é composta por três linhas, em três tabelas:
+  auth.users        identidade (e-mail, hash da senha) — alvo de 11 FKs
+  public.profiles   perfil (nome, avatar, status)
+  public.user_roles papel (super_admin | member | user)
+Elas são criadas juntas, na mesma transação.
+"""
+
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.auth.schemas import (
+    BootstrapIn,
+    LoginIn,
+    StatusInstalacaoOut,
+    TokenOut,
+    UsuarioOut,
+)
+from app.auth.security import conferir_senha, emitir_token, gerar_hash
+from app.database import sessao
+from app.dependencies import Usuario, usuario_atual
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("/status", response_model=StatusInstalacaoOut)
+async def status_instalacao():
+    """Instalação zerada não tem usuário e não há cadastro público — só convite,
+    que exige um admin que ainda não existe. A tela de login usa isto para
+    oferecer a criação do primeiro administrador."""
+    async with sessao(role="service_role") as conn:
+        total = await conn.fetchval("SELECT count(*) FROM auth.users")
+    return StatusInstalacaoOut(precisa_bootstrap=(total == 0), total_usuarios=total)
+
+
+@router.post("/bootstrap-admin", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
+async def bootstrap_admin(dados: BootstrapIn):
+    """Cria o primeiro super_admin. Só funciona com o banco sem nenhum usuário."""
+    senha_hash = gerar_hash(dados.senha)
+
+    async with sessao(role="service_role") as conn:
+        # Trava a tabela para que duas chamadas simultâneas não criem dois
+        # "primeiros" admins. A transação da sessão garante a liberação.
+        await conn.execute("LOCK TABLE auth.users IN EXCLUSIVE MODE")
+
+        if await conn.fetchval("SELECT count(*) FROM auth.users") > 0:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Esta instalação já tem usuários. Peça um convite a um administrador.",
+            )
+
+        user_id = await conn.fetchval(
+            """
+            INSERT INTO auth.users (email, password_hash, email_confirmed_at, last_sign_in_at)
+            VALUES ($1, $2, now(), now())
+            RETURNING id
+            """,
+            dados.email,
+            senha_hash,
+        )
+        await conn.execute(
+            "INSERT INTO public.profiles (id, email, full_name) VALUES ($1, $2, $3)",
+            user_id,
+            dados.email,
+            dados.nome,
+        )
+        await conn.execute(
+            "INSERT INTO public.user_roles (user_id, role) VALUES ($1, 'super_admin')",
+            user_id,
+        )
+
+    logger.info("Primeiro administrador criado: %s", dados.email)
+    token, expira = emitir_token(str(user_id), "super_admin", dados.email)
+    return TokenOut(access_token=token, expires_in=expira)
+
+
+@router.post("/login", response_model=TokenOut)
+async def login(dados: LoginIn):
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            """
+            SELECT u.id::text AS id, u.email, u.password_hash, u.is_active,
+                   COALESCE(r.role::text, 'user') AS papel
+            FROM auth.users u
+            LEFT JOIN public.user_roles r ON r.user_id = u.id
+            WHERE lower(u.email) = lower($1)
+            """,
+            dados.email,
+        )
+
+        # Mensagem única para e-mail inexistente e senha errada: dizer qual dos
+        # dois falhou entrega a existência da conta a quem está tentando adivinhar.
+        if linha is None or not conferir_senha(dados.senha, linha["password_hash"]):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "E-mail ou senha inválidos.")
+        if not linha["is_active"]:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Conta desativada.")
+
+        await conn.execute(
+            "UPDATE auth.users SET last_sign_in_at = now() WHERE id = $1::uuid", linha["id"]
+        )
+
+    token, expira = emitir_token(linha["id"], linha["papel"], linha["email"])
+    return TokenOut(access_token=token, expires_in=expira)
+
+
+@router.get("/me", response_model=UsuarioOut)
+async def eu(usuario: Usuario = Depends(usuario_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        avatar = await conn.fetchval(
+            "SELECT avatar_url FROM public.profiles WHERE id = $1::uuid", usuario.id
+        )
+    return UsuarioOut(
+        id=usuario.id,
+        email=usuario.email,
+        nome=usuario.nome,
+        papel=usuario.papel,
+        avatar_url=avatar,
+    )

@@ -79,8 +79,11 @@ O TalentHS manteve RLS. Se a decisão aqui for aposentar, ela vira a `002` — e
 - **`ALTER DEFAULT PRIVILEGES FOR ROLE postgres|supabase_admin`** — 26 linhas de
   encanamento de ownership do Supabase, sem efeito no banco próprio. Removidas
   pelo `regerar-001.sh`.
-- **Cron jobs** — os 5 jobs operacionais rodavam via `pg_cron` no Supabase. No
-  servidor próprio viram `pg_cron` de novo ou tarefas do backend. **Pendente.**
+- **Cron jobs** — os 5 jobs operacionais (scheduler de automações, sync de agentes,
+  limpeza de arquivos, watchdog) rodavam via `pg_cron` no Supabase. ⚠️ **`pg_cron`
+  NÃO está disponível no Postgres da VPS** (só `pgcrypto`, `moddatetime`, `plpgsql`).
+  Então não é opção: os jobs viram tarefas agendadas do backend (APScheduler no
+  FastAPI, ou cron do sistema chamando endpoints). **Pendente — decidir o mecanismo.**
 - **Storage** — 6 buckets a recriar como `UPLOADS_DIR`/S3: `agent-files`,
   `audio-messages`, `wiki-uploads` (públicos), `company-docs`,
   `generated-documents` (privados). **Pendente.**

@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth.router import router as auth_router
 from app.config import settings
 from app.database import close_db, init_db
 
@@ -10,7 +11,6 @@ from app.database import close_db, init_db
 # registre os routers aqui. Um router por domínio, mesmo padrão do TalentHS:
 #
 # from app.routers.agents import router as agents_router
-# from app.auth.router import router as auth_router
 
 
 @asynccontextmanager
@@ -46,5 +46,5 @@ async def health():
     return {"status": "ok", "service": "hsos-api"}
 
 
-# app.include_router(auth_router)
+app.include_router(auth_router)
 # app.include_router(agents_router)

@@ -1,5 +1,6 @@
 import json
 import logging
+from contextlib import asynccontextmanager
 from typing import Optional
 
 import asyncpg
@@ -44,3 +45,40 @@ async def close_db() -> None:
 
 def get_pool() -> asyncpg.Pool:
     return _pool
+
+
+# Os únicos papéis que uma sessão pode assumir. A lista existe porque
+# `SET LOCAL ROLE` não aceita parâmetro — o nome vai concatenado na query, então
+# ele nunca pode vir de entrada do usuário.
+PAPEIS = frozenset({"anon", "authenticated", "service_role"})
+
+
+@asynccontextmanager
+async def sessao(role: str = "anon", user_id: str | None = None):
+    """Conexão dentro de uma transação, com o contexto de RLS já aplicado.
+
+    Toda query de dado precisa passar por aqui. O backend conecta como `hsos_app`,
+    que é NOINHERIT e não tem privilégio nenhum em `public` — sem o `SET LOCAL
+    ROLE` desta função, a query falha com permissão negada em vez de rodar sem
+    contexto de usuário.
+
+    `role="service_role"` tem BYPASSRLS: usar só para operação interna
+    (bootstrap, jobs agendados), nunca para request de usuário.
+    """
+    if role not in PAPEIS:
+        raise ValueError(f"papel inválido: {role!r}")
+
+    pool = get_pool()
+    if pool is None:
+        raise RuntimeError("banco indisponível")
+
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # set_config com is_local=true equivale a SET LOCAL: reverte no fim
+            # da transação, então a conexão volta limpa para o pool.
+            await conn.execute(
+                "SELECT set_config('app.current_user_id', $1, true)", str(user_id or "")
+            )
+            await conn.execute("SELECT set_config('app.user_role', $1, true)", role)
+            await conn.execute(f"SET LOCAL ROLE {role}")
+            yield conn
