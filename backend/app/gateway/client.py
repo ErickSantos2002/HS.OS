@@ -1,0 +1,178 @@
+"""Cliente do OpenClaw Gateway.
+
+O gateway fala **WebSocket com JSON-RPC**, não REST — o código herdado do dn.os
+chamava `${url}/api/health` e `${url}/v1/models`, caminhos que não existem mais
+(devolvem 404 e o HTML do painel). O contrato abaixo foi levantado testando ao
+vivo contra o gateway 2026.7.1-2.
+
+Identidade importa: só `client.id="gateway-client"` + `client.mode="backend"`
+recebe os scopes `operator.read`/`operator.write`. Qualquer outra combinação
+conecta e é negada em todo método com "missing scope: operator.read".
+
+Este módulo é o único ponto do sistema que conhece o token do gateway. Nada
+disso pode vazar para a resposta de um endpoint.
+"""
+
+import asyncio
+import json
+import logging
+import uuid
+from typing import Any
+
+import websockets
+
+logger = logging.getLogger(__name__)
+
+PROTOCOLO = 4
+TIMEOUT_RPC = 30  # a doc define 30s como padrão por requisição
+TIMEOUT_HANDSHAKE = 15
+
+
+class ErroGateway(Exception):
+    """Falha vinda do gateway ou da conexão com ele."""
+
+    def __init__(self, mensagem: str, codigo: str | None = None):
+        super().__init__(mensagem)
+        self.codigo = codigo
+
+
+class ClienteGateway:
+    """Conexão persistente com o gateway, com reconexão sob demanda.
+
+    Uma instância por processo. `chamar()` serializa as requisições sob um lock:
+    o protocolo correlaciona resposta por `id`, mas ler do socket em paralelo
+    exigiria um demultiplexador — desnecessário para o volume atual, e uma peça
+    a menos para dar errado.
+    """
+
+    def __init__(self, url: str, token: str):
+        self.url = self._normalizar(url)
+        self._token = token
+        self._ws: Any = None
+        self._lock = asyncio.Lock()
+        self.info_servidor: dict[str, Any] = {}
+
+    @staticmethod
+    def _normalizar(url: str) -> str:
+        """Aceita http(s):// ou ws(s):// e devolve sempre o esquema WebSocket."""
+        url = (url or "").strip().rstrip("/")
+        if url.startswith("https://"):
+            return "wss://" + url[len("https://"):]
+        if url.startswith("http://"):
+            return "ws://" + url[len("http://"):]
+        return url
+
+    async def _garantir_conexao(self) -> None:
+        if self._ws is not None and self._ws.state.name == "OPEN":
+            return
+
+        logger.info("Conectando ao gateway em %s", self.url)
+        self._ws = await websockets.connect(self.url, max_size=None, open_timeout=TIMEOUT_HANDSHAKE)
+
+        # O gateway abre com um desafio antes de aceitar o connect.
+        await asyncio.wait_for(self._ws.recv(), TIMEOUT_HANDSHAKE)
+
+        pedido = {
+            "type": "req",
+            "id": str(uuid.uuid4()),
+            "method": "connect",
+            "params": {
+                "minProtocol": PROTOCOLO,
+                "maxProtocol": PROTOCOLO,
+                # Esta identidade é o que concede os scopes de operador.
+                "client": {
+                    "id": "gateway-client",
+                    "version": "0.1.0",
+                    "platform": "linux",
+                    "mode": "backend",
+                },
+                "role": "operator",
+                "scopes": ["operator.read", "operator.write"],
+                "auth": {"token": self._token},
+            },
+        }
+        await self._ws.send(json.dumps(pedido))
+
+        # Eventos podem chegar antes da resposta; ignoramos até achar o "res".
+        while True:
+            msg = json.loads(await asyncio.wait_for(self._ws.recv(), TIMEOUT_HANDSHAKE))
+            if msg.get("type") != "res":
+                continue
+            if not msg.get("ok"):
+                erro = msg.get("error") or {}
+                await self.fechar()
+                raise ErroGateway(
+                    erro.get("message", "Gateway recusou a conexão."), erro.get("code")
+                )
+            self.info_servidor = msg.get("payload") or {}
+            break
+
+        escopos = (self.info_servidor.get("auth") or {}).get("scopes") or []
+        if "operator.read" not in escopos:
+            await self.fechar()
+            raise ErroGateway(
+                "Gateway conectou sem permissão de leitura. Verifique o token "
+                f"(scopes recebidos: {escopos or 'nenhum'})."
+            )
+        logger.info(
+            "Gateway conectado: versão %s, scopes %s",
+            (self.info_servidor.get("server") or {}).get("version"),
+            escopos,
+        )
+
+    async def chamar(self, metodo: str, params: dict | None = None) -> dict:
+        """Executa um método RPC e devolve o payload. Reconecta uma vez se a
+        conexão tiver morrido em silêncio — o gateway fecha com código 4000
+        quando o cliente fica calado além de 2× o `tickIntervalMs`."""
+        async with self._lock:
+            for tentativa in (1, 2):
+                try:
+                    await self._garantir_conexao()
+                    return await self._executar(metodo, params or {})
+                except (websockets.ConnectionClosed, ConnectionError, asyncio.TimeoutError) as exc:
+                    self._ws = None
+                    if tentativa == 2:
+                        raise ErroGateway(f"Gateway indisponível: {exc}") from exc
+                    logger.warning("Conexão com o gateway caiu (%s), reconectando…", exc)
+        raise ErroGateway("Gateway indisponível.")
+
+    async def _executar(self, metodo: str, params: dict) -> dict:
+        rid = str(uuid.uuid4())
+        await self._ws.send(json.dumps({"type": "req", "id": rid, "method": metodo, "params": params}))
+
+        while True:
+            msg = json.loads(await asyncio.wait_for(self._ws.recv(), TIMEOUT_RPC))
+            # Eventos de broadcast chegam misturados; só nos interessa nosso id.
+            if msg.get("type") != "res" or msg.get("id") != rid:
+                continue
+            if msg.get("ok"):
+                return msg.get("payload") or {}
+            erro = msg.get("error") or {}
+            raise ErroGateway(erro.get("message", "Erro no gateway."), erro.get("code"))
+
+    async def fechar(self) -> None:
+        if self._ws is not None:
+            try:
+                await self._ws.close()
+            except Exception:  # noqa: BLE001 — fechar não pode derrubar nada
+                pass
+            self._ws = None
+
+
+# ── Instância única ──────────────────────────────────────────────────────
+_cliente: ClienteGateway | None = None
+
+
+def obter_cliente(url: str, token: str) -> ClienteGateway:
+    """Reaproveita a conexão enquanto a configuração não mudar."""
+    global _cliente
+    if _cliente is None or _cliente.url != ClienteGateway._normalizar(url) or _cliente._token != token:
+        _cliente = ClienteGateway(url, token)
+    return _cliente
+
+
+async def encerrar_cliente() -> None:
+    global _cliente
+    if _cliente is not None:
+        await _cliente.fechar()
+        _cliente = None

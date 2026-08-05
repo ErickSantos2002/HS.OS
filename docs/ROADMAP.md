@@ -10,7 +10,7 @@ Atualizar este arquivo conforme os lotes forem fechando.
 
 | | Feito | Total |
 |---|---|---|
-| Edge functions portadas | 2 | 73 |
+| Edge functions portadas | 9 | 73 |
 | Arquivos do front sem Supabase | 10 | 113 |
 | `supabase.from()` restantes | — | 71 |
 | `functions.invoke()` restantes | — | 48 |
@@ -55,7 +55,7 @@ Endpoints: `/health`, `/auth/{status,login,me,bootstrap-admin}`, `/branding`, `/
 
 ---
 
-## Lote 1 — Gateway
+## ✅ Lote 1 — Gateway (concluído em 05/08/2026)
 
 **7 functions · ~1.360 linhas** — `get-gateway-status`, `test-gateway-connection`,
 `gateway-models`, `gateway-files-proxy`, `list-openclaw-workspaces`,
@@ -69,9 +69,18 @@ de `vps_config` e faz `fetch` direto no gateway em `use-agents.ts`,
 token no código que gera. O endpoint de config deve devolver **apenas a URL e um
 booleano `tem_token`**; toda chamada ao gateway passa a ser proxy do backend.
 
-**Entregável:** Settings → Gateway conecta na VPS e o teste de conexão passa.
-**Pré-requisito:** URL do OpenClaw e admin token.
-**Marco:** a partir daqui tudo é verificável contra um gateway real.
+**Feito.** O OpenClaw trocou REST por **WebSocket JSON-RPC** entre versões — os caminhos
+que o código herdado usava (`/api/health`, `/v1/models`) devolvem 404 e HTML hoje. O
+contrato foi levantado testando ao vivo contra o 2026.7.1-2 e está em `app/gateway/client.py`.
+
+⚠️ **A identidade do cliente é o que concede permissão.** Só
+`client.id="gateway-client"` + `client.mode="backend"` recebe `operator.read`/`operator.write`.
+Qualquer outra combinação conecta e é negada em todo método com "missing scope".
+
+O vazamento do token foi fechado: `/gateway/config` devolve `{url, tem_token, configurado}`,
+nunca o valor. Verificado varrendo as respostas dos 5 endpoints.
+
+Endpoints: `/gateway/{config,status,models,agents,sessions}`.
 
 ## Lote 2 — Agentes
 

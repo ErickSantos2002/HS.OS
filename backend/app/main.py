@@ -6,7 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth.router import router as auth_router
 from app.config import settings
 from app.database import close_db, init_db
+from app.gateway.client import encerrar_cliente
 from app.routers.branding import router as branding_router
+from app.routers.gateway import router as gateway_router
 from app.routers.profiles import router as profiles_router
 
 # Conforme os domínios forem portados das Edge Functions (backend/supabase/),
@@ -19,6 +21,9 @@ from app.routers.profiles import router as profiles_router
 async def lifespan(app: FastAPI):
     await init_db()
     yield
+    # A conexão com o gateway é persistente; fechar no shutdown evita deixar
+    # socket pendurado no OpenClaw a cada reinício.
+    await encerrar_cliente()
     await close_db()
 
 
@@ -50,5 +55,6 @@ async def health():
 
 app.include_router(auth_router)
 app.include_router(branding_router)
+app.include_router(gateway_router)
 app.include_router(profiles_router)
 # app.include_router(agents_router)
