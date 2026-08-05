@@ -13,7 +13,7 @@ backend não é o mesmo que a tela usar o endpoint.
 
 | | Feito | Total |
 |---|---|---|
-| Edge functions **com substituto no backend** | 9 | 73 |
+| Edge functions **com substituto no backend** | 11 | 73 |
 | Edge functions **que o front já parou de chamar** | 8 | 73 |
 | Arquivos do front sem Supabase | 13 | 113 |
 | Functions distintas ainda invocadas | 26 | — |
@@ -131,7 +131,13 @@ Sugestão de subdivisão, porque 18 de uma vez é grande demais:
   no formato que `use-agents.ts` consome. Agente no banco e ausente do gateway
   aparece inativo em vez de sumir. Verificado: a tela de agentes mostra os 5
   agentes reais, sem erro de dado. Falta: avatar e perfil individual.
-- **2b** — escrita: criar, editar, excluir, guardrails, acesso
+- **2b** — 🟡 escrita: `POST /agents/sync` (portado de `sync-agents`) cria os
+  perfis a partir do gateway **preservando o que foi editado à mão** — o gateway
+  é fonte de existência, não de curadoria. `PATCH /agents/{id}` edita nome,
+  emoji, departamento, especialidade, cor, modelo, avatar, acesso e liderança.
+  Atenção: `agent_profiles_single_leader_idx` é índice único parcial e só admite
+  **um líder** por instalação; a troca limpa o anterior na mesma transação.
+  Falta: criar e excluir agente (mexem no gateway, não só no banco).
 - **2c** — Loop Architecture: `agent-task`, `turn-reconciler`, `collect-agent-stats`
 
 **Entregável (2a):** a tela de agentes deixa de ser vazia.
