@@ -13,9 +13,47 @@ não sai do servidor. O Postgres **não suporta TLS** (rejeita o upgrade de SSL)
 então mantê-lo em localhost não é preferência, é o que evita senha e dados
 trafegando em texto claro pela internet.
 
-O OpenClaw fica na outra VPS (**2.24.85.122**) e é alcançado por
-`https://gateway.healthsafetytech.com`, cujo nginx tem allowlist liberando
-apenas o 62.72.11.28. Ver `CLAUDE.md`.
+O OpenClaw fica na outra VPS (**2.24.85.122**) e é alcançado por um **túnel SSH
+persistente** — não pelo domínio público. Ver a seção abaixo.
+
+## O túnel para o OpenClaw
+
+⚠️ **Não adianta apontar o backend para `https://gateway.healthsafetytech.com`.**
+A conexão funciona, mas o gateway devolve **zero scopes** e todo método é negado
+com `missing scope: operator.read`.
+
+O motivo está na documentação do OpenClaw: *"a session not bound to an approved
+paired device/token cannot self-declare permissions"* — sessão proxiada, sem
+dispositivo pareado, tem a lista de scopes zerada de propósito. Só conexões que
+chegam no **loopback do gateway** recebem os scopes de operador.
+
+A solução é um túnel SSH mantido por systemd no 62.72.11.28:
+
+```bash
+scp scripts/tunel-openclaw.sh root@62.72.11.28:/root/
+ssh root@62.72.11.28 'bash /root/tunel-openclaw.sh'
+```
+
+O script cria uma chave dedicada, o serviço `openclaw-tunnel` com
+`Restart=always`, e verifica que o gateway responde. Ele é idempotente.
+
+**O detalhe que faz ou quebra:** o backend roda em container, então o túnel não
+pode escutar em `127.0.0.1` do host — dentro do container isso é o próprio
+container. E como o EasyPanel usa **Docker Swarm**, os containers alcançam o
+host pelo `docker_gwbridge` (`172.18.0.1`), não pelo `docker0`. O script detecta
+isso; se um dia as redes mudarem, é só rodá-lo de novo.
+
+Resultado: `OPENCLAW_GATEWAY_URL=http://172.18.0.1:18789`.
+
+**Consequência boa:** com o túnel, `gateway.healthsafetytech.com` deixa de ser
+necessário e pode sair do ar — menos superfície exposta.
+
+**Ao autorizar a chave no 2.24.85.122**, use `printf '\n%s\n'` e não `echo`: se
+o `authorized_keys` não terminar em quebra de linha, o `>>` cola a chave nova no
+fim da linha anterior e corrompe as duas. Aconteceu aqui, e o sintoma é
+`Permission denied (publickey)` com a chave aparentemente instalada. O
+diagnóstico é `ssh-keygen -lf ~/.ssh/authorized_keys`, que lista só as chaves que
+o servidor consegue de fato ler.
 
 ## Backend
 
@@ -30,7 +68,7 @@ JWT_ALGORITHM=HS256
 JWT_EXPIRE_HOURS=24
 FRONTEND_URL=https://hsos.healthsafetytech.com
 UPLOADS_DIR=/app/uploads
-OPENCLAW_GATEWAY_URL=https://gateway.healthsafetytech.com
+OPENCLAW_GATEWAY_URL=http://172.18.0.1:18789
 OPENCLAW_ADMIN_TOKEN=<token do gateway>
 ```
 
@@ -42,6 +80,10 @@ Três armadilhas que já custaram tempo:
   por design; com ele as 191 policies existem no catálogo e não protegem nada.
 - **`FRONTEND_URL` é o CORS.** Domínios separados significam chamada
   cross-origin; errar aqui derruba o login inteiro com erro de CORS no console.
+- **`public.vps_config` tem precedência sobre o `.env`** para a URL e o token do
+  gateway. Mudar a variável no EasyPanel não surte efeito se a tabela tiver
+  valor gravado — ajuste pela tela Configurações → Gateway ou por
+  `PUT /gateway/config`.
 
 **Volume:** montar `/app/uploads` como persistente, senão os anexos somem a cada
 deploy.
@@ -96,8 +138,13 @@ curl -s -o /dev/null -D- -X OPTIONS https://hsosapi.healthsafetytech.com/auth/lo
 ```
 
 Na aplicação, **Configurações → Gateway** deve mostrar "Online" e a versão do
-OpenClaw. Se mostrar erro de conexão, o suspeito é o allowlist do nginx no
-`2.24.85.122` — confirme que o IP de saída do backend é mesmo o 62.72.11.28.
+OpenClaw. Se não mostrar, o roteiro de diagnóstico é:
+
+| Sintoma | Causa provável |
+|---|---|
+| `Connection refused` | Túnel fora do ar — `systemctl status openclaw-tunnel` |
+| `scopes recebidos: nenhum` | Conexão não está chegando pelo loopback: a URL aponta para o domínio público em vez do túnel |
+| `Gateway não configurado` | `vps_config` vazia e `.env` sem os valores |
 
 ## O que ainda não está no deploy
 
