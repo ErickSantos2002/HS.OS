@@ -14,14 +14,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { setSetting } from "@/lib/app-settings";
-import { useOnboardingProgress } from "@/hooks/use-onboarding-progress";
+import { useOnboardingProgress } from "./use-onboarding-progress";
 import { useBranding, useThemedLogo } from "@/hooks/use-branding";
-import { Step0PrepGateway } from "@/components/onboarding/Step0PrepGateway";
-import { Step1Gateway } from "@/components/onboarding/Step1Gateway";
-import { Step2Team } from "@/components/onboarding/Step2Team";
-import { Step3Company, persistCompanyProfile, type CompanyFormValues } from "@/components/onboarding/Step3Company";
-import { Step4Platforms } from "@/components/onboarding/Step4Platforms";
-import { Step5Activate } from "@/components/onboarding/Step5Activate";
+import { Step0PrepGateway } from "./components/Step0PrepGateway";
+import { Step1Gateway } from "./components/Step1Gateway";
+import { Step2Team } from "./components/Step2Team";
+import { Step3Company, persistCompanyProfile, type CompanyFormValues } from "./components/Step3Company";
+import { Step4Platforms } from "./components/Step4Platforms";
+import { Step5Activate } from "./components/Step5Activate";
 import { cn } from "@/lib/utils";
 
 const STEPS = [

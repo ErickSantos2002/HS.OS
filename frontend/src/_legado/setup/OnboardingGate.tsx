@@ -1,7 +1,7 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useAuthContext } from "@/contexts/auth-context";
-import { useFirstAccess } from "@/hooks/use-first-access";
+import { useFirstAccess } from "./use-first-access";
 
 /**
  * Redirects the authenticated user to `/setup` on first access.

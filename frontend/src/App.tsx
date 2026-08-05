@@ -7,7 +7,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppLayout } from "@/components/AppLayout";
 import { AuthProvider } from "@/components/AuthGuard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { OnboardingGate } from "@/components/OnboardingGate";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { FileSystemProvider } from "@/contexts/FileSystemContext";
@@ -28,7 +27,6 @@ import ArenaCreatePage from "./pages/ArenaCreatePage";
 import ArenaViewPage from "./pages/ArenaViewPage";
 import LoginPage from "./pages/LoginPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
-import SetupPage from "./pages/SetupPage";
 import ResultsPage from "./pages/ResultsPage";
 import KnowledgeBasePage from "./pages/KnowledgeBasePage";
 import DashboardPage from "./pages/DashboardPage";
@@ -86,22 +84,17 @@ const App = () => {
                   }
                 />
 
-                {/* Setup wizard — auth required, no AppLayout, no gate */}
-                <Route
-                  path="/setup"
-                  element={
-                    <ProtectedRoute allowedRoles={["super_admin"]}>
-                      <SetupPage />
-                    </ProtectedRoute>
-                  }
-                />
+                {/* O wizard de /setup foi aposentado — ver src/_legado/setup/.
+                    Ele era o onboarding do cliente da dn.ia (contratar VPS na
+                    Hostinger com cupom, publicar no Lovable, rodar instalador);
+                    nada disso se aplica aqui. Sem ele e sem o OnboardingGate,
+                    o login cai direto no /chat. */}
 
                 {/* Protected routes inside layout */}
                 <Route
                   path="/*"
                   element={
                     <ProtectedRoute>
-                      <OnboardingGate>
                         <AppLayout>
                         <Routes>
                           <Route path="/" element={<HomePage />} />
@@ -252,8 +245,7 @@ const App = () => {
                           <Route path="/profile" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
-                      </AppLayout>
-                      </OnboardingGate>
+                        </AppLayout>
                     </ProtectedRoute>
                   }
                 />
