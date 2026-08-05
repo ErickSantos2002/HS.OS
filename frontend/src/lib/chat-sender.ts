@@ -392,7 +392,7 @@ IMPORTANTE — REGRAS OBRIGATÓRIAS DE ARTEFATOS:
 - Se o artefato for grande, ainda assim inclua o código completo — não resuma nem omita partes
 
 Sempre use nestes artefatos:
-- Cores dn.ia: azul #3D61FF, vermelho #E41A11
+- Cores HS.OS: azul #3D61FF, vermelho #E41A11
 - Dark mode: fundo #0a0a0a, texto branco
 - Fonte: sans-serif
 - Design limpo e profissional
@@ -1660,7 +1660,7 @@ export function sendMessageInBackground(
       if (modelOverride && chatMessages.length > 0) {
         chatMessages.push({
           role: "system",
-          content: `[dn.os] Este turno está sendo executado no modelo ${modelOverride}, escolhido pelo usuário no seletor da conversa (sobrepõe o padrão da sessão). Se perguntarem qual modelo/LLM você está usando, a resposta correta é: ${modelOverride}.`,
+          content: `[HS.OS] Este turno está sendo executado no modelo ${modelOverride}, escolhido pelo usuário no seletor da conversa (sobrepõe o padrão da sessão). Se perguntarem qual modelo/LLM você está usando, a resposta correta é: ${modelOverride}.`,
         });
       }
       const body = {

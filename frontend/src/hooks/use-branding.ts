@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
-import { supabase } from "@/integrations/supabase/client";
-
+import { api } from "@/lib/api";
 
 export interface BrandingConfig {
   logo: string;
@@ -15,8 +14,20 @@ export interface BrandingConfig {
   pwaIconUrl: string;
 }
 
+/** Formato do backend (snake_case, espelhando as colunas de public.branding). */
+interface BrandingApi {
+  company_name: string;
+  primary_color: string;
+  logo: string;
+  logo_light: string;
+  logo_dark: string;
+  mark_light: string;
+  mark_dark: string;
+  favicon_url: string;
+  pwa_icon_url: string;
+}
 
-const STORAGE_KEY = "dnos-branding-cache";
+const STORAGE_KEY = "hsos-branding-cache";
 
 function loadCachedFromStorage(): BrandingConfig | null {
   try {
@@ -32,29 +43,54 @@ function saveToStorage(config: BrandingConfig) {
   } catch { /* ignore */ }
 }
 
-// Marca padrão de qualquer instalação nova. Era "OpenClaw" — o nome do gateway,
-// que o cliente do remix nunca ouviu falar e que aparecia já na tela de criar a
-// conta. O logo aponta para arquivos de public/, servidos pela própria
-// instalação, para não depender de nada estar semeado no banco.
-// Os dois wordmarks são o mesmo desenho em cores opostas (transparente nos
-// dois), então a marca não muda de forma ao trocar de tema.
+// Marca padrão de qualquer instalação nova. Os arquivos vivem em public/,
+// servidos pela própria instalação, para não depender de nada estar semeado no
+// banco. O backend tem o mesmo padrão em app/routers/branding.py — os dois
+// precisam continuar concordando.
 const DEFAULT_BRANDING: BrandingConfig = {
-  logo: "/dnia-wordmark.png",
-  logoLight: "/dnia-wordmark-premium.png", // letras escuras, para fundo claro
-  logoDark: "/dnia-wordmark.png", // letras brancas, para fundo escuro
-  markLight: "",
-  markDark: "",
-  companyName: "dn.ia",
-  primaryColor: "231 100% 62%",
-  faviconUrl: "",
-  pwaIconUrl: "",
+  logo: "/HS-OS-logo.png",
+  logoLight: "/HS-OS-logo.png",
+  logoDark: "/HS-OS-logo.png",
+  markLight: "/logo-hs-padrao.png",
+  markDark: "/logo-hs-padrao.png",
+  companyName: "HS.OS",
+  primaryColor: "203 79% 44%", // #1885c8, o azul da marca Health & Safety
+  faviconUrl: "/hs.ico",
+  pwaIconUrl: "/HS-OS-logo.png",
 };
 
+function daApi(d: BrandingApi): BrandingConfig {
+  return {
+    companyName: d.company_name,
+    primaryColor: d.primary_color,
+    logo: d.logo,
+    logoLight: d.logo_light,
+    logoDark: d.logo_dark,
+    markLight: d.mark_light,
+    markDark: d.mark_dark,
+    faviconUrl: d.favicon_url,
+    pwaIconUrl: d.pwa_icon_url,
+  };
+}
+
+function paraApi(c: BrandingConfig): BrandingApi {
+  return {
+    company_name: c.companyName,
+    primary_color: c.primaryColor,
+    logo: c.logo,
+    logo_light: c.logoLight,
+    logo_dark: c.logoDark,
+    mark_light: c.markLight,
+    mark_dark: c.markDark,
+    favicon_url: c.faviconUrl,
+    pwa_icon_url: c.pwaIconUrl,
+  };
+}
 
 function hslToHex(hslStr: string): string {
   // Parse "H S% L%" format
   const m = hslStr.trim().match(/^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/);
-  if (!m) return "#3D61FF";
+  if (!m) return "#1885c8";
   const h = parseFloat(m[1]) / 360;
   const s = parseFloat(m[2]) / 100;
   const l = parseFloat(m[3]) / 100;
@@ -83,23 +119,21 @@ function applyManifest(config: BrandingConfig) {
   const icon = config.pwaIconUrl || config.faviconUrl || config.logo;
   const themeColor = hslToHex(config.primaryColor);
 
-  // Point <link rel="manifest"> at our edge function so installed PWAs
-  // (desktop + mobile) pick up the branding icon/name at install time.
-  // Bust the cache with a version param whenever branding changes.
-  const origin = window.location.origin;
+  // O manifest é servido pela própria instalação (public/manifest.json). Antes
+  // apontava para uma edge function de OUTRO projeto Supabase — endereço que
+  // não é nosso e que quebraria numa instalação própria.
   const version = encodeURIComponent(
     (icon || "") + "|" + (config.companyName || "") + "|" + themeColor,
   );
-  const manifestUrl = `https://zozyfhisrbkqvdcsdbfp.supabase.co/functions/v1/manifest?origin=${encodeURIComponent(origin)}&v=${version}`;
+  const manifestUrl = `/manifest.json?v=${version}`;
 
   let link = document.querySelector("link[rel='manifest']") as HTMLLinkElement | null;
   if (!link) {
     link = document.createElement("link");
     link.rel = "manifest";
-    link.setAttribute("crossorigin", "use-credentials");
     document.head.appendChild(link);
   }
-  if (link.href !== manifestUrl) link.href = manifestUrl;
+  if (!link.href.endsWith(manifestUrl)) link.href = manifestUrl;
 
   // Apple touch icon (iOS reads this separately from the manifest)
   if (icon) {
@@ -151,43 +185,20 @@ let cachedBranding: BrandingConfig | null = storedCache;
 let fetchPromise: Promise<BrandingConfig | null> | null = null;
 
 async function fetchBranding(): Promise<BrandingConfig | null> {
-  const { data } = await supabase.from("branding").select("*").limit(1).maybeSingle();
-  if (!data) return null;
-  const config: BrandingConfig = {
-    companyName: data.company_name,
-    primaryColor: data.primary_color,
-    logo: data.logo ?? "",
-    logoLight: (data as any).logo_light ?? "",
-    logoDark: (data as any).logo_dark ?? "",
-    faviconUrl: data.favicon_url ?? "",
-    pwaIconUrl: (data as any).pwa_icon_url ?? "",
-    markLight: (data as any).mark_light ?? "",
-    markDark: (data as any).mark_dark ?? "",
-  };
-  cachedBranding = config;
-  saveToStorage(config);
-  return config;
+  try {
+    // Chamada anônima: a tela de login precisa da marca antes de haver sessão.
+    const config = daApi(await api<BrandingApi>("/branding", { autenticar: false }));
+    cachedBranding = config;
+    saveToStorage(config);
+    return config;
+  } catch {
+    // Backend fora do ar não pode deixar o app sem marca — cai no padrão.
+    return null;
+  }
 }
 
 async function upsertBranding(config: BrandingConfig) {
-  const payload = {
-    company_name: config.companyName,
-    primary_color: config.primaryColor,
-    logo: config.logo,
-    logo_light: config.logoLight,
-    logo_dark: config.logoDark,
-    favicon_url: config.faviconUrl,
-    pwa_icon_url: config.pwaIconUrl,
-    mark_light: config.markLight,
-    mark_dark: config.markDark,
-  };
-  const { data: existing } = await supabase.from("branding").select("id").limit(1).maybeSingle();
-  if (existing) {
-
-    await supabase.from("branding").update({ ...payload, updated_at: new Date().toISOString() } as any).eq("id", existing.id);
-  } else {
-    await supabase.from("branding").insert(payload as any);
-  }
+  await api("/branding", { method: "PUT", body: paraApi(config) });
   cachedBranding = config;
   saveToStorage(config);
 }
@@ -263,7 +274,7 @@ export function useBranding() {
       document.documentElement.style.removeProperty(prop)
     );
     const link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
-    if (link) link.href = "/favicon.ico";
+    if (link) link.href = DEFAULT_BRANDING.faviconUrl;
     listeners.forEach(fn => fn());
   }, []);
 
@@ -295,4 +306,3 @@ export function useThemedMark(): string {
   const themedLogo = isLight ? branding.logoLight : branding.logoDark;
   return themedMark || themedLogo || branding.logo || branding.pwaIconUrl || branding.faviconUrl || "";
 }
-

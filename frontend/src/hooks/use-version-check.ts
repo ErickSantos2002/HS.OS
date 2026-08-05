@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 /**
- * Detecta novas versões da dn.os em produção comparando o fingerprint do
+ * Detecta novas versões da HS.OS em produção comparando o fingerprint do
  * /index.html atual contra o que foi carregado inicialmente. Quando muda,
  * mostra um toast persistente com botão "Atualizar agora" que faz reload.
  *
@@ -51,7 +51,7 @@ async function fetchFingerprint(): Promise<string | null> {
 }
 
 function showUpdateToast() {
-  toast("Nova versão da dn.os disponível", {
+  toast("Nova versão da HS.OS disponível", {
     id: TOAST_ID,
     description: "Atualize para receber os últimos recursos e correções.",
     duration: Infinity,

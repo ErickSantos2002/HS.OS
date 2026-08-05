@@ -482,7 +482,7 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
                       <Camera className="h-5 w-5 text-white" />
                     </span>
                   </button>
-                  <p className="text-[10px] text-muted-foreground">Usada em toda a dn.os</p>
+                  <p className="text-[10px] text-muted-foreground">Usada em toda a HS.OS</p>
                 </div>
                 <div className="flex-1">
                   <Label>Nome</Label>

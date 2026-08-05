@@ -52,7 +52,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
               )}
               {!isMobile && <Breadcrumbs />}
               {isMobile && (
-                <h1 className="text-sm font-display font-bold text-foreground truncate">dn.os</h1>
+                <h1 className="text-sm font-display font-bold text-foreground truncate">HS.OS</h1>
               )}
               {!isMobile && (
                 <div className="pointer-events-none absolute left-1/2 top-1/2 z-20 w-full max-w-xl -translate-x-1/2 -translate-y-1/2 px-4">

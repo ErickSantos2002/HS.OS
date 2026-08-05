@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { NavLink } from "@/components/NavLink";
 import { useBranding, useThemedLogo, useThemedMark } from "@/hooks/use-branding";
 import { useTheme } from "next-themes";
-import dnosLogoLight from "@/assets/dnos-logo-light.png";
-import dnosMarkLight from "@/assets/dnos-mark-light.png";
-import dnosMarkDark from "@/assets/dnos-mark-dark.png";
+import dnosLogoLight from "@/assets/hs-os-logo.png";
+import dnosMarkLight from "@/assets/hs-mark.png";
+import dnosMarkDark from "@/assets/hs-mark.png";
 import { useAuthContext } from "@/contexts/auth-context";
 import type { AppRole } from "@/hooks/use-auth";
 import { APP_VERSION, formatBuildDate } from "@/lib/app-version";
@@ -184,19 +184,19 @@ export function AppSidebar() {
           {collapsed ? (
             <img
               src={themedMark || "/icons/icon-192.png"}
-              alt={branding.companyName || "dn.os"}
+              alt={branding.companyName || "HS.OS"}
               className="h-9 w-9 object-contain shrink-0 rounded-md"
             />
           ) : themedLogo ? (
             <img
               src={themedLogo}
-              alt={branding.companyName || "dn.os"}
+              alt={branding.companyName || "HS.OS"}
               className="h-[42px] w-auto object-contain shrink-0"
             />
           ) : isLight ? (
             <img
               src={dnosLogoLight}
-              alt={branding.companyName || "dn.os"}
+              alt={branding.companyName || "HS.OS"}
               className="h-9 w-auto object-contain shrink-0"
             />
 
@@ -313,7 +313,7 @@ export function AppSidebar() {
               className="px-3 py-1 flex items-center justify-between text-[10px] text-muted-foreground/70 font-mono"
               title={`Build: ${formatBuildDate()}`}
             >
-              <span>dn.os</span>
+              <span>HS.OS</span>
               <span className="truncate">{APP_VERSION}</span>
             </div>
           </div>

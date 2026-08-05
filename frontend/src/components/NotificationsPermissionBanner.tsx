@@ -68,7 +68,7 @@ export function NotificationsPermissionBanner() {
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-foreground leading-tight">
-            Ative as notificações do dn.os
+            Ative as notificações do HS.OS
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
             Receba alertas quando alguém te mencionar ou enviar uma mensagem direta.

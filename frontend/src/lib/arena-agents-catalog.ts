@@ -16,7 +16,7 @@ export interface ArenaAgentCatalog {
 }
 
 const ROLE_HINTS: Record<string, string[]> = {
-  // dn.ia curated hints
+  // HS.OS curated hints
   lia: ["Orquestradora", "Analista", "Coordenadora"],
   milo: ["Estrategista de Tráfego", "Growth Hacker", "Performance"],
   kira: ["Diretora de Conteúdo", "Criativa", "Copywriter"],

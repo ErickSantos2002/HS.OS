@@ -148,7 +148,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
           openclaw_id: agentId,
           name: dnos.agent.name,
           emoji: dnos.agent.emoji || "🤖",
-          specialty: dnos.agent.role || dnos.agent.description || "Agente importado do dn.os",
+          specialty: dnos.agent.role || dnos.agent.description || "Agente importado do HS.OS",
           description: dnos.agent.description || "",
           model: DEFAULT_MODEL,
           workspace: workspaceFor(agentId),
@@ -264,7 +264,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
               Importar agente
             </DialogTitle>
             <DialogDescription>
-              Arquivo .dnos gerado no dn.os — o agente é criado com as habilidades e configurações originais.
+              Arquivo .dnos gerado no HS.OS — o agente é criado com as habilidades e configurações originais.
             </DialogDescription>
           </DialogHeader>
 
@@ -314,7 +314,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
                   )}
                   <div className="flex gap-2 mt-0.5 text-[10px] font-mono text-muted-foreground">
                     {dnos.agent.department && <span>{dnos.agent.department}</span>}
-                    <span>por {dnos.agent.author || "dn.os"}</span>
+                    <span>por {dnos.agent.author || "HS.OS"}</span>
                   </div>
                 </div>
               </div>

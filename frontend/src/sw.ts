@@ -173,7 +173,7 @@ self.addEventListener("push", (event) => {
           await setBadge(1);
         }
 
-        await self.registration.showNotification(payload.title ?? "dn.os", {
+        await self.registration.showNotification(payload.title ?? "HS.OS", {
           body: payload.body,
           icon: payload.icon ?? "/icons/icon-192.png",
           badge: "/icons/icon-192.png",

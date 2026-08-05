@@ -43,7 +43,7 @@ const fallbackNotificationsContext: NotificationsContextValue = {
 
 const NotificationsContext = createContext<NotificationsContextValue>(fallbackNotificationsContext);
 
-const BASE_DOC_TITLE = "dn.os";
+const BASE_DOC_TITLE = "HS.OS";
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuthContext();

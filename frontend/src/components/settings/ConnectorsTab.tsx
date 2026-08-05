@@ -175,7 +175,7 @@ type Entrada = {
   logo: string | null;
   grupo: "llm" | "api" | "mcp";
   /** `atencao` é o meio-termo que faltava: existe, mas no lugar errado (a
-   *  chave de LLM guardada no dn.os em vez do gateway). */
+   *  chave de LLM guardada no HS.OS em vez do gateway). */
   estado: "conectado" | "disponivel" | "atencao";
   detalhe: string | null;
   /** Itens curtos que cabem melhor como pílulas do que como frase — hoje os
@@ -254,7 +254,7 @@ export default function ConnectorsTab() {
    *  LLM — e mostrar "Conectar" em tudo é afirmar o contrário. */
   const llmPronto = !!llm.estado;
 
-  /** Migração de um conector de LLM legado: manda a chave guardada no dn.os
+  /** Migração de um conector de LLM legado: manda a chave guardada no HS.OS
    *  para o gateway pelo caminho oficial. Era o botão "Enviar chave ao
    *  Gateway" do card antigo — a ação some se o card sumir, e ela é
    *  justamente a que resolve o estado "Migrar". */
@@ -357,7 +357,7 @@ export default function ConnectorsTab() {
     // ── Conectores sem template: personalizados e MCPs criados à mão.
     for (const r of rows) {
       if (r.template_id && CONNECTOR_CATALOG.some((t) => t.id === r.template_id)) continue;
-      // Conector de LLM legado (chave no dn.os, não no gateway) — some da
+      // Conector de LLM legado (chave no HS.OS, não no gateway) — some da
       // lista quando o provedor já estiver conectado no gateway, senão o
       // mesmo serviço apareceria duas vezes. Enquanto o gateway não responde
       // não dá para saber se é duplicata nem se pede migração: espera.
@@ -367,12 +367,12 @@ export default function ConnectorsTab() {
       lista.push({
         chave: `linha:${r.id}`,
         nome: r.name,
-        subtitulo: ehMcp ? "MCP" : provLegado ? "LLM — chave no dn.os" : "Personalizado",
+        subtitulo: ehMcp ? "MCP" : provLegado ? "LLM — chave no HS.OS" : "Personalizado",
         logo: logoForName(r.name),
         grupo: ehMcp ? "mcp" : provLegado ? "llm" : "api",
         estado: provLegado ? "atencao" : "conectado",
         detalhe: provLegado
-          ? "A chave está guardada no dn.os, não no gateway."
+          ? "A chave está guardada no HS.OS, não no gateway."
           : r.key_preview ?? null,
         uso: (r.agents_using ?? []).filter(Boolean),
         abrir: () => editConnector(r),

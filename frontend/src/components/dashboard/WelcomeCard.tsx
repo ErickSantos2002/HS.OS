@@ -21,7 +21,7 @@ export default function WelcomeCard({ connected, error, onlineCount, totalCount 
       
 
       <div className="relative z-10 space-y-3">
-        <p className="text-xs text-muted-foreground">dn.os</p>
+        <p className="text-xs text-muted-foreground">HS.OS</p>
         <h2 className="text-2xl font-display font-bold text-foreground leading-tight">
           Centro de Comando
         </h2>

@@ -1,5 +1,5 @@
 /**
- * Agent utilities used across dn.os.
+ * Agent utilities used across HS.OS.
  *
  * The list of official agents, display names, colors, emoji and sort order
  * come from `@/lib/agent-catalog` (backed by `agent_profiles` at runtime).

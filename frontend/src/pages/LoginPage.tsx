@@ -172,16 +172,16 @@ export default function LoginPage() {
               // branco e sumiria no tema claro, onde o hook devolve a versão com
               // fundo próprio. O fallback só entra se a marca não carregar.
               <img
-                src={themedLogo || "/dnia-wordmark.png"}
-                alt={branding.companyName || "dn.ia"}
+                src={themedLogo || "/HS-OS-logo.png"}
+                alt={branding.companyName || "HS.OS"}
                 className="w-[220px] h-auto object-contain"
               />
             ) : !brandingLoaded ? (
               <div className="h-20 w-[235px] rounded-xl bg-muted animate-pulse" />
             ) : (
               <img
-                src={themedLogo || "/dnia-logo.png"}
-                alt={branding.companyName || "dn.os"}
+                src={themedLogo || "/HS-OS-logo.png"}
+                alt={branding.companyName || "HS.OS"}
                 className="w-[235px] h-auto object-contain"
               />
             )}

@@ -52,11 +52,11 @@ export interface AgentFile {
 export const mockAgents: Agent[] = [
   {
     id: "1",
-    name: "Atendimento dn.ia",
+    name: "Atendimento HS.OS",
     status: "online",
     model: "gpt-4o",
     channels: ["telegram", "whatsapp"],
-    systemPrompt: "Você é o assistente de atendimento da dn.ia...",
+    systemPrompt: "Você é o assistente de atendimento da HS.OS...",
     tokensUsed: 142850,
     sessions: 38,
     lastActive: "2026-03-14T10:30:00Z",
@@ -97,8 +97,8 @@ export const mockAgents: Agent[] = [
 ];
 
 export const mockMessages: ChatMessage[] = [
-  { id: "m1", agentId: "1", role: "user", content: "Olá, gostaria de saber sobre os serviços da dn.ia", timestamp: "2026-03-14T10:25:00Z", channel: "telegram" },
-  { id: "m2", agentId: "1", role: "agent", content: "Olá! Bem-vindo à dn.ia! Somos especializados em automação com IA para negócios. Posso te ajudar com informações sobre nossos serviços de agentes inteligentes, automação de atendimento e prospecção. O que te interessa mais?", timestamp: "2026-03-14T10:25:05Z", channel: "telegram" },
+  { id: "m1", agentId: "1", role: "user", content: "Olá, gostaria de saber sobre os serviços da HS.OS", timestamp: "2026-03-14T10:25:00Z", channel: "telegram" },
+  { id: "m2", agentId: "1", role: "agent", content: "Olá! Bem-vindo à HS.OS! Somos especializados em automação com IA para negócios. Posso te ajudar com informações sobre nossos serviços de agentes inteligentes, automação de atendimento e prospecção. O que te interessa mais?", timestamp: "2026-03-14T10:25:05Z", channel: "telegram" },
   { id: "m3", agentId: "1", role: "user", content: "Quero saber sobre automação de WhatsApp", timestamp: "2026-03-14T10:26:00Z", channel: "telegram" },
   { id: "m4", agentId: "1", role: "agent", content: "Ótimo! Nossa solução de automação para WhatsApp inclui:\n\n• Atendimento 24/7 com IA\n• Qualificação automática de leads\n• Integração com CRM\n• Respostas personalizadas\n\nQuer agendar uma demonstração?", timestamp: "2026-03-14T10:26:08Z", channel: "telegram" },
 ];

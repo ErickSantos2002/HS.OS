@@ -312,7 +312,7 @@ function InstallSkillDialog({
             Instalar Skill
           </DialogTitle>
           <DialogDescription>
-            Adicione uma skill ao inventário do dn.os e escolha quais agentes vão recebê-la.
+            Adicione uma skill ao inventário do HS.OS e escolha quais agentes vão recebê-la.
           </DialogDescription>
         </DialogHeader>
 

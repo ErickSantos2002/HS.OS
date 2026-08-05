@@ -155,7 +155,7 @@ export default function MissionControlDossierPage({ embedded }: { embedded?: boo
                 Humanos, IAs (super agents) e arquivos em um único sistema operacional.
               </h1>
               <p className="max-w-3xl text-sm leading-6 text-muted-foreground md:text-base">
-                O dn.os conecta a operação da {branding.companyName} em um ambiente integrado: chat
+                O HS.OS conecta a operação da {branding.companyName} em um ambiente integrado: chat
                 corporativo com agentes de IA, geração de artefatos sob demanda e resultados
                 mensuráveis — tudo em tempo real, com governança e escala.
               </p>
@@ -258,7 +258,7 @@ export default function MissionControlDossierPage({ embedded }: { embedded?: boo
             </div>
             <CardTitle className="font-display text-2xl">Segurança e governança</CardTitle>
             <CardDescription>
-              O dn.os foi concebido para sustentar operação crítica com autenticação,
+              O HS.OS foi concebido para sustentar operação crítica com autenticação,
               rastreabilidade e separação clara de acessos.
             </CardDescription>
           </CardHeader>
@@ -286,7 +286,7 @@ export default function MissionControlDossierPage({ embedded }: { embedded?: boo
               <div>
                 <CardTitle className="font-display text-2xl">Ecossistema de integrações</CardTitle>
                 <CardDescription>
-                  Plataformas conectadas que ampliam o alcance operacional do dn.os.
+                  Plataformas conectadas que ampliam o alcance operacional do HS.OS.
                 </CardDescription>
               </div>
             </div>
@@ -334,7 +334,7 @@ export default function MissionControlDossierPage({ embedded }: { embedded?: boo
           <CardHeader>
             <CardTitle className="font-display text-2xl">Resultados que falam por si</CardTitle>
             <CardDescription>
-              A operação com dn.os traduz atividade em números reais de eficiência e produtividade.
+              A operação com HS.OS traduz atividade em números reais de eficiência e produtividade.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -373,7 +373,7 @@ export default function MissionControlDossierPage({ embedded }: { embedded?: boo
           <CardHeader>
             <CardTitle className="font-display text-2xl">Impacto esperado</CardTitle>
             <CardDescription>
-              Na prática, o dn.os apoia uma operação mais madura, previsível e pronta para crescer
+              Na prática, o HS.OS apoia uma operação mais madura, previsível e pronta para crescer
               com disciplina.
             </CardDescription>
           </CardHeader>

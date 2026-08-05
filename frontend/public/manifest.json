@@ -1,24 +1,30 @@
 {
-  "name": "dn.ia dn.os",
-  "short_name": "dn.os",
-  "description": "dn.os — sistema operacional para gerenciar agentes de IA",
+  "name": "HS.OS — Health & Safety",
+  "short_name": "HS.OS",
+  "description": "Plataforma de gestão de agentes de IA da Health & Safety",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0A0A0A",
-  "theme_color": "#3D61FF",
+  "theme_color": "#1885c8",
   "orientation": "portrait-primary",
   "icons": [
+    {
+      "src": "/HS-OS-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "maskable"
     }
   ]
 }

@@ -132,7 +132,7 @@ export default function DocumentationPage({ embedded }: { embedded?: boolean } =
 
       const opts: Record<string, unknown> = {
           margin: [10, 10, 10, 10],
-          filename: "dn.os-Documentacao-Oficial.pdf",
+          filename: "HS.OS-Documentacao-Oficial.pdf",
           image: { type: "jpeg", quality: 0.95 },
           html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
@@ -181,8 +181,8 @@ export default function DocumentationPage({ embedded }: { embedded?: boolean } =
           {/* Header */}
           <div className="flex items-start justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-2xl font-display font-bold text-foreground">Documentação Oficial — dn.os</h1>
-              <p className="text-sm text-muted-foreground mt-1">Plataforma de orquestração de agentes de IA da dn.ia</p>
+              <h1 className="text-2xl font-display font-bold text-foreground">Documentação Oficial — HS.OS</h1>
+              <p className="text-sm text-muted-foreground mt-1">Plataforma de orquestração de agentes de IA da HS.OS</p>
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -220,8 +220,8 @@ export default function DocumentationPage({ embedded }: { embedded?: boolean } =
             {/* 1. VISÃO GERAL */}
             <SectionHeading id="visao-geral" title="1. Visão Geral" />
             <P>
-              O <strong>dn.os</strong> (dn.ia Operating System) é a plataforma central de orquestração de agentes de inteligência
-              artificial da dn.ia. Ele permite que equipes interajam, coordenem e monitorem uma frota de agentes especializados
+              O <strong>HS.OS</strong> (HS.OS Operating System) é a plataforma central de orquestração de agentes de inteligência
+              artificial da HS.OS. Ele permite que equipes interajam, coordenem e monitorem uma frota de agentes especializados
               em tempo real, através de uma interface unificada inspirada em sistemas operacionais de missão.
             </P>
             <SubHeading>Proposta de Valor</SubHeading>
@@ -289,7 +289,7 @@ export default function DocumentationPage({ embedded }: { embedded?: boolean } =
             <SectionHeading id="agentes" title="3. Sistema de Super agentes" />
             <SubHeading>Catálogo de Super agentes Oficiais</SubHeading>
             <P>
-              O dn.os opera com 8 agentes oficiais, cada um com uma identidade e especialização únicas.
+              O HS.OS opera com 8 agentes oficiais, cada um com uma identidade e especialização únicas.
               Todos são acessados pelo modelo <code className="text-xs bg-secondary px-1 rounded">openclaw:{'<agentId>'}</code>.
             </P>
             <TableWrapper>
@@ -402,7 +402,7 @@ export default function DocumentationPage({ embedded }: { embedded?: boolean } =
             </P>
             <SubHeading>Auto-reset de Sessão (Context Overflow)</SubHeading>
             <P>
-              Quando uma sessão atinge o limite de tokens do agente, o dn.os detecta automaticamente o erro
+              Quando uma sessão atinge o limite de tokens do agente, o HS.OS detecta automaticamente o erro
               de <em>context overflow</em> (padrões: <code className="text-xs bg-secondary px-1 rounded">context overflow</code>,
               <code className="text-xs bg-secondary px-1 rounded">prompt too large</code>,
               <code className="text-xs bg-secondary px-1 rounded">context length</code>,
@@ -460,7 +460,7 @@ export default function DocumentationPage({ embedded }: { embedded?: boolean } =
             <SectionHeading id="artefatos" title="5. Artefatos" />
             <P>
               Artefatos são conteúdos visuais ricos (dashboards, relatórios, landing pages, gráficos) gerados pelos agentes
-              diretamente nas conversas. São uma das funcionalidades mais poderosas do dn.os, permitindo que agentes
+              diretamente nas conversas. São uma das funcionalidades mais poderosas do HS.OS, permitindo que agentes
               entreguem resultados concretos e visuais sob demanda.
             </P>
             <SubHeading>Geração de Artefatos</SubHeading>
@@ -558,7 +558,7 @@ export default function DocumentationPage({ embedded }: { embedded?: boolean } =
               Padrão oficial para entregar arquivos PDF ou Word ao usuário. O agente emite a tag
               <code className="text-xs bg-secondary px-1 rounded"> &lt;generate_document type="pdf|docx" title="…"&gt;JSON&lt;/generate_document&gt; </code>
               com uma definição pdfmake (PDF) ou <code className="text-xs bg-secondary px-1 rounded">{`{ title, sections: [...] }`}</code> (DOCX).
-              O dn.os extrai a tag, chama a edge function <code className="text-xs bg-secondary px-1 rounded">generate-document</code> (gera com
+              O HS.OS extrai a tag, chama a edge function <code className="text-xs bg-secondary px-1 rounded">generate-document</code> (gera com
               <code className="text-xs bg-secondary px-1 rounded"> pdfmake</code>/<code className="text-xs bg-secondary px-1 rounded">docx.js</code> no backend), sobe o arquivo em bucket privado
               <code className="text-xs bg-secondary px-1 rounded"> generated-documents</code> e mostra um card com botão <strong>Baixar</strong> no chat.
               Cada clique gera uma <em>signed URL</em> fresh (1h) via <code className="text-xs bg-secondary px-1 rounded">sign-generated-document</code> — link nunca é persistido.
@@ -570,7 +570,7 @@ export default function DocumentationPage({ embedded }: { embedded?: boolean } =
               com RLS por dono — o card sobrevive a reload do chat.
             </P>
             <P>
-              <span className="text-xs text-muted-foreground">Nota: o comportamento também depende do SOUL.md de cada agente (mantido pelo time dn.ia no VPS/OpenClaw). O bloco imperativo
+              <span className="text-xs text-muted-foreground">Nota: o comportamento também depende do SOUL.md de cada agente (mantido pelo time HS.OS no VPS/OpenClaw). O bloco imperativo
               injetado por <code className="text-xs bg-secondary px-1 rounded">live-artifacts-context.ts</code> força a nova tag em toda chamada, mas SOULs desatualizados podem gerar variação —
               a recomendação é atualizar os SOULs para referenciar <code className="text-xs bg-secondary px-1 rounded">&lt;generate_document&gt;</code>.</span>
             </P>
@@ -670,7 +670,7 @@ export default function DocumentationPage({ embedded }: { embedded?: boolean } =
             <P>
               O OpenClaw Gateway é o servidor central que hospeda todos os modelos de agentes.
               A URL é configurada por install em Settings → Gateway (tabela <code className="text-xs bg-secondary px-1 rounded">public.vps_config</code>).
-              O dn.os se comunica com ele via API REST compatível com OpenAI.
+              O HS.OS se comunica com ele via API REST compatível com OpenAI.
             </P>
             <SubHeading>Endpoint Principal</SubHeading>
             <Code>{`POST <gateway-url>/v1/chat/completions
@@ -713,7 +713,7 @@ Body:
             {/* 8. EDGE FUNCTIONS */}
             <SectionHeading id="edge-functions" title="9. Edge Functions" />
             <P>
-              O dn.os utiliza Supabase Edge Functions (runtime Deno) como camada serverless para lógica de negócio.
+              O HS.OS utiliza Supabase Edge Functions (runtime Deno) como camada serverless para lógica de negócio.
             </P>
             <TableWrapper>
               <thead>
@@ -878,7 +878,7 @@ Body:
 
             <P>
               A edge function <code className="text-xs bg-secondary px-1 rounded">channel-broadcast</code> expõe uma API REST externa autenticada via <code className="text-xs bg-secondary px-1 rounded">x-api-key</code>,
-              permitindo que sistemas externos interajam com o dn.os.
+              permitindo que sistemas externos interajam com o HS.OS.
             </P>
             <SubHeading>Endpoints da Broadcast API</SubHeading>
             <TableWrapper>
@@ -944,7 +944,7 @@ curl -X POST \\
             </P>
             <SubHeading>Resiliência Automática</SubHeading>
             <P>
-              O dn.os tem mecanismos automáticos de recuperação, sem exigir intervenção manual do usuário:
+              O HS.OS tem mecanismos automáticos de recuperação, sem exigir intervenção manual do usuário:
             </P>
             <TableWrapper>
               <thead>
@@ -960,7 +960,7 @@ curl -X POST \\
             <P>
               <strong>Limite conhecido:</strong> se um agente concluir uma tarefa longa mas a conexão cair exatamente
               na entrega, hoje não existe forma de recuperar o texto da resposta sem o agente reexecutar — a correção
-              definitiva depende do Gateway (fora do dn.os) empurrar o resultado ativamente ao concluir um turno.
+              definitiva depende do Gateway (fora do HS.OS) empurrar o resultado ativamente ao concluir um turno.
             </P>
 
             {/* 14. ARQUIVOS E STORAGE */}
@@ -968,7 +968,7 @@ curl -X POST \\
             <SubHeading>Upload e Anexos no Chat</SubHeading>
             <P>
               O sistema utiliza o Supabase Storage (bucket <code className="text-xs bg-secondary px-1 rounded">agent-files</code>) para gerenciar anexos de chat.
-              Ao enviar um arquivo, o dn.os gera uma signed URL com validade de 6 horas e encaminha ao agente
+              Ao enviar um arquivo, o HS.OS gera uma signed URL com validade de 6 horas e encaminha ao agente
               apenas a referência: <em>"O usuário enviou o arquivo {'<nome>'}. Acesse em: {'<signed_url>'}. Use web_fetch para ler quando necessário."</em>
             </P>
             <SubHeading>Tipos Suportados</SubHeading>
@@ -1088,7 +1088,7 @@ curl -X POST \\
             </P>
             <SubHeading>Notificações do Navegador</SubHeading>
             <P>
-              Quando a aba está em segundo plano, o dn.os dispara <code className="text-xs bg-secondary px-1 rounded">Notification</code> nativa via
+              Quando a aba está em segundo plano, o HS.OS dispara <code className="text-xs bg-secondary px-1 rounded">Notification</code> nativa via
               <code className="text-xs bg-secondary px-1 rounded">browser-notifications.ts</code>. Permissão é solicitada por banner discreto na primeira interação.
             </P>
             <SubHeading>Web Push (Fora da Aba)</SubHeading>
@@ -1098,7 +1098,7 @@ curl -X POST \\
               • <strong>Envio</strong> via edge function <code className="text-xs bg-secondary px-1 rounded">send-push</code> com payload web-push autenticado por VAPID.
             </P>
             <P>
-              No Windows, o usuário precisa habilitar a entrada do dn.os / dn.ia em
+              No Windows, o usuário precisa habilitar a entrada do HS.OS / HS.OS em
               <em> Configurações → Sistema → Notificações</em> para recebê-las fora do navegador.
             </P>
 
@@ -1190,7 +1190,7 @@ curl -X POST \\
             {/* 23. PWA E MOBILE */}
             <SectionHeading id="pwa-mobile" title="23. PWA e Mobile" />
             <P>
-              O dn.os é distribuído como <strong>Progressive Web App (PWA)</strong> instalável em desktop e mobile.
+              O HS.OS é distribuído como <strong>Progressive Web App (PWA)</strong> instalável em desktop e mobile.
               Não há build nativo (Capacitor/iOS/Android) no momento — a experiência mobile usa a própria PWA.
             </P>
             <SubHeading>Manifest e Ícones</SubHeading>
@@ -1199,7 +1199,7 @@ curl -X POST \\
                 <tr><Th>Campo</Th><Th>Valor</Th></tr>
               </thead>
               <tbody>
-                <tr><Td>name / short_name</Td><Td>dn.ia dn.os / dn.os</Td></tr>
+                <tr><Td>name / short_name</Td><Td>HS.OS HS.OS / HS.OS</Td></tr>
                 <tr><Td>display</Td><Td>standalone (abre como app, sem barra do navegador)</Td></tr>
                 <tr><Td>background_color</Td><Td>#0A0A0A</Td></tr>
                 <tr><Td>theme_color</Td><Td>#3D61FF</Td></tr>
@@ -1229,7 +1229,7 @@ curl -X POST \\
             {/* 24. API PÚBLICA */}
             <SectionHeading id="api-publica" title="24. API Pública" />
             <P>
-              O dn.os <strong>não expõe</strong> uma API REST/GraphQL pública genérica para que outras plataformas consumam recursos
+              O HS.OS <strong>não expõe</strong> uma API REST/GraphQL pública genérica para que outras plataformas consumam recursos
               (agentes, canais, mensagens, artefatos) por endpoint próprio.
             </P>
             <P>
@@ -1237,8 +1237,8 @@ curl -X POST \\
               <code className="text-xs bg-secondary px-1 rounded">x-api-key</code>, voltada para envio de mensagens a canais/DMs e registro de resultados de agentes.
             </P>
             <P>
-              • <strong>Sistemas externos → dn.os</strong> — usar a Broadcast API (<code className="text-xs bg-secondary px-1 rounded">channel-broadcast</code>) para postar conteúdo.<br />
-              • <strong>dn.os → sistemas externos</strong> — cadastrar credenciais na aba Integrações (seção 19) e consumir via gateway/edge functions.
+              • <strong>Sistemas externos → HS.OS</strong> — usar a Broadcast API (<code className="text-xs bg-secondary px-1 rounded">channel-broadcast</code>) para postar conteúdo.<br />
+              • <strong>HS.OS → sistemas externos</strong> — cadastrar credenciais na aba Integrações (seção 19) e consumir via gateway/edge functions.
             </P>
             <P>
               Caso uma API pública seja necessária (exposição de agentes, conversas e artefatos por endpoint REST com OAuth/API key),
@@ -1285,7 +1285,7 @@ curl -X POST \\
             {/* 26. GOAL VS LOOP */}
             <SectionHeading id="goal-vs-loop" title="26. Goal vs Loop — Modos de Autonomia" />
             <P>
-              Os agentes dn.os têm dois mecanismos para executar tarefas de forma autônoma:
+              Os agentes HS.OS têm dois mecanismos para executar tarefas de forma autônoma:
             </P>
 
             <SubHeading>🎯 Goal (OpenClaw Nativo)</SubHeading>
@@ -1305,9 +1305,9 @@ curl -X POST \\
               <strong>Exemplo:</strong> "Faz um relatório de status de todos os agentes" — ~10 ferramentas, termina na mesma conversa.
             </P>
 
-            <SubHeading>🔄 Loop Architecture (dn.os)</SubHeading>
+            <SubHeading>🔄 Loop Architecture (HS.OS)</SubHeading>
             <P>
-              <strong>O que é:</strong> Infraestrutura customizada construída pela dn.ia sobre Supabase. Tarefas grandes são divididas em chunks, com checkpoints salvos no banco. Se a sessão cair ou o agente parar, a tarefa é retomada automaticamente de onde parou.
+              <strong>O que é:</strong> Infraestrutura customizada construída pela HS.OS sobre Supabase. Tarefas grandes são divididas em chunks, com checkpoints salvos no banco. Se a sessão cair ou o agente parar, a tarefa é retomada automaticamente de onde parou.
             </P>
             <P>
               <strong>Quem gerencia:</strong> Supabase (<code className="text-xs bg-secondary px-1 rounded">agent_tasks</code>) + Edge Function (<code className="text-xs bg-secondary px-1 rounded">agent-task</code>) + cron de retomada + UI do Lovable.
@@ -1316,7 +1316,7 @@ curl -X POST \\
               <strong>Quando usar:</strong> Tarefas grandes (15+ tool calls) ou quando um Goal falha por timeout / queda de sessão.
             </P>
             <P>
-              <strong>Frontend:</strong> ESSA é a parte que o Lovable precisa enxergar. O frontend já mostra cards de tarefas em andamento e injeta a system message <code className="text-xs bg-secondary px-1 rounded">[dn.os] Task pendente encontrada</code> no início da sessão para o agente retomar automaticamente.
+              <strong>Frontend:</strong> ESSA é a parte que o Lovable precisa enxergar. O frontend já mostra cards de tarefas em andamento e injeta a system message <code className="text-xs bg-secondary px-1 rounded">[HS.OS] Task pendente encontrada</code> no início da sessão para o agente retomar automaticamente.
             </P>
             <P>
               <strong>Exemplo:</strong> "Audita os workspaces de todos os 8 agentes" — 3 dias, ~60 ferramentas, múltiplas sessões.
@@ -1326,7 +1326,7 @@ curl -X POST \\
             <TableWrapper>
               <thead><tr><Th>Aspecto</Th><Th>Goal</Th><Th>Loop</Th></tr></thead>
               <tbody>
-                <tr><Td>Runtime</Td><Td>OpenClaw nativo</Td><Td>Infra dn.os (Supabase + EF)</Td></tr>
+                <tr><Td>Runtime</Td><Td>OpenClaw nativo</Td><Td>Infra HS.OS (Supabase + EF)</Td></tr>
                 <tr><Td>Persistência</Td><Td>❌ Morre com a sessão</Td><Td>✅ Checkpoints no banco</Td></tr>
                 <tr><Td>Frontend</Td><Td>❌ Não precisa de UI</Td><Td>✅ Já implementado no Lovable</Td></tr>
                 <tr><Td>Gatilho</Td><Td>/goal ou agente decide</Td><Td>agent-task create</Td></tr>
@@ -1345,7 +1345,7 @@ curl -X POST \\
             <SubHeading>✅ O que o Lovable JÁ implementa do Loop</SubHeading>
             <P>
               • Cards de task em andamento na UI.<br />
-              • System message <code className="text-xs bg-secondary px-1 rounded">[dn.os] Task pendente encontrada: "&lt;título&gt;" (ID: &lt;uuid&gt;)</code> injetada no início da sessão.<br />
+              • System message <code className="text-xs bg-secondary px-1 rounded">[HS.OS] Task pendente encontrada: "&lt;título&gt;" (ID: &lt;uuid&gt;)</code> injetada no início da sessão.<br />
               • Status visual: <code className="text-xs bg-secondary px-1 rounded">running</code> / <code className="text-xs bg-secondary px-1 rounded">checkpoint</code> / <code className="text-xs bg-secondary px-1 rounded">completed</code> / <code className="text-xs bg-secondary px-1 rounded">failed</code>.
             </P>
 
@@ -1356,7 +1356,7 @@ curl -X POST \\
             {/* 27. EXPORT / IMPORT */}
             <SectionHeading id="export-import" title="27. Exportação e Importação de Super Agentes (.dnos)" />
             <P>
-              Super agentes podem ser exportados e reimportados entre instâncias dn.os através do formato proprietário <code className="text-xs bg-secondary px-1 rounded">.dnos</code> (JSON estruturado). O pipeline sanitiza dados sensíveis da empresa e UUIDs de plataforma automaticamente, tornando o arquivo seguro para compartilhar.
+              Super agentes podem ser exportados e reimportados entre instâncias HS.OS através do formato proprietário <code className="text-xs bg-secondary px-1 rounded">.dnos</code> (JSON estruturado). O pipeline sanitiza dados sensíveis da empresa e UUIDs de plataforma automaticamente, tornando o arquivo seguro para compartilhar.
             </P>
 
             <SubHeading>Formato .dnos</SubHeading>
@@ -1419,7 +1419,7 @@ curl -X POST \\
 
             <SubHeading>Casos de Uso</SubHeading>
             <P>
-              • Compartilhar agentes entre empresas e instâncias dn.os.<br />
+              • Compartilhar agentes entre empresas e instâncias HS.OS.<br />
               • Backup completo antes de mudanças estruturais no SOUL/IDENTITY.<br />
               • Distribuir super agentes especializados como templates públicos.<br />
               • Migrar agentes entre ambientes (dev → prod).
@@ -1428,7 +1428,7 @@ curl -X POST \\
             {/* Footer */}
             <div className="mt-12 pt-6 border-t border-border text-center">
               <p className="text-xs text-muted-foreground">
-                dn.os — dn.ia Operating System • Documentação gerada automaticamente • {new Date().toLocaleDateString("pt-BR")}
+                HS.OS — HS.OS Operating System • Documentação gerada automaticamente • {new Date().toLocaleDateString("pt-BR")}
               </p>
             </div>
 

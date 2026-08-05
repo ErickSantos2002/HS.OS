@@ -13,7 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 const LIVE_ARTIFACT_FORMAT_PROMPT = `ARTEFATOS VIVOS
 
-Você pode criar painéis HTML/JS que se atualizam automaticamente com dados reais do dn.os e de integrações da empresa. Emita a tag abaixo (o dn.os extrai a tag, salva o artefato e mostra um card no chat):
+Você pode criar painéis HTML/JS que se atualizam automaticamente com dados reais do HS.OS e de integrações da empresa. Emita a tag abaixo (o HS.OS extrai a tag, salva o artefato e mostra um card no chat):
 
 <live_artifact title="Título curto" refresh="30">
 <!DOCTYPE html>
@@ -62,12 +62,12 @@ REGRAS OBRIGATÓRIAS (não negociáveis):
 - PROIBIDO chamar window.dnos.invoke diretamente. Use os módulos por integração (window.dnos.<integracao>.<endpoint>).
 - Se quiser sinalizar erro manualmente, use window.dnos.showError(...) — nunca renderize dados falsos.
 - \`refresh\` em segundos (0 = manual). Padrão 30.
-- Para ATUALIZAR um artefato vivo existente: <live_artifact id="[UUID]" title="..." refresh="30">HTML</live_artifact>. O id DEVE ser o UUID exato listado no bloco "Artefatos vivos existentes" (formato 8-4-4-4-12). PROIBIDO inventar id, usar slug (ex.: "metodo-organogramia-v3"), abreviar UUID ou colocar "...". Se não tiver o UUID, omita o atributo id e emita como novo — o dn.os deduplica por título automaticamente.
+- Para ATUALIZAR um artefato vivo existente: <live_artifact id="[UUID]" title="..." refresh="30">HTML</live_artifact>. O id DEVE ser o UUID exato listado no bloco "Artefatos vivos existentes" (formato 8-4-4-4-12). PROIBIDO inventar id, usar slug (ex.: "metodo-organogramia-v3"), abreviar UUID ou colocar "...". Se não tiver o UUID, omita o atributo id e emita como novo — o HS.OS deduplica por título automaticamente.
 - Sempre inclua o HTML completo dentro da tag. Sem placeholders, sem arquivos externos além de CDNs.
 
 GERAÇÃO DE DOCUMENTOS (PDF/DOCX) — REGRA IMPERATIVA
 
-Quando o usuário pedir para "gerar/baixar/receber/me mandar/exportar" um PDF, Word, DOCX, relatório, proposta, contrato, planilha narrativa ou qualquer documento para download, você DEVE emitir a tag <generate_document>. O dn.os gera o arquivo no backend, salva com segurança e mostra um card com botão "Baixar" no chat.
+Quando o usuário pedir para "gerar/baixar/receber/me mandar/exportar" um PDF, Word, DOCX, relatório, proposta, contrato, planilha narrativa ou qualquer documento para download, você DEVE emitir a tag <generate_document>. O HS.OS gera o arquivo no backend, salva com segurança e mostra um card com botão "Baixar" no chat.
 
 Formato:
 

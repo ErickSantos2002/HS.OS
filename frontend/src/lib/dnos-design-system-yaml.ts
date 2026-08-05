@@ -1,18 +1,18 @@
 /**
- * Gera o Design System completo da dn.os em formato YAML.
+ * Gera o Design System completo da HS.OS em formato YAML.
  * Esse YAML é otimizado para ser consumido por LLMs (Claude, GPT, Gemini)
  * ao gerar artifacts, telas ou componentes que precisem respeitar a
- * identidade visual "Glass Aurora" da dn.os.
+ * identidade visual "Glass Aurora" da HS.OS.
  */
 export function generateDesignSystemYaml(): string {
   const today = new Date().toISOString().slice(0, 10);
   return `##############################################################################
-# dn.os — Design System "Glass Aurora"
-# Identidade visual oficial da plataforma dn.ia Operating System
+# HS.OS — Design System "Glass Aurora"
+# Identidade visual oficial da plataforma HS.OS Operating System
 # Versão: 1.0 | Atualizado: ${today}
 #
 # Use este arquivo como contexto ao gerar UIs, artifacts ou componentes
-# que precisem respeitar a identidade visual da dn.os.
+# que precisem respeitar a identidade visual da HS.OS.
 ##############################################################################
 
 meta:
@@ -29,11 +29,11 @@ cores:
   primary:
     hex: "#3D61FF"
     hsl: "231 100% 62%"
-    descricao: Azul Elétrico dn.ia — ações principais, links, foco
+    descricao: Azul Elétrico HS.OS — ações principais, links, foco
   accent:
     hex: "#E41A11"
     hsl: "4 87% 48%"
-    descricao: Vermelho Energia dn.ia — destaque, alerta, CTA energético
+    descricao: Vermelho Energia HS.OS — destaque, alerta, CTA energético
   destructive:
     hex: "#E41A11"
     hsl: "4 87% 48%"
@@ -265,7 +265,7 @@ animacoes:
   easing_padrao: cubic-bezier(0.4, 0, 0.2, 1)
 
 ##############################################################################
-# Fim do Design System dn.os
+# Fim do Design System HS.OS
 ##############################################################################
 `;
 }

@@ -28,7 +28,7 @@ export type GatewayModel = {
 
 /**
  * Usado só quando o Gateway não responde. Reflete o que está configurado hoje
- * no openclaw.json da dn.ia — pode não valer para um remix, por isso a UI deve
+ * no openclaw.json da HS.OS — pode não valer para um remix, por isso a UI deve
  * sinalizar que é fallback.
  */
 const FALLBACK_MODELS: GatewayModel[] = [

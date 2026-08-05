@@ -617,8 +617,8 @@ export default function WarRoomPage() {
         <header className="wr-topo">
           <div className="wr-marca">
             <img
-              src={claro ? "/dnia-logo-preto.png" : "/dnia-logo-branco.png"}
-              alt="dn.ia"
+              src={"/HS-OS-logo.png"}
+              alt="HS.OS"
               className="wr-logo"
             />
             <b>{"\n"}</b><span>war room</span>
@@ -707,7 +707,7 @@ export default function WarRoomPage() {
 
         <main className="wr-palco">
           <section className="wr-painel">
-            <header><span>o time dn.ia em tempo real</span><span>humanos e IAs como um só time</span></header>
+            <header><span>o time HS.OS em tempo real</span><span>humanos e IAs como um só time</span></header>
             <svg
               ref={svgRef}
               viewBox={`0 0 ${VB.w} ${VB.h}`}
@@ -777,7 +777,7 @@ export default function WarRoomPage() {
               })}
               </g>
 
-              {/* O núcleo é o dn.os. Era um ponto de 5px onde deveria estar o
+              {/* O núcleo é o HS.OS. Era um ponto de 5px onde deveria estar o
                   coração da cena — agora respira, e é para onde tudo converge. */}
               <g transform={`translate(${NUCLEO.x},${NUCLEO.y})`} className="wr-nucleo">
                 <circle r={30} className="wr-nucleo-onda" fill="none" strokeWidth={1} />
@@ -785,7 +785,7 @@ export default function WarRoomPage() {
                 <circle r={19} fill="none" className="wr-nucleo-anel" strokeWidth={1.2} opacity={0.55} />
                 <circle r={11} fill="none" className="wr-nucleo-anel" strokeWidth={1} opacity={0.3} />
                 <circle r={6} className="wr-nucleo-ponto" />
-                <text y={54} textAnchor="middle" className="wr-nucleo-rotulo">dn.os</text>
+                <text y={54} textAnchor="middle" className="wr-nucleo-rotulo">HS.OS</text>
               </g>
 
               {(feed?.pessoas ?? []).map((p, i) => {
@@ -813,7 +813,7 @@ export default function WarRoomPage() {
                       {p.nome.slice(0, 1).toUpperCase()}
                     </text>
                     <text textAnchor="middle" y={R_PE + 28} fontSize={16} className="wr-nome">{p.nome}</text>
-                    <text textAnchor="middle" y={R_PE + 46} fontSize={11} className="wr-tarefa">time dn.ia</text>
+                    <text textAnchor="middle" y={R_PE + 46} fontSize={11} className="wr-tarefa">time HS.OS</text>
                   </g>
                 );
               })}

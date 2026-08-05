@@ -402,7 +402,7 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
           title: "Agente excluído",
           description: data?.openclaw_warning
             ? `Removido do banco. Aviso OpenClaw: ${data.openclaw_warning}`
-            : "Removido do OpenClaw e do dn.os.",
+            : "Removido do OpenClaw e do HS.OS.",
         });
         setDeleteTarget(null);
         fetchAll();
@@ -446,7 +446,7 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
               </div>
               Usuários
             </h1>
-            <p className="text-xs text-muted-foreground mt-1 ml-10">Gerencie os acessos ao dn.os</p>
+            <p className="text-xs text-muted-foreground mt-1 ml-10">Gerencie os acessos ao HS.OS</p>
           </div>
 
           <div className="flex items-center gap-2">
@@ -813,8 +813,8 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {deleteTarget?.kind === "agent"
-                ? `Esta ação é permanente. O agente "${(deleteTarget as AgentRow).name}" será removido do OpenClaw e do dn.os, junto com avatar e integrações.`
-                : `Esta ação é permanente. ${(deleteTarget as HumanRow | null)?.full_name || (deleteTarget as HumanRow | null)?.email} perderá imediatamente o acesso ao dn.os e seu perfil será removido.`}
+                ? `Esta ação é permanente. O agente "${(deleteTarget as AgentRow).name}" será removido do OpenClaw e do HS.OS, junto com avatar e integrações.`
+                : `Esta ação é permanente. ${(deleteTarget as HumanRow | null)?.full_name || (deleteTarget as HumanRow | null)?.email} perderá imediatamente o acesso ao HS.OS e seu perfil será removido.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

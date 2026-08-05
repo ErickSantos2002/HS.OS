@@ -79,9 +79,9 @@ const FALLBACK_SKILLS: Skill[] = [
   { name: "cron-schedule", description: "Agendamento de tarefas periódicas", type: "built-in", installable: true, platform: "any", category: "Scheduling" },
   { name: "task-queue", description: "Fila de tarefas assíncronas", type: "built-in", installable: true, platform: "any", category: "Scheduling" },
   { name: "agent-delegate", description: "Delegação de tarefas entre agentes", type: "built-in", installable: true, platform: "any", category: "Scheduling" },
-  // Custom dn.ia
-  { name: "ai-video-gen", description: "Geração de vídeos com IA (custom dn.ia)", type: "custom", installable: true, platform: "any", category: "Custom dn.ia", requiresCredentials: "Video API Key" },
-  { name: "canva-connect", description: "Integração com Canva para design (custom dn.ia)", type: "custom", installable: true, platform: "any", category: "Custom dn.ia", requiresCredentials: "Canva API Key" },
+  // Custom HS.OS
+  { name: "ai-video-gen", description: "Geração de vídeos com IA (custom HS.OS)", type: "custom", installable: true, platform: "any", category: "Custom HS.OS", requiresCredentials: "Video API Key" },
+  { name: "canva-connect", description: "Integração com Canva para design (custom HS.OS)", type: "custom", installable: true, platform: "any", category: "Custom HS.OS", requiresCredentials: "Canva API Key" },
 ];
 
 export function useSkills() {

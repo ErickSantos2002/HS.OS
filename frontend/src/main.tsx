@@ -20,7 +20,7 @@ const updateSW = registerSW({
     // Publicar fazia a página "dar um refresh sozinha" segundos depois,
     // engolindo cliques e resultados (caçado em 29/07 como se fosse bug de
     // botão — era o auto-update da PWA).
-    toast("Nova versão da dn.os disponível", {
+    toast("Nova versão da HS.OS disponível", {
       description: "Clique para atualizar quando quiser.",
       duration: Infinity,
       action: {

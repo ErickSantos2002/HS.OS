@@ -1,5 +1,5 @@
 /**
- * Build-time version identifier for the dn.os app.
+ * Build-time version identifier for the HS.OS app.
  * Regenerated on every deploy/build via vite.config.ts `define`.
  *
  * Format: v{YYYY.MM.DD}-{git-short-sha}  (e.g. v2026.06.02-b0c04e0)

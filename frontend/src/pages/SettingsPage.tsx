@@ -107,7 +107,7 @@ export default function SettingsPage() {
       window.navigator.standalone === true;
 
     const result = await showNotification({
-      title: "Teste dn.os 🔔",
+      title: "Teste HS.OS 🔔",
       body: "Se você está vendo isso, as notificações nativas estão funcionando!",
       tag: `dnos-test-${Date.now()}`,
     });
@@ -415,7 +415,7 @@ export default function SettingsPage() {
     { id: "artifacts", label: "Artefatos", icon: Link2 },
     ...(isMemberOrAdmin ? [{ id: "documentation" as TabId, label: "Documentação", icon: BookOpen }] : []),
     ...(isAdmin ? [{ id: "gateway" as TabId, label: "Gateway", icon: Wifi }] : []),
-    { id: "dnos", label: "dn.os", icon: FileText },
+    { id: "dnos", label: "HS.OS", icon: FileText },
   ];
 
 
@@ -709,7 +709,7 @@ export default function SettingsPage() {
                       </div>
                       <p className="text-[11px] text-muted-foreground leading-relaxed rounded-lg border border-border/30 bg-secondary/20 px-3 py-2">
                         💡 <strong>Usando como app instalado (PWA) no Windows?</strong> Verifique também:{" "}
-                        <em>Configurações do Windows → Sistema → Notificações</em> e ative a entrada do dn.os / dn.ia na lista de apps.
+                        <em>Configurações do Windows → Sistema → Notificações</em> e ative a entrada do HS.OS / HS.OS na lista de apps.
                         Sem isso, o Windows bloqueia silenciosamente as notificações da PWA mesmo com permissão concedida no app.
                       </p>
                     </>
@@ -1020,7 +1020,7 @@ export default function SettingsPage() {
               <p className="text-[11px] text-muted-foreground/80">
                 {branding.pwaIconUrl
                   ? "Nota: em apps já instalados, o ícone só troca após reinstalar. Novas instalações usam o ícone atual."
-                  : "Nenhum ícone personalizado — usando o ícone padrão do dn.os. Faça upload para substituir."}
+                  : "Nenhum ícone personalizado — usando o ícone padrão do HS.OS. Faça upload para substituir."}
               </p>
             </div>
           </div>
@@ -1037,7 +1037,7 @@ export default function SettingsPage() {
                 <Palette className="h-4 w-4 text-primary" /> Design System (YAML)
               </h3>
               <p className="text-xs text-muted-foreground">
-                Exporte o Design System completo "Glass Aurora" da dn.os em YAML — cores, tipografia,
+                Exporte o Design System completo "Glass Aurora" da HS.OS em YAML — cores, tipografia,
                 tokens, variantes de botão, regras de chat, artifacts e mais. Ideal para colar como
                 contexto em LLMs (Claude, GPT, Gemini) ao gerar telas que respeitem a identidade.
               </p>
@@ -1293,7 +1293,7 @@ export default function SettingsPage() {
       })()}
 
 
-      {/* dn.os Tab */}
+      {/* HS.OS Tab */}
       {activeTab === "dnos" && (
         <div className="-mx-6 -mb-6">
           <MissionControlDossierPage embedded />

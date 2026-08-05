@@ -62,7 +62,7 @@ export function buildPendingTaskSystemPrompt(task: AgentTask): string {
   const chunk = data.currentChunk ?? "n/d";
 
   const lines = [
-    `[dn.os] Task pendente encontrada: "${task.title}" (ID: ${task.id}).`,
+    `[HS.OS] Task pendente encontrada: "${task.title}" (ID: ${task.id}).`,
     `Status atual: ${task.status}. Chunk atual: ${chunk}.`,
     `Checkpoint: ${notes}`,
   ];

@@ -1,5 +1,5 @@
 /**
- * Generates the official dn.os documentation in YAML format.
+ * Generates the official HS.OS documentation in YAML format.
  *
  * ⚠️  IMPORTANT — KEEP IN SYNC WITH src/pages/DocumentationPage.tsx
  *
@@ -9,8 +9,8 @@
 
 export function generateDocumentationYaml(): string {
   return `##############################################################################
-# dn.os — Documentação Oficial para IA
-# dn.ia Operating System — Plataforma de Orquestração de Super agentes de IA
+# HS.OS — Documentação Oficial para IA
+# HS.OS Operating System — Plataforma de Orquestração de Super agentes de IA
 # Versão: 1.3 | Atualizado: ${new Date().toISOString().slice(0, 10)}
 #
 # Este arquivo é otimizado para leitura por modelos de linguagem (LLMs).
@@ -21,10 +21,10 @@ export function generateDocumentationYaml(): string {
 # 1. VISÃO GERAL
 # ═══════════════════════════════════════════════════════════════════════════
 plataforma:
-  nome: dn.os
-  nome_completo: dn.ia Operating System
+  nome: HS.OS
+  nome_completo: HS.OS Operating System
   descricao: >
-    Plataforma central de orquestração de agentes de inteligência artificial da dn.ia.
+    Plataforma central de orquestração de agentes de inteligência artificial da HS.OS.
     Permite que equipes interajam, coordenem e monitorem uma frota de agentes especializados
     em tempo real, através de uma interface unificada inspirada em sistemas operacionais de missão.
   proposta_de_valor:
@@ -93,7 +93,7 @@ arquitetura:
 # ═══════════════════════════════════════════════════════════════════════════
 agentes:
   descricao: >
-    O dn.os opera com 8 agentes oficiais, cada um com identidade e especialização únicas.
+    O HS.OS opera com 8 agentes oficiais, cada um com identidade e especialização únicas.
     Todos são acessados pelo modelo "openclaw:<agentId>".
   modelo_identidade:
     formato: "openclaw:<agentId>"
@@ -222,7 +222,7 @@ chat:
       Transcrição exibida como texto colapsável junto ao player de áudio.
   auto_reset_sessao:
     descricao: >
-      Quando uma sessão atinge o limite de tokens do agente, o dn.os detecta automaticamente
+      Quando uma sessão atinge o limite de tokens do agente, o HS.OS detecta automaticamente
       o erro de context overflow ("context overflow", "prompt too large", "context length",
       "token limit", "input too long", entre outros) e renova a sessão de forma transparente,
       sem expor o erro técnico ao usuário.
@@ -281,7 +281,7 @@ chat:
 artefatos:
   descricao: >
     Conteúdos visuais ricos (dashboards, relatórios, landing pages, gráficos) gerados pelos agentes
-    diretamente nas conversas. São uma das funcionalidades mais poderosas do dn.os, permitindo que agentes
+    diretamente nas conversas. São uma das funcionalidades mais poderosas do HS.OS, permitindo que agentes
     entreguem resultados concretos e visuais sob demanda.
   geracao:
     formato: Código HTML completo dentro de blocos \`\`\`html na resposta do agente
@@ -378,7 +378,7 @@ artefatos:
     geracao_documentos:
       descricao: >
         Padrão oficial: agente emite a tag <generate_document type="pdf|docx" title="…">JSON</generate_document>.
-        O dn.os extrai a tag, chama a edge function generate-document (gera com pdfmake ou docx.js
+        O HS.OS extrai a tag, chama a edge function generate-document (gera com pdfmake ou docx.js
         no backend Deno), sobe o arquivo em bucket privado generated-documents e renderiza um card
         com botão "Baixar" no chat. Cada clique gera signed URL fresh (1h) via sign-generated-document.
         Link nunca é persistido.
@@ -514,7 +514,7 @@ gateway:
   descricao: >
     O OpenClaw Gateway é o servidor central que hospeda todos os modelos de agentes.
     A URL é configurada por install em Settings → Gateway (tabela public.vps_config).
-    O dn.os se comunica via API REST compatível com OpenAI.
+    O HS.OS se comunica via API REST compatível com OpenAI.
   endpoint:
     url: "<gateway-url>/v1/chat/completions"
     metodo: POST
@@ -815,7 +815,7 @@ skills:
 broadcast_api:
   descricao: >
     API REST externa autenticada via header x-api-key que permite sistemas externos
-    interagirem com o dn.os.
+    interagirem com o HS.OS.
   edge_function: channel-broadcast
   autenticacao: "Header x-api-key com valor da secret BROADCAST_API_KEY"
   endpoints:
@@ -892,7 +892,7 @@ monitoramento:
       Os dados permitem análise histórica e detecção de anomalias.
   resiliencia_automatica:
     descricao: >
-      O dn.os tem mecanismos automáticos de recuperação, sem exigir intervenção manual do usuário.
+      O HS.OS tem mecanismos automáticos de recuperação, sem exigir intervenção manual do usuário.
     mecanismos:
       - nome: Fim da execução duplicada
         descricao: >
@@ -913,7 +913,7 @@ monitoramento:
     limite_conhecido: >
       Se um agente concluir uma tarefa longa mas a conexão cair exatamente na entrega, hoje não
       existe forma de recuperar o texto da resposta sem o agente reexecutar — a correção definitiva
-      depende do Gateway (fora do dn.os) empurrar o resultado ativamente ao concluir um turno.
+      depende do Gateway (fora do HS.OS) empurrar o resultado ativamente ao concluir um turno.
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 14. ARQUIVOS E STORAGE
@@ -1137,8 +1137,8 @@ pwa_mobile:
   distribuicao: Progressive Web App (sem Capacitor / sem build nativo iOS/Android)
   manifest:
     arquivo: public/manifest.json
-    name: dn.ia dn.os
-    short_name: dn.os
+    name: HS.OS HS.OS
+    short_name: HS.OS
     display: standalone
     background_color: "#0A0A0A"
     theme_color: "#3D61FF"
@@ -1173,7 +1173,7 @@ pwa_mobile:
 api_publica:
   existe: false
   observacao: >
-    O dn.os NÃO expõe uma API REST/GraphQL pública genérica para que outras
+    O HS.OS NÃO expõe uma API REST/GraphQL pública genérica para que outras
     plataformas consumam recursos (agentes, canais, artefatos) por endpoint
     próprio. A única superfície pública é a Broadcast API.
   superficies_disponiveis:
@@ -1182,7 +1182,7 @@ api_publica:
       auth: Header x-api-key
       uso: Sistemas externos postam mensagens em canais/DMs e registram resultados de agentes
     integracoes_inversas:
-      descricao: dn.os → sistemas externos via credenciais cadastradas em Settings → Integrações
+      descricao: HS.OS → sistemas externos via credenciais cadastradas em Settings → Integrações
       tipos: api_key, multi_key, mcp
   recomendacao: >
     Caso seja necessária API pública completa (CRUD de agentes/conversas/artefatos),
@@ -1228,7 +1228,7 @@ onboarding_empresa:
 # ═══════════════════════════════════════════════════════════════════════════
 goal_vs_loop:
   descricao: >
-    Os agentes dn.os têm dois mecanismos para executar tarefas de forma autônoma.
+    Os agentes HS.OS têm dois mecanismos para executar tarefas de forma autônoma.
   goal:
     titulo: "🎯 Goal (OpenClaw Nativo)"
     o_que_e: >
@@ -1243,9 +1243,9 @@ goal_vs_loop:
       "Faz um relatório de status de todos os agentes" — ~10 ferramentas, termina
       na mesma conversa.
   loop:
-    titulo: "🔄 Loop Architecture (dn.os)"
+    titulo: "🔄 Loop Architecture (HS.OS)"
     o_que_e: >
-      Infraestrutura customizada construída pela dn.ia sobre Supabase. Tarefas grandes
+      Infraestrutura customizada construída pela HS.OS sobre Supabase. Tarefas grandes
       são divididas em chunks, com checkpoints salvos no banco. Se a sessão cair ou
       o agente parar, a tarefa é retomada automaticamente de onde parou.
     quem_gerencia: >
@@ -1254,7 +1254,7 @@ goal_vs_loop:
       Tarefas grandes (15+ tool calls) ou quando um Goal falha por timeout / queda de sessão.
     frontend: >
       ESSA é a parte que o Lovable precisa enxergar. O frontend já mostra cards de
-      tarefas em andamento e injeta a system message [dn.os] Task pendente encontrada
+      tarefas em andamento e injeta a system message [HS.OS] Task pendente encontrada
       no início da sessão para o agente retomar automaticamente.
     exemplo: >
       "Audita os workspaces de todos os 8 agentes" — 3 dias, ~60 ferramentas,
@@ -1262,7 +1262,7 @@ goal_vs_loop:
   comparativo:
     - aspecto: Runtime
       goal: OpenClaw nativo
-      loop: Infra dn.os (Supabase + EF)
+      loop: Infra HS.OS (Supabase + EF)
     - aspecto: Persistência
       goal: "❌ Morre com a sessão"
       loop: "✅ Checkpoints no banco"
@@ -1286,7 +1286,7 @@ goal_vs_loop:
       └─ Goal travou -> 🔄 Loop (fallback automático)
   lovable_ja_implementa:
     - Cards de task em andamento na UI
-    - 'System message [dn.os] Task pendente encontrada: "<título>" (ID: <uuid>) injetada no início da sessão'
+    - 'System message [HS.OS] Task pendente encontrada: "<título>" (ID: <uuid>) injetada no início da sessão'
     - "Status visual: running / checkpoint / completed / failed"
   nao_precisa_implementar:
     - Qualquer UI para Goal — é 100% runtime, invisível pro frontend
@@ -1339,7 +1339,7 @@ export_import_super_agentes:
     - "Nenhum UUID de instância vaza — sanitização contextual em SOUL/IDENTITY/TOOLS/AGENTS"
     - "Nenhuma chave de API é exportada — apenas os nomes dos conectores requeridos"
   casos_de_uso:
-    - "Compartilhar agentes entre empresas/instâncias dn.os"
+    - "Compartilhar agentes entre empresas/instâncias HS.OS"
     - "Backup completo de um agente antes de mudanças estruturais"
     - "Distribuir agentes especializados como templates (via /templates/<id>/)"
     - "Migrar agentes entre ambientes (dev → prod)"

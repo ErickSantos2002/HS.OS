@@ -39,7 +39,7 @@ import { getGatewayConfig } from "@/lib/gateway";
 type PlatformFilter = "all" | "vps" | "mac" | "hardware";
 
 function getPlatformBadge(skill: Skill) {
-  if (skill.type === "custom") return { label: "Custom dn.ia", cls: "bg-primary/15 text-primary border-primary/30" };
+  if (skill.type === "custom") return { label: "Custom HS.OS", cls: "bg-primary/15 text-primary border-primary/30" };
   if (skill.platform === "mac") return { label: "Mac only", cls: "bg-muted text-muted-foreground border-border" };
   if (!skill.installable) return { label: "Hardware", cls: "bg-muted text-muted-foreground border-border" };
   return { label: "VPS", cls: "bg-success/15 text-success border-success/30" };

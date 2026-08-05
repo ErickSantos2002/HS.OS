@@ -84,7 +84,7 @@ export default function PublicArtifactPage() {
               {artifact.title || "Artefato"}
             </h1>
             <p className="text-[10px] text-muted-foreground">
-              Criado por {branding.companyName || "dn.ia"}
+              Criado por {branding.companyName || "HS.OS"}
             </p>
           </div>
         </div>
