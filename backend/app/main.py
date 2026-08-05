@@ -21,8 +21,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="TeamsHS API",
-    description="API da plataforma de agentes de IA TeamsHS",
+    title="HS.OS API",
+    description="API da plataforma de agentes de IA HS.OS",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -43,7 +43,7 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "teamshs-api"}
+    return {"status": "ok", "service": "hsos-api"}
 
 
 # app.include_router(auth_router)

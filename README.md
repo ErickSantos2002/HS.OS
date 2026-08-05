@@ -1,4 +1,4 @@
-# TeamsHS
+# HS.OS
 
 Plataforma de gestão de agentes de IA da Health & Safety — um "Mission Control" para
 agentes que rodam num **OpenClaw Gateway** hospedado em VPS.

@@ -1,0 +1,2818 @@
+schema_completo
+"CREATE TYPE public.app_role AS ENUM ('super_admin', 'member', 'user');
+
+CREATE TYPE public.author_type AS ENUM ('human', 'agent');
+
+CREATE TYPE public.channel_type AS ENUM ('public', 'private', 'dm');
+
+CREATE TABLE public.access_logs (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  user_id uuid,
+  action text NOT NULL,
+  metadata jsonb DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.agent_activity (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  agent_id text NOT NULL,
+  activity_type text NOT NULL,
+  title text NOT NULL,
+  status text DEFAULT 'running'::text NOT NULL,
+  steps jsonb DEFAULT '[]'::jsonb NOT NULL,
+  result jsonb,
+  user_id uuid,
+  channel text,
+  metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.agent_activity_log (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  agent_id text NOT NULL,
+  agent_name text NOT NULL,
+  agent_emoji text,
+  event_type text NOT NULL,
+  tool_name text,
+  detail text NOT NULL,
+  status text DEFAULT 'running'::text NOT NULL,
+  session_key text,
+  ""timestamp"" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.agent_avatars (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  agent_id text NOT NULL,
+  avatar_data text NOT NULL,
+  updated_at timestamp with time zone DEFAULT now(),
+  avatar_url text
+);
+
+CREATE TABLE public.agent_context_state (
+  session_key text NOT NULL,
+  agent_id text NOT NULL,
+  model text,
+  total_tokens bigint DEFAULT 0 NOT NULL,
+  context_tokens bigint DEFAULT 0 NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.agent_creation_log (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  agent_id text NOT NULL,
+  created_by uuid,
+  briefing text NOT NULL,
+  lia_session text,
+  lia_http_status integer,
+  lia_response text,
+  lia_error text,
+  status text DEFAULT 'sent'::text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  responded_at timestamp with time zone
+);
+
+CREATE TABLE public.agent_crons (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  agent_id text NOT NULL,
+  name text DEFAULT ''::text NOT NULL,
+  expression text DEFAULT '* * * * *'::text NOT NULL,
+  description text DEFAULT ''::text,
+  enabled boolean DEFAULT true NOT NULL,
+  last_run timestamp with time zone,
+  next_run timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.agent_files (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  agent_id text NOT NULL,
+  file_name text NOT NULL,
+  content text,
+  synced_at timestamp with time zone DEFAULT now(),
+  pending_write boolean DEFAULT false NOT NULL,
+  origin text DEFAULT 'vps'::text NOT NULL,
+  written_at timestamp with time zone
+);
+
+CREATE TABLE public.agent_integrations (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  agent_id text,
+  name text NOT NULL,
+  type text,
+  status text DEFAULT 'inactive'::text,
+  config jsonb DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  description text
+);
+
+CREATE TABLE public.agent_profiles (
+  agent_id text NOT NULL,
+  avatar_url text,
+  department text,
+  tts_voice_id text,
+  tts_voice_name text,
+  convai_agent_id text,
+  voice_model text DEFAULT 'eleven_multilingual_v2'::text,
+  updated_at timestamp with time zone DEFAULT now(),
+  role text,
+  description text,
+  name text,
+  emoji text DEFAULT '🤖'::text,
+  specialty text,
+  workspace text,
+  channels text[] DEFAULT ARRAY[]::text[],
+  openclaw_id text,
+  status text DEFAULT 'active'::text NOT NULL,
+  model text,
+  behavior text,
+  skills_description text,
+  skills_tags text[] DEFAULT '{}'::text[],
+  integrations_used text[] DEFAULT '{}'::text[],
+  persona_description text,
+  crons_description text,
+  access_type text DEFAULT 'all'::text NOT NULL,
+  allowed_user_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+  guardrails jsonb DEFAULT '[]'::jsonb NOT NULL,
+  is_leader boolean DEFAULT false NOT NULL,
+  leader_id text,
+  is_official boolean DEFAULT false NOT NULL,
+  sort_order integer,
+  color text
+);
+
+CREATE TABLE public.agent_results (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  agent_id text NOT NULL,
+  title text DEFAULT ''::text NOT NULL,
+  description text DEFAULT ''::text,
+  category text DEFAULT 'task'::text,
+  value numeric,
+  metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  user_id text
+);
+
+CREATE TABLE public.agent_skills (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  agent_id text NOT NULL,
+  skill_id uuid NOT NULL,
+  installed_by text DEFAULT 'user'::text NOT NULL,
+  sync_status text DEFAULT 'pending'::text NOT NULL,
+  sync_error text
+);
+
+CREATE TABLE public.agent_stats (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  agent_id text NOT NULL,
+  status text,
+  model text,
+  last_active timestamp with time zone,
+  last_channel text,
+  messages_today integer DEFAULT 0,
+  tokens_today integer DEFAULT 0,
+  cost_today numeric DEFAULT 0,
+  errors_today integer DEFAULT 0,
+  collected_at timestamp with time zone DEFAULT now(),
+  session_count integer,
+  max_total_tokens integer,
+  latest_updated_at timestamp with time zone,
+  top_sessions jsonb,
+  user_id uuid
+);
+
+CREATE TABLE public.agent_tasks (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL,
+  created_by uuid,
+  agent_id text NOT NULL,
+  title text NOT NULL,
+  status text DEFAULT 'running'::text NOT NULL,
+  chunks jsonb DEFAULT '[]'::jsonb NOT NULL,
+  checkpoint_data jsonb DEFAULT '{}'::jsonb NOT NULL,
+  completed_at timestamp with time zone
+);
+
+CREATE TABLE public.agent_templates (
+  agent_id text NOT NULL,
+  name text NOT NULL,
+  role text,
+  specialty text,
+  department text,
+  emoji text DEFAULT '🤖'::text,
+  identity_template text NOT NULL,
+  soul_template text NOT NULL,
+  suggested_channels text[] DEFAULT '{}'::text[] NOT NULL,
+  sort_order integer DEFAULT 0 NOT NULL,
+  is_default_active boolean DEFAULT true NOT NULL,
+  is_leader_template boolean DEFAULT false NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL,
+  color text
+);
+
+CREATE TABLE public.agent_token_snapshots (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  agent_id text NOT NULL,
+  total_tokens integer DEFAULT 0,
+  input_tokens integer DEFAULT 0,
+  output_tokens integer DEFAULT 0,
+  session_count integer DEFAULT 0,
+  snapshot_at timestamp with time zone NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  context_tokens integer DEFAULT 0,
+  cache_read bigint DEFAULT 0,
+  cache_write bigint DEFAULT 0,
+  estimated_cost_usd numeric(10,6) DEFAULT 0,
+  model text,
+  context_window bigint
+);
+
+CREATE TABLE public.agent_turn_events (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  turn_id uuid,
+  session_key text NOT NULL,
+  observed text NOT NULL,
+  decision text NOT NULL,
+  acted boolean DEFAULT false NOT NULL,
+  detail text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.agent_turns (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  agent_id text NOT NULL,
+  user_id uuid,
+  session_key text NOT NULL,
+  user_message_ts timestamp with time zone NOT NULL,
+  source text DEFAULT 'dm'::text NOT NULL,
+  status text DEFAULT 'pending'::text NOT NULL,
+  dispatched_at timestamp with time zone DEFAULT now() NOT NULL,
+  delivered_at timestamp with time zone,
+  detail text,
+  attempts integer DEFAULT 0 NOT NULL,
+  last_checked_at timestamp with time zone,
+  nudged_at timestamp with time zone,
+  last_decision text,
+  warned_soft_at timestamp with time zone,
+  warned_hard_at timestamp with time zone,
+  origin_agent_id text
+);
+
+CREATE TABLE public.app_settings (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  key text NOT NULL,
+  value jsonb DEFAULT '{}'::jsonb NOT NULL,
+  updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.arena_agents (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  arena_id uuid NOT NULL,
+  agent_id text NOT NULL,
+  role_name text,
+  role_description text,
+  is_primary boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.arena_messages (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  session_id uuid NOT NULL,
+  role text NOT NULL,
+  agent_id text,
+  agent_role text,
+  content text,
+  artifact_html text,
+  created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.arena_sessions (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  arena_id uuid NOT NULL,
+  title text DEFAULT 'Nova sessão'::text,
+  parent_session_id uuid,
+  context_summary text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.arena_templates (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  name text NOT NULL,
+  emoji text,
+  description text,
+  agents jsonb DEFAULT '[]'::jsonb,
+  suggested_sessions text[] DEFAULT '{}'::text[],
+  base_prompt text,
+  is_default boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.arenas (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  name text NOT NULL,
+  description text DEFAULT ''::text,
+  emoji text DEFAULT ''::text,
+  agents jsonb DEFAULT '[]'::jsonb,
+  react_code text DEFAULT ''::text,
+  prompt text DEFAULT ''::text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  voice_id text,
+  opening_message text,
+  convai_agent_id text,
+  created_by uuid DEFAULT auth.uid() NOT NULL
+);
+
+CREATE TABLE public.artifact_titles (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  user_id uuid NOT NULL,
+  message_id uuid NOT NULL,
+  title text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.artifacts_published (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  title text,
+  html_content text NOT NULL,
+  created_by uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  expires_at timestamp with time zone,
+  views integer DEFAULT 0,
+  is_public boolean DEFAULT true
+);
+
+CREATE TABLE public.automation_runs (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  automation_id uuid,
+  cron_job_name text,
+  started_at timestamp with time zone DEFAULT now() NOT NULL,
+  finished_at timestamp with time zone,
+  status text,
+  output text,
+  error_message text
+);
+
+CREATE TABLE public.automations (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  name text NOT NULL,
+  agent_id text,
+  type text NOT NULL,
+  scheduled_day text,
+  scheduled_time text,
+  trigger_event text,
+  instruction text NOT NULL,
+  is_active boolean DEFAULT true NOT NULL,
+  last_run_at timestamp with time zone,
+  last_run_status text,
+  created_by uuid,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.branding (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  company_name text DEFAULT 'OpenClaw'::text NOT NULL,
+  primary_color text DEFAULT '231 100% 62%'::text NOT NULL,
+  logo text DEFAULT ''::text,
+  favicon_url text DEFAULT ''::text,
+  updated_at timestamp with time zone DEFAULT now(),
+  pwa_icon_url text,
+  logo_light text,
+  logo_dark text,
+  mark_light text,
+  mark_dark text
+);
+
+CREATE TABLE public.channel_agent_activity (
+  channel_id uuid NOT NULL,
+  agent_id text NOT NULL,
+  started_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL,
+  passo text,
+  finished_at timestamp with time zone
+);
+
+CREATE TABLE public.channel_members (
+  channel_id uuid NOT NULL,
+  user_id text NOT NULL,
+  joined_at timestamp with time zone DEFAULT now() NOT NULL,
+  member_type text DEFAULT 'human'::text NOT NULL,
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  channel text,
+  member_id text NOT NULL,
+  added_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.channel_messages (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  channel_id uuid NOT NULL,
+  author_id text NOT NULL,
+  author_type author_type DEFAULT 'human'::author_type NOT NULL,
+  author_name text NOT NULL,
+  author_avatar text,
+  content text NOT NULL,
+  thread_id uuid,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  audio_url text,
+  edited_at timestamp with time zone,
+  deleted_at timestamp with time zone,
+  attachments jsonb
+);
+
+CREATE TABLE public.channels (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  name text NOT NULL,
+  description text,
+  type channel_type DEFAULT 'public'::channel_type NOT NULL,
+  created_by uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.company_profile (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  company_name text,
+  founder_name text,
+  segment text,
+  description text,
+  target_audience text,
+  products_services text,
+  tone text,
+  revenue text,
+  employees_count text,
+  extra_context text,
+  onboarding_notified_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.conversations (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  agent_id text NOT NULL,
+  role text NOT NULL,
+  content text DEFAULT ''::text,
+  media jsonb,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  user_id uuid NOT NULL
+);
+
+CREATE TABLE public.cron_jobs (
+  id text NOT NULL,
+  name text,
+  agent text,
+  cron_expression text,
+  status text,
+  enabled boolean,
+  last_run timestamp with time zone,
+  next_run timestamp with time zone,
+  prompt text,
+  collected_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.dm_reads (
+  channel_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  last_read_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.drafts (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  user_id uuid NOT NULL,
+  draft_key text NOT NULL,
+  content text DEFAULT ''::text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.email_send_log (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  message_id text,
+  template_name text NOT NULL,
+  recipient_email text NOT NULL,
+  status text NOT NULL,
+  error_message text,
+  metadata jsonb,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.email_send_state (
+  id integer DEFAULT 1 NOT NULL,
+  retry_after_until timestamp with time zone,
+  batch_size integer DEFAULT 10 NOT NULL,
+  send_delay_ms integer DEFAULT 200 NOT NULL,
+  auth_email_ttl_minutes integer DEFAULT 15 NOT NULL,
+  transactional_email_ttl_minutes integer DEFAULT 60 NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.email_unsubscribe_tokens (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  token text NOT NULL,
+  email text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  used_at timestamp with time zone
+);
+
+CREATE TABLE public.gateway_health (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  status text,
+  version text,
+  uptime_seconds integer,
+  latency_ms integer,
+  collected_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.generated_documents (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  user_id uuid NOT NULL,
+  agent_id text,
+  title text NOT NULL,
+  doc_type text NOT NULL,
+  storage_path text NOT NULL,
+  size_bytes integer DEFAULT 0 NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.integration_rate_limit (
+  user_id uuid NOT NULL,
+  window_start timestamp with time zone DEFAULT now() NOT NULL,
+  count integer DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE public.integration_secrets (
+  name text NOT NULL,
+  value text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.integration_templates (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  integration_type text NOT NULL,
+  label text NOT NULL,
+  icon text DEFAULT '🔗'::text,
+  setup_guide text,
+  playbook jsonb,
+  validation_endpoint text,
+  validation_method text DEFAULT 'GET'::text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.integrations (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  name text NOT NULL,
+  category text NOT NULL,
+  key_name text NOT NULL,
+  key_preview text,
+  is_configured boolean DEFAULT false NOT NULL,
+  agents_using text[] DEFAULT '{}'::text[] NOT NULL,
+  added_by_agent text,
+  description text,
+  icon text DEFAULT '🔑'::text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL,
+  integration_type text DEFAULT 'api_key'::text,
+  credentials jsonb DEFAULT '[]'::jsonb,
+  type text DEFAULT 'api'::text,
+  template_id text,
+  last_validated_at timestamp with time zone,
+  last_validation_ok boolean,
+  last_validation_error text
+);
+
+CREATE TABLE public.live_artifacts (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL,
+  user_id uuid NOT NULL,
+  agent_id text,
+  title text NOT NULL,
+  description text,
+  html_content text NOT NULL,
+  refresh_interval integer DEFAULT 30 NOT NULL,
+  is_published boolean DEFAULT false NOT NULL,
+  published_slug text,
+  published_at timestamp with time zone,
+  last_refreshed_at timestamp with time zone,
+  view_count integer DEFAULT 0 NOT NULL,
+  metadata jsonb,
+  deleted_at timestamp with time zone,
+  is_public boolean DEFAULT true NOT NULL,
+  expires_at timestamp with time zone
+);
+
+CREATE TABLE public.llm_provider_ops (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  op text NOT NULL,
+  provider_id text NOT NULL,
+  payload jsonb,
+  status text DEFAULT 'pending'::text NOT NULL,
+  error text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  result jsonb
+);
+
+CREATE TABLE public.message_reactions (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  message_id uuid NOT NULL,
+  user_id uuid DEFAULT auth.uid() NOT NULL,
+  emoji text NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.model_pricing (
+  model text NOT NULL,
+  input_per_1m numeric(12,4) NOT NULL,
+  output_per_1m numeric(12,4) NOT NULL,
+  cached_input_per_1m numeric(12,4),
+  source text,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.notifications (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  user_id uuid NOT NULL,
+  channel_id uuid,
+  message_id uuid,
+  author_name text NOT NULL,
+  content_preview text DEFAULT ''::text NOT NULL,
+  read boolean DEFAULT false NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  agent_id text
+);
+
+CREATE TABLE public.onboarding_progress (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  user_id uuid NOT NULL,
+  current_step integer DEFAULT 1 NOT NULL,
+  step_data jsonb DEFAULT '{}'::jsonb NOT NULL,
+  completed_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.profiles (
+  id uuid NOT NULL,
+  email text NOT NULL,
+  full_name text DEFAULT ''::text,
+  status text DEFAULT 'active'::text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  avatar_url text,
+  last_seen_at timestamp with time zone,
+  custom_status text,
+  custom_status_emoji text,
+  custom_status_set_at timestamp with time zone
+);
+
+CREATE TABLE public.push_subscriptions (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  user_id uuid NOT NULL,
+  endpoint text NOT NULL,
+  p256dh text NOT NULL,
+  auth text NOT NULL,
+  user_agent text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  last_used_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.routine_phrases (
+  cron_id text NOT NULL,
+  agent_id text,
+  nome text,
+  impressao text NOT NULL,
+  frase text NOT NULL,
+  atualizado timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.setup_config (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  seed_completed boolean DEFAULT false,
+  seed_completed_at timestamp with time zone,
+  onboarding_notified_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.skills (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL,
+  slug text NOT NULL,
+  name text NOT NULL,
+  description text,
+  content text NOT NULL,
+  source text DEFAULT 'manual'::text NOT NULL,
+  source_url text,
+  version text DEFAULT '1.0.0'::text NOT NULL,
+  is_default boolean DEFAULT false NOT NULL,
+  sync_status text DEFAULT 'pending'::text NOT NULL,
+  last_synced_at timestamp with time zone
+);
+
+CREATE TABLE public.subagent_watch (
+  child_key text NOT NULL,
+  agent_id text NOT NULL,
+  parent_session_key text NOT NULL,
+  label text,
+  status text DEFAULT 'running'::text NOT NULL,
+  first_seen_at timestamp with time zone DEFAULT now() NOT NULL,
+  completed_at timestamp with time zone,
+  nudged_at timestamp with time zone,
+  resolved_at timestamp with time zone
+);
+
+CREATE TABLE public.suppressed_emails (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  email text NOT NULL,
+  reason text NOT NULL,
+  metadata jsonb,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.team_agents (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  team_id uuid NOT NULL,
+  agent_id text NOT NULL
+);
+
+CREATE TABLE public.teams (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  name text NOT NULL,
+  description text DEFAULT ''::text,
+  color text DEFAULT ''::text,
+  emoji text DEFAULT ''::text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.usage_daily (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  date date NOT NULL,
+  messages_total integer DEFAULT 0,
+  tokens_total integer DEFAULT 0,
+  cost_total numeric DEFAULT 0,
+  cache_hit_rate numeric DEFAULT 0,
+  error_rate numeric DEFAULT 0,
+  tool_calls integer DEFAULT 0,
+  collected_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.usage_events (
+  id bigint DEFAULT nextval('usage_events_id_seq'::regclass) NOT NULL,
+  ts timestamp with time zone DEFAULT now() NOT NULL,
+  agent_id text NOT NULL,
+  model text,
+  kind text NOT NULL,
+  session_key text,
+  label text,
+  user_id uuid,
+  input_tokens integer DEFAULT 0 NOT NULL,
+  output_tokens integer DEFAULT 0 NOT NULL,
+  cached_tokens integer DEFAULT 0 NOT NULL,
+  total_tokens integer DEFAULT 0 NOT NULL,
+  cost_usd numeric(12,6),
+  source text NOT NULL,
+  meta jsonb,
+  external_id text
+);
+
+CREATE TABLE public.usage_session_state (
+  session_key text NOT NULL,
+  agent_id text NOT NULL,
+  last_tokens bigint DEFAULT 0 NOT NULL,
+  last_cost_usd numeric(12,6) DEFAULT 0 NOT NULL,
+  label text,
+  model text,
+  first_seen_at timestamp with time zone DEFAULT now() NOT NULL,
+  last_seen_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.user_roles (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  user_id uuid NOT NULL,
+  role app_role DEFAULT 'user'::app_role NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.vps_config (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  gateway_url text DEFAULT 'https://agentes.dnia.ai'::text NOT NULL,
+  admin_token text DEFAULT ''::text NOT NULL,
+  is_connected boolean DEFAULT false NOT NULL,
+  last_ping timestamp with time zone,
+  collector_version text,
+  gateway_version text,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.wiki_documents (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  space_id uuid NOT NULL,
+  title text DEFAULT 'Sem título'::text NOT NULL,
+  content text DEFAULT ''::text,
+  created_by uuid NOT NULL,
+  updated_by uuid,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  updated_at timestamp with time zone DEFAULT now() NOT NULL,
+  is_pinned boolean DEFAULT false NOT NULL,
+  order_index integer DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE public.wiki_spaces (
+  id uuid DEFAULT gen_random_uuid() NOT NULL,
+  name text NOT NULL,
+  description text DEFAULT ''::text,
+  icon text DEFAULT '📘'::text,
+  color text DEFAULT '#3D61FF'::text,
+  created_by uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT now() NOT NULL,
+  order_index integer DEFAULT 0 NOT NULL,
+  parent_id uuid
+);
+
+ALTER TABLE public.access_logs ADD CONSTRAINT access_logs_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_activity ADD CONSTRAINT agent_activity_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_activity_log ADD CONSTRAINT agent_activity_log_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_avatars ADD CONSTRAINT agent_avatars_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_context_state ADD CONSTRAINT agent_context_state_pkey PRIMARY KEY (session_key);
+
+ALTER TABLE public.agent_creation_log ADD CONSTRAINT agent_creation_log_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_crons ADD CONSTRAINT agent_crons_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_files ADD CONSTRAINT agent_files_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_integrations ADD CONSTRAINT agent_integrations_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_profiles ADD CONSTRAINT agent_profiles_pkey PRIMARY KEY (agent_id);
+
+ALTER TABLE public.agent_results ADD CONSTRAINT agent_results_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_skills ADD CONSTRAINT agent_skills_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_stats ADD CONSTRAINT agent_stats_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_tasks ADD CONSTRAINT agent_tasks_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_templates ADD CONSTRAINT agent_templates_pkey PRIMARY KEY (agent_id);
+
+ALTER TABLE public.agent_token_snapshots ADD CONSTRAINT agent_token_snapshots_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_turn_events ADD CONSTRAINT agent_turn_events_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_turns ADD CONSTRAINT agent_turns_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.app_settings ADD CONSTRAINT app_settings_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.arena_agents ADD CONSTRAINT arena_agents_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.arena_messages ADD CONSTRAINT arena_messages_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.arena_sessions ADD CONSTRAINT arena_sessions_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.arena_templates ADD CONSTRAINT arena_templates_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.arenas ADD CONSTRAINT arenas_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.artifact_titles ADD CONSTRAINT artifact_titles_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.artifacts_published ADD CONSTRAINT artifacts_published_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.automation_runs ADD CONSTRAINT automation_runs_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.automations ADD CONSTRAINT automations_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.branding ADD CONSTRAINT branding_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.channel_agent_activity ADD CONSTRAINT channel_agent_activity_pkey PRIMARY KEY (channel_id, agent_id);
+
+ALTER TABLE public.channel_members ADD CONSTRAINT channel_members_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.channel_messages ADD CONSTRAINT channel_messages_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.channels ADD CONSTRAINT channels_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.company_profile ADD CONSTRAINT company_profile_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.conversations ADD CONSTRAINT conversations_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.cron_jobs ADD CONSTRAINT cron_jobs_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.dm_reads ADD CONSTRAINT dm_reads_pkey PRIMARY KEY (channel_id, user_id);
+
+ALTER TABLE public.drafts ADD CONSTRAINT drafts_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.email_send_log ADD CONSTRAINT email_send_log_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.email_send_state ADD CONSTRAINT email_send_state_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.email_unsubscribe_tokens ADD CONSTRAINT email_unsubscribe_tokens_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.gateway_health ADD CONSTRAINT gateway_health_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.generated_documents ADD CONSTRAINT generated_documents_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.integration_rate_limit ADD CONSTRAINT integration_rate_limit_pkey PRIMARY KEY (user_id);
+
+ALTER TABLE public.integration_secrets ADD CONSTRAINT integration_secrets_pkey PRIMARY KEY (name);
+
+ALTER TABLE public.integration_templates ADD CONSTRAINT integration_templates_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.integrations ADD CONSTRAINT integrations_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.live_artifacts ADD CONSTRAINT live_artifacts_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.llm_provider_ops ADD CONSTRAINT llm_provider_ops_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.message_reactions ADD CONSTRAINT message_reactions_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.model_pricing ADD CONSTRAINT model_pricing_pkey PRIMARY KEY (model);
+
+ALTER TABLE public.notifications ADD CONSTRAINT notifications_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.onboarding_progress ADD CONSTRAINT onboarding_progress_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.push_subscriptions ADD CONSTRAINT push_subscriptions_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.routine_phrases ADD CONSTRAINT routine_phrases_pkey PRIMARY KEY (cron_id);
+
+ALTER TABLE public.setup_config ADD CONSTRAINT setup_config_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.skills ADD CONSTRAINT skills_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.subagent_watch ADD CONSTRAINT subagent_watch_pkey PRIMARY KEY (child_key);
+
+ALTER TABLE public.suppressed_emails ADD CONSTRAINT suppressed_emails_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.team_agents ADD CONSTRAINT team_agents_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.teams ADD CONSTRAINT teams_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.usage_daily ADD CONSTRAINT usage_daily_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.usage_events ADD CONSTRAINT usage_events_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.usage_session_state ADD CONSTRAINT usage_session_state_pkey PRIMARY KEY (session_key);
+
+ALTER TABLE public.user_roles ADD CONSTRAINT user_roles_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.vps_config ADD CONSTRAINT vps_config_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.wiki_documents ADD CONSTRAINT wiki_documents_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.wiki_spaces ADD CONSTRAINT wiki_spaces_pkey PRIMARY KEY (id);
+
+ALTER TABLE public.agent_avatars ADD CONSTRAINT agent_avatars_agent_id_key UNIQUE (agent_id);
+
+ALTER TABLE public.agent_files ADD CONSTRAINT agent_files_agent_id_file_name_key UNIQUE (agent_id, file_name);
+
+ALTER TABLE public.agent_skills ADD CONSTRAINT agent_skills_agent_id_skill_id_key UNIQUE (agent_id, skill_id);
+
+ALTER TABLE public.agent_stats ADD CONSTRAINT agent_stats_agent_id_key UNIQUE (agent_id);
+
+ALTER TABLE public.agent_turns ADD CONSTRAINT agent_turns_session_key_user_message_ts_key UNIQUE (session_key, user_message_ts);
+
+ALTER TABLE public.app_settings ADD CONSTRAINT app_settings_key_key UNIQUE (key);
+
+ALTER TABLE public.artifact_titles ADD CONSTRAINT artifact_titles_user_id_message_id_key UNIQUE (user_id, message_id);
+
+ALTER TABLE public.automations ADD CONSTRAINT automations_name_agent_id_key UNIQUE (name, agent_id);
+
+ALTER TABLE public.channel_members ADD CONSTRAINT channel_members_channel_id_user_id_key UNIQUE (channel_id, user_id);
+
+ALTER TABLE public.drafts ADD CONSTRAINT drafts_user_id_draft_key_key UNIQUE (user_id, draft_key);
+
+ALTER TABLE public.email_unsubscribe_tokens ADD CONSTRAINT email_unsubscribe_tokens_token_key UNIQUE (token);
+
+ALTER TABLE public.email_unsubscribe_tokens ADD CONSTRAINT email_unsubscribe_tokens_email_key UNIQUE (email);
+
+ALTER TABLE public.integration_templates ADD CONSTRAINT integration_templates_integration_type_key UNIQUE (integration_type);
+
+ALTER TABLE public.integrations ADD CONSTRAINT integrations_key_name_key UNIQUE (key_name);
+
+ALTER TABLE public.integrations ADD CONSTRAINT integrations_name_unique UNIQUE (name);
+
+ALTER TABLE public.live_artifacts ADD CONSTRAINT live_artifacts_published_slug_key UNIQUE (published_slug);
+
+ALTER TABLE public.message_reactions ADD CONSTRAINT message_reactions_message_id_user_id_emoji_key UNIQUE (message_id, user_id, emoji);
+
+ALTER TABLE public.onboarding_progress ADD CONSTRAINT onboarding_progress_user_id_key UNIQUE (user_id);
+
+ALTER TABLE public.push_subscriptions ADD CONSTRAINT push_subscriptions_endpoint_key UNIQUE (endpoint);
+
+ALTER TABLE public.skills ADD CONSTRAINT skills_slug_key UNIQUE (slug);
+
+ALTER TABLE public.suppressed_emails ADD CONSTRAINT suppressed_emails_email_key UNIQUE (email);
+
+ALTER TABLE public.team_agents ADD CONSTRAINT team_agents_team_id_agent_id_key UNIQUE (team_id, agent_id);
+
+ALTER TABLE public.usage_daily ADD CONSTRAINT usage_daily_date_key UNIQUE (date);
+
+ALTER TABLE public.user_roles ADD CONSTRAINT user_roles_user_id_role_key UNIQUE (user_id, role);
+
+ALTER TABLE public.agent_creation_log ADD CONSTRAINT agent_creation_log_status_check CHECK ((status = ANY (ARRAY['sent'::text, 'responded'::text, 'failed'::text, 'timeout'::text])));
+
+ALTER TABLE public.agent_integrations ADD CONSTRAINT agent_integrations_status_check CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text, 'error'::text])));
+
+ALTER TABLE public.agent_integrations ADD CONSTRAINT agent_integrations_type_check CHECK ((type = ANY (ARRAY['channel'::text, 'tool'::text, 'api'::text, 'mcp'::text, 'skill'::text])));
+
+ALTER TABLE public.agent_profiles ADD CONSTRAINT agent_profiles_access_type_check CHECK ((access_type = ANY (ARRAY['all'::text, 'admins_only'::text, 'specific_users'::text])));
+
+ALTER TABLE public.agent_profiles ADD CONSTRAINT agent_profiles_status_check CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text, 'configuring'::text])));
+
+ALTER TABLE public.agent_skills ADD CONSTRAINT agent_skills_installed_by_check CHECK ((installed_by = ANY (ARRAY['user'::text, 'agent'::text, 'sync'::text, 'default'::text])));
+
+ALTER TABLE public.agent_skills ADD CONSTRAINT agent_skills_sync_status_check CHECK ((sync_status = ANY (ARRAY['pending'::text, 'synced'::text, 'error'::text, 'removing'::text])));
+
+ALTER TABLE public.agent_tasks ADD CONSTRAINT agent_tasks_status_check CHECK ((status = ANY (ARRAY['running'::text, 'checkpoint'::text, 'done'::text, 'failed'::text])));
+
+ALTER TABLE public.agent_turns ADD CONSTRAINT agent_turns_tem_origem CHECK (((user_id IS NOT NULL) OR (origin_agent_id IS NOT NULL)));
+
+ALTER TABLE public.automation_runs ADD CONSTRAINT automation_runs_status_check CHECK ((status = ANY (ARRAY['running'::text, 'success'::text, 'error'::text])));
+
+ALTER TABLE public.automations ADD CONSTRAINT automations_last_run_status_check CHECK ((last_run_status = ANY (ARRAY['success'::text, 'error'::text, 'running'::text])));
+
+ALTER TABLE public.automations ADD CONSTRAINT automations_scheduled_day_check CHECK ((scheduled_day = ANY (ARRAY['monday'::text, 'tuesday'::text, 'wednesday'::text, 'thursday'::text, 'friday'::text, 'saturday'::text, 'sunday'::text, 'daily'::text])));
+
+ALTER TABLE public.automations ADD CONSTRAINT automations_trigger_event_check CHECK ((trigger_event = ANY (ARRAY['gateway.offline'::text, 'integration.added'::text, 'integration.expired'::text, 'user.joined'::text, 'agent.error'::text])));
+
+ALTER TABLE public.automations ADD CONSTRAINT automations_type_check CHECK ((type = ANY (ARRAY['scheduled'::text, 'trigger'::text])));
+
+ALTER TABLE public.company_profile ADD CONSTRAINT company_profile_tone_check CHECK (((tone IS NULL) OR (tone = ANY (ARRAY['formal'::text, 'informal'::text, 'técnico'::text, 'descontraído'::text]))));
+
+ALTER TABLE public.conversations ADD CONSTRAINT conversations_role_check CHECK ((role = ANY (ARRAY['user'::text, 'agent'::text])));
+
+ALTER TABLE public.email_send_log ADD CONSTRAINT email_send_log_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'sent'::text, 'suppressed'::text, 'failed'::text, 'bounced'::text, 'complained'::text, 'dlq'::text])));
+
+ALTER TABLE public.email_send_state ADD CONSTRAINT email_send_state_id_check CHECK ((id = 1));
+
+ALTER TABLE public.generated_documents ADD CONSTRAINT generated_documents_doc_type_check CHECK ((doc_type = ANY (ARRAY['pdf'::text, 'docx'::text])));
+
+ALTER TABLE public.integrations ADD CONSTRAINT integrations_integration_type_check CHECK ((integration_type = ANY (ARRAY['api_key'::text, 'multi_key'::text, 'mcp'::text])));
+
+ALTER TABLE public.integrations ADD CONSTRAINT integrations_type_check CHECK (((type IS NULL) OR (type = ANY (ARRAY['api'::text, 'mcp'::text]))));
+
+ALTER TABLE public.llm_provider_ops ADD CONSTRAINT llm_provider_ops_op_check CHECK ((op = ANY (ARRAY['upsert_provider'::text, 'remove_provider'::text, 'discover_models'::text])));
+
+ALTER TABLE public.llm_provider_ops ADD CONSTRAINT llm_provider_ops_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'error'::text, 'done'::text])));
+
+ALTER TABLE public.notifications ADD CONSTRAINT notifications_channel_or_agent_chk CHECK (((channel_id IS NOT NULL) OR (agent_id IS NOT NULL)));
+
+ALTER TABLE public.skills ADD CONSTRAINT skills_source_check CHECK ((source = ANY (ARRAY['clawhub'::text, 'git'::text, 'manual'::text, 'agent'::text])));
+
+ALTER TABLE public.skills ADD CONSTRAINT skills_sync_status_check CHECK ((sync_status = ANY (ARRAY['pending'::text, 'synced'::text, 'error'::text])));
+
+ALTER TABLE public.suppressed_emails ADD CONSTRAINT suppressed_emails_reason_check CHECK ((reason = ANY (ARRAY['unsubscribe'::text, 'bounce'::text, 'complaint'::text])));
+
+ALTER TABLE public.usage_events ADD CONSTRAINT usage_events_kind_chk CHECK ((kind = ANY (ARRAY['dm'::text, 'channel'::text, 'cron'::text, 'subagent'::text, 'command'::text, 'unknown'::text])));
+
+ALTER TABLE public.usage_events ADD CONSTRAINT usage_events_source_chk CHECK ((source = ANY (ARRAY['turn'::text, 'session_delta'::text, 'trajectory'::text])));
+
+ALTER TABLE public.access_logs ADD CONSTRAINT access_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+ALTER TABLE public.agent_creation_log ADD CONSTRAINT agent_creation_log_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+ALTER TABLE public.agent_integrations ADD CONSTRAINT agent_integrations_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES agent_profiles(agent_id) ON DELETE CASCADE;
+
+ALTER TABLE public.agent_profiles ADD CONSTRAINT agent_profiles_leader_id_fkey FOREIGN KEY (leader_id) REFERENCES agent_profiles(agent_id) ON DELETE SET NULL;
+
+ALTER TABLE public.agent_skills ADD CONSTRAINT agent_skills_skill_id_fkey FOREIGN KEY (skill_id) REFERENCES skills(id) ON DELETE CASCADE;
+
+ALTER TABLE public.agent_tasks ADD CONSTRAINT agent_tasks_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL;
+
+ALTER TABLE public.agent_turn_events ADD CONSTRAINT agent_turn_events_turn_id_fkey FOREIGN KEY (turn_id) REFERENCES agent_turns(id) ON DELETE CASCADE;
+
+ALTER TABLE public.arena_agents ADD CONSTRAINT arena_agents_arena_id_fkey FOREIGN KEY (arena_id) REFERENCES arenas(id) ON DELETE CASCADE;
+
+ALTER TABLE public.arena_messages ADD CONSTRAINT arena_messages_session_id_fkey FOREIGN KEY (session_id) REFERENCES arena_sessions(id) ON DELETE CASCADE;
+
+ALTER TABLE public.arena_sessions ADD CONSTRAINT arena_sessions_arena_id_fkey FOREIGN KEY (arena_id) REFERENCES arenas(id) ON DELETE CASCADE;
+
+ALTER TABLE public.arena_sessions ADD CONSTRAINT arena_sessions_parent_session_id_fkey FOREIGN KEY (parent_session_id) REFERENCES arena_sessions(id) ON DELETE SET NULL;
+
+ALTER TABLE public.arenas ADD CONSTRAINT arenas_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id);
+
+ALTER TABLE public.artifact_titles ADD CONSTRAINT artifact_titles_message_id_fkey FOREIGN KEY (message_id) REFERENCES conversations(id) ON DELETE CASCADE;
+
+ALTER TABLE public.artifact_titles ADD CONSTRAINT artifact_titles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+ALTER TABLE public.automation_runs ADD CONSTRAINT automation_runs_automation_id_fkey FOREIGN KEY (automation_id) REFERENCES automations(id) ON DELETE CASCADE;
+
+ALTER TABLE public.automations ADD CONSTRAINT automations_agent_id_fkey FOREIGN KEY (agent_id) REFERENCES agent_profiles(agent_id) ON DELETE CASCADE;
+
+ALTER TABLE public.automations ADD CONSTRAINT automations_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id);
+
+ALTER TABLE public.channel_agent_activity ADD CONSTRAINT channel_agent_activity_channel_id_fkey FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE;
+
+ALTER TABLE public.channel_members ADD CONSTRAINT channel_members_channel_id_fkey FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE;
+
+ALTER TABLE public.channel_messages ADD CONSTRAINT channel_messages_channel_id_fkey FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE;
+
+ALTER TABLE public.channel_messages ADD CONSTRAINT channel_messages_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES channel_messages(id) ON DELETE SET NULL;
+
+ALTER TABLE public.generated_documents ADD CONSTRAINT generated_documents_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+ALTER TABLE public.live_artifacts ADD CONSTRAINT live_artifacts_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+ALTER TABLE public.message_reactions ADD CONSTRAINT message_reactions_message_id_fkey FOREIGN KEY (message_id) REFERENCES channel_messages(id) ON DELETE CASCADE;
+
+ALTER TABLE public.notifications ADD CONSTRAINT notifications_channel_id_fkey FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE;
+
+ALTER TABLE public.notifications ADD CONSTRAINT notifications_message_id_fkey FOREIGN KEY (message_id) REFERENCES channel_messages(id) ON DELETE CASCADE;
+
+ALTER TABLE public.onboarding_progress ADD CONSTRAINT onboarding_progress_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+ALTER TABLE public.team_agents ADD CONSTRAINT team_agents_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE;
+
+ALTER TABLE public.user_roles ADD CONSTRAINT user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+ALTER TABLE public.wiki_documents ADD CONSTRAINT wiki_documents_space_id_fkey FOREIGN KEY (space_id) REFERENCES wiki_spaces(id) ON DELETE CASCADE;
+
+ALTER TABLE public.wiki_spaces ADD CONSTRAINT wiki_spaces_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES wiki_spaces(id) ON DELETE CASCADE;
+
+CREATE INDEX agent_activity_agent_id_idx ON public.agent_activity USING btree (agent_id, created_at DESC);
+
+CREATE INDEX agent_activity_created_at_desc_idx ON public.agent_activity USING btree (created_at DESC);
+
+CREATE INDEX agent_activity_log_agent_timestamp_idx ON public.agent_activity_log USING btree (agent_id, ""timestamp"" DESC);
+
+CREATE INDEX agent_activity_log_timestamp_desc_idx ON public.agent_activity_log USING btree (""timestamp"" DESC);
+
+CREATE INDEX agent_activity_user_id_idx ON public.agent_activity USING btree (user_id, created_at DESC);
+
+CREATE INDEX agent_context_state_agent_idx ON public.agent_context_state USING btree (agent_id, updated_at DESC);
+
+CREATE INDEX agent_creation_log_agent_id_idx ON public.agent_creation_log USING btree (agent_id, created_at DESC);
+
+CREATE INDEX agent_files_pending_write_idx ON public.agent_files USING btree (pending_write) WHERE pending_write;
+
+CREATE UNIQUE INDEX agent_profiles_openclaw_id_key ON public.agent_profiles USING btree (openclaw_id) WHERE (openclaw_id IS NOT NULL);
+
+CREATE UNIQUE INDEX agent_profiles_single_leader_idx ON public.agent_profiles USING btree ((true)) WHERE (is_leader = true);
+
+CREATE INDEX agent_skills_agent_idx ON public.agent_skills USING btree (agent_id);
+
+CREATE INDEX agent_skills_puller_idx ON public.agent_skills USING btree (sync_status) WHERE (sync_status = ANY (ARRAY['pending'::text, 'removing'::text]));
+
+CREATE INDEX agent_skills_skill_idx ON public.agent_skills USING btree (skill_id);
+
+CREATE INDEX agent_tasks_agent_idx ON public.agent_tasks USING btree (agent_id, created_at DESC);
+
+CREATE INDEX agent_tasks_status_idx ON public.agent_tasks USING btree (status, created_at DESC) WHERE (status = ANY (ARRAY['running'::text, 'checkpoint'::text]));
+
+CREATE UNIQUE INDEX agent_token_snapshots_agent_snapshot_uniq ON public.agent_token_snapshots USING btree (agent_id, snapshot_at);
+
+CREATE INDEX agent_turn_events_breaker_idx ON public.agent_turn_events USING btree (session_key, created_at) WHERE (acted = true);
+
+CREATE INDEX agent_turn_events_recent_idx ON public.agent_turn_events USING btree (created_at);
+
+CREATE INDEX agent_turn_events_turn_idx ON public.agent_turn_events USING btree (turn_id, created_at);
+
+CREATE INDEX agent_turns_origem_idx ON public.agent_turns USING btree (origin_agent_id) WHERE ((origin_agent_id IS NOT NULL) AND (status = 'pending'::text));
+
+CREATE INDEX agent_turns_pending_idx ON public.agent_turns USING btree (agent_id, user_id) WHERE (status = 'pending'::text);
+
+CREATE INDEX agent_turns_reconciler_idx ON public.agent_turns USING btree (dispatched_at) WHERE (status = 'pending'::text);
+
+CREATE INDEX channel_agent_activity_vivas_idx ON public.channel_agent_activity USING btree (channel_id) WHERE (finished_at IS NULL);
+
+CREATE UNIQUE INDEX company_profile_singleton ON public.company_profile USING btree ((true));
+
+CREATE INDEX idx_agent_files_agent_id ON public.agent_files USING btree (agent_id);
+
+CREATE INDEX idx_agent_profiles_is_leader ON public.agent_profiles USING btree (is_leader) WHERE (is_leader = true);
+
+CREATE INDEX idx_agent_profiles_leader_id ON public.agent_profiles USING btree (leader_id);
+
+CREATE INDEX idx_agent_profiles_official_order ON public.agent_profiles USING btree (is_official, sort_order, name);
+
+CREATE INDEX idx_agent_token_snapshots_agent_time ON public.agent_token_snapshots USING btree (agent_id, snapshot_at DESC);
+
+CREATE INDEX idx_automation_runs_automation_id ON public.automation_runs USING btree (automation_id, started_at DESC);
+
+CREATE INDEX idx_automations_active_scheduled ON public.automations USING btree (type, is_active, scheduled_time) WHERE ((type = 'scheduled'::text) AND (is_active = true));
+
+CREATE INDEX idx_automations_active_trigger ON public.automations USING btree (type, trigger_event, is_active) WHERE ((type = 'trigger'::text) AND (is_active = true));
+
+CREATE INDEX idx_channel_members_member_id ON public.channel_members USING btree (member_id);
+
+CREATE INDEX idx_channel_members_user ON public.channel_members USING btree (user_id);
+
+CREATE INDEX idx_channel_messages_channel_created ON public.channel_messages USING btree (channel_id, created_at DESC);
+
+CREATE INDEX idx_conversations_agent_created ON public.conversations USING btree (agent_id, created_at);
+
+CREATE INDEX idx_conversations_user_agent_created ON public.conversations USING btree (user_id, agent_id, created_at DESC);
+
+CREATE INDEX idx_drafts_user_id_updated_at ON public.drafts USING btree (user_id, updated_at DESC);
+
+CREATE INDEX idx_email_send_log_created ON public.email_send_log USING btree (created_at DESC);
+
+CREATE INDEX idx_email_send_log_message ON public.email_send_log USING btree (message_id);
+
+CREATE UNIQUE INDEX idx_email_send_log_message_sent_unique ON public.email_send_log USING btree (message_id) WHERE (status = 'sent'::text);
+
+CREATE INDEX idx_email_send_log_recipient ON public.email_send_log USING btree (recipient_email);
+
+CREATE INDEX idx_generated_documents_user ON public.generated_documents USING btree (user_id, created_at DESC);
+
+CREATE INDEX idx_notifications_user_unread ON public.notifications USING btree (user_id, read) WHERE (read = false);
+
+CREATE INDEX idx_profiles_last_seen_at ON public.profiles USING btree (last_seen_at);
+
+CREATE INDEX idx_push_subscriptions_user_id ON public.push_subscriptions USING btree (user_id);
+
+CREATE INDEX idx_suppressed_emails_email ON public.suppressed_emails USING btree (email);
+
+CREATE INDEX idx_unsubscribe_tokens_token ON public.email_unsubscribe_tokens USING btree (token);
+
+CREATE INDEX idx_wiki_documents_pinned ON public.wiki_documents USING btree (space_id, is_pinned, order_index);
+
+CREATE INDEX idx_wiki_documents_space ON public.wiki_documents USING btree (space_id);
+
+CREATE INDEX idx_wiki_spaces_parent ON public.wiki_spaces USING btree (parent_id);
+
+CREATE INDEX live_artifacts_active_user_idx ON public.live_artifacts USING btree (user_id, updated_at DESC) WHERE (deleted_at IS NULL);
+
+CREATE UNIQUE INDEX live_artifacts_slug_idx ON public.live_artifacts USING btree (published_slug) WHERE (published_slug IS NOT NULL);
+
+CREATE INDEX live_artifacts_user_idx ON public.live_artifacts USING btree (user_id, created_at DESC);
+
+CREATE INDEX llm_provider_ops_pending_idx ON public.llm_provider_ops USING btree (created_at) WHERE (status = 'pending'::text);
+
+CREATE INDEX skills_slug_idx ON public.skills USING btree (slug);
+
+CREATE INDEX skills_source_idx ON public.skills USING btree (source);
+
+CREATE INDEX subagent_watch_open_idx ON public.subagent_watch USING btree (completed_at) WHERE (resolved_at IS NULL);
+
+CREATE INDEX usage_events_agent_ts_idx ON public.usage_events USING btree (agent_id, ts DESC);
+
+CREATE UNIQUE INDEX usage_events_external_id_uidx ON public.usage_events USING btree (external_id);
+
+CREATE INDEX usage_events_kind_ts_idx ON public.usage_events USING btree (kind, ts DESC);
+
+CREATE INDEX usage_events_model_ts_idx ON public.usage_events USING btree (model, ts DESC);
+
+CREATE INDEX usage_events_ts_idx ON public.usage_events USING btree (ts DESC);
+
+CREATE INDEX usage_session_state_agent_idx ON public.usage_session_state USING btree (agent_id);
+
+CREATE OR REPLACE FUNCTION public.channel_messages_dedup_guard()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF NEW.content IS NULL OR NEW.content = '' OR NEW.thread_id IS NOT NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.channel_messages cm
+    WHERE cm.channel_id = NEW.channel_id
+      AND cm.author_id = NEW.author_id
+      AND cm.content = NEW.content
+      AND cm.thread_id IS NULL
+      AND cm.deleted_at IS NULL
+      AND cm.created_at >= COALESCE(NEW.created_at, now()) - interval '2 seconds'
+      AND cm.created_at <= COALESCE(NEW.created_at, now())
+  ) THEN
+    -- Silently drop the duplicate insert; the first row is already visible
+    -- via realtime, and the client doesn't need an error here.
+    RETURN NULL;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.check_invoke_rate(_user_id uuid, _limit integer, _window_secs integer)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  _row public.integration_rate_limit%ROWTYPE;
+BEGIN
+  SELECT * INTO _row FROM public.integration_rate_limit WHERE user_id = _user_id FOR UPDATE;
+  IF NOT FOUND THEN
+    INSERT INTO public.integration_rate_limit(user_id, window_start, count) VALUES (_user_id, now(), 1);
+    RETURN true;
+  END IF;
+  IF _row.window_start < now() - make_interval(secs => _window_secs) THEN
+    UPDATE public.integration_rate_limit SET window_start = now(), count = 1 WHERE user_id = _user_id;
+    RETURN true;
+  END IF;
+  IF _row.count >= _limit THEN
+    RETURN false;
+  END IF;
+  UPDATE public.integration_rate_limit SET count = count + 1 WHERE user_id = _user_id;
+  RETURN true;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.cleanup_agent_activity_log()
+ RETURNS void
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  DELETE FROM public.agent_activity_log WHERE timestamp < now() - interval '7 days';
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.delete_email(queue_name text, message_id bigint)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+  RETURN pgmq.delete(queue_name, message_id);
+EXCEPTION WHEN undefined_table THEN
+  RETURN FALSE;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.email_queue_dispatch()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pgmq.q_auth_emails)
+     AND NOT EXISTS (SELECT 1 FROM pgmq.q_transactional_emails) THEN
+    BEGIN
+      -- Serialize disarm against email_queue_wake on a shared advisory lock, then
+      -- re-read under it: an enqueue racing the unschedule either committed (we
+      -- see its row and leave the cron) or waits and re-arms after we commit.
+      PERFORM pg_catalog.pg_advisory_xact_lock(7700000000000001);
+      IF EXISTS (SELECT 1 FROM pgmq.q_auth_emails)
+         OR EXISTS (SELECT 1 FROM pgmq.q_transactional_emails) THEN
+        RETURN;
+      END IF;
+      PERFORM cron.unschedule('process-email-queue');
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'email_queue_dispatch: cron unschedule failed: %', SQLERRM;
+    END;
+    RETURN;
+  END IF;
+
+  IF (SELECT retry_after_until FROM public.email_send_state WHERE id = 1) > now() THEN
+    RETURN;
+  END IF;
+
+  PERFORM net.http_post(
+    url := 'https://zozyfhisrbkqvdcsdbfp.supabase.co/functions/v1/process-email-queue',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Lovable-Context', 'cron',
+      'Authorization', 'Bearer ' || (
+        SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'email_queue_service_role_key'
+      )
+    ),
+    body := '{}'::jsonb
+  );
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.email_queue_wake()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+BEGIN
+  -- Runs inside the enqueue transaction; the outer handler guarantees nothing
+  -- below can roll back the customer's email. Shared advisory lock serializes
+  -- arming against email_queue_dispatch's disarm.
+  PERFORM pg_catalog.pg_advisory_xact_lock(7700000000000001);
+  IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'process-email-queue') THEN
+    BEGIN
+      PERFORM cron.schedule('process-email-queue', '5 seconds', $cron$ SELECT public.email_queue_dispatch(); $cron$);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE WARNING 'email_queue_wake: cron schedule failed: %', SQLERRM;
+    END;
+  END IF;
+
+  BEGIN
+    PERFORM net.http_post(
+      url := 'https://zozyfhisrbkqvdcsdbfp.supabase.co/functions/v1/process-email-queue',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Lovable-Context', 'cron',
+        'Authorization', 'Bearer ' || (
+          SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'email_queue_service_role_key'
+        )
+      ),
+      body := '{}'::jsonb
+    );
+  EXCEPTION WHEN OTHERS THEN NULL;
+  END;
+
+  RETURN NULL;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'email_queue_wake failed (enqueue preserved): %', SQLERRM;
+  RETURN NULL;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.enqueue_email(queue_name text, payload jsonb)
+ RETURNS bigint
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+  RETURN pgmq.send(queue_name, payload);
+EXCEPTION WHEN undefined_table THEN
+  PERFORM pgmq.create(queue_name);
+  RETURN pgmq.send(queue_name, payload);
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.find_or_create_agent_agent_dm(_sender_agent_id text, _recipient_agent_id text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  _channel_id uuid;
+BEGIN
+  -- Find existing DM channel where both agents are members
+  SELECT cm1.channel_id INTO _channel_id
+  FROM channel_members cm1
+  JOIN channel_members cm2 ON cm2.channel_id = cm1.channel_id
+  JOIN channels c ON c.id = cm1.channel_id
+  WHERE cm1.user_id = _sender_agent_id
+    AND cm1.member_type = 'agent'
+    AND cm2.user_id = _recipient_agent_id
+    AND cm2.member_type = 'agent'
+    AND c.type = 'dm'
+  LIMIT 1;
+
+  IF _channel_id IS NOT NULL THEN
+    RETURN _channel_id;
+  END IF;
+
+  -- Also check reverse order
+  SELECT cm1.channel_id INTO _channel_id
+  FROM channel_members cm1
+  JOIN channel_members cm2 ON cm2.channel_id = cm1.channel_id
+  JOIN channels c ON c.id = cm1.channel_id
+  WHERE cm1.user_id = _recipient_agent_id
+    AND cm1.member_type = 'agent'
+    AND cm2.user_id = _sender_agent_id
+    AND cm2.member_type = 'agent'
+    AND c.type = 'dm'
+  LIMIT 1;
+
+  IF _channel_id IS NOT NULL THEN
+    RETURN _channel_id;
+  END IF;
+
+  -- Create new DM channel for agent-to-agent
+  INSERT INTO channels (name, description, type, created_by)
+  VALUES (
+    _sender_agent_id || ' ↔ ' || _recipient_agent_id,
+    'Agent-to-agent DM',
+    'dm',
+    '00000000-0000-0000-0000-000000000000'::uuid
+  )
+  RETURNING id INTO _channel_id;
+
+  -- Add both agents as members
+  INSERT INTO channel_members (channel_id, user_id, member_type)
+  VALUES
+    (_channel_id, _sender_agent_id, 'agent'),
+    (_channel_id, _recipient_agent_id, 'agent');
+
+  RETURN _channel_id;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.find_or_create_agent_dm(_agent_id text, _agent_name text, _target_user_id uuid)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  _channel_id uuid;
+BEGIN
+  -- Find existing DM channel where agent and user are both members
+  SELECT cm1.channel_id INTO _channel_id
+  FROM channel_members cm1
+  JOIN channel_members cm2 ON cm2.channel_id = cm1.channel_id
+  JOIN channels c ON c.id = cm1.channel_id
+  WHERE cm1.user_id = _agent_id
+    AND cm1.member_type = 'agent'
+    AND cm2.user_id = _target_user_id::text
+    AND cm2.member_type = 'human'
+    AND c.type = 'dm'
+  LIMIT 1;
+
+  IF _channel_id IS NOT NULL THEN
+    RETURN _channel_id;
+  END IF;
+
+  -- Create new DM channel
+  INSERT INTO channels (name, description, type, created_by)
+  VALUES (_agent_name, NULL, 'dm', _target_user_id)
+  RETURNING id INTO _channel_id;
+
+  -- Add agent and user as members
+  INSERT INTO channel_members (channel_id, user_id, member_type)
+  VALUES
+    (_channel_id, _agent_id, 'agent'),
+    (_channel_id, _target_user_id::text, 'human');
+
+  RETURN _channel_id;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.find_or_create_dm(_target_user_id uuid, _target_name text)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  _current_user_id uuid := auth.uid();
+  _channel_id uuid;
+BEGIN
+  IF _current_user_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
+  -- Find existing DM channel where both users are members
+  SELECT cm1.channel_id INTO _channel_id
+  FROM channel_members cm1
+  JOIN channel_members cm2 ON cm2.channel_id = cm1.channel_id
+  JOIN channels c ON c.id = cm1.channel_id
+  WHERE cm1.user_id = _current_user_id::text
+    AND cm1.member_type = 'human'
+    AND cm2.user_id = _target_user_id::text
+    AND cm2.member_type = 'human'
+    AND c.type = 'dm'
+  LIMIT 1;
+
+  IF _channel_id IS NOT NULL THEN
+    RETURN _channel_id;
+  END IF;
+
+  -- Create new DM channel
+  INSERT INTO channels (name, description, type, created_by)
+  VALUES (_target_name, NULL, 'dm', _current_user_id)
+  RETURNING id INTO _channel_id;
+
+  -- Add both users as members
+  INSERT INTO channel_members (channel_id, user_id, member_type)
+  VALUES
+    (_channel_id, _current_user_id::text, 'human'),
+    (_channel_id, _target_user_id::text, 'human');
+
+  RETURN _channel_id;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.get_agents_last_activity(_agent_ids text[])
+ RETURNS TABLE(agent_id text, last_active timestamp with time zone, last_content text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT DISTINCT ON (c.agent_id)
+    c.agent_id,
+    c.created_at AS last_active,
+    LEFT(c.content, 120) AS last_content
+  FROM conversations c
+  WHERE c.agent_id = ANY(_agent_ids)
+  ORDER BY c.agent_id, c.created_at DESC;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.get_agents_last_activity(_agent_ids text[], _user_id uuid DEFAULT NULL::uuid)
+ RETURNS TABLE(agent_id text, last_active timestamp with time zone, last_content text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT DISTINCT ON (c.agent_id)
+    c.agent_id,
+    c.created_at AS last_active,
+    LEFT(c.content, 120) AS last_content
+  FROM conversations c
+  WHERE c.agent_id = ANY(_agent_ids)
+    AND (_user_id IS NULL OR c.user_id = _user_id)
+  ORDER BY c.agent_id, c.created_at DESC;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.get_fleet_productivity(_since timestamp with time zone)
+ RETURNS TABLE(agent_id text, conv_count bigint, result_count bigint)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT
+    a.agent_id,
+    COALESCE(conv.cnt, 0) AS conv_count,
+    COALESCE(res.cnt, 0) AS result_count
+  FROM (SELECT DISTINCT unnest AS agent_id FROM unnest(
+    (SELECT array_agg(DISTINCT ta.agent_id) FROM team_agents ta)
+  )) a
+  LEFT JOIN (
+    SELECT c.agent_id, COUNT(*) AS cnt
+    FROM conversations c
+    WHERE c.created_at >= _since
+    GROUP BY c.agent_id
+  ) conv ON conv.agent_id = a.agent_id
+  LEFT JOIN (
+    SELECT r.agent_id, COUNT(*) AS cnt
+    FROM agent_results r
+    WHERE r.created_at >= _since
+    GROUP BY r.agent_id
+  ) res ON res.agent_id = a.agent_id;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.get_user_agent_activity(_since timestamp with time zone)
+ RETURNS TABLE(user_id uuid, agent_id text, session_count bigint, last_active timestamp with time zone)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF NOT public.has_role(auth.uid(), 'super_admin') THEN
+    RAISE EXCEPTION 'forbidden';
+  END IF;
+
+  RETURN QUERY
+    SELECT c.user_id, c.agent_id, COUNT(*)::bigint AS session_count, MAX(c.created_at) AS last_active
+    FROM public.conversations c
+    WHERE c.created_at >= _since
+    GROUP BY c.user_id, c.agent_id
+    ORDER BY COUNT(*) DESC;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.get_user_role(_user_id uuid)
+ RETURNS app_role
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT role FROM public.user_roles
+  WHERE user_id = _user_id
+  ORDER BY CASE role
+    WHEN 'super_admin' THEN 1
+    WHEN 'member' THEN 2
+    WHEN 'user' THEN 3
+  END
+  LIMIT 1
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  _default_channel_id uuid;
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, status)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name',''),
+    CASE WHEN NEW.invited_at IS NOT NULL THEN 'pending' ELSE 'active' END
+  );
+
+  INSERT INTO public.user_roles (user_id, role)
+  VALUES (NEW.id, 'user')
+  ON CONFLICT DO NOTHING;
+
+  -- Auto-join first public channel (dynamic — no hardcoded UUID)
+  SELECT id INTO _default_channel_id
+  FROM public.channels
+  WHERE type = 'public'
+  ORDER BY created_at ASC
+  LIMIT 1;
+
+  IF _default_channel_id IS NOT NULL THEN
+    INSERT INTO public.channel_members (channel_id, user_id, member_type)
+    VALUES (_default_channel_id, NEW.id::text, 'human')
+    ON CONFLICT DO NOTHING;
+  END IF;
+
+  RETURN NEW;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role app_role)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT EXISTS (
+    SELECT 1 FROM public.user_roles
+    WHERE user_id = _user_id AND role = _role
+  )
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.invoke_edge_function(_fn text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  _url TEXT;
+  _key TEXT;
+BEGIN
+  BEGIN
+    SELECT decrypted_secret INTO _url
+    FROM vault.decrypted_secrets WHERE name = 'project_url' LIMIT 1;
+  EXCEPTION WHEN OTHERS THEN
+    _url := NULL;
+  END;
+
+  IF _url IS NULL OR _url = '' THEN
+    RAISE WARNING 'invoke_edge_function(%): vault project_url ausente — pulando.', _fn;
+    RETURN;
+  END IF;
+
+  BEGIN
+    SELECT decrypted_secret INTO _key
+    FROM vault.decrypted_secrets WHERE name = 'service_role_key' LIMIT 1;
+  EXCEPTION WHEN OTHERS THEN
+    _key := NULL;
+  END;
+  _key := COALESCE(NULLIF(_key, ''), current_setting('app.settings.service_role_key', true), '');
+
+  PERFORM net.http_post(
+    url := _url || '/functions/v1/' || _fn,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Lovable-Context', 'cron',
+      'Authorization', 'Bearer ' || _key,
+      'apikey', _key
+    ),
+    body := '{}'::jsonb
+  );
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.is_channel_member(_channel_id uuid, _user_id text)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT EXISTS (
+    SELECT 1 FROM public.channel_members
+    WHERE channel_id = _channel_id AND user_id = _user_id
+  )
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.is_public_channel(_channel_id uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT EXISTS (
+    SELECT 1 FROM public.channels
+    WHERE id = _channel_id AND type = 'public'
+  )
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.mark_agent_turn_delivered()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF NEW.role = 'agent' AND NEW.agent_id IS NOT NULL AND NEW.user_id IS NOT NULL
+     AND NOT (
+       NEW.content ILIKE 'no response from%'
+       OR NEW.content ILIKE 'sem resposta do agente%'
+       OR NEW.content LIKE '%⌛ Resposta interrompida%'
+       OR NEW.content LIKE '⚠️ Não consegui finalizar%'
+       OR NEW.content LIKE '⏳ Ainda trabalhando%'
+       OR NEW.content LIKE '⚠️ Sem retorno há%'
+     )
+  THEN
+    UPDATE public.agent_turns
+    SET status = 'delivered', delivered_at = now()
+    WHERE agent_id = NEW.agent_id
+      AND user_id = NEW.user_id
+      AND status = 'pending';
+  END IF;
+  RETURN NEW;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.moddatetime()
+ RETURNS trigger
+ LANGUAGE c
+AS '$libdir/moddatetime', $function$moddatetime$function$
+;
+
+CREATE OR REPLACE FUNCTION public.move_to_dlq(source_queue text, dlq_name text, message_id bigint, payload jsonb)
+ RETURNS bigint
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+DECLARE new_id BIGINT;
+BEGIN
+  SELECT pgmq.send(dlq_name, payload) INTO new_id;
+  PERFORM pgmq.delete(source_queue, message_id);
+  RETURN new_id;
+EXCEPTION WHEN undefined_table THEN
+  BEGIN
+    PERFORM pgmq.create(dlq_name);
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
+  SELECT pgmq.send(dlq_name, payload) INTO new_id;
+  BEGIN
+    PERFORM pgmq.delete(source_queue, message_id);
+  EXCEPTION WHEN undefined_table THEN
+    NULL;
+  END;
+  RETURN new_id;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.post_task_completion_to_chat()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  _notes text;
+  _msg text;
+BEGIN
+  -- Only fire when transitioning INTO 'done' (skip inserts already-done, avoid loops)
+  IF NEW.status <> 'done' THEN RETURN NEW; END IF;
+  IF OLD.status = 'done' THEN RETURN NEW; END IF;
+  IF NEW.created_by IS NULL THEN RETURN NEW; END IF;
+
+  _notes := COALESCE(NULLIF(btrim(NEW.checkpoint_data->>'notes'), ''), 'Sem notas adicionais.');
+  _msg := 'Task concluída: ' || COALESCE(NEW.title, 'sem título') || E'\n\n' || _notes;
+
+  INSERT INTO public.conversations (agent_id, user_id, role, content, created_at)
+  VALUES (NEW.agent_id, NEW.created_by, 'agent', _msg, now());
+
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'post_task_completion_to_chat failed: %', SQLERRM;
+  RETURN NEW;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.read_email_batch(queue_name text, batch_size integer, vt integer)
+ RETURNS TABLE(msg_id bigint, read_ct integer, message jsonb)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
+BEGIN
+  RETURN QUERY SELECT r.msg_id, r.read_ct, r.message FROM pgmq.read(queue_name, vt, batch_size) r;
+EXCEPTION WHEN undefined_table THEN
+  PERFORM pgmq.create(queue_name);
+  RETURN;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.run_zombie_watchdog()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  _tasks int; _runs int; _agents int; _activities int; _stats int;
+BEGIN
+  UPDATE public.agent_tasks
+     SET status = 'failed', updated_at = now()
+   WHERE status IN ('running','checkpoint')
+     AND updated_at < now() - interval '30 minutes';
+  GET DIAGNOSTICS _tasks = ROW_COUNT;
+
+  UPDATE public.automation_runs
+     SET status = 'error', finished_at = now()
+   WHERE status = 'running'
+     AND started_at < now() - interval '15 minutes';
+  GET DIAGNOSTICS _runs = ROW_COUNT;
+
+  UPDATE public.agent_profiles
+     SET status = 'inactive'
+   WHERE status = 'configuring'
+     AND updated_at < now() - interval '30 minutes';
+  GET DIAGNOSTICS _agents = ROW_COUNT;
+
+  UPDATE public.agent_activity
+     SET status = 'failed', updated_at = now()
+   WHERE status IN ('running','in_progress','pending','working')
+     AND updated_at < now() - interval '15 minutes';
+  GET DIAGNOSTICS _activities = ROW_COUNT;
+
+  UPDATE public.agent_stats
+     SET status = 'offline'
+   WHERE status = 'online'
+     AND last_active < now() - interval '15 minutes';
+  GET DIAGNOSTICS _stats = ROW_COUNT;
+
+  IF _tasks > 0 OR _runs > 0 OR _agents > 0 OR _activities > 0 OR _stats > 0 THEN
+    RAISE NOTICE 'zombie-watchdog: % tasks, % runs, % agents, % activities, % stats marcados.', _tasks, _runs, _agents, _activities, _stats;
+  END IF;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.set_drafts_updated_at()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.sync_channel_members_rest_fields()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  _channel_name text;
+BEGIN
+  IF NEW.id IS NULL THEN
+    NEW.id := gen_random_uuid();
+  END IF;
+
+  NEW.member_id := COALESCE(NEW.member_id, NEW.user_id);
+  NEW.added_at := COALESCE(NEW.added_at, NEW.joined_at, now());
+  NEW.joined_at := COALESCE(NEW.joined_at, NEW.added_at, now());
+
+  SELECT name INTO _channel_name
+  FROM public.channels
+  WHERE id = NEW.channel_id;
+
+  NEW.channel := COALESCE(_channel_name, NEW.channel);
+
+  RETURN NEW;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.trigger_send_push_on_notification()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'extensions'
+AS $function$
+DECLARE
+  _supabase_url TEXT;
+  _service_role_key TEXT;
+  _url TEXT;
+BEGIN
+  BEGIN
+    SELECT decrypted_secret INTO _supabase_url
+    FROM vault.decrypted_secrets
+    WHERE name = 'project_url'
+    LIMIT 1;
+  EXCEPTION WHEN OTHERS THEN
+    _supabase_url := NULL;
+  END;
+  -- Fallback kept for one release; remove once remix ships and all deployments have the vault entry.
+  _supabase_url := COALESCE(NULLIF(_supabase_url, ''), 'https://zozyfhisrbkqvdcsdbfp.supabase.co');
+
+  BEGIN
+    SELECT decrypted_secret INTO _service_role_key
+    FROM vault.decrypted_secrets
+    WHERE name = 'service_role_key'
+    LIMIT 1;
+  EXCEPTION WHEN OTHERS THEN
+    _service_role_key := NULL;
+  END;
+
+  IF NEW.agent_id IS NOT NULL AND btrim(NEW.agent_id) <> '' THEN
+    _url := '/chat?agent=' || NEW.agent_id;
+  ELSIF NEW.channel_id IS NOT NULL THEN
+    _url := '/chat?channel=' || NEW.channel_id::text;
+  ELSE
+    _url := '/';
+  END IF;
+
+  PERFORM net.http_post(
+    url := _supabase_url || '/functions/v1/send-push',
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || COALESCE(_service_role_key, current_setting('app.settings.service_role_key', true))
+    ),
+    body := jsonb_build_object(
+      'user_id', NEW.user_id,
+      'title', 'Nova mensagem de ' || NEW.author_name,
+      'body', LEFT(COALESCE(NEW.content_preview, ''), 120),
+      'channel_id', NEW.channel_id,
+      'agent_id', NEW.agent_id,
+      'message_id', NEW.message_id,
+      'notification_id', NEW.id,
+      'url', _url
+    )
+  );
+  RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  RETURN NEW;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.upsert_platform_vault(_project_url text, _service_role_key text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  _id uuid;
+BEGIN
+  IF _project_url IS NULL OR _project_url = '' THEN
+    RAISE EXCEPTION 'project_url vazio';
+  END IF;
+
+  SELECT id INTO _id FROM vault.secrets WHERE name = 'project_url';
+  IF _id IS NULL THEN
+    PERFORM vault.create_secret(_project_url, 'project_url', 'Base URL deste projeto (auto-set pelo setup).');
+  ELSE
+    PERFORM vault.update_secret(_id, _project_url, 'project_url', 'Base URL deste projeto (auto-set pelo setup).');
+  END IF;
+
+  IF _service_role_key IS NOT NULL AND _service_role_key <> '' THEN
+    SELECT id INTO _id FROM vault.secrets WHERE name = 'service_role_key';
+    IF _id IS NULL THEN
+      PERFORM vault.create_secret(_service_role_key, 'service_role_key', 'Service role key deste projeto (auto-set pelo setup).');
+    ELSE
+      PERFORM vault.update_secret(_id, _service_role_key, 'service_role_key', 'Service role key deste projeto (auto-set pelo setup).');
+    END IF;
+
+    SELECT id INTO _id FROM vault.secrets WHERE name = 'email_queue_service_role_key';
+    IF _id IS NULL THEN
+      PERFORM vault.create_secret(_service_role_key, 'email_queue_service_role_key', 'Service role key (fila de e-mail, auto-set pelo setup).');
+    ELSE
+      PERFORM vault.update_secret(_id, _service_role_key, 'email_queue_service_role_key', 'Service role key (fila de e-mail, auto-set pelo setup).');
+    END IF;
+  END IF;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.wiki_documents_set_updated_at()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$function$
+;
+
+CREATE OR REPLACE VIEW public.usage_by_agent_day AS  SELECT date_trunc('day'::text, ts) AS dia,
+    agent_id,
+    sum(total_tokens) AS tokens,
+    sum(input_tokens) AS input_tokens,
+    sum(output_tokens) AS output_tokens,
+    sum(cost_usd) AS custo_usd,
+    count(*) AS eventos
+   FROM usage_events
+  GROUP BY (date_trunc('day'::text, ts)), agent_id;
+
+CREATE OR REPLACE VIEW public.usage_by_model_day AS  SELECT date_trunc('day'::text, ts) AS dia,
+    COALESCE(model, 'desconhecido'::text) AS model,
+    sum(total_tokens) AS tokens,
+    sum(cost_usd) AS custo_usd,
+    count(*) AS eventos
+   FROM usage_events
+  GROUP BY (date_trunc('day'::text, ts)), COALESCE(model, 'desconhecido'::text);
+
+CREATE OR REPLACE VIEW public.usage_by_task_day AS  SELECT date_trunc('day'::text, ts) AS dia,
+    agent_id,
+    kind,
+    COALESCE(label, session_key, '(sem rotulo)'::text) AS tarefa,
+    sum(total_tokens) AS tokens,
+    sum(cost_usd) AS custo_usd,
+    count(*) AS eventos
+   FROM usage_events
+  GROUP BY (date_trunc('day'::text, ts)), agent_id, kind, COALESCE(label, session_key, '(sem rotulo)'::text);
+
+CREATE TRIGGER agent_activity_set_updated_at BEFORE UPDATE ON public.agent_activity FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER agent_tasks_post_completion AFTER UPDATE OF status ON public.agent_tasks FOR EACH ROW WHEN (((new.status = 'done'::text) AND (old.status IS DISTINCT FROM 'done'::text))) EXECUTE FUNCTION post_task_completion_to_chat();
+
+CREATE TRIGGER agent_tasks_updated_at BEFORE UPDATE ON public.agent_tasks FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER agent_templates_set_updated_at BEFORE UPDATE ON public.agent_templates FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER channel_messages_dedup_guard_trg BEFORE INSERT ON public.channel_messages FOR EACH ROW EXECUTE FUNCTION channel_messages_dedup_guard();
+
+CREATE TRIGGER company_profile_updated_at BEFORE UPDATE ON public.company_profile FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER conversations_mark_turn_delivered AFTER INSERT ON public.conversations FOR EACH ROW EXECUTE FUNCTION mark_agent_turn_delivered();
+
+CREATE TRIGGER integration_templates_updated_at BEFORE UPDATE ON public.integration_templates FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER integrations_set_updated_at BEFORE UPDATE ON public.integrations FOR EACH ROW EXECUTE FUNCTION moddatetime('updated_at');
+
+CREATE TRIGGER notifications_send_push AFTER INSERT ON public.notifications FOR EACH ROW EXECUTE FUNCTION trigger_send_push_on_notification();
+
+CREATE TRIGGER set_agent_profiles_updated_at BEFORE UPDATE ON public.agent_profiles FOR EACH ROW EXECUTE FUNCTION moddatetime('updated_at');
+
+CREATE TRIGGER set_drafts_updated_at BEFORE UPDATE ON public.drafts FOR EACH ROW EXECUTE FUNCTION set_drafts_updated_at();
+
+CREATE TRIGGER skills_updated_at BEFORE UPDATE ON public.skills FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER sync_channel_members_rest_fields_trigger BEFORE INSERT OR UPDATE ON public.channel_members FOR EACH ROW EXECUTE FUNCTION sync_channel_members_rest_fields();
+
+CREATE TRIGGER trg_automations_updated_at BEFORE UPDATE ON public.automations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER trg_wiki_documents_updated_at BEFORE UPDATE ON public.wiki_documents FOR EACH ROW EXECUTE FUNCTION wiki_documents_set_updated_at();
+
+CREATE TRIGGER update_artifact_titles_updated_at BEFORE UPDATE ON public.artifact_titles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_integration_secrets_updated_at BEFORE UPDATE ON public.integration_secrets FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_live_artifacts_updated_at BEFORE UPDATE ON public.live_artifacts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_onboarding_progress_updated_at BEFORE UPDATE ON public.onboarding_progress FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_vps_config_updated_at BEFORE UPDATE ON public.vps_config FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+ALTER TABLE public.access_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated insert logs"" ON public.access_logs AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((user_id = auth.uid()));
+
+ALTER TABLE public.access_logs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin reads logs"" ON public.access_logs AS PERMISSIVE FOR SELECT TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.agent_activity ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated users can read agent activity records"" ON public.agent_activity AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.agent_activity_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated users can read agent activity"" ON public.agent_activity_log AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.agent_avatars ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated delete agent_avatars"" ON public.agent_avatars AS PERMISSIVE FOR DELETE TO authenticated USING (true);
+
+ALTER TABLE public.agent_avatars ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated read agent_avatars"" ON public.agent_avatars AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.agent_avatars ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated update agent_avatars"" ON public.agent_avatars AS PERMISSIVE FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE public.agent_avatars ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated write agent_avatars"" ON public.agent_avatars AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);
+
+ALTER TABLE public.agent_avatars ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Public read agent_avatars"" ON public.agent_avatars AS PERMISSIVE FOR SELECT TO anon USING (true);
+
+ALTER TABLE public.agent_context_state ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Autenticados leem contexto"" ON public.agent_context_state AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.agent_creation_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""creator reads own creation logs"" ON public.agent_creation_log AS PERMISSIVE FOR SELECT TO authenticated USING ((created_by = auth.uid()));
+
+ALTER TABLE public.agent_creation_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""super_admin reads all creation logs"" ON public.agent_creation_log AS PERMISSIVE FOR SELECT TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.agent_crons ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated read agent_crons"" ON public.agent_crons AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.agent_crons ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin delete agent_crons"" ON public.agent_crons AS PERMISSIVE FOR DELETE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.agent_crons ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin insert agent_crons"" ON public.agent_crons AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.agent_crons ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin update agent_crons"" ON public.agent_crons AS PERMISSIVE FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.agent_files ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated read agent_files"" ON public.agent_files AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.agent_files ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role manages agent_files"" ON public.agent_files AS PERMISSIVE FOR ALL TO public USING ((auth.role() = 'service_role'::text)) WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.agent_files ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin manages agent_files"" ON public.agent_files AS PERMISSIVE FOR ALL TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.agent_integrations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin manages agent_integrations"" ON public.agent_integrations AS PERMISSIVE FOR ALL TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.agent_integrations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin reads agent_integrations"" ON public.agent_integrations AS PERMISSIVE FOR SELECT TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.agent_profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated read agent_profiles"" ON public.agent_profiles AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.agent_profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin manages agent_profiles"" ON public.agent_profiles AS PERMISSIVE FOR ALL TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.agent_results ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated delete agent_results"" ON public.agent_results AS PERMISSIVE FOR DELETE TO authenticated USING (true);
+
+ALTER TABLE public.agent_results ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated read agent_results"" ON public.agent_results AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.agent_results ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated update agent_results"" ON public.agent_results AS PERMISSIVE FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE public.agent_results ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated write agent_results"" ON public.agent_results AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);
+
+ALTER TABLE public.agent_skills ENABLE ROW LEVEL SECURITY;
+CREATE POLICY agent_skills_authenticated_read ON public.agent_skills AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.agent_stats ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated users read agent_stats"" ON public.agent_stats AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.agent_stats ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role manages agent_stats"" ON public.agent_stats AS PERMISSIVE FOR ALL TO public USING ((auth.role() = 'service_role'::text)) WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.agent_tasks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY authenticated_read_tasks ON public.agent_tasks AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.agent_tasks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY super_admin_manage_tasks ON public.agent_tasks AS PERMISSIVE FOR ALL TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.agent_templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""agent_templates readable by everyone"" ON public.agent_templates AS PERMISSIVE FOR SELECT TO public USING (true);
+
+ALTER TABLE public.agent_templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""agent_templates writable by super_admin"" ON public.agent_templates AS PERMISSIVE FOR ALL TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.agent_token_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated reads agent_token_snapshots"" ON public.agent_token_snapshots AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.agent_token_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role manages agent_token_snapshots"" ON public.agent_token_snapshots AS PERMISSIVE FOR ALL TO public USING ((auth.role() = 'service_role'::text)) WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.agent_token_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin reads agent_token_snapshots"" ON public.agent_token_snapshots AS PERMISSIVE FOR SELECT TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin delete app_settings"" ON public.app_settings AS PERMISSIVE FOR DELETE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin insert app_settings"" ON public.app_settings AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin read app_settings"" ON public.app_settings AS PERMISSIVE FOR SELECT TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.app_settings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin update app_settings"" ON public.app_settings AS PERMISSIVE FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.arena_agents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated read arena_agents"" ON public.arena_agents AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.arena_agents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated update arena_agents"" ON public.arena_agents AS PERMISSIVE FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE public.arena_agents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated write arena_agents"" ON public.arena_agents AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);
+
+ALTER TABLE public.arena_agents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin delete arena_agents"" ON public.arena_agents AS PERMISSIVE FOR DELETE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.arena_agents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arena_agents_delete ON public.arena_agents AS PERMISSIVE FOR DELETE TO authenticated USING ((EXISTS ( SELECT 1
+   FROM arenas a
+  WHERE ((a.id = arena_agents.arena_id) AND (a.created_by = auth.uid())))));
+
+ALTER TABLE public.arena_agents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arena_agents_insert ON public.arena_agents AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((EXISTS ( SELECT 1
+   FROM arenas a
+  WHERE ((a.id = arena_agents.arena_id) AND (a.created_by = auth.uid())))));
+
+ALTER TABLE public.arena_agents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arena_agents_select ON public.arena_agents AS PERMISSIVE FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
+   FROM arenas a
+  WHERE ((a.id = arena_agents.arena_id) AND (a.created_by = auth.uid())))));
+
+ALTER TABLE public.arena_agents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arena_agents_update ON public.arena_agents AS PERMISSIVE FOR UPDATE TO authenticated USING ((EXISTS ( SELECT 1
+   FROM arenas a
+  WHERE ((a.id = arena_agents.arena_id) AND (a.created_by = auth.uid())))));
+
+ALTER TABLE public.arena_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated read arena_messages"" ON public.arena_messages AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.arena_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated update arena_messages"" ON public.arena_messages AS PERMISSIVE FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE public.arena_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated write arena_messages"" ON public.arena_messages AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);
+
+ALTER TABLE public.arena_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin delete arena_messages"" ON public.arena_messages AS PERMISSIVE FOR DELETE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.arena_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arena_messages_delete ON public.arena_messages AS PERMISSIVE FOR DELETE TO authenticated USING ((EXISTS ( SELECT 1
+   FROM (arena_sessions s
+     JOIN arenas a ON ((a.id = s.arena_id)))
+  WHERE ((s.id = arena_messages.session_id) AND (a.created_by = auth.uid())))));
+
+ALTER TABLE public.arena_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arena_messages_insert ON public.arena_messages AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((EXISTS ( SELECT 1
+   FROM (arena_sessions s
+     JOIN arenas a ON ((a.id = s.arena_id)))
+  WHERE ((s.id = arena_messages.session_id) AND (a.created_by = auth.uid())))));
+
+ALTER TABLE public.arena_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arena_messages_select ON public.arena_messages AS PERMISSIVE FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
+   FROM (arena_sessions s
+     JOIN arenas a ON ((a.id = s.arena_id)))
+  WHERE ((s.id = arena_messages.session_id) AND (a.created_by = auth.uid())))));
+
+ALTER TABLE public.arena_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arena_messages_update ON public.arena_messages AS PERMISSIVE FOR UPDATE TO authenticated USING ((EXISTS ( SELECT 1
+   FROM (arena_sessions s
+     JOIN arenas a ON ((a.id = s.arena_id)))
+  WHERE ((s.id = arena_messages.session_id) AND (a.created_by = auth.uid())))));
+
+ALTER TABLE public.arena_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated read arena_sessions"" ON public.arena_sessions AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.arena_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated update arena_sessions"" ON public.arena_sessions AS PERMISSIVE FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE public.arena_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated write arena_sessions"" ON public.arena_sessions AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);
+
+ALTER TABLE public.arena_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin delete arena_sessions"" ON public.arena_sessions AS PERMISSIVE FOR DELETE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.arena_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arena_sessions_delete ON public.arena_sessions AS PERMISSIVE FOR DELETE TO authenticated USING ((EXISTS ( SELECT 1
+   FROM arenas a
+  WHERE ((a.id = arena_sessions.arena_id) AND (a.created_by = auth.uid())))));
+
+ALTER TABLE public.arena_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arena_sessions_insert ON public.arena_sessions AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((EXISTS ( SELECT 1
+   FROM arenas a
+  WHERE ((a.id = arena_sessions.arena_id) AND (a.created_by = auth.uid())))));
+
+ALTER TABLE public.arena_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arena_sessions_select ON public.arena_sessions AS PERMISSIVE FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
+   FROM arenas a
+  WHERE ((a.id = arena_sessions.arena_id) AND (a.created_by = auth.uid())))));
+
+ALTER TABLE public.arena_sessions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arena_sessions_update ON public.arena_sessions AS PERMISSIVE FOR UPDATE TO authenticated USING ((EXISTS ( SELECT 1
+   FROM arenas a
+  WHERE ((a.id = arena_sessions.arena_id) AND (a.created_by = auth.uid())))));
+
+ALTER TABLE public.arena_templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated read arena_templates"" ON public.arena_templates AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.arena_templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin delete arena_templates"" ON public.arena_templates AS PERMISSIVE FOR DELETE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.arena_templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin insert arena_templates"" ON public.arena_templates AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.arena_templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin update arena_templates"" ON public.arena_templates AS PERMISSIVE FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.arena_templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arena_templates_select ON public.arena_templates AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.arenas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated read arenas"" ON public.arenas AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.arenas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated update arenas"" ON public.arenas AS PERMISSIVE FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE public.arenas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated write arenas"" ON public.arenas AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (true);
+
+ALTER TABLE public.arenas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin delete arenas"" ON public.arenas AS PERMISSIVE FOR DELETE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.arenas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arenas_delete ON public.arenas AS PERMISSIVE FOR DELETE TO authenticated USING ((created_by = auth.uid()));
+
+ALTER TABLE public.arenas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arenas_insert ON public.arenas AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((created_by = auth.uid()));
+
+ALTER TABLE public.arenas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arenas_select ON public.arenas AS PERMISSIVE FOR SELECT TO authenticated USING ((created_by = auth.uid()));
+
+ALTER TABLE public.arenas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY arenas_update ON public.arenas AS PERMISSIVE FOR UPDATE TO authenticated USING ((created_by = auth.uid())) WITH CHECK ((created_by = auth.uid()));
+
+ALTER TABLE public.artifact_titles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users can manage their own artifact titles"" ON public.artifact_titles AS PERMISSIVE FOR ALL TO authenticated USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+
+ALTER TABLE public.artifacts_published ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Anyone can view public artifacts"" ON public.artifacts_published AS PERMISSIVE FOR SELECT TO public USING ((is_public = true));
+
+ALTER TABLE public.artifacts_published ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users delete own artifacts"" ON public.artifacts_published AS PERMISSIVE FOR DELETE TO authenticated USING ((created_by = auth.uid()));
+
+ALTER TABLE public.artifacts_published ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users insert own artifacts"" ON public.artifacts_published AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((created_by = auth.uid()));
+
+ALTER TABLE public.artifacts_published ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users update own artifacts"" ON public.artifacts_published AS PERMISSIVE FOR UPDATE TO authenticated USING ((created_by = auth.uid())) WITH CHECK ((created_by = auth.uid()));
+
+ALTER TABLE public.artifacts_published ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users view own artifacts"" ON public.artifacts_published AS PERMISSIVE FOR SELECT TO authenticated USING ((created_by = auth.uid()));
+
+ALTER TABLE public.automation_runs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY automation_runs_admin_all ON public.automation_runs AS PERMISSIVE FOR ALL TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.automation_runs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY automation_runs_member_select ON public.automation_runs AS PERMISSIVE FOR SELECT TO authenticated USING ((has_role(auth.uid(), 'super_admin'::app_role) OR (EXISTS ( SELECT 1
+   FROM automations a
+  WHERE ((a.id = automation_runs.automation_id) AND (a.created_by = auth.uid()))))));
+
+ALTER TABLE public.automations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY automations_admin_all ON public.automations AS PERMISSIVE FOR ALL TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.automations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY automations_member_select ON public.automations AS PERMISSIVE FOR SELECT TO authenticated USING (((created_by = auth.uid()) OR has_role(auth.uid(), 'super_admin'::app_role)));
+
+ALTER TABLE public.branding ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Public read branding"" ON public.branding AS PERMISSIVE FOR SELECT TO anon, authenticated USING (true);
+
+ALTER TABLE public.branding ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin delete branding"" ON public.branding AS PERMISSIVE FOR DELETE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.branding ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin insert branding"" ON public.branding AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.branding ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin update branding"" ON public.branding AS PERMISSIVE FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.channel_agent_activity ENABLE ROW LEVEL SECURITY;
+CREATE POLICY membros_leem_atividade ON public.channel_agent_activity AS PERMISSIVE FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
+   FROM channel_members m
+  WHERE ((m.channel_id = channel_agent_activity.channel_id) AND (m.user_id = (auth.uid())::text)))));
+
+ALTER TABLE public.channel_members ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Channel managers remove members"" ON public.channel_members AS PERMISSIVE FOR DELETE TO authenticated USING (((user_id = (auth.uid())::text) OR (EXISTS ( SELECT 1
+   FROM channels c
+  WHERE ((c.id = channel_members.channel_id) AND ((c.created_by = auth.uid()) OR has_role(auth.uid(), 'super_admin'::app_role)))))));
+
+ALTER TABLE public.channel_members ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""See channel members"" ON public.channel_members AS PERMISSIVE FOR SELECT TO authenticated USING ((is_public_channel(channel_id) OR is_channel_member(channel_id, (auth.uid())::text)));
+
+ALTER TABLE public.channel_members ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role reads channel members"" ON public.channel_members AS PERMISSIVE FOR SELECT TO public USING ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.channel_members ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users join allowed channels"" ON public.channel_members AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((((user_id = (auth.uid())::text) AND is_public_channel(channel_id)) OR (EXISTS ( SELECT 1
+   FROM channels c
+  WHERE ((c.id = channel_members.channel_id) AND ((c.created_by = auth.uid()) OR has_role(auth.uid(), 'super_admin'::app_role)))))));
+
+ALTER TABLE public.channel_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Author can update own messages"" ON public.channel_messages AS PERMISSIVE FOR UPDATE TO authenticated USING ((author_id = (auth.uid())::text)) WITH CHECK ((author_id = (auth.uid())::text));
+
+ALTER TABLE public.channel_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""See channel messages"" ON public.channel_messages AS PERMISSIVE FOR SELECT TO authenticated USING ((is_public_channel(channel_id) OR is_channel_member(channel_id, (auth.uid())::text)));
+
+ALTER TABLE public.channel_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Send channel messages"" ON public.channel_messages AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (is_channel_member(channel_id, (auth.uid())::text));
+
+ALTER TABLE public.channel_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role can delete messages"" ON public.channel_messages AS PERMISSIVE FOR DELETE TO public USING ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.channels ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated users create channels"" ON public.channels AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((created_by = auth.uid()));
+
+ALTER TABLE public.channels ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Channel creator or admin can delete"" ON public.channels AS PERMISSIVE FOR DELETE TO authenticated USING (((created_by = auth.uid()) OR has_role(auth.uid(), 'super_admin'::app_role)));
+
+ALTER TABLE public.channels ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Channel creator or admin can update"" ON public.channels AS PERMISSIVE FOR UPDATE TO authenticated USING (((created_by = auth.uid()) OR has_role(auth.uid(), 'super_admin'::app_role)));
+
+ALTER TABLE public.channels ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users see accessible channels"" ON public.channels AS PERMISSIVE FOR SELECT TO authenticated USING (((type = 'public'::channel_type) OR (created_by = auth.uid()) OR is_channel_member(id, (auth.uid())::text)));
+
+ALTER TABLE public.company_profile ENABLE ROW LEVEL SECURITY;
+CREATE POLICY admin_all_company_profile ON public.company_profile AS PERMISSIVE FOR ALL TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.company_profile ENABLE ROW LEVEL SECURITY;
+CREATE POLICY auth_read_company_profile ON public.company_profile AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role can insert conversations"" ON public.conversations AS PERMISSIVE FOR INSERT TO public WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users delete own conversations"" ON public.conversations AS PERMISSIVE FOR DELETE TO authenticated USING ((user_id = auth.uid()));
+
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users insert own conversations"" ON public.conversations AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((user_id = auth.uid()));
+
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users see own conversations"" ON public.conversations AS PERMISSIVE FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+
+ALTER TABLE public.cron_jobs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated users read cron_jobs"" ON public.cron_jobs AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.cron_jobs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role manages cron_jobs"" ON public.cron_jobs AS PERMISSIVE FOR ALL TO public USING ((auth.role() = 'service_role'::text)) WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.dm_reads ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Members read dm_reads"" ON public.dm_reads AS PERMISSIVE FOR SELECT TO authenticated USING (is_channel_member(channel_id, (auth.uid())::text));
+
+ALTER TABLE public.dm_reads ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users insert own dm_reads"" ON public.dm_reads AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((user_id = auth.uid()) AND is_channel_member(channel_id, (auth.uid())::text)));
+
+ALTER TABLE public.dm_reads ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users update own dm_reads"" ON public.dm_reads AS PERMISSIVE FOR UPDATE TO authenticated USING ((user_id = auth.uid())) WITH CHECK ((user_id = auth.uid()));
+
+ALTER TABLE public.drafts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users delete own drafts"" ON public.drafts AS PERMISSIVE FOR DELETE TO authenticated USING ((user_id = auth.uid()));
+
+ALTER TABLE public.drafts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users insert own drafts"" ON public.drafts AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((user_id = auth.uid()));
+
+ALTER TABLE public.drafts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users read own drafts"" ON public.drafts AS PERMISSIVE FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+
+ALTER TABLE public.drafts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users update own drafts"" ON public.drafts AS PERMISSIVE FOR UPDATE TO authenticated USING ((user_id = auth.uid())) WITH CHECK ((user_id = auth.uid()));
+
+ALTER TABLE public.email_send_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role can insert send log"" ON public.email_send_log AS PERMISSIVE FOR INSERT TO public WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.email_send_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role can read send log"" ON public.email_send_log AS PERMISSIVE FOR SELECT TO public USING ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.email_send_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role can update send log"" ON public.email_send_log AS PERMISSIVE FOR UPDATE TO public USING ((auth.role() = 'service_role'::text)) WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.email_send_state ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role can manage send state"" ON public.email_send_state AS PERMISSIVE FOR ALL TO public USING ((auth.role() = 'service_role'::text)) WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.email_unsubscribe_tokens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role can insert tokens"" ON public.email_unsubscribe_tokens AS PERMISSIVE FOR INSERT TO public WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.email_unsubscribe_tokens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role can mark tokens as used"" ON public.email_unsubscribe_tokens AS PERMISSIVE FOR UPDATE TO public USING ((auth.role() = 'service_role'::text)) WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.email_unsubscribe_tokens ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role can read tokens"" ON public.email_unsubscribe_tokens AS PERMISSIVE FOR SELECT TO public USING ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.gateway_health ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated users read gateway_health"" ON public.gateway_health AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.gateway_health ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role manages gateway_health"" ON public.gateway_health AS PERMISSIVE FOR ALL TO public USING ((auth.role() = 'service_role'::text)) WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.generated_documents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY own_docs_delete ON public.generated_documents AS PERMISSIVE FOR DELETE TO public USING ((auth.uid() = user_id));
+
+ALTER TABLE public.generated_documents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY own_docs_insert ON public.generated_documents AS PERMISSIVE FOR INSERT TO public WITH CHECK ((auth.uid() = user_id));
+
+ALTER TABLE public.generated_documents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY own_docs_select ON public.generated_documents AS PERMISSIVE FOR SELECT TO public USING ((auth.uid() = user_id));
+
+ALTER TABLE public.integration_templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated can read integration templates"" ON public.integration_templates AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.integration_templates ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admins manage integration templates"" ON public.integration_templates AS PERMISSIVE FOR ALL TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.integrations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated can view integrations"" ON public.integrations AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.integrations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admins can delete integrations"" ON public.integrations AS PERMISSIVE FOR DELETE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.integrations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admins can insert integrations"" ON public.integrations AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.integrations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admins can update integrations"" ON public.integrations AS PERMISSIVE FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.live_artifacts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY authenticated_published_read ON public.live_artifacts AS PERMISSIVE FOR SELECT TO authenticated USING (((is_published = true) AND (deleted_at IS NULL) AND ((expires_at IS NULL) OR (expires_at > now()))));
+
+ALTER TABLE public.live_artifacts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY owner_all ON public.live_artifacts AS PERMISSIVE FOR ALL TO public USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+
+ALTER TABLE public.live_artifacts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY public_read ON public.live_artifacts AS PERMISSIVE FOR SELECT TO public USING (((is_published = true) AND (deleted_at IS NULL) AND (is_public = true) AND ((expires_at IS NULL) OR (expires_at > now()))));
+
+ALTER TABLE public.message_reactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated users read reactions"" ON public.message_reactions AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.message_reactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users delete own reactions"" ON public.message_reactions AS PERMISSIVE FOR DELETE TO authenticated USING ((user_id = auth.uid()));
+
+ALTER TABLE public.message_reactions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users insert own reactions"" ON public.message_reactions AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((user_id = auth.uid()));
+
+ALTER TABLE public.model_pricing ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Autenticados leem precos"" ON public.model_pricing AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Channel members can notify other members"" ON public.notifications AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((user_id = auth.uid()) OR ((channel_id IS NOT NULL) AND is_channel_member(channel_id, (auth.uid())::text) AND is_channel_member(channel_id, (user_id)::text))));
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role can insert notifications"" ON public.notifications AS PERMISSIVE FOR INSERT TO public WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users read own notifications"" ON public.notifications AS PERMISSIVE FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users update own notifications"" ON public.notifications AS PERMISSIVE FOR UPDATE TO authenticated USING ((user_id = auth.uid())) WITH CHECK ((user_id = auth.uid()));
+
+ALTER TABLE public.onboarding_progress ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users can delete their own onboarding progress"" ON public.onboarding_progress AS PERMISSIVE FOR DELETE TO authenticated USING ((auth.uid() = user_id));
+
+ALTER TABLE public.onboarding_progress ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users can insert their own onboarding progress"" ON public.onboarding_progress AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((auth.uid() = user_id));
+
+ALTER TABLE public.onboarding_progress ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users can update their own onboarding progress"" ON public.onboarding_progress AS PERMISSIVE FOR UPDATE TO authenticated USING ((auth.uid() = user_id)) WITH CHECK ((auth.uid() = user_id));
+
+ALTER TABLE public.onboarding_progress ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users can view their own onboarding progress"" ON public.onboarding_progress AS PERMISSIVE FOR SELECT TO authenticated USING ((auth.uid() = user_id));
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated users read all profiles"" ON public.profiles AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin manages profiles"" ON public.profiles AS PERMISSIVE FOR ALL TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users read own profile"" ON public.profiles AS PERMISSIVE FOR SELECT TO authenticated USING (((id = auth.uid()) OR has_role(auth.uid(), 'super_admin'::app_role)));
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users update own profile"" ON public.profiles AS PERMISSIVE FOR UPDATE TO authenticated USING ((id = auth.uid())) WITH CHECK ((id = auth.uid()));
+
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role manages push subscriptions"" ON public.push_subscriptions AS PERMISSIVE FOR ALL TO public USING ((auth.role() = 'service_role'::text)) WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users delete own push subscriptions"" ON public.push_subscriptions AS PERMISSIVE FOR DELETE TO authenticated USING ((user_id = auth.uid()));
+
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users insert own push subscriptions"" ON public.push_subscriptions AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((user_id = auth.uid()));
+
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users read own push subscriptions"" ON public.push_subscriptions AS PERMISSIVE FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+
+ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users update own push subscriptions"" ON public.push_subscriptions AS PERMISSIVE FOR UPDATE TO authenticated USING ((user_id = auth.uid())) WITH CHECK ((user_id = auth.uid()));
+
+ALTER TABLE public.setup_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""super_admin can read setup_config"" ON public.setup_config AS PERMISSIVE FOR SELECT TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.skills ENABLE ROW LEVEL SECURITY;
+CREATE POLICY skills_authenticated_read ON public.skills AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.suppressed_emails ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role can insert suppressed emails"" ON public.suppressed_emails AS PERMISSIVE FOR INSERT TO public WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.suppressed_emails ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role can read suppressed emails"" ON public.suppressed_emails AS PERMISSIVE FOR SELECT TO public USING ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.team_agents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated read team_agents"" ON public.team_agents AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.team_agents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin delete team_agents"" ON public.team_agents AS PERMISSIVE FOR DELETE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.team_agents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin insert team_agents"" ON public.team_agents AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.team_agents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin update team_agents"" ON public.team_agents AS PERMISSIVE FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated read teams"" ON public.teams AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin delete teams"" ON public.teams AS PERMISSIVE FOR DELETE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin insert teams"" ON public.teams AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin update teams"" ON public.teams AS PERMISSIVE FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.usage_daily ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Authenticated users read usage_daily"" ON public.usage_daily AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.usage_daily ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Service role manages usage_daily"" ON public.usage_daily AS PERMISSIVE FOR ALL TO public USING ((auth.role() = 'service_role'::text)) WITH CHECK ((auth.role() = 'service_role'::text));
+
+ALTER TABLE public.usage_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Autenticados leem uso"" ON public.usage_events AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Super admin manages roles"" ON public.user_roles AS PERMISSIVE FOR ALL TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Users read own role"" ON public.user_roles AS PERMISSIVE FOR SELECT TO authenticated USING ((user_id = auth.uid()));
+
+ALTER TABLE public.vps_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""super_admin can delete vps_config"" ON public.vps_config AS PERMISSIVE FOR DELETE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.vps_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""super_admin can insert vps_config"" ON public.vps_config AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.vps_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""super_admin can update vps_config"" ON public.vps_config AS PERMISSIVE FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.vps_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""super_admin can view vps_config"" ON public.vps_config AS PERMISSIVE FOR SELECT TO authenticated USING (has_role(auth.uid(), 'super_admin'::app_role));
+
+ALTER TABLE public.wiki_documents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Auth insert docs"" ON public.wiki_documents AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((created_by = auth.uid()));
+
+ALTER TABLE public.wiki_documents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Auth read docs"" ON public.wiki_documents AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.wiki_documents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Auth update docs"" ON public.wiki_documents AS PERMISSIVE FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE public.wiki_documents ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Creator or admin delete docs"" ON public.wiki_documents AS PERMISSIVE FOR DELETE TO authenticated USING (((created_by = auth.uid()) OR has_role(auth.uid(), 'super_admin'::app_role)));
+
+ALTER TABLE public.wiki_spaces ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Auth insert spaces"" ON public.wiki_spaces AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK ((created_by = auth.uid()));
+
+ALTER TABLE public.wiki_spaces ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Auth read spaces"" ON public.wiki_spaces AS PERMISSIVE FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.wiki_spaces ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Auth update spaces"" ON public.wiki_spaces AS PERMISSIVE FOR UPDATE TO authenticated USING (true) WITH CHECK (true);
+
+ALTER TABLE public.wiki_spaces ENABLE ROW LEVEL SECURITY;
+CREATE POLICY ""Creator or admin delete spaces"" ON public.wiki_spaces AS PERMISSIVE FOR DELETE TO authenticated USING (((created_by = auth.uid()) OR has_role(auth.uid(), 'super_admin'::app_role)));"

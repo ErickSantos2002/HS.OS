@@ -1,49 +1,99 @@
-# Migrations — TeamsHS
+# Migrations — HS.OS
 
-Schema do Postgres próprio. **Pasta ainda vazia**: o schema atual vive só no projeto
-Supabase remoto (`urbityqksiiderlvaubl`) e precisa ser extraído de lá antes de qualquer
-coisa. Ver "Extraindo o schema" abaixo.
+Schema do Postgres próprio, extraído do Supabase e validado em Postgres puro.
+
+## Arquivos
+
+| Arquivo | O que é |
+|---|---|
+| `000_compat_supabase.sql` | Camada de compatibilidade. Escrito à mão. |
+| `001_initial_schema.sql` | Schema `public` completo. **Gerado** — não edite. |
+| `_origem/` | Dump de origem + script de regeração + export do SQL editor |
+
+Aplicar em ordem, num banco vazio:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f 000_compat_supabase.sql
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f 001_initial_schema.sql
+```
 
 ## Convenção
 
-Arquivos `.sql` numerados em sequência, aplicados em ordem:
+Arquivos `.sql` numerados, aplicados em ordem. **Nunca edite uma migration já
+aplicada** — crie a próxima. O arquivo aplicado é histórico, não rascunho.
+
+O `001` é gerado a partir do dump: para extrair de novo, rode
+`_origem/regerar-001.sh`. Mudanças de schema daqui pra frente vão na `002+`.
+
+## Por que existe o 000
+
+O schema veio de um banco Supabase e depende de coisas que não existem num
+Postgres comum. Sem o `000`, o `001` falha com 213 erros. O `000` recria o
+mínimo:
+
+- **Roles** `anon`, `authenticated`, `service_role`, `sandbox_exec` — 164
+  policies e 385 GRANTs referenciam esses nomes
+- **Schema `auth`** com `auth.users` (11 FKs apontam para lá) e as funções
+  `auth.uid()` / `auth.role()` — 123 policies chamam `auth.uid()`, e duas
+  tabelas (`arenas`, `message_reactions`) usam `DEFAULT auth.uid()` numa coluna
+- **Extensões** `pgcrypto` (54 defaults usam `gen_random_uuid()`) e
+  `moddatetime` (2 triggers)
+
+### Como o backend conversa com isso
+
+`auth.uid()` no Supabase lê o JWT. Aqui ele lê um setting de sessão que o
+backend precisa preencher a cada request autenticado, antes de qualquer query:
+
+```sql
+SET LOCAL app.current_user_id = '<uuid do usuário>';
+SET LOCAL app.user_role       = 'authenticated';
+```
+
+Sem isso, `auth.uid()` devolve `NULL` e as policies negam — que é o padrão
+seguro. Se você inserir numa tabela com `created_by NOT NULL DEFAULT auth.uid()`
+sem setar o usuário, a transação falha com violação de not-null.
+
+⚠️ O setting **não** pode se chamar `app.current_role`: `current_role` é palavra
+reservada no Postgres e o parser rejeita o `SET LOCAL` com erro de sintaxe.
+
+## Decisão em aberto: manter RLS?
+
+As 191 policies foram preservadas e **funcionam** — validado com teste real. Mas
+elas duplicam a autorização que o FastAPI também vai fazer (`app/dependencies.py`).
+
+- **Manter**: segunda linha de defesa. Um endpoint que esqueça o `require_roles`
+  ainda esbarra na policy. Custo: todo request precisa do `SET LOCAL`, e a regra
+  de acesso vive em dois lugares.
+- **Aposentar**: uma fonte de verdade só, mais simples de raciocinar. Custo: cada
+  endpoint esquecido é um furo aberto.
+
+O TalentHS manteve RLS. Se a decisão aqui for aposentar, ela vira a `002` — e o
+`000` continua necessário (roles e `auth.users` seguem servindo às FKs).
+
+## O que ficou de fora do 001
+
+- **Schemas internos do Supabase** — `auth` (o real), `storage`, `realtime`,
+  `vault`, `graphql`, `pgmq`, `pgbouncer`. Não vão para o Postgres próprio.
+- **Dados** — não há. Confirmado: as 69 tabelas do `public` estão com 0 linhas, e
+  `auth.users` também. A migração é 100% de estrutura.
+- **`ALTER DEFAULT PRIVILEGES FOR ROLE postgres|supabase_admin`** — 26 linhas de
+  encanamento de ownership do Supabase, sem efeito no banco próprio. Removidas
+  pelo `regerar-001.sh`.
+- **Cron jobs** — os 5 jobs operacionais rodavam via `pg_cron` no Supabase. No
+  servidor próprio viram `pg_cron` de novo ou tarefas do backend. **Pendente.**
+- **Storage** — 6 buckets a recriar como `UPLOADS_DIR`/S3: `agent-files`,
+  `audio-messages`, `wiki-uploads` (públicos), `company-docs`,
+  `generated-documents` (privados). **Pendente.**
+
+## Validação feita
+
+Restaurado num Postgres 18.4 limpo (container `pg-teste`), do zero:
 
 ```
-001_initial_schema.sql
-002_<assunto>.sql
-003_<assunto>.sql
+000 → 0 erros      001 → 0 erros
+tabelas 69/69 · views 3/3 · policies 191/191 · FKs 32/32 · triggers 21/21 · enums 3/3
 ```
 
-**Nunca edite uma migration já aplicada.** Mudou de ideia? Crie a próxima. O arquivo
-aplicado é histórico, não rascunho — editar quebra qualquer ambiente que já rodou.
-
-## Extraindo o schema do Supabase
-
-O ponto de partida é um dump só de estrutura do projeto remoto, que vira o `001`:
-
-```bash
-pg_dump --schema-only --no-owner --no-privileges \
-  "postgresql://postgres:<senha>@db.urbityqksiiderlvaubl.supabase.co:5432/postgres" \
-  > 001_initial_schema.sql
-```
-
-O que o dump traz e precisa de decisão consciente antes de virar migration:
-
-- **Políticas de RLS** — dependem de `auth.uid()` e `auth.jwt()`, funções do Supabase que
-  não existem num Postgres puro. Com a auth própria, a autorização vira responsabilidade
-  do backend (`app/dependencies.py`). Ou você recria um equivalente de `auth.uid()`, ou
-  descarta as policies e move a regra para a API. Não dá para copiar e colar.
-- **Schema `auth`** — tabelas de usuário do Supabase (`auth.users`). A tabela `profiles` e
-  `user_roles` referenciam esses IDs; a migração de auth precisa preservar os UUIDs para
-  não órfãos os dados existentes.
-- **Schema `storage`** — buckets de arquivos. Substituído por `UPLOADS_DIR` ou S3.
-- **Extensões** — `pgcrypto`, `uuid-ossp` e afins precisam existir no Postgres de destino.
-- **Cron jobs** — os 5 jobs operacionais (scheduler de automações, sync de agentes, limpeza
-  de arquivos, watchdog) hoje rodam via `pg_cron` no Supabase. No servidor próprio viram
-  `pg_cron` também ou tarefas do backend.
-
-## Referência
-
-As ~70 tabelas, views e RPCs estão tipadas em
-`frontend/src/integrations/supabase/types.ts` — é o inventário mais fiel do schema que
-existe dentro do repositório, útil para conferir se o dump veio completo.
+Teste funcional: com `app.current_user_id` setado, o INSERT em `arenas` preenche
+`created_by` via `auth.uid()` e a leitura respeita a policy; sem o setting, a
+transação é negada.

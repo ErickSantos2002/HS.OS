@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## O que é este projeto
 
-**TeamsHS** — plataforma de gestão de agentes de IA ("Mission Control"). O front conversa com
+**HS.OS** — plataforma de gestão de agentes de IA ("Mission Control"). O front conversa com
 agentes que rodam num **OpenClaw Gateway** hospedado em VPS.
 
 Origem: é um **remix (fork) do `dn.os`**, produto da dn.ia, adaptado pela Health & Safety — mesma
@@ -41,7 +41,7 @@ Monorepo `frontend/` + `backend/`, mesma convenção dos outros sistemas da HS
 frontend/          React + Vite (o app inteiro de hoje)
 backend/
   app/             API FastAPI — esqueleto, a preencher pela portagem
-  migrations/      SQL numerado do Postgres próprio — VAZIO até o schema ser extraído
+  migrations/      000 (compat Supabase) + 001 (schema public) — validados
   supabase/        as 73 Edge Functions: backend vivo hoje, fonte da portagem
 docs/              auditoria e resumos herdados do dn.os
 docker-compose.yml backend:8000 + frontend:80
@@ -90,13 +90,18 @@ substitua por um config próprio antes de tentar rodar E2E.
 
 ## Restrições do ambiente
 
-- **O schema do banco não está no repositório.** `backend/supabase/` tem só `config.toml` e
-  `functions/`, e `backend/migrations/` está vazia de propósito. As ~70 tabelas, as views, as RPCs
-  e todas as políticas de RLS existem **apenas no projeto Supabase remoto**
-  (`project_id = urbityqksiiderlvaubl`). Não dá para levantar o banco a partir do repo — extrair o
-  schema de lá é pré-requisito de qualquer trabalho de banco, não detalhe. O roteiro do dump e as
-  armadilhas (RLS que depende de `auth.uid()`, schema `auth`, `pg_cron`) estão em
+- **O schema já foi extraído do Supabase e vive em `backend/migrations/`.** São dois arquivos, e a
+  ordem importa: `000_compat_supabase.sql` (escrito à mão — recria os roles `authenticated`/`anon`/
+  `service_role`/`sandbox_exec`, o schema `auth` com `auth.uid()`, e as extensões) e
+  `001_initial_schema.sql` (gerado do dump — 69 tabelas, 3 views, 191 policies, 32 FKs). Sem o `000`,
+  o `001` falha com 213 erros. Validado num Postgres 18 limpo com 0 erros. **Não edite o `001`** —
+  ele é gerado por `_origem/regerar-001.sh`; mudanças de schema vão na `002+`. Ver
   `backend/migrations/README.md`.
+- **O banco de origem está vazio.** As 69 tabelas e o `auth.users` têm 0 linhas — a migração é 100%
+  de estrutura. Não existe conta de usuário cadastrada em lugar nenhum.
+- **Se mantiver RLS, todo request autenticado precisa emitir `SET LOCAL app.current_user_id`** antes
+  de qualquer query, senão `auth.uid()` devolve `NULL` e as policies negam. O setting **não** pode se
+  chamar `app.current_role` — `current_role` é palavra reservada e o `SET LOCAL` dá erro de sintaxe.
 - **Gerenciador de pacotes indefinido:** convivem `bun.lock`, `bun.lockb` e `package-lock.json`, e não
   há `packageManager` nem `engines` no `frontend/package.json`. Escolha um, apague os outros e registre a escolha
   aqui — enquanto isso não for feito, installs podem divergir entre máquinas.

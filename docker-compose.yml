@@ -3,7 +3,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: teamshs-backend
+    container_name: hsos-backend
     ports:
       - "8000:8000"
     env_file:
@@ -16,7 +16,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: /api
-    container_name: teamshs-frontend
+    container_name: hsos-frontend
     ports:
       - "80:80"
     depends_on:
