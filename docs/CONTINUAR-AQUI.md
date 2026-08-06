@@ -1,36 +1,80 @@
 # Continuar aqui
 
-Ponto de retomada da portagem. Atualizado em **06/08/2026**, ao fim do Lote 2b.
-Leia isto, depois `CLAUDE.md` e `docs/ROADMAP.md`.
+Ponto de retomada da portagem. Atualizado em **06/08/2026**, ao fim de uma sessão
+longa. Leia isto, depois `CLAUDE.md` e `docs/ROADMAP.md`.
 
 ## O que já funciona
 
-Tudo abaixo está **em produção** e verificado:
+Tudo abaixo está verificado **no navegador**, não só por endpoint:
 
 - **Banco próprio** no Postgres da VPS — 69 tabelas, 191 policies de RLS ativas
   de verdade (o backend conecta como `hsos_app`, não como superusuário)
-- **Autenticação própria** — JWT + bcrypt, sem Supabase Auth
-- **Marca HS.OS** aplicada; `dn.ia` só sobrevive em `frontend/src/_legado/`
-- **Gateway conectado** por túnel SSH, com o `admin_token` fora do navegador
-- **Agentes** — lista, sincronização, edição completa de perfil (todas as abas),
-  verificação de modelo e liderança em lote
+- **Autenticação própria** — JWT + bcrypt
+- **Agentes** — ciclo de vida completo: criar, editar (todas as abas), sincronizar,
+  verificar modelo, liderança, excluir
+- **Usuários** — lista, criar conta, papel, ativar/desativar, excluir
+- **Chat com agente** — envio e resposta, por long-poll do `agent.wait`
+- **Canais** — criar, mensagens, membros
+- **Arquivos** — storage próprio em disco, cinco buckets
+- **Tempo real** — WebSocket em `/ws`, substitui o `postgres_changes`
 - **Deploy** — `hsos.healthsafetytech.com` e `hsosapi.healthsafetytech.com`
-
-Endpoints: `/health`, `/auth/*`, `/branding`, `/profiles/*`, `/gateway/*`, `/agents/*`.
 
 ## Placar
 
-**21 de 73** edge functions com substituto · **16 de 113** arquivos do front sem
-Supabase · **27** functions distintas ainda referenciadas pelo front.
+**25 de 73** edge functions com substituto · **60** ainda na pasta ·
+**23** ainda referenciadas pelo front · **20 de 113** arquivos do front sem Supabase.
 
-**O chat funciona** — conversa com agente e canais, verificados no navegador.
+## ⚠️ Antes de confiar em qualquer verificação
 
-O `AgentEditDrawer` chama **uma** edge, `delete-agent` — era oito chamadas de
-cinco functions diferentes no início de 06/08/2026.
+**`npx tsc --noEmit` não checa nada neste projeto.** O `tsconfig.json` da raiz tem
+`"files": []` com project references. O build do Vite também não checa tipos —
+o esbuild só os remove. O comando certo é:
 
-⚠️ O número 34 corrige o "26" anterior, que era subestimado: o grep antigo não via
-chamadas indiretas (`callEdge(fn, …)` com o nome em variável). A forma correta de
-medir está em `docs/ROADMAP.md`.
+```bash
+npx tsc --noEmit -p tsconfig.app.json
+```
+
+Isso custou meia sessão de falsa confiança. **Sempre use o `-p`.**
+
+## As duas coisas que travam o resto
+
+### 🔴 Lovable AI Gateway — decisão de produto, não técnica
+
+`transcribe-audio`, `chat-image-vision` e `parse-company-context` chamam
+`ai.gateway.lovable.dev` com `LOVABLE_API_KEY`. É dependência da plataforma de
+origem. As três opções e o custo de cada uma estão em `docs/ROADMAP.md`.
+
+### 🟠 ElevenLabs — mesma natureza
+
+As functions de voz e arena (`list-elevenlabs-voices`, `elevenlabs-tts`,
+`arena-convai-*`) dependem de chave da ElevenLabs.
+
+**Estratégia acordada para as duas:** portar tudo que dá e deixar **só** a chamada
+ao provedor parametrizada, esperando a chave. Assim elas saem da pasta e não
+travam o placar.
+
+## Próximo passo, em ordem de valor
+
+1. **`configure-llm-provider`** (717 linhas) — a maior sem bloqueio. A tela usa
+   cinco ações: `list`, `save`, `remove`, `discover`, `discover_status`. As outras
+   (`ops_pull`, `ops_report`) servem a um worker na VPS, não ao navegador. Usa a
+   tabela `llm_provider_ops` como fila de trabalho.
+2. **`agent-task`** (706 linhas) — Loop Architecture, tarefas longas com
+   `checkpoint_data`. Referenciada em 3 arquivos.
+3. **`skill-manage`** — skills dos agentes, 2 arquivos.
+4. **As 37 sem referência do front** — dá para portar sem tocar na tela, e várias
+   são pequenas. Boa fila para ganhar placar rápido: `log-agent-activity`,
+   `check-integration-keys`, `routine-phrases`, `artifact-query`.
+
+## Pendências de infraestrutura que a portagem criou
+
+- **`UPLOADS_DIR` precisa ser volume persistente** no EasyPanel. Sem isso, todo
+  deploy apaga avatares e anexos.
+- **O WebSocket exige `wss://`** em produção: o token vai na query (a API do
+  navegador não permite cabeçalho), então em `ws://` ele viajaria em claro.
+- **O tempo real vive na memória de um processo.** Com mais de um worker do
+  uvicorn, quem está no worker A não recebe o que foi publicado no B. Hoje roda em
+  processo único e está correto.
 
 ## ⚠️ Erro de operação que já aconteceu — não repita
 
