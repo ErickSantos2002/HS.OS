@@ -19,6 +19,7 @@ camada de renomeação em `use-agents.ts`.
 """
 
 import logging
+import re
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -975,3 +976,85 @@ async def sincronizar_lideranca(
     atualizados = sum(1 for r in resultados if r.atualizado)
     logger.info("Sync de liderança: %d/%d atualizados", atualizados, len(resultados))
     return LiderancaOut(atualizados=atualizados, total=len(resultados), agents=resultados)
+
+
+class ExclusaoAgenteOut(BaseModel):
+    agent_id: str
+    removido_do_gateway: bool
+    aviso_gateway: str | None = None
+
+
+@router.delete("/{agent_id}", response_model=ExclusaoAgenteOut)
+async def excluir(
+    agent_id: str,
+    _: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Apaga o agente no gateway e no banco. Portado de `delete-agent`.
+
+    ⚠️ **A ordem aqui é o contrário do `PATCH`, e de propósito.** No `PATCH`, o
+    gateway vem primeiro e a falha aborta tudo, porque divergir seria pior que
+    não salvar. Aqui não: se o gateway recusar, o banco é limpo **mesmo assim** e
+    a resposta traz o aviso. Era o comportamento da edge e é o certo para
+    exclusão — deixar o perfil órfão no banco porque o gateway estava fora
+    significa um agente fantasma na tela que ninguém consegue remover.
+    """
+    aid = (agent_id or "").strip()
+    if not re.match(r"^[A-Za-z0-9_-]{2,80}$", aid):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "agent_id inválido.")
+
+    async with sessao(role="service_role") as conn:
+        alvo = await conn.fetchrow(
+            "SELECT agent_id, COALESCE(NULLIF(openclaw_id, ''), agent_id) AS oid, name "
+            "FROM public.agent_profiles WHERE agent_id = $1",
+            aid,
+        )
+    if alvo is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+
+    removido = False
+    aviso: str | None = None
+    try:
+        c = await cfg.carregar()
+        if not c.configurado:
+            raise ErroGateway("Gateway não configurado.")
+        cliente = obter_cliente(c.url, c.token)
+        # Duas formas de parâmetro, como na edge: `agentId` primeiro, `name`
+        # como alternativa. Só insiste quando a recusa foi de validação — erro
+        # de outra natureza não melhora tentando o outro formato.
+        for params in ({"agentId": alvo["oid"]}, {"name": alvo["name"] or alvo["oid"]}):
+            try:
+                await cliente.chamar("agents.delete", params)
+                removido = True
+                break
+            except ErroGateway as e:
+                msg = str(e).lower()
+                if "not found" in msg or "does not exist" in msg or "no such" in msg:
+                    removido = True  # já não existia lá
+                    break
+                aviso = str(e)
+                if "unexpected property" not in msg and "invalid" not in msg:
+                    break
+    except ErroGateway as e:
+        aviso = str(e)
+
+    async with sessao(role="service_role") as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "DELETE FROM public.agent_profiles "
+                "WHERE agent_id = $1 OR openclaw_id = $2",
+                alvo["agent_id"], alvo["oid"],
+            )
+            # Limpeza do que depende do agente. `best effort` na edge; aqui vai
+            # na mesma transação, que é mais forte e não custa nada.
+            for tabela in ("agent_avatars", "agent_integrations"):
+                await conn.execute(
+                    f"DELETE FROM public.{tabela} WHERE agent_id = ANY($1::text[])",
+                    [alvo["agent_id"], alvo["oid"]],
+                )
+
+    logger.info(
+        "Agente %s excluído (gateway: %s)", aid, "ok" if removido else f"falhou — {aviso}"
+    )
+    return ExclusaoAgenteOut(
+        agent_id=aid, removido_do_gateway=removido, aviso_gateway=None if removido else aviso
+    )

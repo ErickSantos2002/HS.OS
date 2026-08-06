@@ -33,7 +33,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Loader2, X, Crown, Link2, Bot, Globe, Lock, Users as UsersIcon, Camera, RefreshCw, Sparkles, AlertTriangle, CheckCircle2, XCircle, Zap } from "lucide-react";
 import { api } from "@/lib/api";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAgentAvatar } from "@/hooks/use-agent-avatar";
 import { AvatarCropDialog } from "@/components/AvatarCropDialog";
@@ -194,14 +193,6 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
     const leaders = others.filter((a) => a.is_leader);
     return leaders.length > 0 ? leaders : others;
   })();
-
-  const callEdge = async (fn: string, body: any) => {
-    const { data, error } = await supabase.functions.invoke(fn, { body });
-    if (error || data?.success === false) {
-      throw new Error(data?.error || error?.message || "Erro desconhecido");
-    }
-    return data;
-  };
 
   /** Grava o perfil pela nossa API. Substitui a edge `update-agent-profile`.
    *
@@ -375,11 +366,7 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
     }
     setDeleting(true);
     try {
-      await callEdge("delete-agent", {
-        agent_id: agent.openclaw_id ?? agent.agent_id,
-        profile_agent_id: agent.agent_id,
-        name: form.name,
-      });
+      await api(`/agents/${encodeURIComponent(agent.agent_id)}`, { method: "DELETE" });
       toast({ title: "Agente excluído" });
       setShowDeleteConfirm(false);
       onDeleted?.();

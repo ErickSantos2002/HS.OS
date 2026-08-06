@@ -260,3 +260,52 @@ async def criar_conta(
 
     logger.info("Conta criada por %s: %s (%s)", usuario.id, dados.email, dados.role)
     return PerfilOut(**dict(linha))
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def excluir_conta(
+    user_id: str,
+    usuario: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Apaga a conta e o que depende dela.
+
+    Portado de `delete-user`. A ordem das exclusões não é estilo: **não há
+    cascade a partir de `auth.users` neste projeto** — o comentário da edge diz
+    isso com todas as letras — então as tabelas dependentes têm que sair antes,
+    senão a FK barra a última linha.
+
+    A edge limpava `user_roles`, `channel_members` e `profiles`. Mantido igual:
+    se alguma outra FK barrar, o erro sobe em vez de a conta sumir pela metade.
+    """
+    if user_id == usuario.id:
+        # Vinha da edge. Sem isto, um super_admin sozinho apaga a si mesmo e a
+        # instalação fica sem administrador nenhum.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Você não pode excluir a própria conta."
+        )
+
+    async with sessao(role="service_role") as conn:
+        existe = await conn.fetchval(
+            "SELECT 1 FROM auth.users WHERE id = $1::uuid", user_id
+        )
+        if not existe:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuário não encontrado.")
+
+        async with conn.transaction():
+            await conn.execute(
+                "DELETE FROM public.user_roles WHERE user_id = $1::uuid", user_id
+            )
+            await conn.execute(
+                # ⚠️ `channel_members.user_id` é **text**, não uuid — um canal
+                # também tem agente como membro, e `agent_id` é texto. Comparar
+                # com `$1::uuid` dá "operator does not exist: text = uuid". O
+                # `.eq()` do Supabase mandava string e escondia a diferença.
+                "DELETE FROM public.channel_members WHERE user_id = $1", user_id
+            )
+            await conn.execute("DELETE FROM public.profiles WHERE id = $1::uuid", user_id)
+            await conn.execute("DELETE FROM auth.users WHERE id = $1::uuid", user_id)
+            await _registrar_acesso(
+                conn, usuario.id, "delete_user", {"deleted_user": user_id}
+            )
+
+    logger.info("Conta %s excluída por %s", user_id, usuario.id)

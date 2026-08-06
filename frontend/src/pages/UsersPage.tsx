@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { api } from "@/lib/api";
 import { useAuthContext } from "@/contexts/auth-context";
 import { Input } from "@/components/ui/input";
@@ -406,45 +405,41 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
     if (!deleteTarget) return;
     setDeleting(true);
     if (deleteTarget.kind === "human") {
-      const { data, error } = await supabase.functions.invoke("delete-user", {
-        body: { user_id: deleteTarget.id },
-      });
-      if (error || data?.error) {
-        toast({
-          title: "Erro ao excluir",
-          description: data?.error || error?.message || "Erro desconhecido",
-          variant: "destructive",
-        });
-      } else {
+      try {
+        await api(`/profiles/${encodeURIComponent(deleteTarget.id)}`, { method: "DELETE" });
         toast({ title: "Usuário excluído" });
         setDeleteTarget(null);
         fetchAll();
-      }
-    } else {
-      // Hard-delete agent: remove from OpenClaw + Supabase
-      const agent = deleteTarget as AgentRow;
-      const { data, error } = await supabase.functions.invoke("delete-agent", {
-        body: {
-          agent_id: agent.openclaw_id ?? agent.id,
-          profile_agent_id: agent.id,
-          name: agent.name,
-        },
-      });
-      if (error || data?.error) {
+      } catch (e) {
         toast({
-          title: "Erro ao excluir agente",
-          description: data?.error || error?.message || "Erro desconhecido",
+          title: "Erro ao excluir",
+          description: (e as Error).message,
           variant: "destructive",
         });
-      } else {
+      }
+    } else {
+      // Exclusão dura do agente: sai do OpenClaw e do nosso banco. O `agent_id`
+      // basta — o endpoint resolve o `openclaw_id` sozinho.
+      const agent = deleteTarget as AgentRow;
+      try {
+        const d = await api<{ removido_do_gateway: boolean; aviso_gateway: string | null }>(
+          `/agents/${encodeURIComponent(agent.id)}`,
+          { method: "DELETE" },
+        );
         toast({
           title: "Agente excluído",
-          description: data?.openclaw_warning
-            ? `Removido do banco. Aviso OpenClaw: ${data.openclaw_warning}`
-            : "Removido do OpenClaw e do HS.OS.",
+          description: d.removido_do_gateway
+            ? "Removido do OpenClaw e do HS.OS."
+            : `Removido do banco. Aviso do gateway: ${d.aviso_gateway}`,
         });
         setDeleteTarget(null);
         fetchAll();
+      } catch (e) {
+        toast({
+          title: "Erro ao excluir agente",
+          description: (e as Error).message,
+          variant: "destructive",
+        });
       }
     }
     setDeleting(false);
