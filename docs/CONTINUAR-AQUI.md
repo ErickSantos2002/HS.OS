@@ -21,8 +21,11 @@ Tudo abaixo está verificado **no navegador**, não só por endpoint:
 
 ## Placar
 
-**25 de 73** edge functions com substituto · **60** ainda na pasta ·
-**23** ainda referenciadas pelo front · **20 de 113** arquivos do front sem Supabase.
+**45 de 73** edge functions com substituto · **40** ainda na pasta ·
+**20 de 113** arquivos do front sem Supabase.
+
+O `ls backend/supabase/functions | grep -v _shared | wc -l` agora é a medida
+honesta: tudo que tem substituto saiu da pasta.
 
 ## ⚠️ Antes de confiar em qualquer verificação
 
@@ -59,12 +62,20 @@ travam o placar.
    cinco ações: `list`, `save`, `remove`, `discover`, `discover_status`. As outras
    (`ops_pull`, `ops_report`) servem a um worker na VPS, não ao navegador. Usa a
    tabela `llm_provider_ops` como fila de trabalho.
-2. **`agent-task`** (706 linhas) — Loop Architecture, tarefas longas com
-   `checkpoint_data`. Referenciada em 3 arquivos.
-3. **`skill-manage`** — skills dos agentes, 2 arquivos.
-4. **As 37 sem referência do front** — dá para portar sem tocar na tela, e várias
-   são pequenas. Boa fila para ganhar placar rápido: `log-agent-activity`,
-   `check-integration-keys`, `routine-phrases`, `artifact-query`.
+2. **`agent-task`** (706 linhas) + **`turn-reconciler`** (864) — Loop Architecture,
+   tarefas longas com `checkpoint_data`. São as duas maiores do que sobrou.
+3. **`skill-manage`**, **`generate-document`**, **`warroom-feed`** — médias, com
+   tela por trás.
+4. **`monitoring-proxy`** — ⚠️ proxia para `${gateway}/api/monitoring/*`, que é REST.
+   Provavelmente 404 como as outras rotas REST do gateway. **Confirme antes de
+   portar**, senão você reescreve algo que não tem para onde apontar.
+
+**Padrão que funcionou bem hoje:** os endpoints máquina-a-máquina (a VPS chamando
+a plataforma) estão todos em `app/routers/integracoes.py`, com a autenticação por
+segredo compartilhado em `app/integracoes.py`. Function nova desse tipo entra lá.
+
+⚠️ **O cache de segredo é de 60 segundos.** Ao testar um endpoint desses logo
+depois de gravar o segredo, espere o cache expirar ou o 401 vai confundir.
 
 ## Pendências de infraestrutura que a portagem criou
 
