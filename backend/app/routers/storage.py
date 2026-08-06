@@ -78,6 +78,88 @@ class ArquivoOut(BaseModel):
     size: int
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Extração de texto — metade determinística do `extract-file-text`
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ⚠️ A edge fazia **duas** coisas: extrair o texto (determinístico) e depois
+# mandá-lo para `parse-company-context`, que usa LLM para virar campos do
+# `company_profile`. Só a primeira está aqui.
+#
+# A segunda depende do **Lovable AI Gateway** (`LOVABLE_API_KEY`,
+# `google/gemini-2.5-flash`) — dependência da plataforma de origem, que é
+# justamente o que a migração existe para remover. Trocar de provedor custa
+# dinheiro e é decisão do Erick; ver `docs/ROADMAP.md`.
+
+_LIMITE_TEXTO = 50_000
+
+
+class TextoExtraidoOut(BaseModel):
+    text: str
+    caracteres: int
+    truncado: bool
+
+
+@router.post("/extrair-texto/{bucket}/{caminho:path}", response_model=TextoExtraidoOut)
+async def extrair_texto(
+    bucket: str,
+    caminho: str,
+    _: Usuario = Depends(usuario_atual),
+):
+    """Texto de um arquivo já enviado. Aceita `.txt`, `.md`, `.pdf` e `.docx`.
+
+    ⚠️ Declarado **antes** do upload genérico: `POST /storage/{bucket}/{caminho}`
+    casaria com esta URL, tomando `extrair-texto` como nome de bucket.
+
+    Recebe o caminho no storage em vez do arquivo porque é assim que a tela já
+    trabalha: ela sobe o documento primeiro e depois pede o processamento,
+    mandando só `storagePath`.
+    """
+    alvo = _resolver(bucket, caminho)
+    if not alvo.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Arquivo não encontrado.")
+
+    ext = alvo.suffix.lower().lstrip(".")
+    try:
+        if ext in ("txt", "md"):
+            texto = alvo.read_text(encoding="utf-8", errors="replace")
+        elif ext == "pdf":
+            from pypdf import PdfReader
+
+            leitor = PdfReader(str(alvo))
+            texto = "\n".join((p.extract_text() or "") for p in leitor.pages)
+        elif ext == "docx":
+            import docx
+
+            texto = "\n".join(p.text for p in docx.Document(str(alvo)).paragraphs)
+        else:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"Formato não suportado: .{ext}. Envie txt, md, pdf ou docx.",
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning("Falha ao extrair texto de %s/%s: %s", bucket, caminho, e)
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Não foi possível ler o arquivo: {e}",
+        )
+
+    if not texto.strip():
+        # PDF de imagem escaneada cai aqui: tem páginas, não tem texto. Dizer
+        # "sem texto extraível" é mais útil que devolver string vazia.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Arquivo sem texto extraível. Se for um PDF escaneado, ele precisa de OCR.",
+        )
+
+    truncado = len(texto) > _LIMITE_TEXTO
+    return TextoExtraidoOut(
+        text=texto[:_LIMITE_TEXTO], caracteres=len(texto), truncado=truncado
+    )
+
+
 @router.post("/{bucket}/{caminho:path}", response_model=ArquivoOut,
              status_code=status.HTTP_201_CREATED)
 async def enviar(

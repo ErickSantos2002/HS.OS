@@ -80,6 +80,27 @@ As exceções já decididas e fechadas: o vazamento do `admin_token` para o nave
 (Lote 1) e os achados de segurança da auditoria. Fora dessas, reaproveitar o
 comportamento, não só o contrato.
 
+🔴 **Bloqueio: três functions dependem do Lovable AI Gateway.**
+`transcribe-audio`, `chat-image-vision` e `parse-company-context` chamam
+`ai.gateway.lovable.dev` com `LOVABLE_API_KEY` e `google/gemini-2.5-flash`. É
+dependência da **plataforma de origem** — exatamente o que a migração existe para
+remover — e não sai sem escolher outro provedor de LLM multimodal, o que custa
+dinheiro. Afeta: transcrever áudio no chat, descrever imagem anexada, e preencher
+o perfil da empresa a partir de um documento.
+
+Três caminhos, todos com custo:
+1. **Chave direta de provedor** (Gemini ou OpenAI). Mais simples; some a Lovable,
+   entra uma conta nova.
+2. **Pelo OpenClaw**, que a HS já paga. Mas `/v1/chat/completions` é 404 e o
+   `chat.send` manda mensagem para um agente — transcrição entraria no histórico
+   dele e gastaria contexto.
+3. **Desligar as três** e assumir que áudio não transcreve, imagem não é descrita
+   e o perfil da empresa é preenchido à mão.
+
+A metade determinística do `extract-file-text` **já foi portada** e funciona sem
+LLM nenhuma: `POST /storage/extrair-texto/{bucket}/{caminho}` devolve o texto de
+txt, md, pdf e docx.
+
 **Melhorias adiadas** (portadas como estavam, corrigir depois da reconstrução):
 - `POST /agents/leadership/sync` — o botão da UI devolve ao banco os mesmos valores
   que leu; nunca muda nada. Quem faz o trabalho de verdade é o orquestrador na VPS.
