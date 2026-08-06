@@ -1,6 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { toCanonicalAgentId } from "@/lib/agent-id";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
+import { enviarArquivo, removerArquivos, urlPublica } from "@/lib/storage";
+
+/** O que `/agents` devolve e este hook usa. */
+interface AgenteComAvatar {
+  id: string;
+  openclawId: string | null;
+  avatarUrl: string | null;
+}
 
 // In-memory cache for sync access from components that don't use the hook
 const avatarCache = new Map<string, string>();
@@ -36,8 +44,7 @@ function addCandidate(candidates: string[], url: string | null | undefined) {
 }
 
 function buildPublicAvatarUrl(path: string) {
-  const { data } = supabase.storage.from("agent-files").getPublicUrl(path);
-  return withCacheBust(data.publicUrl);
+  return withCacheBust(urlPublica("agent-files", path));
 }
 
 async function canLoadImage(url: string): Promise<boolean> {
@@ -99,10 +106,10 @@ let allAvatarsPromise: Promise<Record<string, string>> | null = null;
 
 export async function loadAllAvatars(): Promise<Record<string, string>> {
   // Only fetch lightweight avatar_url column — never avatar_data
-  const [avatarRows, profileRows] = await Promise.all([
-    supabase.from("agent_avatars").select("agent_id, avatar_url"),
-    supabase.from("agent_profiles").select("agent_id, openclaw_id, avatar_url"),
-  ]);
+  // Antes eram duas consultas — `agent_avatars` e `agent_profiles`. O
+  // `/agents` já junta as duas fontes no servidor e devolve `avatarUrl`, então
+  // basta uma. A tabela `agent_avatars` deixou de ser lida daqui.
+  const { agents } = await api<{ agents: AgenteComAvatar[] }>("/agents?incluir_inativos=true");
 
   const candidatesByAgent = new Map<string, string[]>();
   const ensureCandidates = (agentId: string) => {
@@ -113,17 +120,14 @@ export async function loadAllAvatars(): Promise<Record<string, string>> {
     return existing;
   };
 
-  for (const row of (avatarRows.data ?? []) as Array<{ agent_id: string; avatar_url: string | null }>) {
-    const candidates = ensureCandidates(row.agent_id);
-    if (candidates) addCandidate(candidates, row.avatar_url);
-  }
-
-  for (const row of (profileRows.data ?? []) as Array<{ agent_id: string; openclaw_id: string | null; avatar_url: string | null }>) {
-    const candidates = ensureCandidates(row.agent_id);
-    if (candidates) addCandidate(candidates, row.avatar_url);
-    if (row.openclaw_id && row.openclaw_id !== row.agent_id) {
-      const aliasCandidates = ensureCandidates(row.openclaw_id);
-      if (aliasCandidates) addCandidate(aliasCandidates, row.avatar_url);
+  for (const row of agents) {
+    const candidates = ensureCandidates(row.id);
+    if (candidates) addCandidate(candidates, row.avatarUrl);
+    // O agente pode ser referido pelo id do gateway; o alias aponta para a
+    // mesma foto.
+    if (row.openclawId && row.openclawId !== row.id) {
+      const alias = ensureCandidates(row.openclawId);
+      if (alias) addCandidate(alias, row.avatarUrl);
     }
   }
 
@@ -174,21 +178,16 @@ export async function loadAllAvatars(): Promise<Record<string, string>> {
 
 async function loadAvatarForAgent(canonical: string): Promise<string | null> {
   const candidates: string[] = [];
-  const [avatarRow, profileRows] = await Promise.all([
-    supabase
-      .from("agent_avatars")
-      .select("avatar_url")
-      .eq("agent_id", canonical)
-      .maybeSingle(),
-    supabase
-      .from("agent_profiles")
-      .select("agent_id, openclaw_id, avatar_url")
-      .or(`agent_id.eq.${canonical},openclaw_id.eq.${canonical}`),
-  ]);
-
-  addCandidate(candidates, avatarRow.data?.avatar_url ?? null);
-  for (const row of (profileRows.data ?? []) as Array<{ avatar_url: string | null }>) {
-    addCandidate(candidates, row.avatar_url);
+  try {
+    const { agents } = await api<{ agents: AgenteComAvatar[] }>("/agents?incluir_inativos=true");
+    for (const row of agents) {
+      if (canonicalizeAgentId(row.id) === canonical
+          || (row.openclawId && canonicalizeAgentId(row.openclawId) === canonical)) {
+        addCandidate(candidates, row.avatarUrl);
+      }
+    }
+  } catch (e) {
+    console.warn("[avatar] Não foi possível consultar os agentes:", e);
   }
 
   const saved = await firstLoadableAvatar(candidates);
@@ -259,15 +258,10 @@ async function uploadAvatarToStorage(agentId: string, dataUrl: string): Promise<
   const path = `avatars/${agentId}.${ext}`;
 
   // Upload (upsert)
-  const { error } = await supabase.storage
-    .from("agent-files")
-    .upload(path, blob, { upsert: true, contentType: blob.type });
-
-  if (error) throw error;
-
-  const { data } = supabase.storage.from("agent-files").getPublicUrl(path);
-  // Add cache-busting param
-  return `${data.publicUrl}?t=${Date.now()}`;
+  await enviarArquivo("agent-files", path, blob, `avatar.${ext}`);
+  // O caminho é sempre o mesmo, então sem o `?t=` o navegador mostraria a foto
+  // anterior até o cache expirar.
+  return `${urlPublica("agent-files", path)}?t=${Date.now()}`;
 }
 
 export function useAgentAvatar(agentId: string) {
@@ -296,16 +290,25 @@ export function useAgentAvatar(agentId: string) {
       const publicUrl = await uploadAvatarToStorage(canonical, dataUrl);
       avatarCache.set(canonical, publicUrl);
       setAvatarState(publicUrl);
-      await supabase.from("agent_avatars").upsert(
-        { agent_id: canonical, avatar_url: publicUrl, avatar_data: "migrated", updated_at: new Date().toISOString() },
-        { onConflict: "agent_id" }
-      );
+      // A URL passa a viver em `agent_profiles.avatar_url`, que é o que o
+      // `/agents` devolve. A tabela `agent_avatars` sai do caminho.
+      await api(`/agents/${encodeURIComponent(canonical)}`, {
+        method: "PATCH",
+        body: { avatar_url: publicUrl },
+      });
     } else {
       avatarCache.delete(canonical);
       setAvatarState(null);
-      await supabase.from("agent_avatars").delete().eq("agent_id", canonical);
-      // Also delete from storage
-      await supabase.storage.from("agent-files").remove([`avatars/${canonical}.png`, `avatars/${canonical}.jpg`]);
+      await api(`/agents/${encodeURIComponent(canonical)}`, {
+        method: "PATCH",
+        body: { avatar_url: null },
+      });
+      // As duas extensões: a tela não sabe qual foi gravada, e apagar o que não
+      // existe não é erro.
+      await removerArquivos("agent-files", [
+        `avatars/${canonical}.png`,
+        `avatars/${canonical}.jpg`,
+      ]);
     }
   }, [canonical]);
 

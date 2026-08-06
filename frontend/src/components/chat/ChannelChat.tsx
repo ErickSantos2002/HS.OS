@@ -1,4 +1,5 @@
 import { Fragment, memo, useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from "react";
+import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useChannelMessages, useChannelMembers, Channel, ChannelMessage, ChannelAttachment } from "@/hooks/use-channels";
 import { usePeople } from "@/hooks/use-people";
@@ -1587,16 +1588,16 @@ export default function ChannelChat({
 
       const ext = getAudioFileExtension(blob.type);
       const fileName = `${channel.id}/${Date.now()}.${ext}`;
-      const { error: uploadErr } = await supabase.storage.from("audio-messages").upload(fileName, blob, { contentType: blob.type });
-      if (uploadErr) {
+      try {
+        await enviarArquivo("audio-messages", fileName, blob, `audio.${ext}`);
+      } catch (uploadErr) {
         console.error("Upload error:", uploadErr);
         toast.error("Falha ao enviar o áudio.");
         recorder.setIsProcessing(false);
         return;
       }
 
-      const { data: urlData } = supabase.storage.from("audio-messages").getPublicUrl(fileName);
-      const audioUrl = urlData.publicUrl;
+      const audioUrl = urlPublica("audio-messages", fileName);
       const formData = new FormData();
       formData.append("file", blob, `audio.${ext}`);
       const { data: transcribeData, error: transcribeErr } = await supabase.functions.invoke("transcribe-audio", { body: formData });

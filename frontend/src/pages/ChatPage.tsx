@@ -1,6 +1,8 @@
 import React, { Fragment, useState, useRef, useEffect, useCallback, useMemo, useLayoutEffect } from "react";
 import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { enviarArquivo, urlPublica } from "@/lib/storage";
+import { api } from "@/lib/api";
 
 import { useAllAvatars, useResolvedAgentAvatar } from "@/hooks/use-agent-avatar";
 import { useAgents } from "@/hooks/use-agents";
@@ -2271,11 +2273,22 @@ export default function ChatPage() {
       const ext = getAudioFileExtension(blob.type);
       const fileName = `${Date.now()}.${ext}`;
       const filePath = `${user.id}/${effectiveAgentId}/${fileName}`;
-      const { error: uploadError } = await supabase.storage.from("audio-messages").upload(filePath, blob, { contentType: blob.type });
-      if (uploadError) { toast.error("Erro ao enviar áudio."); return; }
-      const { data: urlData } = supabase.storage.from("audio-messages").getPublicUrl(filePath);
-      const audioUrl = urlData.publicUrl;
-      await supabase.from("conversations").insert({ agent_id: effectiveAgentId, user_id: user.id, role: "user", content: "🎤 Mensagem de voz", media: [{ type: "audio", url: audioUrl, name: fileName }] as any });
+      try {
+        await enviarArquivo("audio-messages", filePath, blob, `audio.${ext}`);
+      } catch {
+        toast.error("Erro ao enviar áudio.");
+        return;
+      }
+      const audioUrl = urlPublica("audio-messages", filePath);
+      // O `user_id` sai do token no servidor.
+      await api(`/conversations/${encodeURIComponent(effectiveAgentId)}`, {
+        method: "POST",
+        body: {
+          role: "user",
+          content: "🎤 Mensagem de voz",
+          media: [{ type: "audio", url: audioUrl, name: fileName }],
+        },
+      });
     } catch (err) {
       console.error("Audio send error:", err);
       toast.error("Erro ao enviar áudio.");

@@ -37,3 +37,4 @@ __pycache__/
 
 # Artefatos do Playwright MCP
 .playwright-mcp/
+backend/.uploads/

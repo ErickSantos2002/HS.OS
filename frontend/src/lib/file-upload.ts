@@ -2,7 +2,7 @@
  * File upload to Supabase Storage + text extraction for documents.
  */
 
-import { supabase } from "@/integrations/supabase/client";
+import { enviarArquivo, urlPublica, type Bucket } from "@/lib/storage";
 
 const MAX_TEXT_CHARS = 50_000;
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -104,8 +104,7 @@ function refreshStorageUrl(url: string): string {
     if (!m) return url;
     const bucket = decodeURIComponent(m[1]);
     const path = decodeURIComponent(m[2]);
-    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-    return data?.publicUrl || url;
+    return urlPublica(bucket as Bucket, path) || url;
   } catch {
     return url;
   }
@@ -189,40 +188,17 @@ export async function uploadFileToStorage(
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const path = `${bucketPath}/${timestamp}_${safeName}`;
 
-  const { data: uploadData, error } = await supabase.storage
-    .from("agent-files")
-    .upload(path, file, { upsert: true, contentType: file.type || "application/octet-stream" });
+  // A conferência de que o objeto existe saiu junto com o `list()`: aqui o
+  // upload só responde 201 depois de o arquivo estar gravado em disco, e
+  // qualquer falha vira exceção. Não há o "sucesso silencioso" contra o qual
+  // aquela checagem defendia.
+  const enviado = await enviarArquivo("agent-files", path, file, file.name);
 
-  if (error) {
-    console.error("[file-upload] storage.upload failed:", error, { path, size: file.size });
-    throw new Error(`Upload falhou: ${error.message}`);
-  }
-  if (!uploadData?.path) {
-    throw new Error("Upload falhou: storage não retornou caminho do objeto.");
-  }
-
-  // Verify the object actually exists (defensive check against silent failures)
-  const { data: head } = await supabase.storage
-    .from("agent-files")
-    .list(path.substring(0, path.lastIndexOf("/")), {
-      search: path.substring(path.lastIndexOf("/") + 1),
-      limit: 1,
-    });
-  if (!head || head.length === 0) {
-    throw new Error("Upload reportou sucesso mas o arquivo não foi persistido no storage.");
-  }
-
-  const { data: signedData, error: signedError } = await supabase.storage
-    .from("agent-files")
-    .createSignedUrl(path, 60 * 60 * 24 * 30); // 30 days
-
-  if (signedError || !signedData?.signedUrl) {
-    // Fallback to public URL if signed URL fails
-    const { data } = supabase.storage.from("agent-files").getPublicUrl(path);
-    return data.publicUrl;
-  }
-
-  return signedData.signedUrl;
+  // Não há URL assinada: `agent-files` é bucket de leitura pública, como já era
+  // no Supabase (o `createSignedUrl` tinha `getPublicUrl` como fallback e caía
+  // nele sempre que a assinatura falhava). O agente precisa buscar o arquivo
+  // sozinho, do lado do gateway, e não teria como carregar nosso token.
+  return `${window.location.origin}${enviado.url}`;
 }
 
 export async function extractTextFromFileUrl(

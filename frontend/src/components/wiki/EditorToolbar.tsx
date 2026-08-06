@@ -7,7 +7,8 @@ import {
   AlignLeft, AlignCenter, AlignRight, AlignJustify, MoveVertical,
   Table as TableIcon, Plus, Trash2, Rows, Columns,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { enviarArquivo, urlPublica } from "@/lib/storage";
+import { lerUsuarioDoToken } from "@/lib/api";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -101,25 +102,20 @@ export function EditorToolbar({ editor, documentId }: Props) {
 
   const uploadFile = async (file: File, kind: "image" | "video" | "attachment") => {
     const ext = file.name.split(".").pop() || "bin";
-    const { data: auth } = await supabase.auth.getUser();
-    const userId = auth?.user?.id;
+    const userId = lerUsuarioDoToken();
     if (!userId) {
       console.error("Upload failed: usuário não autenticado");
       return;
     }
     const folder = documentId || "misc";
     const path = `${userId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const { error } = await supabase.storage.from("wiki-uploads").upload(path, file, {
-      cacheControl: "3600",
-      upsert: false,
-      contentType: file.type || "application/octet-stream",
-    });
-    if (error) {
-      console.error("Upload failed:", error);
+    try {
+      await enviarArquivo("wiki-uploads", path, file, file.name);
+    } catch (e) {
+      console.error("Upload failed:", e);
       return;
     }
-    const { data: pub } = supabase.storage.from("wiki-uploads").getPublicUrl(path);
-    const url = pub.publicUrl;
+    const url = urlPublica("wiki-uploads", path);
     const resolvedKind: "image" | "video" | "attachment" =
       kind === "attachment"
         ? file.type.startsWith("image/")

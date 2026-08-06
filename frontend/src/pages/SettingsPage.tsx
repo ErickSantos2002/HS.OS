@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { useSearchParams } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { getGatewayConfig, loadGatewayConfig, saveGatewayConfig, testConnection } from "@/lib/gateway";
@@ -326,13 +327,13 @@ export default function SettingsPage() {
     if (!file || !user) return;
     const ext = file.name.split(".").pop() || "png";
     const filePath = `avatars/${user.id}/${Date.now()}.${ext}`;
-    const { error: uploadErr } = await supabase.storage.from("agent-files").upload(filePath, file, { contentType: file.type, upsert: true });
-    if (uploadErr) {
+    try {
+      await enviarArquivo("agent-files", filePath, file, file.name);
+    } catch {
       toast({ title: "Erro ao enviar foto", variant: "destructive" });
       return;
     }
-    const { data: urlData } = supabase.storage.from("agent-files").getPublicUrl(filePath);
-    setAvatarUrl(urlData.publicUrl);
+    setAvatarUrl(urlPublica("agent-files", filePath));
   };
 
   const handleSaveProfile = async () => {

@@ -25,6 +25,8 @@ import type { WikiDocument } from "@/hooks/use-wiki-documents";
 import { useUpdateWikiDocument, useDeleteWikiDocument } from "@/hooks/use-wiki-documents";
 import type { WikiSpace } from "@/hooks/use-wiki-spaces";
 import { supabase } from "@/integrations/supabase/client";
+import { enviarArquivo, urlPublica } from "@/lib/storage";
+import { lerUsuarioDoToken } from "@/lib/api";
 import { SpaceIcon } from "./SpaceIcon";
 import { ResizableImage } from "./ResizableImage";
 import { VideoNode } from "./VideoNode";
@@ -288,21 +290,14 @@ function EditorDropZone({ editor, documentId }: { editor: ReturnType<typeof useE
     if (list.length === 0) return;
     setUploading(true);
     try {
-      const { data: auth } = await supabase.auth.getUser();
-      const userId = auth?.user?.id;
+      const userId = lerUsuarioDoToken();
       if (!userId) throw new Error("Usuário não autenticado para enviar arquivos");
 
       for (const file of list) {
         const ext = file.name.split(".").pop() || "bin";
         const path = `${userId}/${documentId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-        const { error } = await supabase.storage.from("wiki-uploads").upload(path, file, {
-          cacheControl: "3600",
-          upsert: false,
-          contentType: file.type || "application/octet-stream",
-        });
-        if (error) throw error;
-        const { data: pub } = supabase.storage.from("wiki-uploads").getPublicUrl(path);
-        const url = pub.publicUrl;
+        await enviarArquivo("wiki-uploads", path, file, file.name);
+        const url = urlPublica("wiki-uploads", path);
         const endPos = editor.state.doc.content.size;
         const chain = editor.chain().focus().setTextSelection(endPos);
         if (file.type.startsWith("image/")) {

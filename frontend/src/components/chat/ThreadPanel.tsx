@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { format } from "date-fns";
 import { FileText, Loader2, MessageSquare, Mic, Paperclip, Pencil, Send, Smile, Trash2, Users, X, Check, Bot } from "lucide-react";
 import EmojiPickerReact, { Theme as EmojiTheme } from "emoji-picker-react";
@@ -498,17 +499,15 @@ export default function ThreadPanel({
       }
       const ext = getAudioFileExtension(blob.type);
       const fileName = `${channelId}/thread-${rootMessage.id}/${Date.now()}.${ext}`;
-      const { error: uploadErr } = await supabase.storage
-        .from("audio-messages")
-        .upload(fileName, blob, { contentType: blob.type });
-      if (uploadErr) {
+      try {
+        await enviarArquivo("audio-messages", fileName, blob, `audio.${ext}`);
+      } catch (uploadErr) {
         console.error("Thread audio upload error:", uploadErr);
         toast.error("Falha ao enviar o áudio.");
         recorder.setIsProcessing(false);
         return;
       }
-      const { data: urlData } = supabase.storage.from("audio-messages").getPublicUrl(fileName);
-      const audioUrl = urlData.publicUrl;
+      const audioUrl = urlPublica("audio-messages", fileName);
       const formData = new FormData();
       formData.append("file", blob, `audio.${ext}`);
       const { data: transcribeData, error: transcribeErr } = await supabase.functions.invoke("transcribe-audio", { body: formData });

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { enviarArquivo } from "@/lib/storage";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
@@ -164,10 +165,8 @@ export default function EmpresaTab() {
         .replace(/[^a-zA-Z0-9._-]+/g, "_")
         .replace(/_+/g, "_");
       const path = `uploads/${Date.now()}-${safeName}`;
-      const { error: upErr } = await supabase.storage
-        .from("company-docs")
-        .upload(path, file);
-      if (upErr) throw upErr;
+      // `company-docs` é privado: o arquivo só é lido por quem tem token.
+      await enviarArquivo("company-docs", path, file, file.name);
       const { data, error } = await supabase.functions.invoke("extract-file-text", {
         body: { storagePath: path, fileName: file.name },
       });

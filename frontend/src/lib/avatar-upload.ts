@@ -1,4 +1,5 @@
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
+import { enviarArquivo, urlPublica } from "@/lib/storage";
 
 async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   const res = await fetch(dataUrl);
@@ -9,17 +10,11 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
 export async function uploadUserAvatar(userId: string, dataUrl: string): Promise<string> {
   const blob = await dataUrlToBlob(dataUrl);
   const path = `avatars/users/${userId}.png`;
-  const { error } = await supabase.storage
-    .from("agent-files")
-    .upload(path, blob, { upsert: true, contentType: "image/png" });
-  if (error) throw error;
-  const { data } = supabase.storage.from("agent-files").getPublicUrl(path);
-  const url = `${data.publicUrl}?t=${Date.now()}`;
-  const { error: upErr } = await supabase
-    .from("profiles")
-    .update({ avatar_url: url, updated_at: new Date().toISOString() } as any)
-    .eq("id", userId);
-  if (upErr) throw upErr;
+  await enviarArquivo("agent-files", path, blob, "avatar.png");
+  // O `?t=` continua: o caminho é sempre o mesmo, então sem isto o navegador
+  // mostraria a foto antiga do cache até o cabeçalho expirar.
+  const url = `${urlPublica("agent-files", path)}?t=${Date.now()}`;
+  await api("/profiles/me", { method: "PATCH", body: { avatar_url: url } });
   return url;
 }
 
@@ -27,21 +22,11 @@ export async function uploadUserAvatar(userId: string, dataUrl: string): Promise
 export async function uploadAgentAvatar(agentId: string, dataUrl: string): Promise<string> {
   const blob = await dataUrlToBlob(dataUrl);
   const path = `avatars/${agentId}.png`;
-  const { error } = await supabase.storage
-    .from("agent-files")
-    .upload(path, blob, { upsert: true, contentType: "image/png" });
-  if (error) throw error;
-  const { data } = supabase.storage.from("agent-files").getPublicUrl(path);
-  const url = `${data.publicUrl}?t=${Date.now()}`;
-  const { error: upErr } = await supabase.from("agent_avatars").upsert(
-    {
-      agent_id: agentId,
-      avatar_url: url,
-      avatar_data: "migrated",
-      updated_at: new Date().toISOString(),
-    } as any,
-    { onConflict: "agent_id" },
-  );
-  if (upErr) throw upErr;
+  await enviarArquivo("agent-files", path, blob, "avatar.png");
+  const url = `${urlPublica("agent-files", path)}?t=${Date.now()}`;
+  await api(`/agents/${encodeURIComponent(agentId)}`, {
+    method: "PATCH",
+    body: { avatar_url: url },
+  });
   return url;
 }

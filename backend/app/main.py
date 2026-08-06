@@ -15,6 +15,7 @@ from app.routers.chat_extras import router as chat_extras_router
 from app.routers.conversations import router as conversations_router
 from app.routers.gateway import router as gateway_router
 from app.routers.profiles import router as profiles_router
+from app.routers.storage import preparar_diretorios, router as storage_router
 
 # Conforme os domínios forem portados das Edge Functions (backend/supabase/),
 # registre os routers aqui. Um router por domínio, mesmo padrão do TalentHS:
@@ -24,6 +25,7 @@ from app.routers.profiles import router as profiles_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    preparar_diretorios()
     yield
     # A conexão com o gateway é persistente; fechar no shutdown evita deixar
     # socket pendurado no OpenClaw a cada reinício.
@@ -72,3 +74,4 @@ app.include_router(channels_router)
 app.include_router(chat_extras_router)
 app.include_router(gateway_router)
 app.include_router(profiles_router)
+app.include_router(storage_router)

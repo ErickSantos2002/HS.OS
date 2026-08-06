@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { useAgents } from "@/hooks/use-agents";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useChannels, useChannelMessages, useChannelMembers, Channel } from "@/hooks/use-channels";
@@ -158,19 +159,15 @@ export default function ChannelsPage() {
       // 1. Upload to storage
       const ext = getAudioFileExtension(blob.type);
       const fileName = `${selectedChannel.id}/${Date.now()}.${ext}`;
-      const { error: uploadErr } = await supabase.storage
-        .from("audio-messages")
-        .upload(fileName, blob, { contentType: blob.type });
-
-      if (uploadErr) {
+      try {
+        await enviarArquivo("audio-messages", fileName, blob, `audio.${ext}`);
+      } catch (uploadErr) {
         console.error("Upload error:", uploadErr);
         toast.error("Falha ao enviar o áudio.");
         recorder.setIsProcessing(false);
         return;
       }
-
-      const { data: urlData } = supabase.storage.from("audio-messages").getPublicUrl(fileName);
-      const audioUrl = urlData.publicUrl;
+      const audioUrl = urlPublica("audio-messages", fileName);
 
       // 2. Transcribe via edge function
       const formData = new FormData();
