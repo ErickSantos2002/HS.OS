@@ -13,7 +13,7 @@ backend não é o mesmo que a tela usar o endpoint.
 
 | | Feito | Total |
 |---|---|---|
-| Edge functions **com substituto no backend** | 36 | 73 |
+| Edge functions **com substituto no backend** | 37 | 73 |
 | Edge functions **que o front já parou de chamar** | 21 | 73 |
 | Arquivos do front sem Supabase | 20 | 113 |
 | Functions distintas ainda referenciadas pelo front | 23 | — |
