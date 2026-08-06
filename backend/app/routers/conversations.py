@@ -35,7 +35,7 @@ _LIMITE_MAXIMO = 200
 
 _COLUNAS = """
     id::text AS id, agent_id, role, content, media,
-    to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MSOF') AS created_at
+    to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at
 """
 
 
@@ -237,7 +237,6 @@ class EnvioIn(BaseModel):
 
 
 class EnvioOut(BaseModel):
-    message: MensagemOut
     run_id: str
 
 
@@ -287,28 +286,20 @@ async def enviar(
     dados: EnvioIn,
     usuario: Usuario = Depends(usuario_atual),
 ):
-    """Grava a mensagem do usuário e dispara o agente.
+    """Dispara o agente. **Não grava a mensagem do usuário.**
 
-    A gravação vem primeiro de propósito: se o gateway estiver fora, a mensagem
-    do usuário não se perde — ela fica na conversa e dá para reenviar. O
-    contrário (disparar e gravar depois) perderia o que a pessoa escreveu
-    justamente quando algo já está dando errado.
+    Quem grava é o `POST /conversations/{agent_id}`, chamado pela tela antes
+    deste — ela precisa da linha persistida de volta para trocar pela bolha
+    otimista. Gravar aqui também duplicaria a mensagem na conversa.
+
+    A ordem importa e é a que a tela já usava: persistir primeiro, disparar
+    depois. Se o gateway estiver fora, o que a pessoa escreveu continua lá para
+    reenviar.
     """
     c = await cfg.carregar()
     if not c.configurado:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado."
-        )
-
-    async with sessao(role="authenticated", user_id=usuario.id) as conn:
-        linha = await conn.fetchrow(
-            f"""
-            INSERT INTO public.conversations (agent_id, user_id, role, content, media)
-            VALUES ($1, $2::uuid, 'user', $3, $4::jsonb)
-            RETURNING {_COLUNAS}
-            """,
-            agent_id, usuario.id, dados.content,
-            json.dumps(dados.media) if dados.media else None,
         )
 
     chave = _chave_sessao(agent_id, usuario.id)
@@ -333,13 +324,12 @@ async def enviar(
         )
     except ErroGateway as e:
         raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY,
-            f"A mensagem foi salva, mas o agente não pôde ser acionado: {e}",
+            status.HTTP_502_BAD_GATEWAY, f"O agente não pôde ser acionado: {e}"
         )
 
     _SEQ_DO_RUN[run_id] = (agent_id, chave, seq_antes)
     logger.info("Envio para %s por %s: run %s", agent_id, usuario.id, run_id)
-    return EnvioOut(message=_para_saida(linha), run_id=run_id)
+    return EnvioOut(run_id=run_id)
 
 
 # Memória de processo: qual era o `seq` da sessão quando cada run começou. Cabe

@@ -33,9 +33,9 @@ _COLUNAS_MSG = """
     m.id::text AS id, m.channel_id::text AS channel_id, m.author_id,
     m.author_type::text AS author_type, m.author_name, m.author_avatar,
     m.content, m.thread_id::text AS thread_id, m.audio_url, m.attachments,
-    to_char(m.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MSOF') AS created_at,
-    to_char(m.edited_at,  'YYYY-MM-DD"T"HH24:MI:SS.MSOF') AS edited_at,
-    to_char(m.deleted_at, 'YYYY-MM-DD"T"HH24:MI:SS.MSOF') AS deleted_at
+    to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at,
+    to_char(m.edited_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS edited_at,
+    to_char(m.deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS deleted_at
 """
 
 
@@ -126,7 +126,7 @@ async def listar(usuario: Usuario = Depends(usuario_atual)):
             """
             SELECT id::text AS id, name, description, type::text AS type,
                    created_by::text AS created_by,
-                   to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MSOF') AS created_at
+                   to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at
               FROM public.channels ORDER BY created_at
             """
         )
@@ -157,7 +157,7 @@ async def criar(dados: CanalIn, usuario: Usuario = Depends(usuario_atual)):
                 VALUES ($1, $2, $3::public.channel_type, $4::uuid)
                 RETURNING id::text AS id, name, description, type::text AS type,
                           created_by::text AS created_by,
-                          to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MSOF') AS created_at
+                          to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at
                 """,
                 dados.name, dados.description or None, dados.type, usuario.id,
             )
@@ -201,7 +201,7 @@ async def membros(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
         linhas = await conn.fetch(
             """
             SELECT channel_id::text AS channel_id, user_id, member_type,
-                   to_char(joined_at, 'YYYY-MM-DD"T"HH24:MI:SS.MSOF') AS joined_at
+                   to_char(joined_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS joined_at
               FROM public.channel_members WHERE channel_id = $1::uuid
              ORDER BY joined_at
             """,

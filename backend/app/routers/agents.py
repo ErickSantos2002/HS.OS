@@ -121,7 +121,7 @@ async def listar(
                    -- Presença: a tela derivava online/recente/offline da distância
                    -- até `latest_updated_at`. Sem este join todo mundo apareceria
                    -- offline.
-                   to_char(s.latest_updated_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS last_active
+                   to_char(s.latest_updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS last_active
               FROM public.agent_profiles p
               LEFT JOIN public.agent_stats s ON s.agent_id = p.agent_id
              WHERE ($1::bool OR p.status IS DISTINCT FROM 'inactive')

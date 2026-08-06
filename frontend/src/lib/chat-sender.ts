@@ -13,6 +13,8 @@ import { getAgentReadableImageContext } from "@/lib/chat-image-vision";
 import { getModelForAgent } from "@/lib/active-agents";
 import { appendToConversations, conversationRowToMessage } from "@/lib/chat-persistence";
 import { getModelOverride } from "@/lib/agent-model-override";
+import { enviarParaAgente } from "@/lib/agent-chat";
+import { lerUsuarioDoToken } from "@/lib/api";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 import type { ChatMessage, MediaAttachment } from "@/lib/mock-data";
 import { QueryClient } from "@tanstack/react-query";
@@ -1428,692 +1430,96 @@ export function sendMessageInBackground(
   stoppedAgents.delete(agentId);
   pendingAgents.add(agentId);
   emitPending();
-  
-
 
   const run = async () => {
     const controller = new AbortController();
     const requestId = `${agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     activeAgentRequests.set(agentId, { controller, requestId });
 
-    // Tracks streamed text so we can preserve it on timeout/abort
-    const accumulatedRef = { current: "" };
+    let userId: string | undefined;
+    try {
+      userId = lerUsuarioDoToken() ?? undefined;
 
-    // Instrumentação (Bloco 2): mede a decomposição do tempo do turno (pré-voo →
-    // 1º token → total) para diagnosticar os 7-20s. Só console, fire-and-forget,
-    // sem alterar comportamento.
-    const timings = { t0: Date.now(), prevoo: 0, firstToken: 0 };
-
-    let _userId: string | undefined;
-    let _userMessageTimestamp = new Date().toISOString();
-
-
-    // ── Slash command interception ──
-    // Commands like /compact, /new, /reset must go to the command endpoint,
-    // not the chat completions endpoint.
-    const lastMsg = fullHistory[fullHistory.length - 1];
-    const lastText = lastMsg?.role === "user" ? (lastMsg.content ?? "").trim() : "";
-    if (lastText.startsWith("/")) {
-      const resetCmd = isResetCommand(lastText);
-
-      // ── Reset (/new, /reset): 100% client-side, sem tocar no gateway ──
-      // Antes isso ia como mensagem de chat pro gateway e NÃO resetava nada (só
-      // voltava uma resposta do modelo — o /new "mentia"). Agora incrementamos a
-      // geração da sessão: a próxima mensagem usa uma chave nova e o gateway abre
-      // uma sessão zerada. A sessão antiga fica inerte. Não apaga memória nem
-      // identidade do agente — é o mesmo agente, só a conversa recomeça.
-      if (resetCmd) {
-        const canonicalAgentId = toCanonicalAgentId(agentId);
-        const gen = bumpSessionGen(canonicalAgentId);
-        console.log(`[chat-sender] Reset ${lastText} — geração da sessão de ${canonicalAgentId} agora é g${gen}`);
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          const userId = session?.user?.id;
-          toast("Nova sessão iniciada", {
-            icon: createElement(RefreshCw, { className: "h-4 w-4" }),
-          });
-          const cmdMsg: ChatMessage = {
-            id: `m${Date.now()}reset`,
-            agentId,
-            channel: "dm",
-            role: "agent",
-            content: "Nova sessão iniciada. Contexto anterior arquivado — recomeçamos do zero.",
-            timestamp: new Date().toISOString(),
-          };
-          // Emitir a mensagem PERSISTIDA (com id do banco), não o cmdMsg local:
-          // a subscription realtime de conversas também renderiza a linha inserida,
-          // e a UI deduplica por id. Emitir o cmdMsg (id diferente) duplicaria.
-          let emittedReset = cmdMsg;
-          if (userId) {
-            try {
-              emittedReset = await appendToConversations(userId, agentId, cmdMsg);
-            } catch (e) {
-              console.warn("[chat-sender] persist reset reply failed:", e);
-            }
-          }
-          emitStream(agentId, "");
-          emitUpdate(agentId, emittedReset);
-        } finally {
-          pendingAgents.delete(agentId);
-          activeAgentRequests.delete(agentId);
-          emitPending();
-        }
+      // O texto do turno é a ÚLTIMA mensagem do usuário, só ela. O histórico
+      // inteiro não vai mais junto: quem guarda a conversa é a sessão do agente
+      // no gateway, e reenviar o passado duplicaria o contexto.
+      const ultima = [...fullHistory].reverse().find((m) => m.role === "user");
+      const texto = typeof ultima?.content === "string" ? ultima.content.trim() : "";
+      if (!texto) {
+        console.warn("[chat-sender] Nada a enviar — turno sem mensagem de usuário.");
         return;
       }
 
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const userId = session?.user?.id;
-        console.log("[chat-sender] Slash command detected — routing via gateway-chat", {
-          agentId: toCanonicalAgentId(agentId),
-          text: lastText,
-          resetCmd,
-        });
-
-        let replyText: string;
-        try {
-          replyText = await runSlashCommandViaEdge(agentId, lastText, controller.signal);
-        } catch (innerErr) {
-          // Reset commands intentionally tear the session down on the gateway,
-          // which frequently aborts the in-flight request. Treat abort-like
-          // errors as success — the reset already happened server-side.
-          if (resetCmd && isAbortLikeError(innerErr)) {
-            replyText = "Nova sessão iniciada.";
-          } else {
-            throw innerErr;
-          }
-        }
-
-        // For /new and /reset, normalize gateway "Comando falhou" into a
-        // clean success — the reset routinely closes the connection before
-        // the ack lands, but the session on the gateway is already fresh.
-        if (resetCmd) {
-          if (typeof replyText === "string" && replyText.includes("Comando falhou")) {
-            replyText = "Nova sessão iniciada.";
-          }
-          toast("Nova sessão iniciada", {
-            icon: createElement(RefreshCw, { className: "h-4 w-4" }),
-          });
-        } else {
-          // Catch-all for any other slash command (e.g. /compact).
-          // Success → confirmation toast. Unknown/failed → warning toast.
-          const failed =
-            typeof replyText === "string" &&
-            (/comando falhou/i.test(replyText) ||
-              /unknown command|not recognized|não reconhecido|não encontrado/i.test(replyText));
-          if (failed) {
-            toast(`Comando não reconhecido: ${lastText}`, {
-              icon: createElement(AlertCircle, { className: "h-4 w-4" }),
-            });
-          } else {
-            toast("Comando executado", {
-              icon: createElement(Check, { className: "h-4 w-4" }),
-            });
-          }
-        }
-
-        const cmdMsg: ChatMessage = {
-          id: `m${Date.now()}cmd`,
-          agentId,
-          channel: "dm",
-          role: "agent",
-          content: replyText,
-          timestamp: new Date().toISOString(),
-        };
-        if (userId) {
-          await appendToConversations(userId, agentId, cmdMsg).catch((e) =>
-            console.warn("[chat-sender] persist slash reply failed:", e)
-          );
-        }
-        emitStream(agentId, "");
-        emitUpdate(agentId, cmdMsg);
-      } catch (err: any) {
-        if (err?.name !== "AbortError") {
-          console.error("[chat-sender] Slash command error:", err);
-          const errMsg: ChatMessage = {
-            id: `m${Date.now()}cmderr`,
-            agentId,
-            channel: "dm",
-            role: "agent",
-            content: `Erro ao executar comando: ${err?.message ?? String(err)}`,
-            timestamp: new Date().toISOString(),
-          };
-          emitStream(agentId, "");
-          emitUpdate(agentId, errMsg);
-        }
-      } finally {
-        pendingAgents.delete(agentId);
-        activeAgentRequests.delete(agentId);
-        emitPending();
-      }
-      return;
-    }
-
-    let _retryChatMessages: any[] = [];
-    let _retryModelId = "";
-    let _retrySessionUser: string | undefined;
-    let _retryModelOverride: string | undefined;
-    try {
-      const modelId = getModelForAgent(agentId);
-      _retryModelId = modelId;
-      const timeoutMs = 180_000;
-
-      const limited = limitHistory(fullHistory);
-      const chatMessages = await toChatMessages(limited, agentId);
-      timings.prevoo = Date.now();
-      _retryChatMessages = chatMessages;
-
-      // Include authenticated user ID in the request body
-      const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id;
-      _userId = userId;
-
-      // Register a "normal" pending task so the placeholder survives a refresh.
-      // It's removed in the finally block or upgraded to a "long" task on timeout.
       if (userId) {
         addPendingTask({
           kind: "normal",
           agentId,
           userId,
-          sinceTimestamp: _userMessageTimestamp,
+          sinceTimestamp: new Date().toISOString(),
           startedAt: Date.now(),
         });
       }
 
-      // ── Prepare file references (signed URLs) for agent ──
-      const lastUserMsg = fullHistory[fullHistory.length - 1];
-      if (lastUserMsg?.role === "user" && lastUserMsg.media?.length) {
-        const fileAttachments = lastUserMsg.media.filter((m) => m.type === "file");
-        if (fileAttachments.length > 0) {
-          const preparedFiles = (
-            await Promise.all(fileAttachments.map((attachment) => prepareFileAttachmentForAgent(attachment)))
-          ).filter((attachment): attachment is PreparedFileAttachment => Boolean(attachment));
+      const resposta = await enviarParaAgente(agentId, texto, controller.signal);
 
-          if (chatMessages.length > 0 && preparedFiles.length > 0) {
-            const lastChat = chatMessages[chatMessages.length - 1];
-            const textBlocks = preparedFiles.flatMap((file) => (file.promptText ? [file.promptText] : []));
-
-            if (lastChat.role === "user" && textBlocks.length > 0) {
-              if (typeof lastChat.content === "string") {
-                lastChat.content = [lastChat.content, ...textBlocks].filter(Boolean).join("\n\n---\n\n");
-              } else if (Array.isArray(lastChat.content)) {
-                lastChat.content.push(...textBlocks.map((text) => ({ type: "text", text })));
-              }
-            }
-          }
-        }
+      if (manuallyStoppedRequestIds.has(requestId)) {
+        // O usuário mandou parar enquanto esperávamos. A resposta pode ter
+        // chegado mesmo assim e já está gravada; só não empurramos para a tela.
+        return;
       }
 
-      const sessionUser = userId ? buildSessionUser(userId, toCanonicalAgentId(agentId)) : undefined;
-      _retrySessionUser = sessionUser;
-      // Override de LLM da conversa. Vai nos DOIS caminhos de envio (streaming
-      // aqui e fallback dm-agent-reply abaixo) — se só um mandasse, um turno
-      // longo cairia no fallback e seria respondido por um modelo diferente do
-      // escolhido, sem nada na tela indicando.
-      const modelOverride = getModelOverride(toCanonicalAgentId(agentId)) ?? undefined;
-      _retryModelOverride = modelOverride;
-      // O agente não tem como SENTIR em qual LLM roda: perguntado, ele
-      // consulta a config da sessão (o padrão) e responde errado — caso real
-      // de 01/08, GPT-5-mini afirmando "estou usando deepseek-v4-flash".
-      // Com override ativo, o turno leva a verdade junto. No FIM das
-      // mensagens, de propósito: mexer no prefixo estouraria o cache.
-      if (modelOverride && chatMessages.length > 0) {
-        chatMessages.push({
-          role: "system",
-          content: `[HS.OS] Este turno está sendo executado no modelo ${modelOverride}, escolhido pelo usuário no seletor da conversa (sobrepõe o padrão da sessão). Se perguntarem qual modelo/LLM você está usando, a resposta correta é: ${modelOverride}.`,
+      if (resposta.status === "erro") {
+        const errMsg: ChatMessage = {
+          id: `erro-${Date.now()}`,
+          agentId,
+          role: "agent",
+          content: `[error] ${resposta.detalhe ?? "Falha ao falar com o agente."}`,
+          timestamp: new Date().toISOString(),
+          channel: "web",
+          isError: true,
+        };
+        emitUpdate(agentId, errMsg);
+        return;
+      }
+
+      // A resposta JÁ foi gravada pelo backend, junto com a espera — por isso
+      // aqui não há `appendToConversations`. Gravar de novo duplicaria.
+      const partes = splitIntoMessages(resposta.content ?? "");
+      partes.forEach((parte, i) => {
+        emitUpdate(agentId, {
+          // Só a primeira parte corresponde à linha persistida; as demais são
+          // recorte de exibição do mesmo texto.
+          id: i === 0 ? (resposta.messageId ?? `resp-${Date.now()}`) : `${resposta.messageId}-p${i}`,
+          agentId,
+          role: "agent",
+          content: parte,
+          timestamp: resposta.createdAt ?? new Date().toISOString(),
+          channel: "web",
         });
-      }
-      const body = {
-        model: modelId,
-        messages: chatMessages,
-        ...(userId && { userId }),
-        ...(sessionUser && { sessionUser }),
-        ...(modelOverride && { modelOverride }),
-      };
+      });
 
-      // Fire background Edge Function with keepalive so the request survives tab close
-      const userMessageTimestamp = _userMessageTimestamp;
-      if (userId) {
-        try {
-          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-          const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-          fetch(`${supabaseUrl}/functions/v1/dm-agent-reply`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${session?.access_token || anonKey}`,
-              apikey: anonKey,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              agentId,
-              userId,
-              messages: chatMessages,
-              model: modelId,
-              userMessageTimestamp,
-              ...(sessionUser && { sessionUser }),
-              ...(modelOverride && { modelOverride }),
-            }),
-            keepalive: true,
-          }).catch((err) => {
-            // Non-critical: the local streaming path is the primary UX
-            console.warn("[chat-sender] Background dm-agent-reply fire-and-forget failed:", err.message);
-          });
-        } catch (e) {
-          console.warn("[chat-sender] Failed to dispatch background edge function:", e);
-        }
-      }
-
-      // Emit working indicator immediately
-      emitStream(agentId, "[working]");
-
-      const MAX_OVERLOAD_RETRIES = 2;
-      const OVERLOAD_RETRY_DELAY = 3000;
-
-      let reply: ExtractedReply | undefined;
-
-      for (let overloadAttempt = 0; overloadAttempt <= MAX_OVERLOAD_RETRIES; overloadAttempt++) {
-        reply = undefined;
-
-        // Try streaming via edge function
-        try {
-          reply = await streamFromEdgeFunction(
-            body,
-            agentId,
-            controller,
-            timeoutMs,
-            accumulatedRef,
-            () => { if (!timings.firstToken) timings.firstToken = Date.now(); },
-          );
-        } catch (streamErr: any) {
-          // A3 (flag): erro DEFINITIVO do gateway → mostra o motivo na hora e
-          // encerra. Não faz fallback sync nem poll de 15 min ("trabalhando…").
-          if (isStructuredErrorsEnabled() && streamErr?.gatewayError) {
-            console.warn("[chat-sender] Erro definitivo do gateway:", streamErr.message);
-            reply = { text: `⚠️ Falhou: ${streamErr.message}` };
-            break;
-          }
-          // Fallback to sync via edge function
-          console.warn("[chat-sender] Stream failed, falling back to sync:", streamErr.message);
-          emitStream(agentId, "");
-
-          const doFetch = async (reqBody: any): Promise<string> => {
-            const { data: { session } } = await supabase.auth.getSession();
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-            const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-            const url = `${supabaseUrl}/functions/v1/gateway-chat`;
-
-            console.log('[chat-sender] Fallback chamando edge function proxy');
-            const res = await fetch(url, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${session?.access_token || anonKey}`,
-                apikey: anonKey,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(reqBody),
-              signal: controller.signal,
-            });
-            if (!res.ok) {
-              const errText = await res.text().catch(() => "");
-              console.error('[chat-sender] Fallback erro:', res.status, errText);
-              throw new Error(`Erro ${res.status}: ${errText}`);
-            }
-            return await res.text();
-          };
-
-          const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-          let lastErr: any;
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-              const raw = await doFetch(body);
-              reply = extractResponsesReply(JSON.parse(raw));
-              break;
-            } catch (err: any) {
-              lastErr = err;
-              const isTransient = err?.name === "AbortError" || err instanceof TypeError || /Failed to fetch/i.test(String(err?.message ?? ""));
-              if (!isTransient) throw err;
-              if (attempt < 2) await wait(1000 * (attempt + 1));
-            }
-          }
-
-          if (!reply) {
-            if (lastErr?.name === "AbortError") throw new Error(`Tempo limite (${Math.round(timeoutMs / 1000)}s). Tente uma mensagem menor.`);
-            throw new Error("Falha de conexão com o gateway. Verifique sua internet e tente novamente.");
-          }
-        }
-
-        // Auto-reset on context overflow returned as a normal reply
-        if (!isOverflowFalsePositiveFixEnabled() && reply && isContextOverflowError(reply.text) && !contextResetInFlight.has(agentId)) {
-          console.warn("[chat-sender] Context overflow detected in reply — auto-resetting session", { agentId });
-          contextResetInFlight.add(agentId);
-          try {
-            toast("♻️ Sessão renovada automaticamente. Continuando...", {
-              description: `Limite de contexto atingido em ${agentId}. Reenviando sua mensagem.`,
-              duration: 4000,
-            });
-            await resetAgentSession(agentId);
-            emitStream(agentId, "");
-            sendMessageInBackground(agentId, fullHistory.slice(-6));
-          } finally {
-            setTimeout(() => contextResetInFlight.delete(agentId), 2000);
-          }
-          return;
-        }
-
-        if (!isOverflowFalsePositiveFixEnabled() && reply && isGatewayOverloadError(reply.text)) {
-          console.warn(`[chat-sender] Gateway overload detected (attempt ${overloadAttempt + 1}/${MAX_OVERLOAD_RETRIES + 1})`);
-          if (overloadAttempt < MAX_OVERLOAD_RETRIES) {
-            emitStream(agentId, "[retrying]");
-            await new Promise((r) => setTimeout(r, OVERLOAD_RETRY_DELAY * (overloadAttempt + 1)));
-            emitStream(agentId, "");
-            continue;
-          }
-          // All retries exhausted — persist as error message so it survives reloads.
-          const errorMsg: ChatMessage = {
-            id: `m${Date.now()}oe`,
-            agentId,
-            role: "agent",
-            content: "[error] O serviço está temporariamente sobrecarregado. Tente novamente em alguns instantes.",
-            timestamp: new Date().toISOString(),
-            channel: "web",
-            isError: true,
-          };
-          const { data: { session: oeSession } } = await supabase.auth.getSession();
-          const oeUserId = oeSession?.user?.id;
-          let emittedOverloadError = errorMsg;
-          if (oeUserId) {
-            try {
-              emittedOverloadError = await appendToConversations(oeUserId, agentId, errorMsg);
-              emittedOverloadError = { ...emittedOverloadError, isError: true };
-            } catch (persistErr) {
-              console.warn("[chat-sender] Failed to persist overload error:", persistErr);
-            }
-          }
-          emitUpdate(agentId, emittedOverloadError);
-          return;
-        }
-
-        // Valid reply — break out of overload retry loop
-        break;
-      }
-
-      // Reject empty/placeholder replies — route through extended polling
-      // so the user sees "ainda estou trabalhando…" instead of a fake bubble.
-      if (isEmptyReply(reply)) {
-        console.warn("[chat-sender] Empty/placeholder reply detected — switching to extended polling");
-        throw new Error("STREAM_EMPTY");
-      }
-
-      // Multi-message support: split the reply by MSG_BREAK_TOKEN. If the
-      // agent (or gateway) signalled multiple messages, each becomes its
-      // own bubble persisted as a separate row.
-      const replyParts = splitIntoMessages(reply!.text);
-      const baseTs = Date.now();
-
-      const { data: { session: persistSession } } = await supabase.auth.getSession();
-      const senderId = persistSession?.user?.id;
-
-      // Background-reply dedup: if the edge function already persisted
-      // anything for this turn, trust it and skip the client-side insert.
-      let bgAlreadyPersisted = false;
-      if (senderId) {
-        const { data: bgReply } = await supabase
-          .from("conversations")
-          .select("id, content, created_at")
-          .eq("agent_id", agentId)
-          .eq("user_id", senderId)
-          .eq("role", "agent")
-          .gt("created_at", userMessageTimestamp)
-          .order("created_at", { ascending: true });
-
-        if (bgReply && bgReply.length > 0) {
-          console.log(`[chat-sender] Background reply already persisted (${bgReply.length} msg), using it`);
-          for (const row of bgReply) {
-            emitUpdate(agentId, conversationRowToMessage(row, agentId));
-          }
-          bgAlreadyPersisted = true;
-        }
-      }
-
-      if (!bgAlreadyPersisted) {
-        for (let i = 0; i < replyParts.length; i++) {
-          const partText = replyParts[i];
-          // Sequential timestamps preserve order in the UI
-          const partTs = new Date(baseTs + i).toISOString();
-          const partMsg: ChatMessage = {
-            id: `stream-${agentId}-${userMessageTimestamp}-${i}`,
-            agentId,
-            role: "agent",
-            content: partText,
-            timestamp: partTs,
-            channel: "web",
-            // Only attach media to the last bubble to avoid duplicates
-            media: i === replyParts.length - 1 ? reply!.media : undefined,
-          };
-
-          let emittedPart = partMsg;
-          if (senderId) {
-            try {
-              emittedPart = await appendToConversations(senderId, agentId, partMsg);
-            } catch (persistErr) {
-              console.warn(`[chat-sender] Failed to persist part ${i + 1}/${replyParts.length}:`, persistErr);
-            }
-          }
-          emitUpdate(agentId, emittedPart);
-        }
-      }
-
-      // Notify if user is not viewing this agent (badge only — toast/sound handled by use-notifications)
       if (!isSameAgentId(_activeAgentId, agentId)) {
         markAgentUnread(agentId);
       }
-
-      // Mark agent as active in react-query cache immediately
-      emitAgentActive(agentId);
-    } catch (err: any) {
-      const isManualStop = manuallyStoppedRequestIds.has(requestId)
-        || controller.signal.reason === STOP_REASON;
-      if (isManualStop) {
-        manuallyStoppedRequestIds.delete(requestId);
-        return;
-      }
-
-      const errMessage = String(err?.message ?? "");
-
-
-      // ── Auto-reset on context overflow ──
-      if (isContextOverflowError(errMessage) && !contextResetInFlight.has(agentId)) {
-        console.warn("[chat-sender] Context overflow detected — auto-resetting session", { agentId });
-        contextResetInFlight.add(agentId);
-        try {
-          toast("♻️ Sessão renovada automaticamente. Continuando...", {
-            description: `Limite de contexto atingido em ${agentId}. Reenviando sua mensagem.`,
-            duration: 4000,
-          });
-          await resetAgentSession(agentId);
-          // Trim history aggressively for the retry to avoid the same overflow
-          const trimmed = fullHistory.slice(-6);
-          emitStream(agentId, "");
-          // Re-dispatch with trimmed history; the user's last message is preserved
-          sendMessageInBackground(agentId, trimmed);
-        } finally {
-          // Clear flag shortly after — the new run owns its own pending state
-          setTimeout(() => contextResetInFlight.delete(agentId), 2000);
-        }
-        return;
-      }
-
-      // If streaming timed out / failed connection / returned empty, fall back
-      // to extended polling. We never persist a [error] bubble — the gateway
-      // often delivers the answer minutes later as an inter-session message,
-      // and a red error bubble would mislead the user. The UI shows a live
-      // "ainda estou trabalhando…" placeholder instead.
-      const isBackgroundable =
-        /tempo limite|timeout|aborted|stream_empty|stream-timeout|service_unavailable|falha de conex|failed to fetch|networkerror|load failed/i.test(errMessage)
-        || err?.name === "AbortError"
-        || controller.signal.reason === "stream-timeout";
-
-      if (isBackgroundable && _userId) {
-        console.log("[chat-sender] Stream unavailable, switching to extended background poll...", { reason: errMessage });
-        const pollStart = Date.now();
-        // Snapshot any partial streamed text so it's not lost
-        const partialText = (accumulatedRef.current || "").trim();
-
-        // Fresh controller for the extended poll — original was aborted by timeout
-        const pollController = new AbortController();
-        // Re-register so manual stop still cancels the poll
-        activeAgentRequests.set(agentId, { controller: pollController, requestId });
-
-        // Persist this long-task so it survives a page refresh.
-        addPendingTask({
-          kind: "long",
-          agentId,
-          userId: _userId,
-          sinceTimestamp: _userMessageTimestamp,
-          startedAt: pollStart,
-        });
-
-        // No text placeholder — the animated StreamingActivityIndicator
-        // (shimmer + activity chips) + heartbeat panel already convey
-        // "working" without a fake message bubble. Just make sure any
-        // partial stream text is cleared so it doesn't stay frozen.
-        emitStream(agentId, "");
-
-        try {
-          const bgMsg = await pollForBackgroundReply(agentId, _userId, _userMessageTimestamp, {
-            timeoutMs: EXTENDED_POLL_TIME_MS,
-            intervalMs: EXTENDED_POLL_INTERVAL_MS,
-            signal: pollController.signal,
-            emitHeartbeats: true,
-          });
-          if (bgMsg) {
-            console.log("[chat-sender] Background reply found via extended polling");
-            emitStream(agentId, "");
-            emitHeartbeat(agentId, null, true);
-            emitUpdate(agentId, bgMsg);
-            if (!isSameAgentId(_activeAgentId, agentId)) markAgentUnread(agentId);
-            emitAgentActive(agentId);
-            return;
-          }
-          console.warn("[chat-sender] Extended polling exhausted (15 min). No reply.");
-
-          // If we captured partial text, persist it so it doesn't disappear.
-          if (partialText) {
-            const partialMsg: ChatMessage = {
-              id: `m${Date.now()}p`,
-              agentId,
-              role: "agent",
-              content: `${partialText}\n\n_⌛ Resposta interrompida — o agente pode continuar processando em background._`,
-              timestamp: new Date().toISOString(),
-              channel: "web",
-            };
-            try {
-              const persisted = await appendToConversations(_userId, agentId, partialMsg);
-              emitStream(agentId, "");
-              emitHeartbeat(agentId, null, true);
-              emitUpdate(agentId, persisted);
-              return;
-            } catch (persistErr) {
-              console.warn("[chat-sender] Failed to persist partial reply:", persistErr);
-            }
-          }
-
-          emitStream(
-            agentId,
-            "⌛ O agente não respondeu nos últimos 15 minutos. Sua próxima mensagem reabre a conversa.",
-          );
-          emitHeartbeat(agentId, null, true);
-          setTimeout(() => emitStream(agentId, ""), 8_000);
-          return;
-        } finally {
-          if (_userId) removePendingTask(agentId, _userId);
-        }
-      }
-
-
-
-
-      console.error('[chat-sender] Erro final detalhado:', err.message, err.status, err.response, err.stack);
-      // Do NOT persist a red [error] bubble — show a transient inline warning
-      // and let the user retry. Persisted errors used to "stick" in the DM
-      // even after the agent eventually delivered the real answer.
-      emitStream(
+    } catch (err) {
+      console.error("[chat-sender] Falha no turno:", err);
+      emitUpdate(agentId, {
+        id: `erro-${Date.now()}`,
         agentId,
-        `⚠️ Não consegui concluir agora: ${err.message || "erro inesperado"}.\n_Retentando automaticamente em 5s…_`,
-      );
-
-      // Auto-retry once via the background edge function. The edge function
-      // performs its own duplicate-check (skips insert if an agent reply was
-      // already persisted after the user's message), so this is safe.
-      if (_userId) {
-        setTimeout(async () => {
-          try {
-            const { data: existing } = await supabase
-              .from("conversations")
-              .select("id")
-              .eq("agent_id", agentId)
-              .eq("user_id", _userId)
-              .eq("role", "agent")
-              .gt("created_at", _userMessageTimestamp)
-              .limit(1);
-            if (existing && existing.length > 0) {
-              emitStream(agentId, "");
-              return;
-            }
-            const { data: { session: retrySession } } = await supabase.auth.getSession();
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-            const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-            console.log("[chat-sender] Auto-retry: re-invoking dm-agent-reply");
-            emitStream(agentId, "🔄 Reentrando em contato com o agente…");
-            await fetch(`${supabaseUrl}/functions/v1/dm-agent-reply`, {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${retrySession?.access_token || anonKey}`,
-                apikey: anonKey,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                agentId,
-                userId: _userId,
-                messages: _retryChatMessages,
-                model: _retryModelId,
-                userMessageTimestamp: _userMessageTimestamp,
-                ...(_retrySessionUser && { sessionUser: _retrySessionUser }),
-                // O retry também precisa do override — senão a re-tentativa de
-                // um turno escolhido em Claude voltaria no modelo padrão.
-                ...(_retryModelOverride && { modelOverride: _retryModelOverride }),
-              }),
-              keepalive: true,
-            });
-            setTimeout(() => emitStream(agentId, ""), 6_000);
-          } catch (retryErr) {
-            console.warn("[chat-sender] Auto-retry failed:", retryErr);
-            emitStream(agentId, "⚠️ Não foi possível reconectar automaticamente. Reenvie a mensagem.");
-            setTimeout(() => emitStream(agentId, ""), 8_000);
-          }
-        }, 5_000);
-      } else {
-        setTimeout(() => emitStream(agentId, ""), 8_000);
-      }
+        role: "agent",
+        content: `[error] ${(err as Error)?.message ?? "Erro inesperado."}`,
+        timestamp: new Date().toISOString(),
+        channel: "web",
+        isError: true,
+      });
     } finally {
-      // Instrumentação (Bloco 2): decomposição do tempo do turno.
-      // pré-voo = montar o payload no cliente; 1º token = até a 1ª palavra do
-      // agente (prefill+reasoning+rede); total = fim. "—" = caiu no fallback sync.
-      const prevooMs = timings.prevoo ? timings.prevoo - timings.t0 : 0;
-      const ttftMs = timings.firstToken ? timings.firstToken - timings.t0 : 0;
-      const totalMs = Date.now() - timings.t0;
-      console.info(
-        `[timing] ${agentId} | pré-voo ${prevooMs}ms | 1º token ${ttftMs || "—"}ms | total ${totalMs}ms`,
-      );
-
       const activeRequest = activeAgentRequests.get(agentId);
       if (activeRequest?.requestId === requestId) {
         activeAgentRequests.delete(agentId);
       }
       manuallyStoppedRequestIds.delete(requestId);
       pendingAgents.delete(agentId);
-      if (_userId) removePendingTask(agentId, _userId);
+      if (userId) removePendingTask(agentId, userId);
       emitPending();
     }
   };

@@ -43,7 +43,8 @@ async def leitura_do_par(
     """Quando a outra pessoa leu o canal pela última vez."""
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         valor = await conn.fetchval(
-            "SELECT to_char(last_read_at, 'YYYY-MM-DD\"T\"HH24:MI:SS.MSOF') "
+            "SELECT to_char(last_read_at AT TIME ZONE 'UTC', "
+            "'YYYY-MM-DD\"T\"HH24:MI:SS.MS') || 'Z' "
             "FROM public.dm_reads WHERE channel_id = $1::uuid AND user_id = $2::uuid",
             channel_id, user_id,
         )
@@ -64,7 +65,7 @@ async def marcar_lido(channel_id: str, usuario: Usuario = Depends(usuario_atual)
             INSERT INTO public.dm_reads (channel_id, user_id, last_read_at)
             VALUES ($1::uuid, $2::uuid, now())
             ON CONFLICT (channel_id, user_id) DO UPDATE SET last_read_at = now()
-            RETURNING to_char(last_read_at, 'YYYY-MM-DD"T"HH24:MI:SS.MSOF')
+            RETURNING to_char(last_read_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z'
             """,
             channel_id, usuario.id,
         )

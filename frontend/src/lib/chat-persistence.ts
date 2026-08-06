@@ -5,6 +5,22 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
+
+/** Uma linha de `conversations` como a nossa API devolve. */
+interface ConversationRow {
+  id: string;
+  agent_id: string;
+  role: string;
+  content: string;
+  media: unknown[] | null;
+  created_at: string;
+}
+
+interface PaginaApi {
+  messages: ConversationRow[];
+  has_more: boolean;
+}
 import type { ChatMessage, MediaAttachment } from "@/lib/mock-data";
 
 const INITIAL_PAGE_SIZE = 50;
@@ -112,20 +128,16 @@ export function removeMessageFromHistoryCache(userId: string, agentId: string, m
 export async function loadPersistedHistory(userId: string, agentId: string): Promise<PaginatedHistory> {
   const key = cacheKey(userId, agentId);
 
-  const { data, error } = await supabase
-    .from("conversations")
-    .select("*")
-    .eq("agent_id", agentId)
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(INITIAL_PAGE_SIZE);
-
-  if (error) {
+  let data: ConversationRow[];
+  try {
+    const pagina = await api<PaginaApi>(
+      `/conversations/${encodeURIComponent(agentId)}?limite=${INITIAL_PAGE_SIZE}`,
+    );
+    data = pagina.messages;
+  } catch (error) {
     console.error("[chat-persistence] Failed to load history:", error);
     return historyCache[key] ?? { messages: [], hasMore: false };
   }
-
-  if (!data) return historyCache[key] ?? { messages: [], hasMore: false };
 
   // Protect cache: don't overwrite valid cached data with empty results (transient failures)
   if (data.length === 0 && historyCache[key]?.messages.length) {
@@ -182,21 +194,17 @@ export async function loadOlderMessages(
   beforeTimestamp: string,
   limit: number = LOAD_MORE_SIZE
 ): Promise<PaginatedHistory> {
-  const { data, error } = await supabase
-    .from("conversations")
-    .select("*")
-    .eq("agent_id", agentId)
-    .eq("user_id", userId)
-    .lt("created_at", beforeTimestamp)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  if (error) {
+  let data: ConversationRow[];
+  try {
+    const pagina = await api<PaginaApi>(
+      `/conversations/${encodeURIComponent(agentId)}`
+      + `?limite=${limit}&antes_de=${encodeURIComponent(beforeTimestamp)}`,
+    );
+    data = pagina.messages;
+  } catch (error) {
     console.error("[chat-persistence] Failed to load older messages:", error);
     return { messages: [], hasMore: false };
   }
-
-  if (!data) return { messages: [], hasMore: false };
 
   const hasMore = data.length === limit;
   const messages = [...data].reverse().map((row) => conversationRowToMessage(row, agentId));
@@ -205,19 +213,17 @@ export async function loadOlderMessages(
 }
 
 export async function appendToConversations(userId: string, agentId: string, msg: ChatMessage): Promise<ChatMessage> {
-  const { data, error } = await supabase.from("conversations").insert({
-    agent_id: agentId,
-    user_id: userId,
-    role: msg.role,
-    content: msg.content,
-    media: msg.media ? (msg.media as any) : null,
-    created_at: msg.timestamp,
-  }).select("*").single();
-
-  if (error) {
-    console.error("[chat-persistence] Failed to append message:", error);
-    throw error;
-  }
+  // O `user_id` sai do token no servidor — mandá-lo daqui não teria efeito e
+  // daria a impressão errada de que o cliente escolhe de quem é a mensagem.
+  const data = await api<ConversationRow>(`/conversations/${encodeURIComponent(agentId)}`, {
+    method: "POST",
+    body: {
+      role: msg.role,
+      content: msg.content,
+      media: msg.media ?? null,
+      created_at: msg.timestamp,
+    },
+  });
 
   const persistedMessage = conversationRowToMessage(data, agentId);
   appendMessageToHistoryCache(userId, agentId, persistedMessage);
@@ -226,7 +232,7 @@ export async function appendToConversations(userId: string, agentId: string, msg
 
 export async function clearConversationHistory(userId: string, agentId: string) {
   delete historyCache[cacheKey(userId, agentId)];
-  await supabase.from("conversations").delete().eq("agent_id", agentId).eq("user_id", userId);
+  await api(`/conversations/${encodeURIComponent(agentId)}`, { method: "DELETE" });
 }
 
 /**

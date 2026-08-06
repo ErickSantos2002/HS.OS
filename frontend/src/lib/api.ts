@@ -22,6 +22,31 @@ export function lerToken(): string | null {
   }
 }
 
+/**
+ * Id do usuário logado, lido do próprio JWT.
+ *
+ * Existe para o código que roda **fora** do React e não tem acesso ao
+ * `AuthContext` — o `chat-sender`, que despacha de uma fila em nível de módulo.
+ * Substitui o `supabase.auth.getSession()` que fazia esse papel.
+ *
+ * Não valida assinatura: quem valida é o servidor, a cada request. Aqui é só
+ * para saber de quem é a fila; um token adulterado não abre porta nenhuma.
+ */
+export function lerUsuarioDoToken(): string | null {
+  const token = lerToken();
+  if (!token) return null;
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) return null;
+    // base64url → base64: o JWT troca +/ por -_ e dispensa o padding.
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const json = atob(base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "="));
+    return (JSON.parse(json) as { sub?: string }).sub ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function gravarToken(token: string | null): void {
   try {
     if (token) localStorage.setItem(CHAVE_TOKEN, token);
