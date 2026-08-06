@@ -220,6 +220,31 @@ Por isso `POST /agents/test-model` verifica por `models.list` + `models.authStat
 troca, ele **não** afirma que a LLM respondeu — só que está registrada, disponível e com credencial
 válida.
 
+### Leitura de arquivo do workspace — o gateway ganhou isso
+
+```
+agents.files.list  { agentId }               → { files: [{name, path, size, missing}] }
+agents.files.get   { agentId, name }         → { file: { content, size, encoding, … } }
+agents.workspace.list { agentId, path? }     → { entries: [{path, name, kind, size}] }
+agents.workspace.get  { agentId, path }      → { file: { content, mimeType, encoding, … } }
+```
+
+Os canônicos que o `agents.files.list` devolve: `AGENTS.md`, `SOUL.md`, `TOOLS.md`,
+`IDENTITY.md`, `USER.md`, `HEARTBEAT.md`, `MEMORY.md`. Confirmado ao vivo em 06/08/2026 lendo o
+`SOUL.md` da `nina`.
+
+⚠️ **Isto contradiz o comentário do `export-agent`**, que afirma (19/07/2026) que "o gateway em
+produção não expõe NENHUM endpoint de leitura de arquivo funcional (`/api/files`, `agents.files.get`
+RPC, `/api/agents/{id}/{key}` — todos 404 ou method not supported)". Era verdade naquela versão;
+deixou de ser. Consequências ao portar:
+
+- `export-agent` pede ao **LLM do orquestrador** para ler os arquivos e devolver JSON, com prompt de
+  ~170s de timeout, justamente porque não havia outro jeito. Agora há leitura determinística.
+- A ponte `dnos-files-bridge` na VPS (timer de 60s espelhando arquivos para a tabela `agent_files`)
+  existe pelo mesmo motivo. Vale reavaliar se ainda precisa existir.
+- `agents.files.get` usa **`name`** (nome canônico); `agents.workspace.get` usa **`path`**. Trocar um
+  pelo outro dá `unexpected property`.
+
 ⚠️ **Regra de operação: não sonde método de escrita do gateway sem combinar antes.** Leitura
 (`*.list`, `*.get`, `*.status`) é livre. Qualquer coisa que crie, altere ou envie: mostre o payload
 e confirme. Em 06/08/2026 duas sondagens escaparam — uma quebrou o modelo da `nina`, outra mandou
