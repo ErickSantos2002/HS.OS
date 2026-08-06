@@ -20,8 +20,10 @@ Endpoints: `/health`, `/auth/*`, `/branding`, `/profiles/*`, `/gateway/*`, `/age
 
 ## Placar
 
-**17 de 73** edge functions com substituto · **13 de 113** arquivos do front sem
-Supabase · **31** functions distintas ainda referenciadas pelo front.
+**21 de 73** edge functions com substituto · **16 de 113** arquivos do front sem
+Supabase · **27** functions distintas ainda referenciadas pelo front.
+
+**O chat funciona** — conversa com agente e canais, verificados no navegador.
 
 O `AgentEditDrawer` chama **uma** edge, `delete-agent` — era oito chamadas de
 cinco functions diferentes no início de 06/08/2026.

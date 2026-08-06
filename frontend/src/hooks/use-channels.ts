@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { useAuthContext } from "@/contexts/auth-context";
 
 export interface Channel {
@@ -64,13 +64,11 @@ export function useChannels() {
 
   const fetchChannels = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
-      .from("channels")
-      .select("*")
-      .order("created_at", { ascending: true });
-    if (data) {
-      cachedChannels = data as unknown as Channel[];
+    try {
+      cachedChannels = await api<Channel[]>("/channels");
       setChannels(cachedChannels);
+    } catch (e) {
+      console.error("Erro ao carregar canais:", e);
     }
     setLoading(false);
   }, [user]);
@@ -87,40 +85,25 @@ export function useChannels() {
     agentIds?: string[]
   ): Promise<Channel | null> => {
     if (!user) return null;
-    const { data, error } = await supabase
-      .from("channels")
-      .insert({ name, description: description || null, type, created_by: user.id } as any)
-      .select()
-      .single();
-    if (error) {
-      console.error("Erro ao criar canal:", error);
+    // Uma chamada só. Eram quatro inserts independentes, cada um podendo falhar
+    // sozinho — dava para criar canal sem membro nenhum, inclusive sem o
+    // criador, e aí o RLS escondia o canal de todo mundo. Agora é transação no
+    // servidor: ou tudo entra, ou nada entra.
+    let channel: Channel;
+    try {
+      channel = await api<Channel>("/channels", {
+        method: "POST",
+        body: {
+          name,
+          description: description || null,
+          type,
+          member_ids: memberIds ?? [],
+          agent_ids: agentIds ?? [],
+        },
+      });
+    } catch (e) {
+      console.error("Erro ao criar canal:", e);
       return null;
-    }
-    if (!data) return null;
-    const channel = data as unknown as Channel;
-
-    // Add creator as member
-    const { error: memberErr } = await supabase
-      .from("channel_members")
-      .insert({ channel_id: channel.id, user_id: user.id, member_type: "human" } as any);
-    if (memberErr) console.error("Erro ao adicionar criador como membro:", memberErr);
-
-    // Add human members
-    if (memberIds?.length) {
-      const inserts = memberIds
-        .filter((id) => id !== user.id)
-        .map((id) => ({ channel_id: channel.id, user_id: id, member_type: "human" }));
-      if (inserts.length) await supabase.from("channel_members").insert(inserts as any);
-    }
-
-    // Add agent members
-    if (agentIds?.length) {
-      const inserts = agentIds.map((id) => ({
-        channel_id: channel.id,
-        user_id: id,
-        member_type: "agent",
-      }));
-      await supabase.from("channel_members").insert(inserts as any);
     }
 
     await fetchChannels();
@@ -130,13 +113,11 @@ export function useChannels() {
   const joinChannel = async (channelId: string) => {
     if (!user) return;
     // Use upsert-like approach: ignore duplicate
-    const { error } = await supabase
-      .from("channel_members")
-      .upsert(
-        { channel_id: channelId, user_id: user.id, member_type: "human" } as any,
-        { onConflict: "channel_id,user_id", ignoreDuplicates: true }
-      );
-    if (error) console.error("Join channel error:", error);
+    try {
+      await api(`/channels/${encodeURIComponent(channelId)}/members/me`, { method: "PUT" });
+    } catch (e) {
+      console.error("Join channel error:", e);
+    }
   };
 
   return { channels, loading, createChannel, joinChannel, refetch: fetchChannels };
@@ -149,16 +130,14 @@ const CHANNEL_MESSAGES_CACHE_LIMIT = 200;
 /** Prefetch channel messages into cache (no-op if already cached) */
 export async function prefetchChannelMessages(channelId: string): Promise<void> {
   if (channelMessageCache[channelId]) return;
-  const { data } = await supabase
-    .from("channel_messages")
-    .select("*")
-    .eq("channel_id", channelId)
-    .is("thread_id", null)
-    .order("created_at", { ascending: false })
-    .limit(CHANNEL_MESSAGES_CACHE_LIMIT);
-  if (data) {
-    data.reverse();
-    channelMessageCache[channelId] = data as unknown as ChannelMessage[];
+  try {
+    // Já vem em ordem cronológica e só o nível de cima (sem respostas de
+    // thread) — o filtro que era `.is("thread_id", null)` agora é do endpoint.
+    channelMessageCache[channelId] = await api<ChannelMessage[]>(
+      `/channels/${encodeURIComponent(channelId)}/messages?limite=${CHANNEL_MESSAGES_CACHE_LIMIT}`,
+    );
+  } catch (e) {
+    console.error("Failed to prefetch channel messages:", e);
   }
 }
 
@@ -203,23 +182,12 @@ export function useChannelMessages(channelId: string | null) {
     // Background revalidation
     const load = async () => {
       try {
-        const { data, error } = await supabase
-          .from("channel_messages")
-          .select("*")
-          .eq("channel_id", channelId)
-          .is("thread_id", null)
-          .order("created_at", { ascending: false })
-          .limit(CHANNEL_MESSAGES_CACHE_LIMIT);
+        const data = await api<ChannelMessage[]>(
+          `/channels/${encodeURIComponent(channelId)}/messages?limite=${CHANNEL_MESSAGES_CACHE_LIMIT}`,
+        );
         if (cancelled) return;
-        if (error) {
-          console.error("Failed to load channel messages:", error);
-          setLoading(false);
-          loadedRef.current = true;
-          return;
-        }
-        if (data) {
-          data.reverse();
-          const msgs = data as unknown as ChannelMessage[];
+        {
+          const msgs = data;
           if (msgs.length === 0 && (channelMessageCache[channelId]?.length ?? 0) > 0) {
             const buffered = pendingBuffer.splice(0);
             if (buffered.length > 0) {
@@ -252,66 +220,24 @@ export function useChannelMessages(channelId: string | null) {
     document.addEventListener("visibilitychange", resync);
     window.addEventListener("focus", resync);
 
-    // Realtime subscription
-    const channel = supabase
-      .channel(`channel-messages-${channelId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "channel_messages",
-          filter: `channel_id=eq.${channelId}`,
-        },
-        (payload) => {
-          if (cancelled) return;
-          const msg = payload.new as unknown as ChannelMessage;
-          if (!msg.thread_id) {
-            if (!loadedRef.current) {
-              pendingBuffer.push(msg);
-              return;
-            }
-            updateMessages(prev => reconcileMessages(prev, [msg]));
-          }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "channel_messages",
-          filter: `channel_id=eq.${channelId}`,
-        },
-        (payload) => {
-          if (cancelled) return;
-          const updated = payload.new as unknown as ChannelMessage;
-          updateMessages(prev => reconcileMessages(prev, [updated]));
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "DELETE",
-          schema: "public",
-          table: "channel_messages",
-          filter: `channel_id=eq.${channelId}`,
-        },
-        (payload) => {
-          if (cancelled) return;
-          const deletedId = (payload.old as any)?.id;
-          if (deletedId) {
-            updateMessages(prev => prev.filter(m => m.id !== deletedId));
-          }
-        }
-      )
-      .subscribe();
+    // ⚠️ Aqui havia assinatura de `postgres_changes` em três eventos (INSERT,
+    // UPDATE, DELETE). O Realtime do Supabase saiu e a substituição é um
+    // intervalo: o `load()` acima já reconcilia por id, então repetir é barato
+    // e idempotente.
+    //
+    // 4 segundos é o meio-termo entre parecer vivo e não martelar o servidor.
+    // Enquanto a aba está oculta o navegador já estrangula timers sozinho, e o
+    // `resync` acima cobre a volta ao foco.
+    //
+    // O caminho definitivo é o backend empurrar evento por WebSocket — mesma
+    // peça que daria streaming ao chat. Está na fila do pós-entrega.
+    const enquete = window.setInterval(load, 4000);
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", resync);
       window.removeEventListener("focus", resync);
-      supabase.removeChannel(channel);
+      window.clearInterval(enquete);
     };
   }, [channelId]);
 
@@ -325,25 +251,22 @@ export function useChannelMessages(channelId: string | null) {
     // Already in cache?
     if ((channelMessageCache[channelId] ?? []).some((m) => m.id === messageId)) return true;
 
-    // Fetch the target message
-    const { data: target, error: targetErr } = await supabase
-      .from("channel_messages")
-      .select("*")
-      .eq("id", messageId)
-      .maybeSingle();
-    if (targetErr || !target) return false;
-
-    // Load everything from that timestamp forward (the message + newer context),
-    // so we render a contiguous range from target → now.
-    const { data: range } = await supabase
-      .from("channel_messages")
-      .select("*")
-      .eq("channel_id", channelId)
-      .is("thread_id", null)
-      .gte("created_at", (target as any).created_at)
-      .order("created_at", { ascending: true });
-
-    const incoming = ((range as unknown as ChannelMessage[]) ?? []).concat([target as unknown as ChannelMessage]);
+    let incoming: ChannelMessage[];
+    try {
+      const target = await api<ChannelMessage>(
+        `/channels/${encodeURIComponent(channelId)}/messages/${encodeURIComponent(messageId)}`,
+      );
+      // Tudo daquele instante em diante, para a tela renderizar um trecho
+      // contíguo do alvo até agora — em vez de um buraco no meio da conversa.
+      const range = await api<ChannelMessage[]>(
+        `/channels/${encodeURIComponent(channelId)}/messages`
+        + `?desde=${encodeURIComponent(target.created_at)}`,
+      );
+      incoming = [...range, target];
+    } catch (e) {
+      console.error("Erro ao carregar a mensagem:", e);
+      return false;
+    }
     setMessages((prev) => {
       const next = reconcileMessages(prev, incoming);
       channelMessageCache[channelId] = next;
@@ -372,11 +295,8 @@ export function useChannelMessages(channelId: string | null) {
     let resolvedName = authorName;
     if (authorType === "human" && (!resolvedAvatar || !resolvedName || resolvedName.includes("@"))) {
       try {
-        const { data: prof } = await supabase
-          .from("profiles")
-          .select("avatar_url, full_name")
-          .eq("id", authorId)
-          .maybeSingle();
+        const todos = await api<Array<{ id: string; avatar_url: string | null; full_name: string | null }>>("/profiles");
+        const prof = todos.find((p) => p.id === authorId);
         if (prof) {
           if (!resolvedAvatar && prof.avatar_url) resolvedAvatar = prof.avatar_url;
           if ((!resolvedName || resolvedName.includes("@")) && prof.full_name) resolvedName = prof.full_name;
@@ -415,17 +335,26 @@ export function useChannelMessages(channelId: string | null) {
     }
 
     // Insert into DB (Realtime will replace the optimistic msg)
-    const { error } = await supabase.from("channel_messages").insert({
-      channel_id: channelId,
-      author_id: authorId,
-      author_type: authorType,
-      author_name: resolvedName,
-      content,
-      author_avatar: resolvedAvatar,
-      audio_url: audioUrl || null,
-      attachments: attachments || null,
-      thread_id: threadId ?? null,
-    } as any);
+    let error: unknown = null;
+    try {
+      // O servidor resolve nome e avatar quando não vierem, então mandar
+      // `resolvedName`/`resolvedAvatar` aqui é só o atalho de quem já os tem.
+      await api(`/channels/${encodeURIComponent(channelId)}/messages`, {
+        method: "POST",
+        body: {
+          author_id: authorId,
+          author_type: authorType,
+          author_name: resolvedName,
+          author_avatar: resolvedAvatar,
+          content,
+          audio_url: audioUrl || null,
+          attachments: attachments || null,
+          thread_id: threadId ?? null,
+        },
+      });
+    } catch (e) {
+      error = e;
+    }
 
     if (error) {
       // Rollback optimistic message on failure
@@ -455,37 +384,26 @@ export function useChannelMembers(channelId: string | null, refreshKey?: number)
     let isActive = true;
 
     const loadMembers = async () => {
-      const { data } = await supabase
-        .from("channel_members")
-        .select("*")
-        .eq("channel_id", channelId);
-
-      if (isActive && data) {
-        setMembers(data as unknown as ChannelMember[]);
+      try {
+        const data = await api<ChannelMember[]>(
+          `/channels/${encodeURIComponent(channelId)}/members`,
+        );
+        if (isActive) setMembers(data);
+      } catch (e) {
+        console.error("Erro ao carregar membros do canal:", e);
       }
     };
 
     void loadMembers();
 
-    const channel = supabase
-      .channel(`channel-members-${channelId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "channel_members",
-          filter: `channel_id=eq.${channelId}`,
-        },
-        () => {
-          void loadMembers();
-        }
-      )
-      .subscribe();
+    // A lista de membros mudava por Realtime. Aqui o intervalo é bem mais
+    // espaçado que o das mensagens: entrar e sair de canal é raro, e recarregar
+    // isso de 4 em 4 segundos seria desperdício.
+    const enquete = window.setInterval(() => void loadMembers(), 30_000);
 
     return () => {
       isActive = false;
-      supabase.removeChannel(channel);
+      window.clearInterval(enquete);
     };
   }, [channelId, refreshKey]);
 

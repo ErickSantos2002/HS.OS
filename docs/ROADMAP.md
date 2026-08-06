@@ -15,7 +15,7 @@ backend não é o mesmo que a tela usar o endpoint.
 |---|---|---|
 | Edge functions **com substituto no backend** | 21 | 73 |
 | Edge functions **que o front já parou de chamar** | 17 | 73 |
-| Arquivos do front sem Supabase | 15 | 113 |
+| Arquivos do front sem Supabase | 16 | 113 |
 | Functions distintas ainda referenciadas pelo front | 27 | — |
 
 Um lote só fecha quando as duas linhas andam.

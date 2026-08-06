@@ -319,3 +319,26 @@ async def enviar(
             dados.thread_id or "",
         )
     return _msg_saida(linha)
+
+
+@router.get("/{channel_id}/messages/{message_id}", response_model=MensagemCanalOut)
+async def mensagem(
+    channel_id: str,
+    message_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Uma mensagem pelo id.
+
+    Existe para o link direto vindo da busca: a tela precisa saber o horário da
+    mensagem alvo para então carregar o trecho contíguo dali até agora, com
+    `?desde=`. Sem isto teria que varrer páginas para trás até topar com ela.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            f"SELECT {_COLUNAS_MSG} FROM public.channel_messages m "
+            f"WHERE m.id = $1::uuid AND m.channel_id = $2::uuid",
+            message_id, channel_id,
+        )
+    if linha is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mensagem não encontrada.")
+    return _msg_saida(linha)
