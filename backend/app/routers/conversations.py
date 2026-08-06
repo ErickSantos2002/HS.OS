@@ -23,6 +23,7 @@ from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
 from app.gateway import config as cfg
 from app.gateway.client import ErroGateway, obter_cliente, obter_cliente_de_espera
+from app.realtime import hub, topico_usuario
 
 logger = logging.getLogger(__name__)
 
@@ -405,5 +406,10 @@ async def resposta(
             agent_id, usuario.id, texto,
         )
     _SEQ_DO_RUN.pop(run_id, None)
+    saida = _para_saida(linha)
+    # Vai para o próprio usuário: é ele quem tem a conversa aberta, e assim uma
+    # segunda aba do mesmo dono também recebe a resposta.
+    hub.publicar(topico_usuario(usuario.id), "resposta-agente",
+                 {"agent_id": agent_id, "message": saida.model_dump()})
     logger.info("Resposta de %s gravada (run %s, %d chars)", agent_id, run_id, len(texto))
-    return RespostaOut(status="pronta", message=_para_saida(linha))
+    return RespostaOut(status="pronta", message=saida)

@@ -34,6 +34,9 @@ export default defineConfig(({ mode }) => ({
       "/api": {
         target: "http://127.0.0.1:8002",
         changeOrigin: true,
+        // Sem isto o proxy não repassa o Upgrade e o /ws falha só em
+        // desenvolvimento — em produção o nginx do EasyPanel faz o papel.
+        ws: true,
         rewrite: (caminho) => caminho.replace(/^\/api/, ""),
       },
     },

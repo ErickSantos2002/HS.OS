@@ -102,6 +102,17 @@ LLM nenhuma: `POST /storage/extrair-texto/{bucket}/{caminho}` devolve o texto de
 txt, md, pdf e docx.
 
 **Melhorias adiadas** (portadas como estavam, corrigir depois da reconstrução):
+- 🟠 **A descoberta de avatar faz 1.022 requisições numa sessão.**
+  `discoverAvatarUrl` em `use-agent-avatar.ts` testa 4 extensões (`png`, `jpg`,
+  `jpeg`, `webp`) para cada agente conhecido — 52 requisições por carga — e
+  repete a cada montagem de componente, sem lembrar que já deu 404. É
+  comportamento herdado: fazia o mesmo contra o Supabase. Só ficou **visível**
+  agora que o log é nosso. Correção provável: memorizar por sessão quais agentes
+  não têm arquivo, reaproveitando o `brokenAvatarUrls` que já existe no módulo.
+- ⚙️ **O tempo real vive na memória de um processo.** Com mais de um worker do
+  uvicorn, quem está conectado ao worker A não recebe o que foi publicado no B.
+  Hoje o backend roda em processo único e está correto. Se escalar, o caminho é
+  `LISTEN`/`NOTIFY` do Postgres — já está lá, não precisa de peça nova.
 - `POST /agents/leadership/sync` — o botão da UI devolve ao banco os mesmos valores
   que leu; nunca muda nada. Quem faz o trabalho de verdade é o orquestrador na VPS.
 - 🔴 **`GET /agents/{id}/export` vaza domínios internos.** A sanitização só troca o

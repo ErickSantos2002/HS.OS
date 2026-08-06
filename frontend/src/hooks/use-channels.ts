@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
+import { assinar } from "@/lib/realtime";
 import { useAuthContext } from "@/contexts/auth-context";
 
 export interface Channel {
@@ -220,23 +221,30 @@ export function useChannelMessages(channelId: string | null) {
     document.addEventListener("visibilitychange", resync);
     window.addEventListener("focus", resync);
 
-    // ⚠️ Aqui havia assinatura de `postgres_changes` em três eventos (INSERT,
-    // UPDATE, DELETE). O Realtime do Supabase saiu e a substituição é um
-    // intervalo: o `load()` acima já reconcilia por id, então repetir é barato
-    // e idempotente.
-    //
-    // 4 segundos é o meio-termo entre parecer vivo e não martelar o servidor.
-    // Enquanto a aba está oculta o navegador já estrangula timers sozinho, e o
-    // `resync` acima cobre a volta ao foco.
-    //
-    // O caminho definitivo é o backend empurrar evento por WebSocket — mesma
-    // peça que daria streaming ao chat. Está na fila do pós-entrega.
-    const enquete = window.setInterval(load, 4000);
+    // Tempo real por WebSocket, no lugar do `postgres_changes` do Supabase.
+    // A mensagem chega pronta do servidor — não precisa recarregar a página
+    // para descobrir o que mudou.
+    const cancelarAssinatura = assinar(`canal:${channelId}`, (tipo, dados) => {
+      if (cancelled || tipo !== "mensagem") return;
+      const msg = dados as ChannelMessage;
+      if (msg.thread_id) return; // resposta de thread tem painel próprio
+      if (!loadedRef.current) {
+        pendingBuffer.push(msg);
+        return;
+      }
+      updateMessages((prev) => reconcileMessages(prev, [msg]));
+    });
+
+    // Rede de segurança, bem espaçada: se a conexão cair e a reconexão demorar,
+    // isto garante que a conversa não fica parada. Antes era de 4 em 4 segundos
+    // e era o único caminho; agora é o plano B.
+    const enquete = window.setInterval(load, 60_000);
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", resync);
       window.removeEventListener("focus", resync);
+      cancelarAssinatura();
       window.clearInterval(enquete);
     };
   }, [channelId]);
@@ -396,10 +404,9 @@ export function useChannelMembers(channelId: string | null, refreshKey?: number)
 
     void loadMembers();
 
-    // A lista de membros mudava por Realtime. Aqui o intervalo é bem mais
-    // espaçado que o das mensagens: entrar e sair de canal é raro, e recarregar
-    // isso de 4 em 4 segundos seria desperdício.
-    const enquete = window.setInterval(() => void loadMembers(), 30_000);
+    // Membros mudam raramente; um intervalo largo basta e não vale um tópico
+    // próprio de WebSocket.
+    const enquete = window.setInterval(() => void loadMembers(), 60_000);
 
     return () => {
       isActive = false;

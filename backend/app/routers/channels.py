@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
+from app.realtime import hub, topico_canal
 
 logger = logging.getLogger(__name__)
 
@@ -318,7 +319,12 @@ async def enviar(
             json.dumps(dados.attachments) if dados.attachments else None,
             dados.thread_id or "",
         )
-    return _msg_saida(linha)
+    saida = _msg_saida(linha)
+    # Avisa quem está com o canal aberto. Publicar **depois** da transação é
+    # essencial: avisar antes faria a tela buscar uma mensagem que ainda não
+    # está visível para outra conexão.
+    hub.publicar(topico_canal(channel_id), "mensagem", saida.model_dump())
+    return saida
 
 
 @router.get("/{channel_id}/messages/{message_id}", response_model=MensagemCanalOut)
