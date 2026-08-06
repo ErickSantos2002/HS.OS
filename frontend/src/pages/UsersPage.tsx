@@ -358,35 +358,42 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
     setInviting(false);
   };
 
+  // A trilha em `access_logs` saiu do cliente: o endpoint grava o log na mesma
+  // transação da mudança. Antes eram duas escritas independentes, e a segunda
+  // podia falhar em silêncio deixando a mudança sem registro.
   const handleRoleChange = async (userId: string, newRole: AppRole) => {
-    await supabase.from("user_roles").delete().eq("user_id", userId);
-    await supabase.from("user_roles").insert({ user_id: userId, role: newRole });
-    if (currentUser) {
-      await supabase.from("access_logs").insert({
-        user_id: currentUser.id,
-        action: "change_role",
-        metadata: { target_user: userId, new_role: newRole },
+    try {
+      await api(`/profiles/${encodeURIComponent(userId)}`, {
+        method: "PATCH",
+        body: { role: newRole },
+      });
+      toast({ title: "Role atualizado" });
+      fetchAll();
+    } catch (e) {
+      toast({
+        title: "Erro ao alterar o papel",
+        description: (e as Error).message,
+        variant: "destructive",
       });
     }
-    toast({ title: "Role atualizado" });
-    fetchAll();
   };
 
   const handleToggleStatus = async (userId: string, currentStatus: string) => {
     const newStatus = currentStatus === "active" ? "inactive" : "active";
-    await supabase
-      .from("profiles")
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq("id", userId);
-    if (currentUser) {
-      await supabase.from("access_logs").insert({
-        user_id: currentUser.id,
-        action: newStatus === "inactive" ? "deactivate_user" : "activate_user",
-        metadata: { target_user: userId },
+    try {
+      await api(`/profiles/${encodeURIComponent(userId)}`, {
+        method: "PATCH",
+        body: { status: newStatus },
+      });
+      toast({ title: newStatus === "inactive" ? "Usuário desativado" : "Usuário reativado" });
+      fetchAll();
+    } catch (e) {
+      toast({
+        title: "Erro ao alterar o status",
+        description: (e as Error).message,
+        variant: "destructive",
       });
     }
-    toast({ title: newStatus === "inactive" ? "Usuário desativado" : "Usuário reativado" });
-    fetchAll();
   };
 
   const handleDelete = async () => {
@@ -439,21 +446,25 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
 
   const handleSync = async () => {
     setSyncing(true);
-    const { data, error } = await supabase.functions.invoke("sync-agents", { body: {} });
-    if (error || data?.error) {
-      toast({
-        title: "Erro ao sincronizar",
-        description: data?.error || error?.message || "Verifique OPENCLAW_ADMIN_TOKEN",
-        variant: "destructive",
-      });
-    } else {
+    try {
+      const d = await api<{ criados: number; atualizados: number; total_no_gateway: number }>(
+        "/agents/sync",
+        { method: "POST" },
+      );
       toast({
         title: "Sincronização concluída",
-        description: `${data?.imported ?? 0} agentes importados, ${data?.existing ?? 0} já estavam sincronizados`,
+        description: `${d.criados} agentes importados, ${d.atualizados} já estavam sincronizados`,
       });
       fetchAll();
+    } catch (e) {
+      toast({
+        title: "Erro ao sincronizar",
+        description: (e as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setSyncing(false);
     }
-    setSyncing(false);
   };
 
   const goToAgentChat = (openclawId: string) => {

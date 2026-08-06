@@ -4,10 +4,13 @@ O RLS continua valendo: a leitura roda como `authenticated`, então as policies
 herdadas decidem o que cada um enxerga. A escrita é limitada ao próprio perfil.
 """
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 from app.database import sessao
-from app.dependencies import Usuario, usuario_atual
+from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.routers.schemas import PerfilOut, PerfilPatch
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
@@ -89,3 +92,96 @@ async def atualizar_meu_perfil(
             usuario.id,
         )
     return PerfilOut(**dict(linha))
+
+
+class PerfilAdminPatch(BaseModel):
+    """O que um `super_admin` muda no perfil de outra pessoa.
+
+    Portado das escritas que a tela de usuários fazia direto no Supabase — não
+    havia edge function para isto, o RLS é que segurava. A regra de quem pode
+    era a policy mais o `isAdmin` do front; aqui é `exige_papel`.
+    """
+
+    role: str | None = None
+    status: str | None = None
+
+
+_PAPEIS = {"super_admin", "member", "user"}
+_STATUS_PERFIL = {"active", "inactive"}
+
+
+@router.patch("/{user_id}", response_model=PerfilOut)
+async def atualizar_perfil(
+    user_id: str,
+    dados: PerfilAdminPatch,
+    usuario: Usuario = Depends(exige_papel("super_admin")),
+):
+    campos = dados.model_dump(exclude_unset=True)
+    if not campos:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nada para atualizar.")
+    if "role" in campos and campos["role"] not in _PAPEIS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Papel inválido. Use um de: {', '.join(sorted(_PAPEIS))}.",
+        )
+    if "status" in campos and campos["status"] not in _STATUS_PERFIL:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"status inválido. Use um de: {', '.join(sorted(_STATUS_PERFIL))}.",
+        )
+
+    async with sessao(role="service_role") as conn:
+        existe = await conn.fetchval(
+            "SELECT 1 FROM public.profiles WHERE id = $1::uuid", user_id
+        )
+        if not existe:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuário não encontrado.")
+
+        async with conn.transaction():
+            if "role" in campos:
+                # Apaga e insere, como o front fazia — `user_roles` admite mais
+                # de uma linha por usuário, e trocar o papel é substituir o
+                # conjunto, não editar uma linha. Numa transação porque o
+                # intervalo entre o DELETE e o INSERT é um usuário sem papel
+                # nenhum, e `has_role` negaria tudo nesse instante.
+                await conn.execute(
+                    "DELETE FROM public.user_roles WHERE user_id = $1::uuid", user_id
+                )
+                await conn.execute(
+                    "INSERT INTO public.user_roles (user_id, role) "
+                    "VALUES ($1::uuid, $2::public.app_role)",
+                    user_id, campos["role"],
+                )
+                await _registrar_acesso(
+                    conn, usuario.id, "change_role",
+                    {"target_user": user_id, "new_role": campos["role"]},
+                )
+
+            if "status" in campos:
+                await conn.execute(
+                    "UPDATE public.profiles SET status = $2, updated_at = now() "
+                    "WHERE id = $1::uuid",
+                    user_id, campos["status"],
+                )
+                await _registrar_acesso(
+                    conn, usuario.id,
+                    "deactivate_user" if campos["status"] == "inactive" else "activate_user",
+                    {"target_user": user_id},
+                )
+
+        linha = await conn.fetchrow(
+            f"SELECT {_COLUNAS}, {_PAPEL} FROM public.profiles p WHERE p.id = $1::uuid",
+            user_id,
+        )
+    return PerfilOut(**dict(linha))
+
+
+async def _registrar_acesso(conn, autor_id: str, acao: str, metadata: dict) -> None:
+    """Trilha em `access_logs`. O front gravava isto junto de cada mudança —
+    quem mudou, o quê, em quem. Vai na mesma transação: log que some quando a
+    escrita dá errado é pior que log nenhum, porque dá falsa confiança."""
+    await conn.execute(
+        "INSERT INTO public.access_logs (user_id, action, metadata) "
+        "VALUES ($1::uuid, $2, $3::jsonb)",
+        autor_id, acao, json.dumps(metadata),
+    )
