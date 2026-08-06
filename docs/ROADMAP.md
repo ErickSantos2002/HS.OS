@@ -83,6 +83,18 @@ comportamento, não só o contrato.
 **Melhorias adiadas** (portadas como estavam, corrigir depois da reconstrução):
 - `POST /agents/leadership/sync` — o botão da UI devolve ao banco os mesmos valores
   que leu; nunca muda nada. Quem faz o trabalho de verdade é o orquestrador na VPS.
+- 🔴 **`GET /agents/{id}/export` vaza domínios internos.** A sanitização só troca o
+  host do gateway e a URL do Supabase; qualquer outro domínio da empresa passa
+  direto. No export real da `nina` saíram `growthhsapi.healthsafetytech.com`,
+  `hsgrowth.healthsafetytech.com`, `authapi…`, `tinyapi…` e a conta
+  `nina@healthsafetytech.com` — dentro de um arquivo cujo propósito é ser
+  compartilhado com outra empresa. **Herdado da edge, não introduzido na portagem.**
+  Correção provável: derivar o domínio da empresa dos e-mails em `profiles` (a mesma
+  fonte determinística já usada para nomes de pessoas) e trocar por
+  `{{COMPANY_DOMAIN}}`. Até lá, tratar o `.dnos` como documento interno.
+- O `_sanitizar_uuids` usa janela de 60 caracteres que atravessa quebra de linha, então
+  UUIDs vizinhos herdam o rótulo do anterior. Só erra o rótulo — o id é sanitizado de
+  todo jeito. Igual ao original.
 
 **Exceção já decidida:** `PATCH /agents/{id}` grava no gateway antes do banco e aborta
 com 502 se ele recusar, em vez do `openclaw_warning` ignorado da edge. Foi mudança de

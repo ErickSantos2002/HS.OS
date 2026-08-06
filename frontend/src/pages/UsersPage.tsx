@@ -184,22 +184,12 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
     const id = agent.openclaw_id ?? agent.id;
     setExportingId(id);
     try {
-      const { data, error } = await supabase.functions.invoke("export-agent", {
-        body: { agent_id: id },
-      });
-      if (error) {
-        let msg = error.message || "Falha ao exportar";
-        try {
-          const ctx = (error as any).context;
-          if (ctx && typeof ctx.json === "function") {
-            const parsed = await ctx.json();
-            if (parsed?.error) msg = parsed.error;
-          }
-        } catch { /* ignore */ }
-        throw new Error(msg);
-      }
-      if (!data || typeof data !== "object" || !(data as any).dnos_version || !(data as any).agent?.agent_id) {
-        throw new Error((data as any)?.error || "Resposta inválida do servidor");
+      // GET porque é leitura pura. O `agent_id` vai na rota, não no corpo.
+      const data = await api<{ dnos_version?: string; agent?: { agent_id?: string } }>(
+        `/agents/${encodeURIComponent(id)}/export`,
+      );
+      if (!data?.dnos_version || !data.agent?.agent_id) {
+        throw new Error("Resposta inválida do servidor");
       }
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
