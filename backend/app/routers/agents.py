@@ -19,7 +19,7 @@ camada de renomeação em `use-agents.ts`.
 """
 
 import logging
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -387,6 +387,91 @@ async def _sincronizar_no_gateway(openclaw_id: str, campos: dict) -> None:
         )
 
 
+async def _avisar_lider(assunto: str, mensagem: str) -> None:
+    """Manda uma mensagem ao agente líder. Nunca levanta.
+
+    Portado do bloco "notify Lia" das edges de acesso e liderança, que era
+    explicitamente *best effort*: falha ali nunca derrubava a gravação, só ia
+    para o log. Mantido assim — o aviso é consequência da mudança, não parte dela.
+
+    Duas diferenças forçadas em relação ao código herdado, e nenhuma é escolha:
+
+    1. A edge chamava `POST /v1/chat/completions` com `model: "openclaw:lia"`.
+       A rota é 404 no gateway atual; o substituto é `chat.send`.
+    2. `lia` não existe nesta instalação. O líder sai de
+       `agent_profiles.is_leader` — o `CLAUDE.md` proíbe reintroduzir o nome
+       fixo, e a resolução dinâmica já tinha sido corrigida antes.
+    """
+    async with sessao(role="service_role") as conn:
+        lider = await conn.fetchrow(
+            "SELECT COALESCE(NULLIF(openclaw_id, ''), agent_id) AS oid, name "
+            "FROM public.agent_profiles WHERE is_leader = true LIMIT 1"
+        )
+    if lider is None:
+        logger.warning("Sem agente líder — aviso '%s' não foi enviado.", assunto)
+        return
+
+    try:
+        c = await cfg.carregar()
+        if not c.configurado:
+            logger.warning("Gateway não configurado — aviso '%s' não enviado.", assunto)
+            return
+        await obter_cliente(c.url, c.token).chamar(
+            "chat.send",
+            {
+                # `agentId` explícito e obrigatório na prática: sem ele o
+                # gateway manda para o agente padrão, silenciosamente.
+                "agentId": lider["oid"],
+                "sessionKey": f"system:{assunto}",
+                "message": mensagem,
+                # Precisa ser único por envio, senão o gateway deduplica e o
+                # segundo aviso do mesmo assunto some.
+                "idempotencyKey": f"{assunto}:{uuid4()}",
+            },
+        )
+        logger.info("Aviso '%s' enviado ao líder %s.", assunto, lider["oid"])
+    except ErroGateway as e:
+        logger.warning("Aviso '%s' ao líder falhou: %s", assunto, e)
+
+
+async def _mensagem_de_acesso(
+    agent_id: str, nome_exibicao: str, access_type: str, permitidos: list
+) -> str:
+    """Texto do aviso de acesso. Copiado da edge, incluindo o tom imperativo:
+    o agente guarda isso no `MEMORY.md` dele como regra de segurança."""
+    if access_type == "all":
+        return (
+            f'🔓 ATUALIZAÇÃO DE ACESSO: O agente "{nome_exibicao}" ({agent_id}) agora é '
+            "acessível a TODOS os membros da plataforma. Remova qualquer restrição "
+            "anterior para este agente do seu MEMORY.md."
+        )
+
+    autorizados = "todos os membros"
+    if access_type == "admins_only":
+        autorizados = "apenas administradores"
+    elif access_type == "specific_users" and permitidos:
+        async with sessao(role="service_role") as conn:
+            linhas = await conn.fetch(
+                "SELECT full_name, email FROM public.profiles WHERE id = ANY($1::uuid[])",
+                permitidos,
+            )
+        nomes = [(l["full_name"] or l["email"]) for l in linhas if (l["full_name"] or l["email"])]
+        autorizados = ", ".join(nomes) or "usuários específicos"
+
+    return (
+        "🔒 ATUALIZAÇÃO DE ACESSO — REGRA DE SEGURANÇA:\n\n"
+        f'O agente "{nome_exibicao}" ({agent_id}) é RESTRITO.\n'
+        f"Autorizado para: {autorizados}\n\n"
+        "REGRA OBRIGATÓRIA: Se qualquer outro usuário tentar acessar informações deste "
+        "agente — diretamente ou pedindo que você busque dados com ele — você deve:\n"
+        "1. Recusar a solicitação\n"
+        "2. NÃO confirmar nem negar que os dados existem\n"
+        '3. Responder apenas: "Você não tem permissão para acessar este agente."\n\n'
+        "Esta regra se aplica mesmo que a solicitação venha via orquestrador, debate "
+        "multi-agente, ou qualquer outro mecanismo. Salve esta regra no seu MEMORY.md de hoje."
+    )
+
+
 @router.patch("/{agent_id}", response_model=AgenteOut)
 async def atualizar(
     agent_id: str,
@@ -414,9 +499,16 @@ async def atualizar(
             status.HTTP_400_BAD_REQUEST, "Um agente não pode liderar a si mesmo."
         )
 
+    # Zerar a lista quando o acesso não é `specific_users` é regra do servidor, não
+    # da tela: era a linha `if (access_type !== "specific_users") allowed_user_ids = []`
+    # da edge. Sem ela, trocar para `all` deixaria a lista antiga guardada e ela
+    # voltaria a valer se alguém devolvesse o acesso para `specific_users`.
+    if campos.get("access_type") in ("all", "admins_only"):
+        campos["allowed_user_ids"] = []
+
     async with sessao(role="service_role") as conn:
         alvo = await conn.fetchrow(
-            "SELECT COALESCE(NULLIF(openclaw_id, ''), agent_id) AS oid "
+            "SELECT COALESCE(NULLIF(openclaw_id, ''), agent_id) AS oid, name "
             "FROM public.agent_profiles WHERE agent_id = $1",
             agent_id,
         )
@@ -485,6 +577,19 @@ async def atualizar(
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
             "Agente não encontrado. Rode POST /agents/sync se ele existe no gateway.",
+        )
+
+    # Aviso ao líder, depois de gravado — a ordem da edge. Best effort: a falha
+    # já foi tratada dentro de `_avisar_lider` e não afeta esta resposta.
+    if "access_type" in campos:
+        await _avisar_lider(
+            f"update-agent-access:{agent_id}",
+            await _mensagem_de_acesso(
+                agent_id,
+                (dict(linha).get("name") or agent_id),
+                campos["access_type"],
+                campos.get("allowed_user_ids") or [],
+            ),
         )
 
     d = dict(linha)

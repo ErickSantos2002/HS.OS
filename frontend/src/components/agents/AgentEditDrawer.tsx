@@ -251,9 +251,11 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
   const handleSaveAcesso = async () => {
     setSavingTab("acesso");
     try {
-      await callEdge("update-agent-access", {
-        agent_id: agent.openclaw_id ?? agent.agent_id,
-        agent_name: form.name,
+      // A edge recebia `openclaw_id ?? agent_id`; aqui a chave é sempre o
+      // `agent_id`, e o endpoint resolve o `openclaw_id` sozinho quando precisa
+      // falar com o gateway. Zerar a lista fora de `specific_users` agora é
+      // regra do servidor — mandada aqui também só para a tela não mentir.
+      await salvarPerfil({
         access_type: accessType,
         allowed_user_ids: accessType === "specific_users" ? allowedUsers : [],
       });
