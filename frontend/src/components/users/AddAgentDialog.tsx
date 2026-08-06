@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { api } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
@@ -265,13 +266,15 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
     setWorkspacesLoading(true);
     (async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("list-openclaw-workspaces");
+        // A edge só derivava isto do `agents.list` do gateway, e o nosso
+        // `/agents` já devolve `workspace` — não precisa de endpoint próprio.
+        const resposta = await api<{
+          agents: Array<{ id: string; name: string | null; workspace: string | null }>;
+        }>("/agents");
         if (cancelled) return;
-        if (error || !data?.success) {
-          throw new Error(error?.message ?? data?.error ?? "failed");
-        }
-        const agents: Array<{ id: string | null; name: string | null; workspace: string }> =
-          data.agents ?? [];
+        const agents = resposta.agents
+          .filter((a) => !!a.workspace)
+          .map((a) => ({ id: a.id, name: a.name, workspace: a.workspace as string }));
         const owners: Record<string, string> = {};
         for (const a of agents) {
           if (a.workspace && !owners[a.workspace]) {
@@ -451,16 +454,18 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
 
   async function importExisting() {
     setSubmitting(true);
-    const { data, error } = await supabase.functions.invoke("sync-agents", { body: {} });
-    setSubmitting(false);
-    if (error || data?.error) {
+    try {
+      await api("/agents/sync", { method: "POST" });
+    } catch (e) {
+      setSubmitting(false);
       toast({
         title: "Erro ao importar",
-        description: data?.error || error?.message || "Falha na sincronização",
+        description: (e as Error).message,
         variant: "destructive",
       });
       return;
     }
+    setSubmitting(false);
     toast({
       title: "Importação concluída",
       description: "O agente existente foi sincronizado a partir do OpenClaw.",

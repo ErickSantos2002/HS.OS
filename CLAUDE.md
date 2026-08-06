@@ -23,10 +23,10 @@ Sair do Supabase é substituir **cinco** subsistemas, não só o banco:
 | Subsistema | Situação | Destino |
 |---|---|---|
 | Auth | ✅ portado | JWT próprio (PyJWT + bcrypt) |
+| Storage | ✅ portado | `UPLOADS_DIR` em disco, `app/routers/storage.py` |
+| Realtime (`postgres_changes`) | ✅ portado | WebSocket em `/ws`, `app/realtime.py` |
 | Banco (via RLS, direto do browser) | 🟡 em andamento | endpoints FastAPI |
-| Edge Functions | 🟡 12 de 73 | routers FastAPI |
-| Storage | ❌ não começou | `UPLOADS_DIR` na VPS ou S3 |
-| Realtime (`postgres_changes`) | ❌ não começou | WebSocket ou polling |
+| Edge Functions | 🟡 24 de 73 | routers FastAPI |
 
 O placar atualizado e a forma de medi-lo estão em `docs/ROADMAP.md`.
 
@@ -144,8 +144,9 @@ React SPA (Vite) ───┤        └─► OpenClaw Gateway (WebSocket, via 
                     └─► Supabase      (o que ainda não foi portado)  ← em remoção
 ```
 
-O que **já é nosso**: autenticação, marca, perfis, gateway e agentes (leitura, sync, edição completa
-de perfil, verificação de modelo e liderança em lote). O resto ainda chama o Supabase.
+O que **já é nosso**: autenticação, marca, perfis, gateway, agentes (leitura, sync, edição completa
+de perfil, verificação de modelo e liderança em lote), **conversa com agente**, **canais**,
+**arquivos** e **tempo real**. O resto ainda chama o Supabase.
 
 **Regra ao portar escrita que toca as duas pontas: gateway primeiro, banco depois.** `PATCH
 /agents/{id}` escreve nome e modelo no gateway **antes** de tocar no banco e aborta com 502 se ele
@@ -375,12 +376,11 @@ O que é código e precisa de mudança manual:
 - `README.md` com o título do remix
 - Prefixo `dnos_` das feature flags e a chave `dnos-branding-cache`
 
-**Dois IDs de projeto Supabase de terceiros continuam hardcoded** — vão quebrar em instalação própria:
-
-| Onde | ID | O que é |
-|---|---|---|
-| `frontend/src/hooks/use-branding.ts:93` | `zozyfhisrbkqvdcsdbfp` | URL da Edge Function `manifest` — aponta para outro projeto, não para o próprio |
-| `backend/supabase/functions/marketing-analytics-proxy/index.ts:4` | `kfhojzdcnpuntynodsff` | `DNMARKETING_URL`, API de analytics da dn.ia |
+**IDs de projeto Supabase de terceiros:** o do `manifest`
+(`zozyfhisrbkqvdcsdbfp`, que apontava para outro projeto) **já saiu** — o manifest
+é servido pela própria instalação. Resta `kfhojzdcnpuntynodsff` em
+`backend/supabase/functions/marketing-analytics-proxy/index.ts:4`
+(`DNMARKETING_URL`, API de analytics da dn.ia), numa function ainda não portada.
 
 Nomes de agentes da instância original (`lia`, `rock`, `milo`, `kira`, `radar`, `sigma`, `rodrigo`)
 ainda aparecem como default em `frontend/src/hooks/use-agent-avatar.ts`, `channel-agent-reply`, `automations-api`

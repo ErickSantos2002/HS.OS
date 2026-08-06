@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { api } from "@/lib/api";
 import { enviarArquivo } from "@/lib/storage";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -167,13 +168,20 @@ export default function EmpresaTab() {
       const path = `uploads/${Date.now()}-${safeName}`;
       // `company-docs` é privado: o arquivo só é lido por quem tem token.
       await enviarArquivo("company-docs", path, file, file.name);
-      const { data, error } = await supabase.functions.invoke("extract-file-text", {
-        body: { storagePath: path, fileName: file.name },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      applyParsed(data);
-      toast.success(`Arquivo "${file.name}" processado! Revise e salve.`);
+      // A extração do texto já é nossa. O passo seguinte — transformar esse
+      // texto nos campos da empresa — ainda depende de LLM, e a edge que fazia
+      // isso (`parse-company-context`) usa o Lovable AI Gateway. Enquanto essa
+      // decisão não sai, o texto é entregue para revisão manual em vez de a
+      // tela falhar. Ver o bloqueio em `docs/ROADMAP.md`.
+      const { text } = await api<{ text: string }>(
+        `/storage/extrair-texto/company-docs/${encodeURIComponent(path)}`,
+        { method: "POST" },
+      );
+      applyParsed({ extra_context: text });
+      toast.success(
+        `Texto de "${file.name}" extraído. O preenchimento automático dos campos `
+        + `ainda não está disponível — revise e complete manualmente.`,
+      );
     } catch (e: any) {
       toast.error(`Erro ao processar arquivo: ${e.message ?? e}`);
     } finally {
