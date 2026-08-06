@@ -387,30 +387,18 @@ async def _sincronizar_no_gateway(openclaw_id: str, campos: dict) -> None:
         )
 
 
-async def _avisar_lider(assunto: str, mensagem: str) -> None:
-    """Manda uma mensagem ao agente líder. Nunca levanta.
+async def _avisar_agente(openclaw_id: str, assunto: str, mensagem: str) -> None:
+    """Manda uma mensagem a um agente. Nunca levanta.
 
-    Portado do bloco "notify Lia" das edges de acesso e liderança, que era
-    explicitamente *best effort*: falha ali nunca derrubava a gravação, só ia
-    para o log. Mantido assim — o aviso é consequência da mudança, não parte dela.
+    Portado dos blocos "notify" das edges de acesso e liderança, que eram
+    explicitamente *best effort* (`EdgeRuntime.waitUntil`, falha só no log):
+    o aviso é consequência da mudança, não parte dela, e nunca derrubava a
+    gravação.
 
-    Duas diferenças forçadas em relação ao código herdado, e nenhuma é escolha:
-
-    1. A edge chamava `POST /v1/chat/completions` com `model: "openclaw:lia"`.
-       A rota é 404 no gateway atual; o substituto é `chat.send`.
-    2. `lia` não existe nesta instalação. O líder sai de
-       `agent_profiles.is_leader` — o `CLAUDE.md` proíbe reintroduzir o nome
-       fixo, e a resolução dinâmica já tinha sido corrigida antes.
+    Uma diferença forçada, que não é escolha: a edge chamava
+    `POST /v1/chat/completions` com `model: "openclaw:<agente>"`. A rota é 404
+    no gateway atual e o substituto é `chat.send` — ver `CLAUDE.md`.
     """
-    async with sessao(role="service_role") as conn:
-        lider = await conn.fetchrow(
-            "SELECT COALESCE(NULLIF(openclaw_id, ''), agent_id) AS oid, name "
-            "FROM public.agent_profiles WHERE is_leader = true LIMIT 1"
-        )
-    if lider is None:
-        logger.warning("Sem agente líder — aviso '%s' não foi enviado.", assunto)
-        return
-
     try:
         c = await cfg.carregar()
         if not c.configurado:
@@ -421,17 +409,104 @@ async def _avisar_lider(assunto: str, mensagem: str) -> None:
             {
                 # `agentId` explícito e obrigatório na prática: sem ele o
                 # gateway manda para o agente padrão, silenciosamente.
-                "agentId": lider["oid"],
+                "agentId": openclaw_id,
                 "sessionKey": f"system:{assunto}",
                 "message": mensagem,
-                # Precisa ser único por envio, senão o gateway deduplica e o
+                # Único por envio, senão o gateway deduplica pelo runId e o
                 # segundo aviso do mesmo assunto some.
                 "idempotencyKey": f"{assunto}:{uuid4()}",
             },
         )
-        logger.info("Aviso '%s' enviado ao líder %s.", assunto, lider["oid"])
+        logger.info("Aviso '%s' enviado a %s.", assunto, openclaw_id)
     except ErroGateway as e:
-        logger.warning("Aviso '%s' ao líder falhou: %s", assunto, e)
+        logger.warning("Aviso '%s' a %s falhou: %s", assunto, openclaw_id, e)
+
+
+async def _avisar_lider(assunto: str, mensagem: str) -> None:
+    """Avisa o agente líder da instalação.
+
+    A edge de acesso mandava para `openclaw:lia` fixo, e `lia` não existe aqui.
+    O líder sai de `agent_profiles.is_leader` — o `CLAUDE.md` proíbe reintroduzir
+    o nome fixo, e a resolução dinâmica já tinha sido corrigida antes.
+    """
+    async with sessao(role="service_role") as conn:
+        lider = await conn.fetchrow(
+            "SELECT COALESCE(NULLIF(openclaw_id, ''), agent_id) AS oid "
+            "FROM public.agent_profiles WHERE is_leader = true LIMIT 1"
+        )
+    if lider is None:
+        logger.warning("Sem agente líder — aviso '%s' não foi enviado.", assunto)
+        return
+    await _avisar_agente(lider["oid"], assunto, mensagem)
+
+
+def _rotulo(emoji: str | None, nome: str | None, aid: str) -> str:
+    """`emoji nome` como a edge montava, tolerando ambos ausentes."""
+    return " ".join(p for p in (emoji or "", nome or aid) if p).strip()
+
+
+async def _avisar_lideranca(
+    agent_id: str, rotulo_agente: str, lider_anterior: str | None, lider_novo: str | None
+) -> None:
+    """Avisa os orquestradores envolvidos numa troca de liderança.
+
+    Dois avisos possíveis, exatamente como na edge: o líder que **perdeu** o
+    agente é mandado tirar a referência do `IDENTITY.md` dele, e o que **ganhou**
+    recebe as instruções de escrever nos dois arquivos. Os textos são cópia —
+    são instruções que o agente executa, não mensagem para humano.
+    """
+    async def perfil(aid: str):
+        async with sessao(role="service_role") as conn:
+            return await conn.fetchrow(
+                "SELECT COALESCE(NULLIF(openclaw_id, ''), agent_id) AS oid, agent_id, "
+                "name, emoji FROM public.agent_profiles WHERE agent_id = $1",
+                aid,
+            )
+
+    if lider_anterior and lider_anterior != lider_novo:
+        anterior = await perfil(lider_anterior)
+        if anterior:
+            await _avisar_agente(
+                anterior["oid"],
+                f"leadership:{anterior['agent_id']}",
+                "ATUALIZAÇÃO DE LIDERANÇA:\n\n"
+                f"O agente {rotulo_agente} (ID: {agent_id}) não está mais sob sua "
+                "coordenação direta.\n\n"
+                "Por favor:\n"
+                '1. No seu IDENTITY.md, remova a referência a este agente da seção '
+                '"## Super agentes sob sua coordenação".\n'
+                "2. Confirme quando concluído.",
+            )
+
+    if not lider_novo:
+        return
+
+    novo = await perfil(lider_novo)
+    if novo is None:
+        # A edge devolvia 404 aqui — **depois** de já ter gravado o leader_id.
+        # Mantido o efeito (grava e avisa que o líder não existe) sem derrubar o
+        # PATCH inteiro, que também gravou outros campos legítimos.
+        logger.warning("Líder %s não encontrado — aviso não enviado.", lider_novo)
+        return
+
+    rotulo_lider = _rotulo(novo["emoji"], novo["name"], novo["agent_id"])
+    await _avisar_agente(
+        novo["oid"],
+        f"leadership:{novo['agent_id']}",
+        "CONFIGURAÇÃO DE LIDERANÇA:\n\n"
+        f"Um agente foi vinculado à sua coordenação: {rotulo_agente} (ID: {agent_id}).\n\n"
+        "Por favor, faça o seguinte:\n"
+        f"1. Acesse o workspace do agente {rotulo_agente} em "
+        f"/root/.openclaw/workspace-{agent_id}/\n"
+        "2. No arquivo IDENTITY.md desse agente, adicione (se ainda não existir) a seção:\n\n"
+        "## Estrutura de Liderança\n"
+        f"Seu orquestrador direto é {rotulo_lider}. Em decisões estratégicas, conflitos "
+        "de prioridade ou dúvidas sobre direcionamento, consulte-o.\n\n"
+        f"3. No SEU próprio IDENTITY.md ({rotulo_lider}), adicione ou atualize:\n\n"
+        "## Super agentes sob sua coordenação\n"
+        f"- {rotulo_agente} ({agent_id})\n\n"
+        "4. Confirme quando concluído.",
+    )
 
 
 async def _mensagem_de_acesso(
@@ -508,7 +583,12 @@ async def atualizar(
 
     async with sessao(role="service_role") as conn:
         alvo = await conn.fetchrow(
-            "SELECT COALESCE(NULLIF(openclaw_id, ''), agent_id) AS oid, name "
+            "SELECT COALESCE(NULLIF(openclaw_id, ''), agent_id) AS oid, name, emoji, "
+            # O líder de antes, para saber quem avisar da perda. A edge recebia
+            # isto do front (`previous_leader_id`), que o guardava em estado de
+            # componente; ler do banco dá o mesmo resultado sem depender de um
+            # valor que pode ter envelhecido na tela aberta.
+            "leader_id AS lider_anterior "
             "FROM public.agent_profiles WHERE agent_id = $1",
             agent_id,
         )
@@ -579,8 +659,8 @@ async def atualizar(
             "Agente não encontrado. Rode POST /agents/sync se ele existe no gateway.",
         )
 
-    # Aviso ao líder, depois de gravado — a ordem da edge. Best effort: a falha
-    # já foi tratada dentro de `_avisar_lider` e não afeta esta resposta.
+    # Avisos aos agentes, depois de gravado — a ordem da edge. Best effort: a
+    # falha já foi tratada lá dentro e não afeta esta resposta.
     if "access_type" in campos:
         await _avisar_lider(
             f"update-agent-access:{agent_id}",
@@ -590,6 +670,18 @@ async def atualizar(
                 campos["access_type"],
                 campos.get("allowed_user_ids") or [],
             ),
+        )
+
+    # Sem condicionar a "mudou": a edge avisava o líder novo **sempre** que era
+    # chamada, e a tela depende disso — "Sincronizar com orquestrador" e
+    # "Re-configurar" remandam o mesmo líder só para disparar a mensagem. Só o
+    # aviso ao líder *anterior* é condicional, e essa guarda está lá dentro.
+    if "leader_id" in campos:
+        await _avisar_lideranca(
+            agent_id,
+            _rotulo(alvo["emoji"], alvo["name"], agent_id),
+            alvo["lider_anterior"],
+            campos["leader_id"],
         )
 
     d = dict(linha)

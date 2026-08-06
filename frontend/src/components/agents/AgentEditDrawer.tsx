@@ -119,7 +119,9 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
 
   // Liderança
   const [hasLeader, setHasLeader] = useState(false);
-  const [previousLeaderId, setPreviousLeaderId] = useState<string | null>(null);
+  // `previousLeaderId` deixou de existir com a portagem: quem descobre o líder
+  // anterior agora é o servidor, lendo do banco antes de gravar. Guardá-lo aqui
+  // só recriaria a chance de divergir do que está persistido.
   const [allAgents, setAllAgents] = useState<AgentOption[]>([]);
 
   // Delete
@@ -163,7 +165,6 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
       setAccessType((p.access_type as AccessType) ?? "all");
       setAllowedUsers(Array.isArray(p.allowed_user_ids) ? p.allowed_user_ids : []);
       setHasLeader(!!p.leader_id);
-      setPreviousLeaderId(p.leader_id ?? null);
       setAllUsers(usuariosRes.status === "fulfilled" ? usuariosRes.value : []);
       const listaAgentes =
         agentesRes.status === "fulfilled" ? agentesRes.value.agents ?? [] : [];
@@ -271,18 +272,12 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
   const handleSaveLideranca = async () => {
     setSavingTab("lideranca");
     try {
-      // Persist is_leader change
-      await salvarPerfil({ is_leader: form.is_leader });
-      // Update leader_id (and notify orchestrators)
+      // Uma chamada só: o endpoint grava is_leader e leader_id e dispara os
+      // avisos aos orquestradores. O `previous_leader_id` sumiu do payload de
+      // propósito — o servidor lê o líder anterior do banco, que não envelhece
+      // como o estado desta tela.
       const newLeader = hasLeader && form.leader_id ? form.leader_id : null;
-      await callEdge("update-agent-leadership", {
-        agent_id: agent.agent_id,
-        leader_id: newLeader,
-        agent_name: form.name,
-        agent_emoji: form.emoji,
-        previous_leader_id: previousLeaderId,
-      });
-      setPreviousLeaderId(newLeader);
+      await salvarPerfil({ is_leader: form.is_leader, leader_id: newLeader });
       toast({ title: "Liderança atualizada" });
       onSaved?.();
     } catch (e) {
@@ -316,13 +311,9 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
       return;
     }
     try {
-      await callEdge("update-agent-leadership", {
-        agent_id: agent.agent_id,
-        leader_id: leader.agent_id,
-        agent_name: form.name,
-        agent_emoji: form.emoji,
-        previous_leader_id: previousLeaderId,
-      });
+      // Regravar o mesmo líder é o gatilho: o endpoint avisa o orquestrador
+      // toda vez que `leader_id` vem no corpo, mude ou não.
+      await salvarPerfil({ leader_id: leader.agent_id });
       toast({
         title: "Sincronização iniciada",
         description: `${leader.name} foi notificado para atualizar o IDENTITY.md.`,
@@ -355,15 +346,10 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
       title: "Re-configuração solicitada",
       description: `${leader.name} vai reescrever os arquivos do agente.`,
     });
-    // Reuse leadership notify channel as a generic trigger
+    // Reaproveita o aviso de liderança como gatilho genérico — era assim na
+    // edge e continua sendo aqui.
     try {
-      await callEdge("update-agent-leadership", {
-        agent_id: agent.agent_id,
-        leader_id: leader.agent_id,
-        agent_name: form.name,
-        agent_emoji: form.emoji,
-        previous_leader_id: previousLeaderId,
-      });
+      await salvarPerfil({ leader_id: leader.agent_id });
     } catch {/* best-effort */}
   };
 
