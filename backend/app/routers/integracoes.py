@@ -334,3 +334,170 @@ async def confirmar_escrita(
                 "WHERE agent_id = $1 AND file_name = $2",
                 c.agent_id, c.file_name,
             )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Integrações: registro e entrega de credenciais ao agente
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Portados de `register-integration` e `fetch-agent-credentials`. Os dois lidam
+# com **segredo de cliente** (chave de API do Meta, do Google, etc.), então duas
+# regras valem em todo este bloco:
+#
+# 1. Nada aqui é exposto ao navegador — só ao serviço da VPS, por segredo
+#    compartilhado. É por isso que a tela usa `key_preview`, que é máscara.
+# 2. Valor de credencial nunca vai para log.
+
+
+class CredencialIn(BaseModel):
+    key_name: str
+    value: str = ""
+    label: str | None = None
+
+
+class IntegracaoIn(BaseModel):
+    name: str = Field(min_length=1)
+    category: str = Field(min_length=1)
+    key_name: str = Field(min_length=1)
+    key_preview: str | None = None
+    agents_using: list[str] = []
+    description: str | None = None
+    icon: str = "🔑"
+    added_by_agent: str | None = None
+    is_configured: bool = False
+    integration_type: str = "api_key"
+    credentials: list[CredencialIn] = []
+    template_id: str | None = None
+
+
+_TIPOS_INTEGRACAO = {"api_key", "multi_key", "mcp"}
+
+
+@router.post("/integrations", status_code=status.HTTP_201_CREATED)
+async def registrar_integracao(
+    dados: IntegracaoIn,
+    _: None = Depends(exige_segredo("GUARDRAILS_API_TOKEN")),
+):
+    """Cria ou atualiza uma integração, **mesclando** as credenciais.
+
+    Mesclar, não substituir: o agente pode registrar de novo uma integração
+    mandando só a chave que ele conhece, e substituir apagaria as outras. A
+    regra da edge, mantida: credencial que chega **com valor vazio** preserva o
+    valor que já estava — é assim que o agente atualiza rótulo sem reenviar o
+    segredo.
+    """
+    if dados.integration_type not in _TIPOS_INTEGRACAO:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"integration_type inválido. Use um de: {', '.join(sorted(_TIPOS_INTEGRACAO))}.",
+        )
+
+    async with sessao(role="service_role") as conn:
+        existente = await conn.fetchrow(
+            "SELECT id, credentials FROM public.integrations "
+            "WHERE name = $1 OR key_name = $2 LIMIT 1",
+            dados.name, dados.key_name,
+        )
+
+        antigas = []
+        if existente and existente["credentials"]:
+            bruto = existente["credentials"]
+            antigas = json.loads(bruto) if isinstance(bruto, str) else bruto
+
+        por_nome = {c.get("key_name"): c for c in antigas if isinstance(c, dict)}
+        for nova in dados.credentials:
+            anterior = por_nome.get(nova.key_name, {})
+            por_nome[nova.key_name] = {
+                "key_name": nova.key_name,
+                # Valor vazio preserva o que já havia.
+                "value": nova.value or anterior.get("value", ""),
+                "label": nova.label or anterior.get("label"),
+            }
+        mescladas = list(por_nome.values())
+
+        if existente:
+            await conn.execute(
+                """
+                UPDATE public.integrations SET
+                    name = $2, category = $3, key_name = $4,
+                    key_preview = COALESCE($5, key_preview),
+                    agents_using = $6::text[], description = $7, icon = $8,
+                    is_configured = $9, integration_type = $10,
+                    credentials = $11::jsonb, template_id = COALESCE($12, template_id),
+                    updated_at = now()
+                 WHERE id = $1
+                """,
+                existente["id"], dados.name, dados.category, dados.key_name,
+                dados.key_preview, dados.agents_using, dados.description, dados.icon,
+                dados.is_configured, dados.integration_type,
+                json.dumps(mescladas), dados.template_id,
+            )
+            acao = "atualizada"
+        else:
+            await conn.execute(
+                """
+                INSERT INTO public.integrations
+                    (name, category, key_name, key_preview, agents_using, description,
+                     icon, added_by_agent, is_configured, integration_type,
+                     credentials, template_id)
+                VALUES ($1,$2,$3,$4,$5::text[],$6,$7,$8,$9,$10,$11::jsonb,$12)
+                """,
+                dados.name, dados.category, dados.key_name, dados.key_preview,
+                dados.agents_using, dados.description, dados.icon,
+                dados.added_by_agent, dados.is_configured, dados.integration_type,
+                json.dumps(mescladas), dados.template_id,
+            )
+            acao = "criada"
+
+    # Log sem valor de credencial, de propósito.
+    logger.info("Integração %s %s (%d credenciais)", dados.name, acao, len(mescladas))
+    return {"success": True, "acao": acao, "credenciais": len(mescladas)}
+
+
+@router.get("/agent-credentials/{agent_id}")
+async def credenciais_do_agente(
+    agent_id: str,
+    provider: str = "",
+    _: None = Depends(exige_segredo("GUARDRAILS_API_TOKEN")),
+):
+    """As credenciais que este agente pode usar.
+
+    ⚠️ **Devolve valor de segredo em claro.** É o ponto do endpoint: o agente
+    precisa da chave para chamar a API do provedor. Por isso está atrás do
+    segredo compartilhado e nunca é exposto ao navegador — a tela vê
+    `key_preview`, que é máscara.
+
+    O filtro `provider` compara com nome e `key_name` porque era assim na edge:
+    o agente pede \"as credenciais do meta\" sem saber como a integração foi
+    cadastrada.
+    """
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            "SELECT name, key_name, credentials FROM public.integrations "
+            "WHERE is_configured = true AND $1 = ANY(agents_using)",
+            agent_id,
+        )
+
+    alvo = provider.strip().lower()
+    credenciais: dict[str, str] = {}
+    integracoes: list[dict] = []
+    for linha in linhas:
+        if alvo and alvo not in f"{linha['name']} {linha['key_name']}".lower():
+            continue
+        bruto = linha["credentials"] or "[]"
+        lista = json.loads(bruto) if isinstance(bruto, str) else bruto
+        chaves = []
+        for c in lista:
+            nome = str((c or {}).get("key_name") or "").strip()
+            valor = str((c or {}).get("value") or "")
+            if nome and valor:
+                credenciais[nome] = valor
+                chaves.append(nome)
+        if chaves:
+            integracoes.append({"name": linha["name"], "keys": chaves})
+
+    logger.info(
+        "Credenciais entregues a %s: %d chave(s) de %d integração(ões)",
+        agent_id, len(credenciais), len(integracoes),
+    )
+    return {"credentials": credenciais, "integrations": integracoes}
