@@ -31,6 +31,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.config import settings
+from app.database import sessao
 from app.dependencies import Usuario, exige_papel, usuario_atual
 
 logger = logging.getLogger(__name__)
@@ -158,6 +159,63 @@ async def extrair_texto(
     truncado = len(texto) > _LIMITE_TEXTO
     return TextoExtraidoOut(
         text=texto[:_LIMITE_TEXTO], caracteres=len(texto), truncado=truncado
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Acesso a documento gerado — portado de `sign-generated-document`
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class DocumentoOut(BaseModel):
+    url: str
+    title: str | None = None
+    doc_type: str | None = None
+
+
+@router.get("/documento/{documento_id}", response_model=DocumentoOut)
+async def documento_gerado(
+    documento_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Devolve o endereço de um documento gerado, se ele for do usuário.
+
+    ⚠️ Declarado **antes** do upload e do download genéricos — é a quarta rota
+    deste módulo com prefixo fixo, e todas precisam vir antes de
+    `/storage/{bucket}/{caminho}`, senão `documento` vira nome de bucket.
+
+    A edge criava uma URL assinada de 1 hora do Supabase Storage. Aqui não há
+    assinatura: `generated-documents` é bucket privado, servido por
+    `/storage/privado/...`, que já exige o token do usuário em cada request.
+    O efeito de segurança é o mesmo — melhor, até: a URL assinada valia para
+    quem a tivesse durante uma hora, esta vale só para quem tem o token.
+
+    A conferência de dono acontece aqui e não pelo RLS porque a leitura roda
+    como `service_role` para poder olhar a linha antes de decidir.
+    """
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            "SELECT user_id::text AS user_id, storage_path, title, doc_type "
+            "FROM public.generated_documents WHERE id = $1::uuid",
+            documento_id,
+        )
+    if linha is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento não encontrado.")
+    if linha["user_id"] and linha["user_id"] != usuario.id:
+        # 404, não 403: quem não é dono também não deveria descobrir que o
+        # documento existe.
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Documento não encontrado.")
+
+    caminho = (linha["storage_path"] or "").lstrip("/")
+    if not caminho:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "O documento existe no banco mas não tem arquivo associado.",
+        )
+    return DocumentoOut(
+        url=f"/storage/privado/generated-documents/{caminho}",
+        title=linha["title"],
+        doc_type=linha["doc_type"],
     )
 
 
