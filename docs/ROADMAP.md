@@ -13,7 +13,7 @@ backend não é o mesmo que a tela usar o endpoint.
 
 | | Feito | Total |
 |---|---|---|
-| Edge functions **com substituto no backend** | 38 | 73 |
+| Edge functions **com substituto no backend** | 44 | 73 |
 | Edge functions **que o front já parou de chamar** | 21 | 73 |
 | Arquivos do front sem Supabase | 20 | 113 |
 | Functions distintas ainda referenciadas pelo front | 23 | — |
@@ -29,10 +29,11 @@ grep -rl 'integrations/supabase/client' frontend/src --include=*.ts --include=*.
 
 ⚠️ **Duas armadilhas na medição**, descobertas em 06/08/2026:
 
-1. `ls backend/supabase/functions | wc -l` dá **70**, não 58. As 12 functions dos
-   lotes 0 e 1 ganharam substituto mas **não foram removidas da pasta**, ao
-   contrário do que o `CLAUDE.md` manda. Enquanto isso não for acertado, o `ls`
-   subestima o progresso. As 3 do lote 2b saíram.
+1. ~~O `ls` subestimava o progresso porque as functions dos lotes 0 e 1 ganharam
+   substituto e ficaram na pasta.~~ **Acertado em 06/08/2026:** as seis
+   pendentes (`bootstrap-first-admin`, `test-gateway-connection`,
+   `get-gateway-status`, `gateway-models`, `configure-instance-vault`,
+   `save-install-block`) saíram. Agora o `ls` é a medida honesta.
 2. O grep de `functions.invoke(` **não vê chamadas indiretas**. O
    `AgentEditDrawer` passava o nome por variável (`callEdge(fn, …)`), então três
    functions apareciam como "não invocadas" enquanto eram chamadas oito vezes.
