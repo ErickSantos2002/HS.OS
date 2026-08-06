@@ -19,6 +19,7 @@ camada de renomeação em `use-agents.ts`.
 """
 
 import logging
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -52,6 +53,9 @@ class AgenteOut(BaseModel):
     specialty: str | None = None
     workspace: str | None = None
     isLeader: bool = False
+    # Quem lidera este agente. Vem na lista porque a tela de liderança precisa do
+    # estado de **todos** para regravá-lo em lote sem apagar o dos outros.
+    leaderId: str | None = None
     isOfficial: bool = False
     color: str | None = None
 
@@ -95,7 +99,8 @@ async def listar(usuario: Usuario = Depends(usuario_atual)):
             """
             SELECT agent_id, name, emoji, avatar_url, model, channels, status,
                    access_type, allowed_user_ids, department, description,
-                   specialty, workspace, is_leader, is_official, color, sort_order
+                   specialty, workspace, is_leader, leader_id, is_official, color,
+                   sort_order
             FROM public.agent_profiles
             WHERE status IS DISTINCT FROM 'inactive'
             ORDER BY sort_order NULLS LAST, name
@@ -157,6 +162,7 @@ async def listar(usuario: Usuario = Depends(usuario_atual)):
                 specialty=p.get("specialty"),
                 workspace=g.get("workspace") or p.get("workspace"),
                 isLeader=bool(p.get("is_leader")),
+                leaderId=p.get("leader_id"),
                 isOfficial=bool(p.get("is_official")),
                 color=p.get("color"),
             )
@@ -323,9 +329,62 @@ class PerfilAgentePatch(BaseModel):
     access_type: str | None = None
     allowed_user_ids: list[str] | None = None
     is_leader: bool | None = None
+    # Campos das abas Persona e Automações — o drawer os gravava por
+    # `update-agent-profile`, que era a única rota que os conhecia.
+    persona_description: str | None = None
+    skills_description: str | None = None
+    skills_tags: list[str] | None = None
+    crons_description: str | None = None
+    leader_id: str | None = None
+    status: str | None = None
 
 
 _ACESSOS = {"all", "admins_only", "specific_users"}
+# Espelha o CHECK de `agent_profiles_status_check`. Não restringir mais que o
+# banco: `configuring` é o estado em que `create-agent` deixa um agente novo, e
+# recusá-lo aqui quebraria esse fluxo quando ele for portado.
+_STATUS = {"active", "inactive", "configuring"}
+
+# Campos que o gateway também guarda. Mudar um deles só no banco faz a tela
+# mostrar uma coisa e o agente rodar outra — o caso que a portagem tinha que
+# evitar.
+_CAMPOS_DO_GATEWAY = ("name", "model")
+
+
+async def _sincronizar_no_gateway(openclaw_id: str, campos: dict) -> None:
+    """Propaga nome/modelo para o gateway. Levanta se não conseguir.
+
+    **Gateway primeiro, banco depois.** Se esta chamada falhar, o PATCH aborta e
+    nada muda em lugar nenhum — é o único arranjo em que as duas pontas não
+    divergem. A edge function herdada fazia o contrário (gravava no banco e
+    seguia com um `openclaw_warning` que a UI ignorava), e por isso um gateway
+    fora do ar deixava o banco dizendo um modelo e o agente rodando outro.
+
+    Cuidado registrado: `agents.update` **não valida o modelo** — aceita qualquer
+    string e grava. Um id errado aqui deixa o agente mudo sem erro nenhum. É por
+    isso que existe `POST /agents/test-model`.
+    """
+    payload = {"agentId": openclaw_id}
+    for c in _CAMPOS_DO_GATEWAY:
+        if c in campos:
+            # `model` vai como string nua. O gateway devolve `{"primary": ...}`
+            # no `agents.list`, mas recusa esse formato na escrita
+            # ("at /model: must be string") — assimetria confirmada ao vivo.
+            payload[c] = campos[c]
+
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Gateway não configurado — nome e modelo não podem ser alterados agora.",
+        )
+    try:
+        await obter_cliente(c.url, c.token).chamar("agents.update", payload)
+    except ErroGateway as e:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"O gateway recusou a alteração e nada foi salvo: {e}",
+        )
 
 
 @router.patch("/{agent_id}", response_model=AgenteOut)
@@ -343,8 +402,50 @@ async def atualizar(
             status.HTTP_400_BAD_REQUEST,
             f"access_type inválido. Use um de: {', '.join(sorted(_ACESSOS))}.",
         )
+    if "status" in campos and campos["status"] not in _STATUS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"status inválido. Use um de: {', '.join(sorted(_STATUS))}.",
+        )
+    if campos.get("leader_id") == agent_id:
+        # Um agente não lidera a si mesmo. A edge function silenciava isso para
+        # NULL; aqui é erro, porque a UI não tem como oferecer essa opção sem bug.
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Um agente não pode liderar a si mesmo."
+        )
+
+    async with sessao(role="service_role") as conn:
+        alvo = await conn.fetchrow(
+            "SELECT COALESCE(NULLIF(openclaw_id, ''), agent_id) AS oid "
+            "FROM public.agent_profiles WHERE agent_id = $1",
+            agent_id,
+        )
+    if alvo is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Agente não encontrado. Rode POST /agents/sync se ele existe no gateway.",
+        )
+
+    # Antes de tocar no banco: só quando a mudança realmente alcança o gateway.
+    # Persona, skills, crons e acesso são metadados nossos — editá-los com o
+    # gateway fora do ar é legítimo e não pode ficar bloqueado.
+    if any(c in campos for c in _CAMPOS_DO_GATEWAY):
+        await _sincronizar_no_gateway(alvo["oid"], campos)
 
     virou_lider = campos.pop("is_leader", None)
+
+    if "allowed_user_ids" in campos:
+        # A coluna é `uuid[]`. Um id malformado aqui viraria um erro de driver
+        # sem indicação de qual campo estava errado.
+        try:
+            campos["allowed_user_ids"] = [
+                UUID(str(u)) for u in (campos["allowed_user_ids"] or [])
+            ]
+        except ValueError:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "allowed_user_ids contém um identificador que não é UUID.",
+            )
 
     async with sessao(role="service_role") as conn:
         if campos:
@@ -374,7 +475,7 @@ async def atualizar(
             """
             SELECT agent_id, name, emoji, avatar_url, model, channels, status,
                    department, description, specialty, workspace,
-                   is_leader, is_official, color
+                   is_leader, leader_id, is_official, color
             FROM public.agent_profiles WHERE agent_id = $1
             """,
             agent_id,
@@ -400,6 +501,255 @@ async def atualizar(
         specialty=d.get("specialty"),
         workspace=d.get("workspace"),
         isLeader=bool(d.get("is_leader")),
+        leaderId=d.get("leader_id"),
         isOfficial=bool(d.get("is_official")),
         color=d.get("color"),
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Verificação de modelo — sucessora de `test-llm-model`
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Por que existe: `agents.update` **não valida o modelo**. Aceita qualquer string
+# e grava — comprovado ao vivo em 06/08/2026, gravando um id inventado num agente
+# real. Sem uma verificação, um id errado deixa o agente mudo em silêncio.
+#
+# **Isto não é a portagem do `test-llm-model`, é a substituição dele.** A edge
+# function provava que a LLM respondia mandando uma mensagem de verdade em
+# `POST /v1/chat/completions` com o header `x-openclaw-model`. Essa rota **não
+# existe mais** no gateway 2026.7.1-2 (404, verificado), e o equivalente novo
+# (`chat.send`) manda mensagem real: cria histórico num agente e gasta tokens a
+# cada clique.
+#
+# Em compensação o gateway hoje entrega de graça o que antes só a chamada real
+# revelava:
+#   - `models.list`       → `available` por modelo
+#   - `models.authStatus` → status e expiração da credencial de cada provedor
+#
+# Então a verificação passou a ser barata e sem efeito colateral, ao preço de ser
+# mais fraca: ela confirma que o modelo está **registrado e disponível** e que a
+# **credencial do provedor está válida**, não que a LLM respondeu. A UI diz isso
+# com todas as letras — prometer "funciona" seria mentira.
+
+_PROVEDORES = {"deepseek", "openai", "anthropic", "gemini"}
+
+# Status de credencial que reprovam. O gateway usa `expired` para OAuth vencido;
+# os outros aparecem em falha de refresh e revogação.
+_AUTH_RUIM = {"expired", "invalid", "error", "revoked"}
+
+
+class TesteModeloIn(BaseModel):
+    model: str = Field(min_length=1, max_length=200)
+
+
+class TesteModeloOut(BaseModel):
+    model: str
+    # ok | credencial_invalida | indisponivel | nao_registrado | erro
+    status: str
+    mensagem: str
+    detalhe: str | None = None
+    # Falso quando não há credencial OAuth para o provedor: aí o gateway usa API
+    # key, que o `authStatus` não cobre, e a validade não pôde ser checada.
+    credencial_verificada: bool = False
+
+
+def _perfis_do_provedor(auth: dict, provedor: str) -> list[dict]:
+    """Perfis de credencial que pertencem a um provedor.
+
+    O `authStatus` identifica o provedor de dois jeitos que não coincidem: a
+    entrada de topo traz um nome de integração (`claude-cli`), e o perfil traz
+    `profileId` no formato `provedor:integração` (`anthropic:claude-cli`). Casar
+    só pelo nome de topo perderia a credencial da Anthropic.
+    """
+    achados = []
+    for p in auth.get("providers") or []:
+        nome = str(p.get("provider") or "").lower()
+        for perfil in p.get("profiles") or [{}]:
+            pid = str(perfil.get("profileId") or "").lower()
+            if nome == provedor or pid.startswith(f"{provedor}:"):
+                achados.append(perfil or p)
+    return achados
+
+
+@router.post("/test-model", response_model=TesteModeloOut)
+async def testar_modelo(
+    dados: TesteModeloIn,
+    _: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Confere se um modelo está registrado, disponível e com credencial válida.
+
+    `super_admin` porque configuração de LLM é superfície de admin.
+    """
+    requisitado = dados.model.strip()
+
+    # Exige `provedor/modelo`. Sem prefixo o gateway assume `deepseek/` e a
+    # verificação reprovaria um modelo de outro provedor por engano.
+    provedor, _barra, id_modelo = requisitado.partition("/")
+    provedor = provedor.lower()
+    if not id_modelo or provedor not in _PROVEDORES:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Informe o modelo no formato provedor/modelo (ex.: anthropic/claude-sonnet-4-6).",
+        )
+
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Gateway não configurado — conecte o gateway em Configurações primeiro.",
+        )
+
+    cliente = obter_cliente(c.url, c.token)
+    try:
+        modelos = await cliente.chamar("models.list", {"view": "configured"})
+        auth = await cliente.chamar("models.authStatus")
+    except ErroGateway as e:
+        logger.warning("Verificação do modelo %s falhou: %s", requisitado, e)
+        return TesteModeloOut(
+            model=requisitado,
+            status="erro",
+            mensagem="Não foi possível falar com o gateway.",
+            detalhe=str(e)[:300],
+        )
+
+    encontrado = next(
+        (
+            m
+            for m in (modelos.get("models") or [])
+            if str(m.get("id") or "").lower() == id_modelo.lower()
+            and str(m.get("provider") or "").lower() == provedor
+        ),
+        None,
+    )
+
+    if encontrado is None:
+        disponiveis = ", ".join(
+            f"{m.get('provider')}/{m.get('id')}" for m in (modelos.get("models") or [])[:8]
+        )
+        return TesteModeloOut(
+            model=requisitado,
+            status="nao_registrado",
+            mensagem="O gateway não reconhece esse modelo. Verifique se ele está "
+            "registrado na configuração.",
+            detalhe=f"Registrados: {disponiveis}" if disponiveis else None,
+        )
+
+    if encontrado.get("available") is False:
+        return TesteModeloOut(
+            model=requisitado,
+            status="indisponivel",
+            mensagem="O modelo está registrado mas o gateway o marca como "
+            "indisponível agora.",
+        )
+
+    perfis = _perfis_do_provedor(auth, provedor)
+    ruins = [p for p in perfis if str(p.get("status") or "").lower() in _AUTH_RUIM]
+    if ruins:
+        rotulo = (ruins[0].get("expiry") or {}).get("at")
+        return TesteModeloOut(
+            model=requisitado,
+            status="credencial_invalida",
+            mensagem=f"O modelo existe e está disponível, mas a credencial de "
+            f"{provedor} está {ruins[0].get('status')}. Reconecte o provedor — "
+            "o agente vai ficar mudo assim que precisar dela.",
+            detalhe=f"perfil {ruins[0].get('profileId')}, expira em {rotulo}" if rotulo else None,
+            credencial_verificada=True,
+        )
+
+    if not perfis:
+        # Provedor por API key não aparece no authStatus. Não dá para afirmar que
+        # a chave é boa — e afirmar seria pior que não verificar.
+        return TesteModeloOut(
+            model=requisitado,
+            status="ok",
+            mensagem="Modelo registrado e disponível. A credencial do provedor não "
+            "pôde ser verificada (sem perfil OAuth — provavelmente API key).",
+            credencial_verificada=False,
+        )
+
+    return TesteModeloOut(
+        model=requisitado,
+        status="ok",
+        mensagem="Modelo registrado, disponível e com credencial válida.",
+        credencial_verificada=True,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Liderança em lote — portado de `sync-agent-leadership`
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class LiderancaItem(BaseModel):
+    agent_id: str = Field(min_length=1, max_length=120)
+    is_leader: bool
+    leader_id: str | None = Field(default=None, max_length=120)
+
+
+class LiderancaIn(BaseModel):
+    agents: list[LiderancaItem] = Field(min_length=1, max_length=500)
+
+
+class LiderancaResultado(BaseModel):
+    agent_id: str
+    is_leader: bool
+    leader_id: str | None
+    atualizado: bool
+
+
+class LiderancaOut(BaseModel):
+    atualizados: int
+    total: int
+    agents: list[LiderancaResultado]
+
+
+@router.post("/leadership/sync", response_model=LiderancaOut)
+async def sincronizar_lideranca(
+    dados: LiderancaIn,
+    _: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Grava `is_leader`/`leader_id` de vários agentes de uma vez.
+
+    Existe para o agente orquestrador (na VPS) empurrar a liderança que ele lê do
+    `SOUL.md` de cada agente, que é a fonte canônica.
+
+    ⚠️ **O botão da UI que chama isto é inócuo** e já era assim na edge function:
+    a tela lê `is_leader`/`leader_id` do banco e devolve os mesmos valores, então
+    o round-trip nunca muda nada. Foi portado como estava, de propósito — corrigir
+    o produto é outra tarefa, registrada em `docs/ROADMAP.md`. Pelo caminho da
+    VPS, que manda um payload de verdade, o endpoint funciona.
+
+    A autorização aqui é só `super_admin`. A edge function também aceitava um
+    `GUARDRAILS_API_TOKEN` para o caminho automatizado; esse segundo caminho
+    entra quando a autenticação máquina-a-máquina for portada, e não antes —
+    aceitar um token que ainda não tem dono seria abrir uma porta sem tranca.
+    """
+    resultados: list[LiderancaResultado] = []
+
+    async with sessao(role="service_role") as conn:
+        for a in dados.agents:
+            # Um agente não lidera a si mesmo.
+            leader_id = a.leader_id if a.leader_id and a.leader_id != a.agent_id else None
+            marca = await conn.execute(
+                """
+                UPDATE public.agent_profiles
+                   SET is_leader = $2, leader_id = $3, updated_at = now()
+                 WHERE agent_id = $1
+                """,
+                a.agent_id, a.is_leader, leader_id,
+            )
+            resultados.append(
+                LiderancaResultado(
+                    agent_id=a.agent_id,
+                    is_leader=a.is_leader,
+                    leader_id=leader_id,
+                    # asyncpg devolve "UPDATE <n>"; 0 significa que o agent_id
+                    # não existe no banco.
+                    atualizado=marca.rsplit(" ", 1)[-1] != "0",
+                )
+            )
+
+    atualizados = sum(1 for r in resultados if r.atualizado)
+    logger.info("Sync de liderança: %d/%d atualizados", atualizados, len(resultados))
+    return LiderancaOut(atualizados=atualizados, total=len(resultados), agents=resultados)

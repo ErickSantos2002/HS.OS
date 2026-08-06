@@ -6,8 +6,9 @@ chamava `${url}/api/health` e `${url}/v1/models`, caminhos que não existem mais
 vivo contra o gateway 2026.7.1-2.
 
 Identidade importa: só `client.id="gateway-client"` + `client.mode="backend"`
-recebe os scopes `operator.read`/`operator.write`. Qualquer outra combinação
-conecta e é negada em todo método com "missing scope: operator.read".
+recebe os scopes de operador. Qualquer outra combinação conecta e é negada em
+todo método com "missing scope: operator.read". Os scopes concedidos são os que
+o cliente pediu — ver `SCOPES` abaixo.
 
 Este módulo é o único ponto do sistema que conhece o token do gateway. Nada
 disso pode vazar para a resposta de um endpoint.
@@ -26,6 +27,17 @@ logger = logging.getLogger(__name__)
 PROTOCOLO = 4
 TIMEOUT_RPC = 30  # a doc define 30s como padrão por requisição
 TIMEOUT_HANDSHAKE = 15
+
+# Scopes pedidos no handshake. O gateway não infere o que o cliente precisa: ele
+# concede exatamente o que foi pedido, e nega o resto método a método.
+#
+# `operator.admin` está aqui porque sem ele `agents.update` responde
+# "missing scope: operator.admin" — a leitura funcionava e mascarou a falta até
+# a primeira escrita (Lote 2b). Pedir a mais é inofensivo quando o gateway não
+# concede: ele devolve só o subconjunto autorizado, e `_garantir_conexao`
+# registra o que veio.
+SCOPES = ["operator.read", "operator.write", "operator.admin"]
+SCOPE_MINIMO = "operator.read"
 
 
 class ErroGateway(Exception):
@@ -51,6 +63,7 @@ class ClienteGateway:
         self._ws: Any = None
         self._lock = asyncio.Lock()
         self.info_servidor: dict[str, Any] = {}
+        self.scopes: list[str] = []
 
     @staticmethod
     def _normalizar(url: str) -> str:
@@ -87,7 +100,7 @@ class ClienteGateway:
                     "mode": "backend",
                 },
                 "role": "operator",
-                "scopes": ["operator.read", "operator.write"],
+                "scopes": SCOPES,
                 "auth": {"token": self._token},
             },
         }
@@ -108,11 +121,21 @@ class ClienteGateway:
             break
 
         escopos = (self.info_servidor.get("auth") or {}).get("scopes") or []
-        if "operator.read" not in escopos:
+        self.scopes = list(escopos)
+        if SCOPE_MINIMO not in escopos:
             await self.fechar()
             raise ErroGateway(
                 "Gateway conectou sem permissão de leitura. Verifique o token "
                 f"(scopes recebidos: {escopos or 'nenhum'})."
+            )
+        faltando = [s for s in SCOPES if s not in escopos]
+        if faltando:
+            # Não é erro: a leitura segue funcionando. Mas a escrita vai falhar
+            # lá na frente com "missing scope", e sem este aviso o sintoma
+            # aparece longe da causa.
+            logger.warning(
+                "Gateway não concedeu os scopes %s — métodos de escrita vão falhar.",
+                faltando,
             )
         logger.info(
             "Gateway conectado: versão %s, scopes %s",

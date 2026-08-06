@@ -13,10 +13,10 @@ backend não é o mesmo que a tela usar o endpoint.
 
 | | Feito | Total |
 |---|---|---|
-| Edge functions **com substituto no backend** | 12 | 73 |
-| Edge functions **que o front já parou de chamar** | 8 | 73 |
+| Edge functions **com substituto no backend** | 15 | 73 |
+| Edge functions **que o front já parou de chamar** | 11 | 73 |
 | Arquivos do front sem Supabase | 13 | 113 |
-| Functions distintas ainda invocadas | 26 | — |
+| Functions distintas ainda referenciadas pelo front | 34 | — |
 
 Um lote só fecha quando as duas linhas andam.
 
@@ -26,6 +26,24 @@ Medir com:
 ls backend/supabase/functions | grep -v _shared | wc -l
 grep -rl 'integrations/supabase/client' frontend/src --include=*.ts --include=*.tsx | grep -v _legado | wc -l
 ```
+
+⚠️ **Duas armadilhas na medição**, descobertas em 06/08/2026:
+
+1. `ls backend/supabase/functions | wc -l` dá **70**, não 58. As 12 functions dos
+   lotes 0 e 1 ganharam substituto mas **não foram removidas da pasta**, ao
+   contrário do que o `CLAUDE.md` manda. Enquanto isso não for acertado, o `ls`
+   subestima o progresso. As 3 do lote 2b saíram.
+2. O grep de `functions.invoke(` **não vê chamadas indiretas**. O
+   `AgentEditDrawer` passava o nome por variável (`callEdge(fn, …)`), então três
+   functions apareciam como "não invocadas" enquanto eram chamadas oito vezes.
+   O número real de functions ainda referenciadas era **34**, não 26. Medir
+   cruzando com os nomes de pasta:
+
+   ```bash
+   for d in $(ls backend/supabase/functions | grep -v _shared); do
+     grep -rq "\"$d\"" frontend/src --include=*.ts --include=*.tsx --exclude-dir=_legado && echo "$d"
+   done | wc -l
+   ```
 
 ## Princípios
 
@@ -131,13 +149,18 @@ Sugestão de subdivisão, porque 18 de uma vez é grande demais:
   no formato que `use-agents.ts` consome. Agente no banco e ausente do gateway
   aparece inativo em vez de sumir. Verificado: a tela de agentes mostra os 5
   agentes reais, sem erro de dado. Falta: avatar e perfil individual.
-- **2b** — 🟡 escrita: `POST /agents/sync` (portado de `sync-agents`) cria os
+- **2b** — ✅ escrita: `POST /agents/sync` (portado de `sync-agents`) cria os
   perfis a partir do gateway **preservando o que foi editado à mão** — o gateway
   é fonte de existência, não de curadoria. `PATCH /agents/{id}` edita nome,
-  emoji, departamento, especialidade, cor, modelo, avatar, acesso e liderança.
+  emoji, departamento, especialidade, cor, modelo, avatar, acesso, liderança,
+  persona, skills, crons e status. `POST /agents/test-model` verifica um modelo e
+  `POST /agents/leadership/sync` regrava a liderança em lote.
   Atenção: `agent_profiles_single_leader_idx` é índice único parcial e só admite
   **um líder** por instalação; a troca limpa o anterior na mesma transação.
-  Falta: criar e excluir agente (mexem no gateway, não só no banco).
+  Saíram: `update-agent-profile`, `test-llm-model`, `sync-agent-leadership`.
+  Falta: criar e excluir agente (mexem no gateway, não só no banco), e as três
+  edges que o drawer ainda chama — `update-agent-access`,
+  `update-agent-leadership`, `delete-agent`.
 - **2c** — Loop Architecture: `agent-task`, `turn-reconciler`, `collect-agent-stats`
 
 **Entregável (2a):** a tela de agentes deixa de ser vazia.

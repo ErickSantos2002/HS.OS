@@ -66,6 +66,7 @@ interface AgentOption {
   emoji: string;
   avatar_url: string | null;
   is_leader: boolean;
+  leader_id: string | null;
 }
 
 /** Sentinela de UI para "sem modelo próprio — herda o padrão do Gateway". */
@@ -81,11 +82,13 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
   const open = !!agent;
   const { models: gatewayModels, isFallback: modelsAreFallback } = useGatewayModels();
   const [loading, setLoading] = useState(false);
-  // Teste de modelo: `models.list` diz o que está CONFIGURADO, não o que
-  // FUNCIONA — os GPT-5 aparecem na lista mas a credencial OAuth da OpenAI está
-  // expirada, e escolher um deles deixaria o agente mudo. Só uma chamada real
-  // prova que a LLM responde.
-  const [modelTest, setModelTest] = useState<{ status: string; message: string } | null>(null);
+  // Verificação de modelo: `agents.update` aceita qualquer string como modelo
+  // sem validar, então um id errado deixa o agente mudo em silêncio. O endpoint
+  // cruza `models.list` (o modelo existe e está disponível?) com
+  // `models.authStatus` (a credencial do provedor está válida?). Ele **não**
+  // prova que a LLM respondeu — a rota que fazia isso não existe mais no
+  // gateway. Ver `POST /agents/test-model` no backend.
+  const [modelTest, setModelTest] = useState<{ status: string; mensagem: string } | null>(null);
   const [testingModel, setTestingModel] = useState(false);
   const [savingTab, setSavingTab] = useState<string | null>(null);
 
@@ -173,6 +176,7 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
           // só para montar um mapa de agent_id → url.
           avatar_url: a.avatarUrl ?? null,
           is_leader: !!a.isLeader,
+          leader_id: a.leaderId ?? null,
         })),
       );
       setLoading(false);
@@ -198,15 +202,27 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
     return data;
   };
 
+  /** Grava o perfil pela nossa API. Substitui a edge `update-agent-profile`.
+   *
+   *  Nome e modelo também vivem no Gateway: o endpoint escreve **lá primeiro** e
+   *  aborta sem tocar no banco se ele recusar. Um 502 aqui significa que nada
+   *  mudou em lugar nenhum — é seguro mostrar o erro e deixar o usuário tentar
+   *  de novo. */
+  const salvarPerfil = (campos: Record<string, unknown>) =>
+    api(`/agents/${encodeURIComponent(agent.agent_id)}`, { method: "PATCH", body: campos });
+
   const handleTestModel = async () => {
     if (!form.model) return;
     setTestingModel(true);
     setModelTest(null);
     try {
-      const data = await callEdge("test-llm-model", { model: form.model });
-      setModelTest({ status: data.status, message: data.message });
+      const data = await api<{ status: string; mensagem: string }>("/agents/test-model", {
+        method: "POST",
+        body: { model: form.model },
+      });
+      setModelTest({ status: data.status, mensagem: data.mensagem });
     } catch (e) {
-      setModelTest({ status: "error", message: (e as Error).message });
+      setModelTest({ status: "erro", mensagem: (e as Error).message });
     } finally {
       setTestingModel(false);
     }
@@ -215,8 +231,7 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
   const handleSaveGeral = async () => {
     setSavingTab("geral");
     try {
-      await callEdge("update-agent-profile", {
-        agent_id: agent.agent_id,
+      await salvarPerfil({
         name: form.name,
         emoji: form.emoji,
         specialty: form.specialty,
@@ -255,10 +270,7 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
     setSavingTab("lideranca");
     try {
       // Persist is_leader change
-      await callEdge("update-agent-profile", {
-        agent_id: agent.agent_id,
-        is_leader: form.is_leader,
-      });
+      await salvarPerfil({ is_leader: form.is_leader });
       // Update leader_id (and notify orchestrators)
       const newLeader = hasLeader && form.leader_id ? form.leader_id : null;
       await callEdge("update-agent-leadership", {
@@ -281,8 +293,7 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
   const handleSavePersona = async () => {
     setSavingTab("persona");
     try {
-      await callEdge("update-agent-profile", {
-        agent_id: agent.agent_id,
+      await salvarPerfil({
         persona_description: form.persona_description,
         skills_description: form.skills_description,
         skills_tags: form.skills_tags,
@@ -322,10 +333,7 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
   const handleSaveAutomacoes = async () => {
     setSavingTab("automacoes");
     try {
-      await callEdge("update-agent-profile", {
-        agent_id: agent.agent_id,
-        crons_description: form.crons_description,
-      });
+      await salvarPerfil({ crons_description: form.crons_description });
       toast({ title: "Automações atualizadas" });
       onSaved?.();
     } catch (e) {
@@ -361,7 +369,7 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
     setSavingTab("deactivate");
     try {
       const next = form.status === "inactive" ? "active" : "inactive";
-      await callEdge("update-agent-profile", { agent_id: agent.agent_id, status: next });
+      await salvarPerfil({ status: next });
       setForm((f) => ({ ...f, status: next }));
       toast({ title: next === "inactive" ? "Agente desativado" : "Agente reativado" });
       onSaved?.();
@@ -542,8 +550,8 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
                     disabled={!form.model || testingModel}
                     title={
                       form.model
-                        ? "Faz uma chamada real ao modelo para confirmar que ele responde"
-                        : "Escolha um modelo específico para testar"
+                        ? "Confere se o modelo está registrado no Gateway, disponível e com credencial válida"
+                        : "Escolha um modelo específico para verificar"
                     }
                   >
                     {testingModel ? (
@@ -564,7 +572,7 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
                       ) : (
                         <XCircle className="h-3.5 w-3.5 shrink-0" />
                       )}
-                      {modelTest.message}
+                      {modelTest.mensagem}
                     </span>
                   )}
                 </div>
@@ -684,11 +692,19 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
                 {savingTab === "lideranca" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salvar liderança"}
               </Button>
 
+              {/* ⚠️ Este botão é inócuo, e já era assim na edge function: ele lê
+                  is_leader/leader_id do banco e devolve os mesmos valores, então o
+                  round-trip nunca muda nada. O texto promete ler o SOUL.md, que
+                  nunca chegou a acontecer aqui — quem faz isso é o agente
+                  orquestrador na VPS, que chama o endpoint com um payload de
+                  verdade. Portado como estava, de propósito; corrigir o produto
+                  está registrado em docs/ROADMAP.md. */}
               <div className="pt-2 border-t border-border/40">
                 <p className="text-xs text-muted-foreground mb-2">
-                  Sincronizar liderança lendo o <code className="font-mono">SOUL.md</code> de cada agente
-                  (fonte canônica). Atualiza <code className="font-mono">is_leader</code> e{" "}
-                  <code className="font-mono">leader_id</code> para todos.
+                  Regrava <code className="font-mono">is_leader</code> e{" "}
+                  <code className="font-mono">leader_id</code> de todos os agentes a partir do
+                  estado atual do banco. A leitura do <code className="font-mono">SOUL.md</code>{" "}
+                  de cada agente, que é a fonte canônica, é feita pelo orquestrador na VPS.
                 </p>
                 <Button
                   variant="outline"
@@ -697,24 +713,24 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
                   onClick={async () => {
                     setSavingTab("sync-leadership");
                     try {
-                      const { data: all, error: selErr } = await supabase
-                        .from("agent_profiles")
-                        .select("agent_id, is_leader, leader_id");
-                      if (selErr) throw selErr;
                       const payload = {
-                        agents: (all ?? []).map((a: any) => ({
+                        // Cada agente devolve o **próprio** estado. Mandar null
+                        // para os outros apagaria a liderança deles.
+                        agents: allAgents.map((a) => ({
                           agent_id: a.agent_id,
-                          is_leader: !!a.is_leader,
-                          leader_id: a.leader_id ?? null,
+                          is_leader: a.is_leader,
+                          leader_id: a.leader_id,
                         })),
                       };
-                      const { data, error } = await supabase.functions.invoke("sync-agent-leadership", { body: payload });
-                      if (error) throw error;
-                      const d = data as { total?: number; updated?: number; agents?: Array<{ agent_id: string; is_leader: boolean; leader_id: string | null }> };
-                      const leaders = (d.agents ?? []).filter((r) => r.is_leader).map((r) => r.agent_id).join(", ") || "nenhum";
+                      const d = await api<{
+                        total: number;
+                        atualizados: number;
+                        agents: Array<{ agent_id: string; is_leader: boolean }>;
+                      }>("/agents/leadership/sync", { method: "POST", body: payload });
+                      const leaders = d.agents.filter((r) => r.is_leader).map((r) => r.agent_id).join(", ") || "nenhum";
                       toast({
                         title: "Liderança sincronizada",
-                        description: `${d.updated}/${d.total} agentes atualizados. Líderes: ${leaders}.`,
+                        description: `${d.atualizados}/${d.total} agentes atualizados. Líderes: ${leaders}.`,
                       });
                       onSaved?.();
                     } catch (e) {

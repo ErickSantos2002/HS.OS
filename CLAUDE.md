@@ -144,8 +144,15 @@ React SPA (Vite) ───┤        └─► OpenClaw Gateway (WebSocket, via 
                     └─► Supabase      (o que ainda não foi portado)  ← em remoção
 ```
 
-O que **já é nosso**: autenticação, marca, perfis, gateway e agentes (leitura, sync e edição de
-perfil). O resto ainda chama o Supabase.
+O que **já é nosso**: autenticação, marca, perfis, gateway e agentes (leitura, sync, edição completa
+de perfil, verificação de modelo e liderança em lote). O resto ainda chama o Supabase.
+
+**Regra ao portar escrita que toca as duas pontas: gateway primeiro, banco depois.** `PATCH
+/agents/{id}` escreve nome e modelo no gateway **antes** de tocar no banco e aborta com 502 se ele
+recusar — nada muda em lugar nenhum. As edges herdadas faziam o contrário (gravavam no banco e
+seguiam com um `openclaw_warning` que a UI ignorava), e com o gateway fora do ar o banco passava a
+dizer um modelo enquanto o agente rodava outro. Campos que só existem no banco (persona, skills,
+crons, acesso) continuam editáveis com o gateway fora — travá-los seria pior.
 
 Telas não portadas **falham de forma visível e nomeada**, de propósito — some sem explicação é pior
 do que aparecer quebrado. Dois mecanismos fazem isso, e ambos devem ser respeitados ao portar:
@@ -163,12 +170,36 @@ copie chamada de edge function antiga sem verificar. O cliente correto está em
 `backend/app/gateway/client.py`, e o contrato foi levantado testando ao vivo.
 
 ⚠️ **A identidade do cliente concede a permissão.** Só `client.id="gateway-client"` +
-`client.mode="backend"` recebe `operator.read`/`operator.write`. Qualquer outra combinação **conecta
+`client.mode="backend"` recebe os scopes de operador. Qualquer outra combinação **conecta
 com sucesso** e é negada em cada método com `missing scope` — um modo de falhar particularmente
 traiçoeiro.
 
+⚠️ **O cliente pede os scopes; o gateway não infere.** `SCOPES` em `client.py` é a lista enviada no
+handshake, e o gateway concede exatamente ela. Até 06/08/2026 pedíamos só `operator.read` e
+`operator.write`, e como todo o Lote 2a era leitura ninguém notou — a primeira escrita
+(`agents.update`) morreu com `missing scope: operator.admin`. Se um método novo negar por scope,
+olhe essa lista antes de suspeitar do token.
+
 ⚠️ **Só conexões que chegam no loopback do gateway recebem scopes.** Por isso produção usa um túnel
 SSH (`scripts/tunel-openclaw.sh`) e não o domínio público. Ver `docs/DEPLOY.md`.
+
+⚠️ **`agents.update` não valida nada e grava.** Mandar `model: "isto-nao-e-um-modelo"` retorna
+sucesso e deixa o agente com esse modelo — comprovado em 06/08/2026, no `nina` em produção, num teste
+que **esperava uma recusa**. Não sonde a escrita do gateway com valor inválido: ele aceita. Para
+descobrir formato, use um `agentId` inexistente, que falha antes de gravar.
+
+⚠️ **O `model` é assimétrico.** `agents.list` devolve `{"primary": "anthropic/claude-sonnet-4-6"}`,
+mas `agents.update` exige **string nua** e recusa o objeto com `at /model: must be string`.
+
+⚠️ **A rota HTTP OpenAI-compatível sumiu.** `POST /v1/chat/completions` com o header
+`x-openclaw-model`, que a edge `test-llm-model` usava para provar que uma LLM respondia, hoje é 404.
+O equivalente é `chat.send`, que manda mensagem de verdade (gasta tokens, cria histórico). Por isso
+`POST /agents/test-model` verifica por `models.list` + `models.authStatus` e **não** afirma que a LLM
+respondeu.
+
+⚠️ **O handshake WebSocket falha por timeout de vez em quando**, mesmo com o túnel de pé e
+`/health` respondendo 200. `chamar()` já reconecta uma vez; em script solto, repita antes de
+concluir que o gateway caiu.
 
 **O vazamento do token foi fechado (Lote 1).** `frontend/src/lib/gateway.ts` não conhece mais o
 `admin_token` — expõe só `{url, temToken, configurado}`. Toda chamada ao gateway passa por

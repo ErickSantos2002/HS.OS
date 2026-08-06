@@ -1,34 +1,42 @@
 # Continuar aqui
 
-Ponto de retomada da portagem. Escrito em **05/08/2026**, ao fim da sessão que fez
-a fundação. Leia isto, depois `CLAUDE.md` e `docs/ROADMAP.md`.
+Ponto de retomada da portagem. Atualizado em **06/08/2026**, ao fim do Lote 2b.
+Leia isto, depois `CLAUDE.md` e `docs/ROADMAP.md`.
 
 ## O que já funciona
 
-Tudo abaixo está **em produção** e verificado no navegador:
+Tudo abaixo está **em produção** e verificado:
 
 - **Banco próprio** no Postgres da VPS — 69 tabelas, 191 policies de RLS ativas
   de verdade (o backend conecta como `hsos_app`, não como superusuário)
 - **Autenticação própria** — JWT + bcrypt, sem Supabase Auth
 - **Marca HS.OS** aplicada; `dn.ia` só sobrevive em `frontend/src/_legado/`
 - **Gateway conectado** por túnel SSH, com o `admin_token` fora do navegador
-- **Agentes** — lista, sincronização e edição de perfil
+- **Agentes** — lista, sincronização, edição completa de perfil (todas as abas),
+  verificação de modelo e liderança em lote
 - **Deploy** — `hsos.healthsafetytech.com` e `hsosapi.healthsafetytech.com`
 
 Endpoints: `/health`, `/auth/*`, `/branding`, `/profiles/*`, `/gateway/*`, `/agents/*`.
 
 ## Placar
 
-**12 de 73** edge functions com substituto · **13 de 113** arquivos do front sem
-Supabase · **26** functions distintas ainda invocadas.
+**15 de 73** edge functions com substituto · **13 de 113** arquivos do front sem
+Supabase · **34** functions distintas ainda referenciadas pelo front.
 
-```bash
-# medir a qualquer momento
-grep -rn 'functions\.invoke(' frontend/src --include=*.ts --include=*.tsx \
-  | grep -v _legado | grep -oP 'invoke\(\s*"\K[^"]+' | sort -u | wc -l
-grep -rl 'integrations/supabase/client' frontend/src --include=*.ts --include=*.tsx \
-  | grep -v _legado | wc -l
-```
+⚠️ O número 34 corrige o "26" anterior, que era subestimado: o grep antigo não via
+chamadas indiretas (`callEdge(fn, …)` com o nome em variável). A forma correta de
+medir está em `docs/ROADMAP.md`.
+
+## ⚠️ Erro de operação que já aconteceu — não repita
+
+Em 06/08/2026, uma sondagem mandou `agents.update` com um modelo inválido de
+propósito, **esperando que o gateway recusasse**. Ele aceitou e gravou: o agente
+`nina`, que é o `defaultId`, ficou com `model: "isto-nao-e-um-modelo"` em
+produção até ser restaurado à mão.
+
+**O gateway não valida o que grava.** Para descobrir formato de parâmetro, use um
+`agentId` inexistente — a chamada falha na busca do agente, antes de escrever.
+Nunca use valor inválido num alvo real.
 
 ## Antes de escrever qualquer linha
 
@@ -43,14 +51,16 @@ grep -rl 'integrations/supabase/client' frontend/src --include=*.ts --include=*.
 
 ## Próximos passos, em ordem de dependência
 
-### 1. Gravação de agente — fecha o Lote 2b
+### 1. As três edges que sobraram no drawer
 
-`AgentEditDrawer.tsx` já **lê** pela nossa API, mas ainda **grava** por edge
-function. Portar `update-agent-profile`, `test-llm-model` e
-`sync-agent-leadership`.
+O Lote 2b fechou `update-agent-profile`, `test-llm-model` e
+`sync-agent-leadership`. O `AgentEditDrawer.tsx` ainda chama três:
+`update-agent-access`, `update-agent-leadership` e `delete-agent`.
 
-Atenção: `update-agent-profile` grava no banco **e** no gateway (`agents.update`).
-Só metade seria pior que nada — o banco diria uma coisa e o agente faria outra.
+`update-agent-access` é a mais barata: `PATCH /agents/{id}` **já aceita**
+`access_type` e `allowed_user_ids`, é só trocar a chamada e verificar.
+`update-agent-leadership` notifica o orquestrador — leia antes, porque a parte
+que importa é o efeito no gateway, não o `UPDATE`.
 
 ### 2. Criar e excluir agente — Lote 2c
 
@@ -78,6 +88,7 @@ Seis buckets a recriar: `agent-files`, `audio-messages`, `wiki-uploads`
 
 | Decisão | Por quê importa |
 |---|---|
+| **Credencial da Anthropic no gateway está expirada** | `models.authStatus` diz `expired` no perfil `anthropic:claude-cli`, vencido desde ~mai/2026. Os 5 agentes usam `anthropic/claude-sonnet-4-6`. Ou existe uma API key que o `authStatus` não cobre, ou os agentes estão mudos. Conferir no OpenClaw. |
 | **Trocar a senha `admin123`** | Conta `super_admin` que guarda o token do gateway. Precisa de `POST /auth/change-password`. Fazer **antes** de liberar para a equipe. |
 | Flags `dnos_flag_*` viram padrão? | São 4 correções de estabilidade hoje desligadas — o sistema roda com os bugs antigos ativos. |
 | Manter as 191 policies de RLS? | Funcionam, mas duplicam a autorização do FastAPI. Se aposentar, vira a `003`. |
@@ -89,7 +100,12 @@ Seis buckets a recriar: `agent-files`, `audio-messages`, `wiki-uploads`
 Repetidas aqui porque são as que fazem perder uma tarde:
 
 - O gateway **conecta com sucesso** e nega tudo com `missing scope` quando a
-  identidade do cliente está errada
+  identidade do cliente está errada — ou quando o scope não foi **pedido** no
+  handshake (`SCOPES` em `client.py`)
+- O **handshake WebSocket dá timeout de vez em quando** com o túnel de pé e
+  `/health` em 200. Repita antes de concluir que o gateway caiu
+- O modelo é **assimétrico**: `agents.list` devolve `{"primary": "..."}`,
+  `agents.update` exige string nua
 - **Superusuário bypassa RLS** — as policies ficam no catálogo sem proteger nada
 - No **PG 16+** a herança de role é gravada por associação: `ALTER ROLE NOINHERIT`
   posterior não altera GRANTs já feitos
