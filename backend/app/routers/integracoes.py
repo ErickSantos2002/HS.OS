@@ -17,12 +17,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.integracoes import exige_segredo
+from app.dependencies import Usuario, exige_papel
+from app.integracoes import exige_segredo, ler_segredo
 from app.realtime import hub, topico_usuario
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/integracoes", tags=["integrações"])
+
+# Allowlist do que pode ser revelado. Sem ela, o endpoint viraria leitura livre
+# da tabela de segredos — que guarda mais coisa do que o admin precisa ver.
+_SEGREDOS_REVELAVEIS = {"GUARDRAILS_API_TOKEN", "BRIDGE_API_TOKEN", "INGEST_API_KEY"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -501,3 +506,32 @@ async def credenciais_do_agente(
         agent_id, len(credenciais), len(integracoes),
     )
     return {"credentials": credenciais, "integrations": integracoes}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Revelar o segredo compartilhado — portado de `reveal-guardrails-token`
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/segredo/{nome}")
+async def revelar_segredo(
+    nome: str,
+    usuario: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Mostra um segredo de integração ao administrador.
+
+    Existe para o admin cadastrar o mesmo valor do lado da VPS. **Lê da mesma
+    fonte que a autenticação usa** — banco primeiro, ambiente depois. Se lesse
+    só do ambiente, mostraria um valor diferente do que de fato autentica
+    quando o segredo vier do banco, e alguém cadastraria o token errado na VPS.
+
+    Só `super_admin`, e o valor não vai para log.
+    """
+    if nome not in _SEGREDOS_REVELAVEIS:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Segredo desconhecido. Reveláveis: {', '.join(sorted(_SEGREDOS_REVELAVEIS))}.",
+        )
+    valor = await ler_segredo(nome)
+    logger.info("Segredo %s revelado a %s", nome, usuario.id)
+    return {"nome": nome, "token": valor, "configurado": bool(valor)}
