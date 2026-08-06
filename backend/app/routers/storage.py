@@ -23,6 +23,7 @@ Escrever exige autenticação em **todos** os buckets, inclusive nos públicos.
 import logging
 import mimetypes
 import re
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -30,7 +31,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.config import settings
-from app.dependencies import Usuario, usuario_atual
+from app.dependencies import Usuario, exige_papel, usuario_atual
 
 logger = logging.getLogger(__name__)
 
@@ -284,3 +285,57 @@ def preparar_diretorios() -> None:
             logger.warning("Não foi possível preparar %s/%s: %s", base, bucket, e)
             return
     logger.info("Buckets prontos em %s: %s", base, ", ".join(sorted(_BUCKETS)))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Faxina de anexos vencidos — portado de `cleanup-expired-files`
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 30 dias. Anexo de chat é material de trabalho de uma conversa, não arquivo
+# permanente — guardar para sempre enche o disco com coisa que ninguém abre.
+_VALIDADE_SEGUNDOS = 30 * 24 * 60 * 60
+
+# `uploadFileToStorage` grava como `<pasta>/<timestamp>_<nome>`. A idade sai do
+# nome, não do mtime do arquivo: cópia e restauração de backup mudam o mtime e
+# apagariam anexo recente por engano.
+_CARIMBO = re.compile(r"^(\d{10,13})_")
+
+
+class FaxinaOut(BaseModel):
+    removidos: int
+    examinados: int
+
+
+@router.post("/faxina", response_model=FaxinaOut)
+async def faxina(_: Usuario = Depends(exige_papel("super_admin"))):
+    """Apaga anexos com mais de 30 dias do bucket `agent-files`.
+
+    Só `agent-files`: avatar de agente vive nele também, mas em `avatars/`, e
+    esses **não** têm carimbo no nome — a regra do carimbo os protege sozinha.
+    """
+    base = Path(settings.UPLOADS_DIR) / "agent-files"
+    if not base.is_dir():
+        return FaxinaOut(removidos=0, examinados=0)
+
+    limite_ms = (time.time() - _VALIDADE_SEGUNDOS) * 1000
+    removidos = examinados = 0
+    for arquivo in base.rglob("*"):
+        if not arquivo.is_file():
+            continue
+        examinados += 1
+        m = _CARIMBO.match(arquivo.name)
+        if not m:
+            continue
+        carimbo = int(m.group(1))
+        # 10 dígitos é segundo, 13 é milissegundo — o JS grava em ms.
+        if len(m.group(1)) == 10:
+            carimbo *= 1000
+        if carimbo < limite_ms:
+            try:
+                arquivo.unlink()
+                removidos += 1
+            except OSError as e:
+                logger.warning("Não foi possível remover %s: %s", arquivo, e)
+
+    logger.info("Faxina: %d removidos de %d examinados", removidos, examinados)
+    return FaxinaOut(removidos=removidos, examinados=examinados)
