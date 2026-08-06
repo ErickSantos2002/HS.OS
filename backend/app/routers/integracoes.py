@@ -11,6 +11,9 @@ porque separá-los em três módulos de 40 linhas não ajudaria ninguém a achá
 import json
 import logging
 import os
+import re
+
+import httpx
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -535,3 +538,141 @@ async def revelar_segredo(
     valor = await ler_segredo(nome)
     logger.info("Segredo %s revelado a %s", nome, usuario.id)
     return {"nome": nome, "token": valor, "configurado": bool(valor)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Validar credencial de integração — portado de `validate-integration-token`
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Prova que a chave cadastrada funciona, chamando o provedor. Mesma ideia do
+# `/agents/test-model`: estar gravado não é estar funcionando.
+
+_PROVEDORES_CONHECIDOS = {
+    "linkedin", "meta", "facebook", "instagram", "telegram", "slack",
+    "whatsapp", "canva", "elevenlabs", "perplexity",
+}
+# Nome de chave que costuma guardar o token de acesso, entre várias credenciais.
+_CHAVE_DE_TOKEN = re.compile(r"access[_-]?token|api[_-]?key|bearer|^token$", re.I)
+_TIMEOUT_VALIDACAO = 15.0
+
+
+class ValidacaoIn(BaseModel):
+    integration_id: str | None = None
+    integration_type: str = ""
+    credentials: dict = {}
+
+
+class ValidacaoOut(BaseModel):
+    valid: bool
+    error: str | None = None
+    detalhe: str | None = None
+
+
+def _escolher_token(credenciais: list) -> str:
+    """O token entre várias credenciais.
+
+    Prefere a chave cujo nome parece de token de acesso; se nenhuma casar, usa
+    a última com valor. Era o comportamento da edge, e existe porque uma
+    integração pode guardar id de conta junto com o segredo.
+    """
+    reserva = ""
+    escolhido = ""
+    for c in credenciais:
+        valor = str((c or {}).get("value") or "").strip()
+        if not valor:
+            continue
+        reserva = valor
+        nome = str((c or {}).get("key_name") or (c or {}).get("key") or "")
+        if _CHAVE_DE_TOKEN.search(nome):
+            escolhido = valor
+    return escolhido or reserva
+
+
+@router.post("/validar-token", response_model=ValidacaoOut)
+async def validar_token(
+    dados: ValidacaoIn,
+    _: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Chama o provedor para confirmar que a credencial vale.
+
+    O endereço de validação vem de `integration_templates.validation_endpoint`,
+    exceto pelo LinkedIn, que tem caminho próprio na edge e foi mantido: o token
+    dele começa com `WPL_AP`, que é código de autorização e não token de acesso —
+    reconhecer isso dá uma mensagem útil em vez de um 401 genérico.
+    """
+    tipo = dados.integration_type.strip().lower()
+    token = ""
+
+    async with sessao(role="service_role") as conn:
+        if dados.integration_id:
+            linha = await conn.fetchrow(
+                "SELECT name, integration_type, credentials FROM public.integrations WHERE id = $1::uuid",
+                dados.integration_id,
+            )
+            if linha is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Conexão não encontrada.")
+            tipo = tipo or str(linha["integration_type"] or "").lower()
+            # `api_key` é genérico demais para escolher endpoint: nesse caso o
+            # nome da integração é a pista melhor.
+            if tipo in ("", "api_key", "custom", "api"):
+                pelo_nome = re.sub(r"[^a-z]", "", str(linha["name"] or "").lower())
+                if pelo_nome in _PROVEDORES_CONHECIDOS:
+                    tipo = "meta" if pelo_nome == "facebook" else pelo_nome
+            bruto = linha["credentials"] or "[]"
+            token = _escolher_token(json.loads(bruto) if isinstance(bruto, str) else bruto)
+        else:
+            c = dados.credentials
+            token = str(c.get("access_token") or c.get("token") or c.get("api_key") or "").strip()
+
+        if not tipo:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "integration_type é obrigatório.")
+        if not token:
+            return ValidacaoOut(valid=False, error="Nenhuma credencial com valor foi encontrada.")
+
+        if tipo == "linkedin" and token.upper().startswith("WPL_AP"):
+            return ValidacaoOut(
+                valid=False,
+                error="Este é um código de autorização, não um token de acesso. "
+                "Troque-o por um access token antes de salvar.",
+            )
+
+        endpoint, metodo = None, "GET"
+        if tipo == "linkedin":
+            endpoint = "https://api.linkedin.com/v2/userinfo"
+        else:
+            # A coluna que identifica o provedor é `integration_type`, não
+            # `name` nem `id` — o `id` é uuid e casar com ele daria erro de tipo.
+            tpl = await conn.fetchrow(
+                "SELECT validation_endpoint, validation_method FROM public.integration_templates "
+                "WHERE lower(integration_type) = $1",
+                tipo,
+            )
+            if tpl:
+                endpoint = tpl["validation_endpoint"]
+                metodo = tpl["validation_method"] or "GET"
+
+    if not endpoint:
+        return ValidacaoOut(
+            valid=False,
+            error=f"Não há endereço de validação cadastrado para '{tipo}'. "
+            "A credencial foi salva, mas não dá para confirmar que funciona.",
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT_VALIDACAO) as http:
+            r = await http.request(
+                metodo, endpoint, headers={"Authorization": f"Bearer {token}"}
+            )
+    except httpx.HTTPError as e:
+        return ValidacaoOut(valid=False, error="Não foi possível falar com o provedor.",
+                            detalhe=str(e)[:200])
+
+    if r.is_success:
+        return ValidacaoOut(valid=True)
+    # O corpo do erro do provedor é o que permite diagnosticar; truncado, e
+    # nunca inclui o token.
+    return ValidacaoOut(
+        valid=False,
+        error=f"O provedor recusou a credencial (HTTP {r.status_code}).",
+        detalhe=r.text[:300] or None,
+    )
