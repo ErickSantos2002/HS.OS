@@ -249,3 +249,88 @@ async def checar_chaves(_: None = Depends(exige_segredo("BRIDGE_API_TOKEN"))):
 
     logger.info("Chaves de integração: %d de %d configuradas", configuradas, len(linhas))
     return ChavesOut(checadas=len(linhas), configuradas=configuradas)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Espelho dos arquivos de agente — portado de `sync-agent-files`
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# A ponte na VPS mantém `agent_files` em dia nos dois sentidos:
+#   - empurra o que está no disco para cá (o caso comum)
+#   - puxa daqui o que foi editado pela tela, marcado com `pending_write`
+#
+# ⚠️ Com `agents.files.get` funcionando no gateway (ver `CLAUDE.md`), a metade
+# de leitura desta ponte pode ter perdido a razão de existir. A de escrita
+# não: continua sendo o caminho para a tela alterar arquivo do agente.
+# Reavaliar depois da entrega — está em `docs/ROADMAP.md`.
+
+
+class ArquivoAgente(BaseModel):
+    agent_id: str = Field(min_length=1)
+    file_name: str = Field(min_length=1)
+    content: str = ""
+    # Marca que a origem é a tela e o disco ainda não recebeu. A ponte usa isto
+    # para saber o que escrever de volta.
+    pending_write: bool = False
+
+
+class SincronizarArquivosIn(BaseModel):
+    files: list[ArquivoAgente] = Field(min_length=1, max_length=200)
+
+
+class ConfirmacaoEscrita(BaseModel):
+    agent_id: str
+    file_name: str
+
+
+@router.post("/agent-files", status_code=status.HTTP_204_NO_CONTENT)
+async def espelhar_arquivos(
+    dados: SincronizarArquivosIn,
+    _: None = Depends(exige_segredo("GUARDRAILS_API_TOKEN")),
+):
+    """Grava o conteúdo dos arquivos, sobrescrevendo por `(agent_id, file_name)`."""
+    async with sessao(role="service_role") as conn:
+        for a in dados.files:
+            await conn.execute(
+                """
+                INSERT INTO public.agent_files (agent_id, file_name, content, pending_write, synced_at)
+                VALUES ($1, $2, $3, $4, now())
+                ON CONFLICT (agent_id, file_name) DO UPDATE SET
+                    content = EXCLUDED.content,
+                    pending_write = EXCLUDED.pending_write,
+                    synced_at = now()
+                """,
+                a.agent_id, a.file_name, a.content, a.pending_write,
+            )
+    logger.info("Espelhados %d arquivo(s) de agente", len(dados.files))
+
+
+@router.get("/agent-files/pendentes")
+async def arquivos_pendentes(_: None = Depends(exige_segredo("GUARDRAILS_API_TOKEN"))):
+    """O que a tela editou e o disco ainda não recebeu."""
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            "SELECT agent_id, file_name, content FROM public.agent_files "
+            "WHERE pending_write = true LIMIT 200"
+        )
+    return {"files": [dict(l) for l in linhas]}
+
+
+@router.post("/agent-files/confirmar", status_code=status.HTTP_204_NO_CONTENT)
+async def confirmar_escrita(
+    dados: list[ConfirmacaoEscrita],
+    _: None = Depends(exige_segredo("GUARDRAILS_API_TOKEN")),
+):
+    """A ponte avisa o que já escreveu no disco.
+
+    Confirmar é passo separado de puxar, de propósito: se a ponte marcasse como
+    escrito ao receber, uma falha entre receber e gravar perderia a edição em
+    silêncio — e o usuário veria na tela um arquivo que o agente nunca leu.
+    """
+    async with sessao(role="service_role") as conn:
+        for c in dados:
+            await conn.execute(
+                "UPDATE public.agent_files SET pending_write = false, written_at = now() "
+                "WHERE agent_id = $1 AND file_name = $2",
+                c.agent_id, c.file_name,
+            )
