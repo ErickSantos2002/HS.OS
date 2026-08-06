@@ -9,6 +9,7 @@ from app.database import close_db, init_db
 from app.gateway.client import encerrar_cliente
 from app.routers.agent_export import router as agent_export_router
 from app.routers.agents import router as agents_router
+from app.routers.artefatos import router as artefatos_router
 from app.routers.branding import router as branding_router
 from app.routers.channels import router as channels_router
 from app.routers.chat_extras import router as chat_extras_router
@@ -68,6 +69,7 @@ async def health():
 
 
 app.include_router(agents_router)
+app.include_router(artefatos_router)
 app.include_router(agent_export_router)
 app.include_router(auth_router)
 app.include_router(branding_router)
