@@ -14,12 +14,15 @@ a própria conversa), não só a defesa.
 import json
 import logging
 from datetime import datetime
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
+from app.gateway import config as cfg
+from app.gateway.client import ErroGateway, obter_cliente, obter_cliente_de_espera
 
 logger = logging.getLogger(__name__)
 
@@ -192,3 +195,225 @@ async def limpar(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
             agent_id, usuario.id,
         )
     logger.info("Conversa %s/%s limpa (%s)", usuario.id, agent_id, marca)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Envio ao agente e espera pela resposta
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# O desenho antigo era HTTP com SSE: o navegador abria `/v1/chat/completions`
+# e via a resposta se formando. Essa rota é 404 no gateway atual, e o
+# substituto (`chat.send`) é assíncrono — devolve `runId` e pronto.
+#
+# Aqui a resposta volta por **long-poll**, não por polling burro: `agent.wait`
+# segura a conexão até o agente terminar ou até estourar o `timeoutMs`. Na
+# prática a latência é a do agente, não a do intervalo de pergunta. O front
+# chama `/reply` em laço enquanto vier `status: "executando"`.
+#
+# Streaming de verdade (ver o texto aparecendo token a token) exige assinar
+# eventos no WebSocket e empurrar para o navegador. Fica para depois da entrega
+# — é melhoria de percepção, não de capacidade.
+
+
+def _chave_sessao(agent_id: str, user_id: str) -> str:
+    """Uma sessão de gateway por usuário, por agente.
+
+    ⚠️ A chave tem que vir **composta**: `agent:<agentId>:<sufixo>`. Mandar só o
+    sufixo com `agentId` junto é recusado com
+    `agentId "X" does not match session key "Y"` — o gateway extrai o agente da
+    própria chave e confere. (Sem `agentId`, ele aceita a chave crua e assume o
+    agente padrão, que é como uma sondagem acabou mandando mensagem para a
+    `nina` por engano.)
+
+    O sufixo é o id do usuário: sem isso, duas pessoas falando com o mesmo
+    agente cairiam na mesma sessão e leriam o histórico uma da outra.
+    """
+    return f"agent:{agent_id}:hsos-{user_id}"
+
+
+class EnvioIn(BaseModel):
+    content: str = Field(min_length=1)
+    media: list[dict] | None = None
+
+
+class EnvioOut(BaseModel):
+    message: MensagemOut
+    run_id: str
+
+
+class RespostaOut(BaseModel):
+    # executando | pronta | erro
+    status: str
+    message: MensagemOut | None = None
+    detalhe: str | None = None
+
+
+def _texto_da_resposta(mensagens: list, desde_seq: int) -> str:
+    """Junta o texto do que o agente disse depois do nosso envio.
+
+    O histórico do gateway traz também `toolCall` e `toolResult` — o raciocínio
+    e as ferramentas. Nada disso vai para a tela: a conversa que o usuário vê é
+    só o texto final. Por isso filtra por `role == assistant` e pega apenas os
+    blocos de tipo `text`.
+    """
+    partes: list[str] = []
+    for m in mensagens:
+        seq = (m.get("__openclaw") or {}).get("seq")
+        if seq is None or seq <= desde_seq or m.get("role") != "assistant":
+            continue
+        conteudo = m.get("content")
+        if isinstance(conteudo, str):
+            partes.append(conteudo)
+            continue
+        for bloco in conteudo or []:
+            if isinstance(bloco, dict) and bloco.get("type") == "text" and bloco.get("text"):
+                partes.append(bloco["text"])
+    return "\n\n".join(p.strip() for p in partes if p.strip())
+
+
+async def _ultimo_seq(cliente, chave_completa: str) -> int:
+    """Maior `seq` já presente na sessão, para saber o que é novo depois."""
+    try:
+        r = await cliente.chamar("chat.history", {"sessionKey": chave_completa, "limit": 1})
+    except ErroGateway:
+        return 0
+    msgs = r.get("messages") or []
+    return max((m.get("__openclaw") or {}).get("seq") or 0 for m in msgs) if msgs else 0
+
+
+@router.post("/{agent_id}/send", response_model=EnvioOut, status_code=status.HTTP_201_CREATED)
+async def enviar(
+    agent_id: str,
+    dados: EnvioIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Grava a mensagem do usuário e dispara o agente.
+
+    A gravação vem primeiro de propósito: se o gateway estiver fora, a mensagem
+    do usuário não se perde — ela fica na conversa e dá para reenviar. O
+    contrário (disparar e gravar depois) perderia o que a pessoa escreveu
+    justamente quando algo já está dando errado.
+    """
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado."
+        )
+
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            f"""
+            INSERT INTO public.conversations (agent_id, user_id, role, content, media)
+            VALUES ($1, $2::uuid, 'user', $3, $4::jsonb)
+            RETURNING {_COLUNAS}
+            """,
+            agent_id, usuario.id, dados.content,
+            json.dumps(dados.media) if dados.media else None,
+        )
+
+    chave = _chave_sessao(agent_id, usuario.id)
+    cliente = obter_cliente(c.url, c.token)
+    seq_antes = await _ultimo_seq(cliente, chave)
+
+    # O `runId` volta igual ao `idempotencyKey` e é o que a espera usa depois.
+    # Precisa ser único por envio: reaproveitar faria o gateway deduplicar e a
+    # segunda mensagem sumiria em silêncio.
+    run_id = f"hsos-{uuid4()}"
+    try:
+        await cliente.chamar(
+            "chat.send",
+            {
+                # Explícito e obrigatório na prática: sem `agentId` o gateway
+                # manda para o agente padrão, sem avisar.
+                "agentId": agent_id,
+                "sessionKey": chave,
+                "message": dados.content,
+                "idempotencyKey": run_id,
+            },
+        )
+    except ErroGateway as e:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"A mensagem foi salva, mas o agente não pôde ser acionado: {e}",
+        )
+
+    _SEQ_DO_RUN[run_id] = (agent_id, chave, seq_antes)
+    logger.info("Envio para %s por %s: run %s", agent_id, usuario.id, run_id)
+    return EnvioOut(message=_para_saida(linha), run_id=run_id)
+
+
+# Memória de processo: qual era o `seq` da sessão quando cada run começou. Cabe
+# aqui porque só vive entre o envio e a resposta, que é questão de segundos.
+# Se o backend reiniciar no meio, a espera devolve `erro` e a tela reenvia — o
+# custo de perder isto é baixo, e uma tabela para dado de segundos não se paga.
+_SEQ_DO_RUN: dict[str, tuple[str, str, int]] = {}
+
+# Quanto o gateway segura a conexão por chamada. 20s dá resposta quase imediata
+# na maioria dos turnos e ainda deixa o navegador refazer o pedido antes de
+# qualquer proxy considerar a conexão ociosa.
+_ESPERA_MS = 20_000
+
+
+@router.get("/{agent_id}/reply", response_model=RespostaOut)
+async def resposta(
+    agent_id: str,
+    run_id: str = Query(),
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Espera a resposta do agente e grava quando ela vier.
+
+    Devolve `executando` quando o tempo de espera acaba antes do agente — é o
+    sinal para a tela chamar de novo. Chamar repetidamente é o uso normal.
+    """
+    registro = _SEQ_DO_RUN.get(run_id)
+    if registro is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Envio desconhecido. Pode ter expirado com um reinício do servidor — reenvie a mensagem.",
+        )
+    agente_do_run, chave, seq_antes = registro
+    if agente_do_run != agent_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Este envio é de outro agente.")
+
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
+
+    espera = obter_cliente_de_espera(c.url, c.token)
+    try:
+        r = await espera.chamar("agent.wait", {"runId": run_id, "timeoutMs": _ESPERA_MS})
+    except ErroGateway as e:
+        return RespostaOut(status="erro", detalhe=str(e))
+
+    if r.get("status") == "timeout":
+        # `timeoutPhase: queue` com `providerStarted: false` significa que o
+        # gateway nem começou — pode ser fila ou run que já não existe. Nos dois
+        # casos a tela pergunta de novo; o limite de tentativas é dela.
+        return RespostaOut(status="executando")
+
+    cliente = obter_cliente(c.url, c.token)
+    try:
+        hist = await cliente.chamar("chat.history", {"sessionKey": chave, "limit": 40})
+    except ErroGateway as e:
+        return RespostaOut(status="erro", detalhe=str(e))
+
+    texto = _texto_da_resposta(hist.get("messages") or [], seq_antes)
+    if not texto:
+        return RespostaOut(
+            status="erro",
+            detalhe="O agente terminou sem produzir texto. Pode ter respondido só com "
+            "ferramentas, ou a resposta ficou vazia.",
+        )
+
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            f"""
+            INSERT INTO public.conversations (agent_id, user_id, role, content)
+            VALUES ($1, $2::uuid, 'agent', $3)
+            RETURNING {_COLUNAS}
+            """,
+            agent_id, usuario.id, texto,
+        )
+    _SEQ_DO_RUN.pop(run_id, None)
+    logger.info("Resposta de %s gravada (run %s, %d chars)", agent_id, run_id, len(texto))
+    return RespostaOut(status="pronta", message=_para_saida(linha))

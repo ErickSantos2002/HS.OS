@@ -108,7 +108,7 @@ Seis buckets a recriar: `agent-files`, `audio-messages`, `wiki-uploads`
 
 | Decisão | Por quê importa |
 |---|---|
-| **Credencial da Anthropic no gateway está expirada** | `models.authStatus` diz `expired` no perfil `anthropic:claude-cli`, vencido desde ~mai/2026. Os 5 agentes usam `anthropic/claude-sonnet-4-6`. Ou existe uma API key que o `authStatus` não cobre, ou os agentes estão mudos. Conferir no OpenClaw. |
+| ~~Credencial da Anthropic expirada~~ — **resolvido, era alarme falso** | O `models.authStatus` diz `expired` no perfil `anthropic:claude-cli`, mas em 06/08/2026 a `nina` respondeu a uma mensagem de verdade pelo chat portado. Existe credencial que o `authStatus` não enxerga. Ou seja: `POST /agents/test-model` pode reprovar modelo que funciona — ele avisa, não condena. |
 | **Trocar a senha `admin123`** | Conta `super_admin` que guarda o token do gateway. Precisa de `POST /auth/change-password`. Fazer **antes** de liberar para a equipe. |
 | Flags `dnos_flag_*` viram padrão? | São 4 correções de estabilidade hoje desligadas — o sistema roda com os bugs antigos ativos. |
 | Manter as 191 policies de RLS? | Funcionam, mas duplicam a autorização do FastAPI. Se aposentar, vira a `003`. |

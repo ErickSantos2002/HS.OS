@@ -184,6 +184,7 @@ class ClienteGateway:
 
 # ── Instância única ──────────────────────────────────────────────────────
 _cliente: ClienteGateway | None = None
+_cliente_espera: ClienteGateway | None = None
 
 
 def obter_cliente(url: str, token: str) -> ClienteGateway:
@@ -194,8 +195,35 @@ def obter_cliente(url: str, token: str) -> ClienteGateway:
     return _cliente
 
 
+def obter_cliente_de_espera(url: str, token: str) -> ClienteGateway:
+    """Conexão **separada**, só para chamadas que ficam penduradas.
+
+    `agent.wait` segura a resposta até o agente terminar — é o long-poll que dá
+    ao chat sensação de tempo real sem WebSocket. O problema é que `chamar()`
+    serializa tudo sob um lock por conexão: uma espera de 20s na conexão
+    principal congelaria `agents.list`, `models.list` e todo o resto pelo mesmo
+    tempo, para todo mundo.
+
+    Por isso as esperas vivem numa segunda conexão. O gateway aceita várias, e o
+    custo é uma sessão WebSocket a mais.
+    """
+    global _cliente_espera
+    if (
+        _cliente_espera is None
+        or _cliente_espera.url != ClienteGateway._normalizar(url)
+        or _cliente_espera._token != token
+    ):
+        _cliente_espera = ClienteGateway(url, token)
+    return _cliente_espera
+
+
 async def encerrar_cliente() -> None:
-    global _cliente
+    """Fecha as duas conexões no desligamento. Esquecer a de espera deixaria um
+    WebSocket aberto a cada reinício, e o gateway acumularia sessões zumbis."""
+    global _cliente, _cliente_espera
     if _cliente is not None:
         await _cliente.fechar()
         _cliente = None
+    if _cliente_espera is not None:
+        await _cliente_espera.fechar()
+        _cliente_espera = None
