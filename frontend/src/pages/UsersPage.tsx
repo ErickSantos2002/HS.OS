@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { useAuthContext } from "@/contexts/auth-context";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -73,6 +74,31 @@ import ImportAgentDialog from "@/components/agents/ImportAgentDialog";
 import { AgentAccessDialog } from "@/components/users/AgentAccessDialog";
 import { AvatarCropDialog } from "@/components/AvatarCropDialog";
 import { uploadUserAvatar, uploadAgentAvatar } from "@/lib/avatar-upload";
+
+/** O que `GET /profiles` devolve — só o que esta tela usa. */
+interface PerfilApi {
+  id: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  status: string;
+  role: string;
+}
+
+/** O que `GET /agents` devolve — só o que esta tela usa. */
+interface AgenteApi {
+  id: string;
+  name: string | null;
+  emoji: string | null;
+  specialty: string | null;
+  description: string | null;
+  openclawId: string | null;
+  /** Status gravado em agent_profiles, não a liveness do gateway. */
+  profileStatus: string;
+  lastActive: string | null;
+  isLeader: boolean;
+  leaderId: string | null;
+}
 import { useAllAvatars } from "@/hooks/use-agent-avatar";
 import { Camera, Lock } from "lucide-react";
 
@@ -195,82 +221,82 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
   const fetchAll = useCallback(async () => {
     setLoading(true);
 
-    const [profilesRes, rolesRes, agentsRes, statsRes] = await Promise.all([
-      supabase.from("profiles").select("id, email, full_name, avatar_url, status").order("created_at", { ascending: true }),
-      supabase.from("user_roles").select("user_id, role"),
-      supabase
-        .from("agent_profiles")
-        .select("agent_id, openclaw_id, name, emoji, specialty, status, description, role, access_type, allowed_user_ids, is_leader, leader_id")
-        .order("agent_id", { ascending: true }),
-      supabase.from("agent_stats").select("agent_id, latest_updated_at"),
+    // Duas chamadas à nossa API no lugar de quatro consultas ao Supabase.
+    // `user_roles` sumiu do cliente: o papel já vem em /profiles, resolvido pela
+    // mesma regra de prioridade que estava aqui (super_admin > member > user).
+    // `agent_stats` também: a última atividade vem em `lastActive`.
+    //
+    // `incluir_inativos` é obrigatório aqui — esta é a tela onde se reativa um
+    // agente desativado, e sem isso ele sumiria da lista e não teria como voltar.
+    const [perfisRes, agentesRes] = await Promise.allSettled([
+      api<PerfilApi[]>("/profiles"),
+      api<{ agents: AgenteApi[] }>("/agents?incluir_inativos=true"),
     ]);
 
-    // Humans
-    const roleMap = new Map<string, AppRole>();
-    const priority: Record<string, number> = { super_admin: 1, member: 2, user: 3 };
-    rolesRes.data?.forEach((r) => {
-      const existing = roleMap.get(r.user_id);
-      if (!existing || (priority[r.role] ?? 99) < (priority[existing] ?? 99)) {
-        roleMap.set(r.user_id, r.role as AppRole);
-      }
-    });
+    if (perfisRes.status === "rejected") {
+      toast({
+        title: "Erro ao carregar usuários",
+        description: (perfisRes.reason as Error).message,
+        variant: "destructive",
+      });
+    }
+    if (agentesRes.status === "rejected") {
+      toast({
+        title: "Erro ao carregar agentes",
+        description: (agentesRes.reason as Error).message,
+        variant: "destructive",
+      });
+    }
+
+    const perfis = perfisRes.status === "fulfilled" ? perfisRes.value : [];
+    const agentesApi = agentesRes.status === "fulfilled" ? agentesRes.value.agents ?? [] : [];
+
     setHumans(
-      (profilesRes.data ?? []).map((p: any) => ({
+      perfis.map((p) => ({
         kind: "human" as const,
         id: p.id,
         email: p.email,
         full_name: p.full_name ?? "",
         avatar_url: p.avatar_url ?? null,
         status: p.status,
-        role: roleMap.get(p.id) ?? "user",
+        role: (p.role ?? "user") as AppRole,
       })),
     );
 
-    // Agents
+    // O filtro por `access_type` que estava aqui saiu: o endpoint já aplica o
+    // mesmo controle no servidor, onde ele de fato protege. Repetir no cliente
+    // não acrescentava nada — os dados já teriam chegado ao navegador.
     const now = Date.now();
-    const statsMap = new Map<string, string | null>();
-    statsRes.data?.forEach((s: any) => statsMap.set(s.agent_id, s.latest_updated_at));
     setAgents(
-      (agentsRes.data ?? [])
-        .filter((a: any) => {
-          if (isAdmin) return true;
-          const at = a.access_type ?? "all";
-          if (at === "all") return true;
-          if (at === "admins_only") return false;
-          if (at === "specific_users") {
-            const allowed: string[] = Array.isArray(a.allowed_user_ids) ? a.allowed_user_ids : [];
-            return !!currentUser && allowed.includes(currentUser.id);
-          }
-          return true;
-        })
-        .map((a: any) => {
-          const last = statsMap.get(a.agent_id);
-          const elapsed = last ? now - new Date(last).getTime() : Infinity;
-          const presence: AgentRow["presence"] =
-            a.status === "configuring"
-              ? "configuring"
-              : elapsed < 5 * 60_000
-              ? "online"
-              : elapsed < 30 * 60_000
-              ? "recent"
-              : "offline";
-          return {
-            kind: "agent" as const,
-            id: a.agent_id,
-            openclaw_id: a.openclaw_id ?? a.agent_id,
-            name: a.name ?? a.agent_id,
-            emoji: a.emoji ?? "🤖",
-            specialty: a.specialty ?? a.role ?? a.description ?? null,
-            status: a.status ?? "active",
-            presence,
-            is_leader: !!a.is_leader,
-            leader_id: a.leader_id ?? null,
-          };
-        }),
+      agentesApi.map((a) => {
+        const elapsed = a.lastActive ? now - new Date(a.lastActive).getTime() : Infinity;
+        const presence: AgentRow["presence"] =
+          a.profileStatus === "configuring"
+            ? "configuring"
+            : elapsed < 5 * 60_000
+            ? "online"
+            : elapsed < 30 * 60_000
+            ? "recent"
+            : "offline";
+        return {
+          kind: "agent" as const,
+          id: a.id,
+          openclaw_id: a.openclawId ?? a.id,
+          name: a.name ?? a.id,
+          emoji: a.emoji ?? "🤖",
+          specialty: a.specialty ?? a.description ?? null,
+          // O status do banco, não a liveness do gateway: é o que decide se a
+          // linha aparece como desativada e se o botão oferece reativar.
+          status: a.profileStatus ?? "active",
+          presence,
+          is_leader: !!a.isLeader,
+          leader_id: a.leaderId ?? null,
+        };
+      }),
     );
 
     setLoading(false);
-  }, [isAdmin, currentUser]);
+  }, []);
 
   useEffect(() => {
     fetchAll();

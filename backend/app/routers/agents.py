@@ -56,6 +56,14 @@ class AgenteOut(BaseModel):
     # Quem lidera este agente. Vem na lista porque a tela de liderança precisa do
     # estado de **todos** para regravá-lo em lote sem apagar o dos outros.
     leaderId: str | None = None
+    # Id no gateway quando difere do `agent_id`. A tela de usuários mostra os dois
+    # e o drawer usava o `openclaw_id` como chave em algumas chamadas.
+    openclawId: str | None = None
+    # `status` acima é liveness do gateway (existe em `agents.list` ou não).
+    # Este é o status gravado em `agent_profiles` — active | inactive |
+    # configuring — e são coisas diferentes: um agente pode estar `configuring`
+    # no banco e já responder no gateway. A tela de administração precisa deste.
+    profileStatus: str = "active"
     isOfficial: bool = False
     color: str | None = None
 
@@ -91,20 +99,34 @@ def _pode_ver(perfil: dict, user_id: str, is_admin: bool) -> bool:
 
 
 @router.get("", response_model=ListaAgentesOut)
-async def listar(usuario: Usuario = Depends(usuario_atual)):
+async def listar(
+    usuario: Usuario = Depends(usuario_atual),
+    incluir_inativos: bool = False,
+):
+    """`incluir_inativos` existe para a tela de administração de usuários, que
+    precisa enxergar o agente desativado — é de lá que se reativa. As telas de
+    uso normal (chat, lista de agentes) continuam sem ver inativo, que era o
+    comportamento herdado."""
     is_admin = usuario.papel == "super_admin"
 
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """
-            SELECT agent_id, name, emoji, avatar_url, model, channels, status,
-                   access_type, allowed_user_ids, department, description,
-                   specialty, workspace, is_leader, leader_id, is_official, color,
-                   sort_order
-            FROM public.agent_profiles
-            WHERE status IS DISTINCT FROM 'inactive'
-            ORDER BY sort_order NULLS LAST, name
-            """
+            SELECT p.agent_id, p.name, p.emoji, p.avatar_url, p.model, p.channels,
+                   p.status, p.access_type, p.allowed_user_ids, p.department,
+                   p.description, p.specialty, p.workspace, p.is_leader,
+                   p.leader_id, p.is_official, p.color, p.sort_order,
+                   p.openclaw_id,
+                   -- Presença: a tela derivava online/recente/offline da distância
+                   -- até `latest_updated_at`. Sem este join todo mundo apareceria
+                   -- offline.
+                   to_char(s.latest_updated_at, 'YYYY-MM-DD"T"HH24:MI:SSOF') AS last_active
+              FROM public.agent_profiles p
+              LEFT JOIN public.agent_stats s ON s.agent_id = p.agent_id
+             WHERE ($1::bool OR p.status IS DISTINCT FROM 'inactive')
+             ORDER BY p.sort_order NULLS LAST, p.name
+            """,
+            incluir_inativos,
         )
 
     perfis: dict[str, dict] = {}
@@ -163,6 +185,9 @@ async def listar(usuario: Usuario = Depends(usuario_atual)):
                 workspace=g.get("workspace") or p.get("workspace"),
                 isLeader=bool(p.get("is_leader")),
                 leaderId=p.get("leader_id"),
+                openclawId=p.get("openclaw_id") or aid,
+                lastActive=p.get("last_active"),
+                profileStatus=p.get("status") or "active",
                 isOfficial=bool(p.get("is_official")),
                 color=p.get("color"),
             )
