@@ -513,7 +513,8 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
     setProgress({ openclaw: "running", supabase: "pending", lia: "pending" });
 
     try {
-      const { data, error } = await supabase.functions.invoke("create-agent", {
+      const resultado = await api<{ orquestrador_avisado: boolean }>("/agents", {
+        method: "POST",
         body: {
           openclaw_id: agentId,
           name,
@@ -529,7 +530,7 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
           integrations_used: selectedIntegrations,
           persona_description: personaDescription,
           behavior_restrictions: behaviorRestrictions,
-          crons_description: cronsDescription || null,
+          crons_description: cronsDescription || "",
           lia_onboarding: liaOnboarding,
           access_type: accessType,
           allowed_user_ids: accessType === "specific_users" ? allowedUserIds : [],
@@ -537,40 +538,21 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
         },
       });
 
-      if (error && !data) {
-        setProgress((p) => ({ ...p, openclaw: "error" }));
-        setErrorStep("openclaw");
-        setErrorMsg(error.message || "Falha na chamada da função");
-        setPhase("error");
-        setSubmitting(false);
-        return;
-      }
-
-      if (data?.success === false || data?.error) {
-        const failedStep: "openclaw" | "supabase" | "lia" =
-          data.step === "supabase" ? "supabase" : data.step === "lia" ? "lia" : "openclaw";
-        setProgress((p) => {
-          const next = { ...p };
-          if (failedStep === "supabase") next.openclaw = "done";
-          if (failedStep === "lia") {
-            next.openclaw = "done";
-            next.supabase = "done";
-          }
-          next[failedStep] = "error";
-          return next;
+      // Não há mais como falhar "no meio": o endpoint só grava depois de o
+      // gateway aceitar, então se chegou aqui as duas primeiras etapas deram
+      // certo. O aviso ao orquestrador é best effort e vem no resultado.
+      setProgress({
+        openclaw: "done",
+        supabase: "done",
+        lia: resultado.orquestrador_avisado ? "done" : "error",
+      });
+      if (!resultado.orquestrador_avisado) {
+        toast({
+          title: "Agente criado, mas o orquestrador não foi avisado",
+          description: "Ele existe no gateway e no banco. Reenvie o briefing pela tela do agente.",
+          variant: "destructive",
         });
-        setErrorStep(failedStep);
-        setErrorMsg(data.error || "Erro desconhecido");
-        setPhase("error");
-        setSubmitting(false);
-        return;
       }
-
-      setProgress({ openclaw: "done", supabase: "running", lia: "pending" });
-      await new Promise((r) => setTimeout(r, 250));
-      setProgress({ openclaw: "done", supabase: "done", lia: "running" });
-      await new Promise((r) => setTimeout(r, 250));
-      setProgress({ openclaw: "done", supabase: "done", lia: "done" });
 
       // Upload avatar if user picked one
       if (avatarDataUrl) {
@@ -594,13 +576,6 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
         specialty,
         pending: true,
       });
-
-      if (data?.lia_warning) {
-        toast({
-          title: "Agente criado",
-          description: `Aviso ao notificar a Lia: ${data.lia_warning}`,
-        });
-      }
 
       setPhase("done");
       setSubmitting(false);

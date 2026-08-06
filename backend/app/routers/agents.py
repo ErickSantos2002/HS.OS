@@ -1058,3 +1058,192 @@ async def excluir(
     return ExclusaoAgenteOut(
         agent_id=aid, removido_do_gateway=removido, aviso_gateway=None if removido else aviso
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Criação de agente — portado de `create-agent`
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class AgenteNovoIn(BaseModel):
+    openclaw_id: str = Field(min_length=2, max_length=32)
+    name: str = Field(min_length=2, max_length=200)
+    specialty: str = Field(min_length=5)
+    model: str = Field(min_length=1)
+    workspace: str = Field(min_length=1)
+    channels: list[str] = Field(min_length=1)
+    emoji: str = "🤖"
+    description: str = ""
+    behavior: str = ""
+    skills_description: str = ""
+    skills_tags: list[str] = []
+    integrations_used: list[str] = []
+    persona_description: str = ""
+    behavior_restrictions: str = ""
+    crons_description: str = ""
+    # Quando falso, o orquestrador só monta a infraestrutura e o usuário escreve
+    # os arquivos do agente à mão.
+    lia_onboarding: bool = True
+    access_type: str = "all"
+    allowed_user_ids: list[str] = []
+    leader_id: str | None = None
+
+
+class AgenteNovoOut(BaseModel):
+    agent_id: str
+    criado_no_gateway: bool
+    orquestrador_avisado: bool
+
+
+def _briefing(d: AgenteNovoIn) -> str:
+    """Instruções para o orquestrador montar o agente no VPS.
+
+    Copiado da edge, incluindo o tom imperativo e o aviso em maiúsculas de que
+    ele deve **executar** as ferramentas em vez de descrever o que faria. Isso
+    não é estilo: era a correção de um comportamento real em que o agente
+    respondia com um plano e não criava arquivo nenhum.
+    """
+    integracoes = ", ".join(d.integrations_used) or "Nenhuma selecionada"
+    crons = (
+        f'AUTOMAÇÕES (configure os crons após criar o agente):\n"{d.crons_description}"'
+        if d.crons_description
+        else "Sem automações configuradas."
+    )
+
+    if not d.lia_onboarding:
+        return (
+            "🤖 NOVO AGENTE CRIADO — CONFIGURAÇÃO BÁSICA\n\n"
+            "⚠️ EXECUTE as ferramentas (SSH) — não responda apenas com texto.\n\n"
+            f"ID: {d.openclaw_id} | Nome: {d.name} {d.emoji}\n"
+            f"Workspace: {d.workspace}\n"
+            f"{crons}\n\n"
+            "Execute apenas os passos de infraestrutura do AGENT_CREATION.md "
+            "(criar workspace, registrar no gateway, reiniciar). O usuário vai "
+            "configurar os arquivos manualmente."
+        )
+
+    return (
+        "🤖 NOVO AGENTE CRIADO — EXECUTE ONBOARDING COMPLETO\n\n"
+        "⚠️ INSTRUÇÃO CRÍTICA: você DEVE executar as ferramentas (SSH/file write) "
+        "para criar os arquivos no VPS. Não responda apenas com texto descrevendo "
+        "o que faria — EXECUTE. Ao final, liste cada arquivo criado com o caminho "
+        "completo.\n\n"
+        "Dados técnicos:\n"
+        f"- ID: {d.openclaw_id}\n"
+        f"- Nome: {d.name} {d.emoji}\n"
+        f"- Modelo: {d.model}\n"
+        f"- Workspace: {d.workspace}\n"
+        f"- Canais: {', '.join(d.channels) or 'webchat'}\n\n"
+        f"Especialidade: {d.specialty or d.skills_description or 'Não definida'}\n"
+        f"Tags: {', '.join(d.skills_tags) or 'Nenhuma'}\n"
+        f"Integrações selecionadas: {integracoes}\n\n"
+        "PERSONA (base para SOUL.md e IDENTITY.md):\n"
+        f'"{d.persona_description or "Não definida — use a especialidade como referência"}"\n\n'
+        "Restrições importantes:\n"
+        f'"{d.behavior_restrictions or "Nenhuma definida"}"\n\n'
+        f"{crons}\n\n"
+        "Execute TODOS os passos do AGENT_CREATION.md:\n"
+        f"1. Crie o workspace {d.workspace} no VPS\n"
+        "2. Escreva SOUL.md com a personalidade descrita acima — seja criativo e "
+        "detalhado, capture a essência do agente\n"
+        "3. Escreva IDENTITY.md com missão, especialidade, tom de voz e exemplos "
+        "de respostas\n"
+        f"4. Escreva TOOLS.md listando as integrações: {integracoes}\n"
+        "5. Escreva AGENTS.md (relações com outros agentes da equipe)\n"
+        "6. Escreva MEMORY.md (vazio, pronto para uso)\n"
+        "7. Escreva HEARTBEAT.md (status inicial)\n"
+        "8. Atualize /root/.openclaw/AGENTS_DIRECTORY.md adicionando o novo agente\n"
+        "9. Configure os crons descritos acima no openclaw.json\n"
+        "10. Reinicie o gateway para carregar o novo agente\n"
+        "11. Ao final desta mensagem, resuma o que foi configurado e liste os "
+        "arquivos criados com o caminho completo\n\n"
+        "Capricha no SOUL.md — é a alma do agente. NÃO pule a execução das ferramentas."
+    )
+
+
+@router.post("", response_model=AgenteNovoOut, status_code=status.HTTP_201_CREATED)
+async def criar(
+    dados: AgenteNovoIn,
+    _: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Registra o agente no gateway, grava o perfil e manda o orquestrador montá-lo.
+
+    **Gateway primeiro**, como no `PATCH`: se `agents.create` falhar, nada é
+    gravado. O contrário deixaria um perfil apontando para um agente que não
+    existe do outro lado — visível na tela, impossível de usar.
+
+    O agente nasce com `status = 'configuring'`: quem termina de montá-lo é o
+    orquestrador, e até lá a tela mostra o estado \"configurando\" em vez de
+    fingir que está pronto.
+    """
+    if not re.match(r"^[a-z0-9-]{2,32}$", dados.openclaw_id):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "openclaw_id inválido: use letras minúsculas, números e hífen (2 a 32).",
+        )
+    if dados.access_type not in _ACESSOS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"access_type inválido. Use um de: {', '.join(sorted(_ACESSOS))}.",
+        )
+
+    async with sessao(role="service_role") as conn:
+        if await conn.fetchval(
+            "SELECT 1 FROM public.agent_profiles WHERE agent_id = $1", dados.openclaw_id
+        ):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT, "Já existe um agente com este identificador."
+            )
+
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
+    try:
+        await obter_cliente(c.url, c.token).chamar(
+            "agents.create", {"name": dados.name, "workspace": dados.workspace}
+        )
+    except ErroGateway as e:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"O gateway recusou a criação e nada foi salvo: {e}",
+        )
+
+    permitidos = [UUID(str(u)) for u in dados.allowed_user_ids] if dados.allowed_user_ids else []
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            """
+            INSERT INTO public.agent_profiles
+                (agent_id, openclaw_id, name, emoji, specialty, description, workspace,
+                 channels, model, behavior, skills_description, skills_tags,
+                 integrations_used, persona_description, crons_description,
+                 access_type, allowed_user_ids, leader_id, status)
+            VALUES ($1, $1, $2, $3, $4, $5, $6, $7::text[], $8, $9, $10, $11::text[],
+                    $12::text[], $13, NULLIF($14, ''), $15, $16::uuid[], $17, 'configuring')
+            """,
+            dados.openclaw_id, dados.name, dados.emoji, dados.specialty,
+            dados.description, dados.workspace, dados.channels, dados.model,
+            dados.behavior, dados.skills_description, dados.skills_tags,
+            dados.integrations_used, dados.persona_description,
+            dados.crons_description, dados.access_type, permitidos, dados.leader_id,
+        )
+
+    briefing = _briefing(dados)
+    async with sessao(role="service_role") as conn:
+        # Trilha do que foi pedido ao orquestrador. Sem isto não há como saber
+        # depois por que um agente nasceu diferente do que se esperava.
+        await conn.execute(
+            "INSERT INTO public.agent_creation_log (agent_id, briefing) VALUES ($1, $2)",
+            dados.openclaw_id, briefing,
+        )
+
+    avisado = True
+    try:
+        await _avisar_lider(f"create-agent:{dados.openclaw_id}", briefing)
+    except Exception as e:  # noqa: BLE001
+        avisado = False
+        logger.warning("Briefing de %s não enviado: %s", dados.openclaw_id, e)
+
+    logger.info("Agente %s criado por super_admin", dados.openclaw_id)
+    return AgenteNovoOut(
+        agent_id=dados.openclaw_id, criado_no_gateway=True, orquestrador_avisado=avisado
+    )
