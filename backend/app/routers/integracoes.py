@@ -676,3 +676,61 @@ async def validar_token(
         error=f"O provedor recusou a credencial (HTTP {r.status_code}).",
         detalhe=r.text[:300] or None,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Revelar credenciais de um conector — portado de `reveal-connector-credentials`
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Sufixos que provedores costumam usar. A busca é por tentativa porque o valor
+# vive em variável de ambiente e não há como listar "as variáveis deste
+# conector" — só perguntar por nome.
+_SUFIXOS_COMUNS = [
+    "API_KEY", "ACCESS_TOKEN", "CLIENT_ID", "CLIENT_SECRET", "REFRESH_TOKEN",
+    "SECRET_KEY", "WEBHOOK_SECRET", "BOT_TOKEN", "ACCOUNT_SID", "AUTH_TOKEN",
+    "PHONE_NUMBER_ID", "PAGE_ID", "AD_ACCOUNT_ID", "APP_ID", "BASE_URL", "TOKEN",
+]
+
+
+@router.get("/conectores/{integration_id}/credenciais")
+async def revelar_credenciais_conector(
+    integration_id: str,
+    usuario: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Mostra ao admin as credenciais que o **ambiente** tem para este conector.
+
+    ⚠️ Devolve valor em claro, e por isso é `super_admin`. Existe para o admin
+    conferir o que de fato está configurado no servidor — a tela normal mostra
+    só `key_preview`.
+
+    Procura em três lugares, na ordem do original: os nomes de chave gravados em
+    `credentials`, o `key_name` da integração, e o prefixo derivado do
+    `template_id` combinado com os sufixos comuns.
+    """
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            "SELECT name, key_name, credentials, template_id FROM public.integrations "
+            "WHERE id = $1::uuid",
+            integration_id,
+        )
+    if linha is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conector não encontrado.")
+
+    nomes: list[str] = []
+    bruto = linha["credentials"] or "[]"
+    for c in (json.loads(bruto) if isinstance(bruto, str) else bruto):
+        nome = str((c or {}).get("key_name") or (c or {}).get("key") or "").strip()
+        if nome:
+            nomes.append(nome)
+    if linha["key_name"]:
+        nomes.append(linha["key_name"])
+    if linha["template_id"]:
+        prefixo = re.sub(r"[^A-Z0-9]+", "_", str(linha["template_id"]).upper())
+        nomes += [f"{prefixo}_{s}" for s in _SUFIXOS_COMUNS]
+
+    encontradas = {n: os.environ[n] for n in dict.fromkeys(nomes) if os.environ.get(n)}
+    logger.info(
+        "Credenciais do conector %s reveladas a %s: %d encontrada(s)",
+        linha["name"], usuario.id, len(encontradas),
+    )
+    return {"success": True, "credentials": encontradas}
