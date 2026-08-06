@@ -66,9 +66,27 @@ a primeira parada é ver **como o sistema fazia antes**: as 73 edge functions em
 mostrou que o contrato antigo era REST, o que provou que o protocolo tinha mudado e
 apontou o caminho.
 
-**Não replicar o que estava errado.** Ao mesmo tempo, herdar não é copiar: a portagem
-é a oportunidade de corrigir os achados da auditoria e o vazamento do token do
-gateway. Ver os avisos no `CLAUDE.md`. Reaproveitar o *contrato*, não os defeitos.
+**Portar fiel; melhorar depois.** ⚠️ Este princípio **limita o de cima** e foi acertado
+em 06/08/2026, depois de um dia em que a portagem demorou por causa de erro
+introduzido na própria portagem. O comportamento tem que voltar a ser **o que era**,
+mesmo quando o código herdado parece errado. Enxergou melhoria? Anota aqui e segue
+portando. Mudança de comportamento é decisão do Erick e vai em commit separado.
+
+Motivo: cada melhoria enfiada no meio vira mais uma variável para depurar quando algo
+quebra, e some a referência de "como era antes" — que é justamente o que faz a
+depuração ser rápida.
+
+As exceções já decididas e fechadas: o vazamento do `admin_token` para o navegador
+(Lote 1) e os achados de segurança da auditoria. Fora dessas, reaproveitar o
+comportamento, não só o contrato.
+
+**Melhorias adiadas** (portadas como estavam, corrigir depois da reconstrução):
+- `POST /agents/leadership/sync` — o botão da UI devolve ao banco os mesmos valores
+  que leu; nunca muda nada. Quem faz o trabalho de verdade é o orquestrador na VPS.
+- `PATCH /agents/{id}` grava no gateway antes do banco e aborta com 502 se ele
+  recusar. **Isto é uma mudança de comportamento feita durante a portagem** — a edge
+  gravava no banco primeiro e seguia com um `openclaw_warning` que a UI ignorava.
+  Decidir se fica ou se volta ao original.
 
 **Construir ≠ liberar.** O sistema fica híbrido por semanas (parte Supabase, parte
 nossa). Isso é estado de obra, não de entrega — a equipe só entra quando estiver
