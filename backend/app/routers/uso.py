@@ -8,6 +8,7 @@ Quem chama é o coletor da VPS, por segredo compartilhado.
 """
 
 import logging
+import re
 from datetime import datetime
 from decimal import Decimal
 
@@ -15,6 +16,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
+from app.dependencies import Usuario, exige_papel
+from app.gateway import config as cfg
+from app.gateway.client import ErroGateway, obter_cliente
 from app.integracoes import exige_segredo
 
 logger = logging.getLogger(__name__)
@@ -144,3 +148,90 @@ async def importar(
 
     logger.info("Uso importado: %d inseridos, %d ignorados", inseridos, ignorados)
     return ImportacaoOut(inseridos=inseridos, ignorados=ignorados)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Varredura de janela de contexto — portado de `usage-sweep`
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class VarreduraOut(BaseModel):
+    agentes: int
+    sessoes: int
+    contextos: int
+    removidos: int
+
+
+@router.post("/varrer-contexto", response_model=VarreduraOut)
+async def varrer_contexto(_: Usuario = Depends(exige_papel("super_admin"))):
+    """Atualiza quanto da janela de contexto cada sessão está ocupando.
+
+    ⚠️ **Esta varredura não registra mais consumo**, e o comentário da edge
+    explica por quê: o `trajectory` registra a mesma chamada com modelo real,
+    divisão de cache e tokens de raciocínio, e entra por `/uso/importar`. Gravar
+    nos dois lugares contava o custo duas vezes. Aqui sobrou só a janela.
+
+    A higiene no fim é o que evita a tabela virar cemitério: sessão sem sinal há
+    uma semana não volta.
+    """
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
+
+    async with sessao(role="service_role") as conn:
+        agentes = [
+            l["agent_id"]
+            for l in await conn.fetch("SELECT agent_id FROM public.agent_profiles LIMIT 50")
+            if re.match(r"^[a-z0-9-]{2,32}$", l["agent_id"] or "")
+        ]
+
+    cliente = obter_cliente(c.url, c.token)
+    vistas = contextos = 0
+    async with sessao(role="service_role") as conn:
+        for agente in agentes:
+            try:
+                r = await cliente.chamar("sessions.list", {"agentId": agente, "limit": 100})
+            except ErroGateway as e:
+                logger.warning("sessions.list de %s falhou: %s", agente, e)
+                continue
+
+            for s in (r.get("sessions") or r.get("items") or []):
+                chave = s.get("key")
+                if not isinstance(chave, str):
+                    continue
+                vistas += 1
+                contexto = int(s.get("contextTokens") or 0)
+                if contexto <= 0:
+                    # Sessão sem contexto medido não vira linha: gravar zero
+                    # faria o painel mostrar "0% da janela" para algo que nunca
+                    # foi medido, que é diferente de vazio.
+                    continue
+                await conn.execute(
+                    """
+                    INSERT INTO public.agent_context_state
+                        (session_key, agent_id, model, total_tokens, context_tokens, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, now())
+                    ON CONFLICT (session_key) DO UPDATE SET
+                        agent_id = EXCLUDED.agent_id,
+                        model = EXCLUDED.model,
+                        total_tokens = EXCLUDED.total_tokens,
+                        context_tokens = EXCLUDED.context_tokens,
+                        updated_at = now()
+                    """,
+                    chave, s.get("agentId") or agente, s.get("model"),
+                    int(s.get("totalTokens") or 0), contexto,
+                )
+                contextos += 1
+
+        marca = await conn.execute(
+            "DELETE FROM public.agent_context_state WHERE updated_at < now() - interval '7 days'"
+        )
+    removidos = int(marca.rsplit(" ", 1)[-1] or 0)
+
+    logger.info(
+        "Varredura de contexto: %d agentes, %d sessões, %d contextos, %d removidos",
+        len(agentes), vistas, contextos, removidos,
+    )
+    return VarreduraOut(
+        agentes=len(agentes), sessoes=vistas, contextos=contextos, removidos=removidos
+    )
