@@ -166,6 +166,7 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<AppRole>("member");
+  const [invitePassword, setInvitePassword] = useState("");
   const [inviting, setInviting] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
@@ -326,26 +327,41 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
     ]);
   }, []);
 
+  // Não há mais convite por e-mail: o admin cria a conta com uma senha inicial
+  // e entrega as credenciais pelo canal interno da empresa. Decisão do Erick em
+  // 06/08/2026 — some a dependência de servidor de e-mail e o estado "pendente"
+  // de quem foi convidado mas nunca clicou no link.
   const handleInvite = async () => {
-    if (!inviteEmail) return;
+    if (!inviteEmail || !inviteName.trim() || invitePassword.length < 8) return;
     setInviting(true);
-    const { data, error } = await supabase.functions.invoke("invite-user", {
-      body: { email: inviteEmail, role: inviteRole, full_name: inviteName.trim() },
-    });
-    if (error || data?.error) {
-      toast({
-        title: "Erro ao convidar",
-        description: data?.error || error?.message || "Erro desconhecido",
-        variant: "destructive",
+    try {
+      await api("/profiles", {
+        method: "POST",
+        body: {
+          email: inviteEmail,
+          nome: inviteName.trim(),
+          senha: invitePassword,
+          role: inviteRole,
+        },
       });
-    } else {
-      toast({ title: "Convite enviado", description: `Email enviado para ${inviteEmail}` });
+      toast({
+        title: "Conta criada",
+        description: `${inviteEmail} já pode entrar com a senha definida.`,
+      });
       setInviteEmail("");
       setInviteName("");
+      setInvitePassword("");
       setInviteOpen(false);
       fetchAll();
+    } catch (e) {
+      toast({
+        title: "Erro ao criar a conta",
+        description: (e as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setInviting(false);
     }
-    setInviting(false);
   };
 
   // A trilha em `access_logs` saiu do cliente: o endpoint grava o log na mesma
@@ -497,12 +513,12 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
               <DialogTrigger asChild>
                 <button className="flex items-center gap-2 px-5 py-2.5 text-sm rounded-full bg-gradient-to-r from-primary to-[hsl(260,70%,55%)] text-white hover:opacity-90 transition-opacity shadow-lg shadow-primary/20">
                   <UserPlus className="h-4 w-4" />
-                  Convidar Usuário
+                  Criar Conta
                 </button>
               </DialogTrigger>
               <DialogContent className="glass-card border-border/30 bg-card/95 backdrop-blur-xl max-w-md rounded-2xl p-0 gap-0">
                 <DialogHeader className="aurora-glow px-6 py-4 border-b border-border/30">
-                  <DialogTitle className="font-display font-bold text-foreground relative z-10">Convidar novo usuário</DialogTitle>
+                  <DialogTitle className="font-display font-bold text-foreground relative z-10">Criar conta de colaborador</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 p-6">
                   <div className="space-y-2">
@@ -533,6 +549,23 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
                     </div>
                   </div>
                   <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Senha inicial</label>
+                    <div className="glass-input flex items-center gap-2 px-3">
+                      <Lock className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <input
+                        type="text"
+                        value={invitePassword}
+                        onChange={(e) => setInvitePassword(e.target.value)}
+                        placeholder="mínimo de 8 caracteres"
+                        className="w-full bg-transparent py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Visível de propósito — você precisa copiar e repassar pelo canal interno.
+                      Não há e-mail de convite.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
                     <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Perfil de acesso</label>
                     <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as AppRole)}>
                       <SelectTrigger>
@@ -547,10 +580,10 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
                   </div>
                   <button
                     onClick={handleInvite}
-                    disabled={inviting || !inviteEmail}
+                    disabled={inviting || !inviteEmail || !inviteName.trim() || invitePassword.length < 8}
                     className="w-full py-3 rounded-full bg-gradient-to-r from-primary to-[hsl(260,70%,55%)] text-primary-foreground font-display font-bold text-sm transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
                   >
-                    {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enviar convite"}
+                    {inviting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Criar conta"}
                   </button>
                 </div>
               </DialogContent>

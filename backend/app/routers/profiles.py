@@ -5,13 +5,18 @@ herdadas decidem o que cada um enxerga. A escrita é limitada ao próprio perfil
 """
 
 import json
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 
+from app.auth.schemas import LIMITE_SENHA_BYTES
+from app.auth.security import gerar_hash
 from app.database import sessao
 from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.routers.schemas import PerfilOut, PerfilPatch
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/profiles", tags=["profiles"])
 
@@ -185,3 +190,73 @@ async def _registrar_acesso(conn, autor_id: str, acao: str, metadata: dict) -> N
         "VALUES ($1::uuid, $2, $3::jsonb)",
         autor_id, acao, json.dumps(metadata),
     )
+
+
+class ContaNovaIn(BaseModel):
+    """Criação de conta pelo administrador.
+
+    Substitui a edge `invite-user`, que mandava convite por e-mail
+    (`inviteUserByEmail`) e deixava a conta pendente até a pessoa clicar no
+    link. **Decisão do Erick (06/08/2026):** a HS não usa convite — o admin cria
+    a conta, entrega as credenciais pelo canal interno e a pessoa já entra. Some
+    a dependência de servidor de e-mail e o estado "pendente".
+    """
+
+    email: EmailStr
+    nome: str = Field(min_length=1, max_length=200)
+    senha: str = Field(min_length=8, max_length=LIMITE_SENHA_BYTES)
+    role: str = "user"
+
+
+@router.post("", response_model=PerfilOut, status_code=status.HTTP_201_CREATED)
+async def criar_conta(
+    dados: ContaNovaIn,
+    usuario: Usuario = Depends(exige_papel("super_admin")),
+):
+    if dados.role not in _PAPEIS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Papel inválido. Use um de: {', '.join(sorted(_PAPEIS))}.",
+        )
+
+    senha_hash = gerar_hash(dados.senha)
+
+    async with sessao(role="service_role") as conn:
+        async with conn.transaction():
+            # `email_confirmed_at` preenchido na criação: não há fluxo de
+            # confirmação por e-mail aqui, e deixar nulo faria a conta nascer
+            # num estado que nada nesta instalação resolve.
+            user_id = await conn.fetchval(
+                """
+                INSERT INTO auth.users (email, password_hash, email_confirmed_at)
+                VALUES ($1, $2, now())
+                ON CONFLICT (email) DO NOTHING
+                RETURNING id
+                """,
+                dados.email, senha_hash,
+            )
+            if user_id is None:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, "Já existe uma conta com este e-mail."
+                )
+            await conn.execute(
+                "INSERT INTO public.profiles (id, email, full_name) VALUES ($1, $2, $3)",
+                user_id, dados.email, dados.nome,
+            )
+            await conn.execute(
+                "INSERT INTO public.user_roles (user_id, role) "
+                "VALUES ($1, $2::public.app_role)",
+                user_id, dados.role,
+            )
+            await _registrar_acesso(
+                conn, usuario.id, "create_user",
+                {"target_user": str(user_id), "email": dados.email, "role": dados.role},
+            )
+
+        linha = await conn.fetchrow(
+            f"SELECT {_COLUNAS}, {_PAPEL} FROM public.profiles p WHERE p.id = $1",
+            user_id,
+        )
+
+    logger.info("Conta criada por %s: %s (%s)", usuario.id, dados.email, dados.role)
+    return PerfilOut(**dict(linha))
