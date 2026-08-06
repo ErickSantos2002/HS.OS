@@ -83,10 +83,11 @@ comportamento, não só o contrato.
 **Melhorias adiadas** (portadas como estavam, corrigir depois da reconstrução):
 - `POST /agents/leadership/sync` — o botão da UI devolve ao banco os mesmos valores
   que leu; nunca muda nada. Quem faz o trabalho de verdade é o orquestrador na VPS.
-- `PATCH /agents/{id}` grava no gateway antes do banco e aborta com 502 se ele
-  recusar. **Isto é uma mudança de comportamento feita durante a portagem** — a edge
-  gravava no banco primeiro e seguia com um `openclaw_warning` que a UI ignorava.
-  Decidir se fica ou se volta ao original.
+
+**Exceção já decidida:** `PATCH /agents/{id}` grava no gateway antes do banco e aborta
+com 502 se ele recusar, em vez do `openclaw_warning` ignorado da edge. Foi mudança de
+comportamento feita durante a portagem, mas o Erick decidiu manter (06/08/2026) — o
+que já está feito e testado fica. Não é pendência.
 
 **Construir ≠ liberar.** O sistema fica híbrido por semanas (parte Supabase, parte
 nossa). Isso é estado de obra, não de entrega — a equipe só entra quando estiver

@@ -191,11 +191,41 @@ descobrir formato, use um `agentId` inexistente, que falha antes de gravar.
 ⚠️ **O `model` é assimétrico.** `agents.list` devolve `{"primary": "anthropic/claude-sonnet-4-6"}`,
 mas `agents.update` exige **string nua** e recusa o objeto com `at /model: must be string`.
 
-⚠️ **A rota HTTP OpenAI-compatível sumiu.** `POST /v1/chat/completions` com o header
-`x-openclaw-model`, que a edge `test-llm-model` usava para provar que uma LLM respondia, hoje é 404.
-O equivalente é `chat.send`, que manda mensagem de verdade (gasta tokens, cria histórico). Por isso
-`POST /agents/test-model` verifica por `models.list` + `models.authStatus` e **não** afirma que a LLM
-respondeu.
+⚠️ **A rota HTTP OpenAI-compatível sumiu.** `POST /v1/chat/completions` hoje é 404. **Doze** edge
+functions ainda a usam — é a espinha do chat, e portanto do Lote 3: `gateway-chat`, `dm-agent-reply`,
+`channel-agent-reply`, `agent-task`, `create-agent`, `update-agent-access`, `update-agent-leadership`,
+`resend-agent-briefing`, `chat-image-vision`, `parse-company-context`, `export-agent`, `seed-agents`.
+Todas precisam do mesmo substituto.
+
+### `chat.send` — o substituto, levantado ao vivo em 06/08/2026
+
+```
+chat.send { sessionKey, message, idempotencyKey, agentId? }  →  { runId, status: "started" }
+```
+
+- ⚠️ **Sem `agentId` vai para o agente padrão** (`defaultId` do `agents.list`, hoje `nina`), sem
+  aviso nenhum. Foi assim que uma sondagem mandou "ping" para a `nina` por engano. **Sempre mande
+  `agentId` explícito**, mesmo quando parecer óbvio qual é o alvo.
+- A chave real da sessão é **composta**: `sessionKey: "x"` com `agentId: "nina"` vira
+  `agent:nina:x`. É esse nome composto que aparece no `sessions.list` e é o que o
+  `sessions.delete` exige (em `key`, não em `sessionKey`).
+- **`idempotencyKey` é obrigatório** e o `runId` volta igual a ele. O gateway passou a deduplicar
+  nativamente — vale conferir se isso não resolve sozinho a execução duplicada catalogada em
+  A1–A19 da auditoria, antes de reimplementar a fila do `chat-sender.ts`.
+- `chat.send` é **assíncrono**: devolve `started`, não a resposta. A resposta chega por outro
+  caminho (era o `agent-reply-webhook` no desenho antigo).
+
+Por isso `POST /agents/test-model` verifica por `models.list` + `models.authStatus` em vez de
+`chat.send`: mandar mensagem de verdade a cada clique custa tokens e polui o histórico do agente. Em
+troca, ele **não** afirma que a LLM respondeu — só que está registrada, disponível e com credencial
+válida.
+
+⚠️ **Regra de operação: não sonde método de escrita do gateway sem combinar antes.** Leitura
+(`*.list`, `*.get`, `*.status`) é livre. Qualquer coisa que crie, altere ou envie: mostre o payload
+e confirme. Em 06/08/2026 duas sondagens escaparam — uma quebrou o modelo da `nina`, outra mandou
+mensagem para ela. Para descobrir formato de parâmetro sem escrever, use um **`agentId` inexistente**
+(o gateway valida o schema e devolve o campo que falta antes de resolver o agente) — mas confira que
+**toda** chamada do lote leva o alvo inexistente, porque basta uma sem ele.
 
 ⚠️ **O handshake WebSocket falha por timeout de vez em quando**, mesmo com o túnel de pé e
 `/health` respondendo 200. `chamar()` já reconecta uma vez; em script solto, repita antes de
