@@ -14,6 +14,7 @@ from app.routers.channels import router as channels_router
 from app.routers.chat_extras import router as chat_extras_router
 from app.routers.conversations import router as conversations_router
 from app.routers.gateway import router as gateway_router
+from app.routers.integracoes import router as integracoes_router
 from app.routers.profiles import router as profiles_router
 from app.routers.storage import preparar_diretorios, router as storage_router
 from app.routers.ws import router as ws_router
@@ -74,6 +75,7 @@ app.include_router(conversations_router)
 app.include_router(channels_router)
 app.include_router(chat_extras_router)
 app.include_router(gateway_router)
+app.include_router(integracoes_router)
 app.include_router(profiles_router)
 app.include_router(storage_router)
 app.include_router(ws_router)
