@@ -20,8 +20,11 @@ Endpoints: `/health`, `/auth/*`, `/branding`, `/profiles/*`, `/gateway/*`, `/age
 
 ## Placar
 
-**15 de 73** edge functions com substituto · **13 de 113** arquivos do front sem
-Supabase · **34** functions distintas ainda referenciadas pelo front.
+**17 de 73** edge functions com substituto · **13 de 113** arquivos do front sem
+Supabase · **31** functions distintas ainda referenciadas pelo front.
+
+O `AgentEditDrawer` chama **uma** edge, `delete-agent` — era oito chamadas de
+cinco functions diferentes no início de 06/08/2026.
 
 ⚠️ O número 34 corrige o "26" anterior, que era subestimado: o grep antigo não via
 chamadas indiretas (`callEdge(fn, …)` com o nome em variável). A forma correta de
@@ -51,16 +54,33 @@ Nunca use valor inválido num alvo real.
 
 ## Próximos passos, em ordem de dependência
 
-### 1. As três edges que sobraram no drawer
+### 0. Verificar com o Erick o que ficou pendente (fazer primeiro)
 
-O Lote 2b fechou `update-agent-profile`, `test-llm-model` e
-`sync-agent-leadership`. O `AgentEditDrawer.tsx` ainda chama três:
-`update-agent-access`, `update-agent-leadership` e `delete-agent`.
+Três coisas foram escritas e **não** foram verificadas rodando, porque testar
+dispara efeito real. Ficou combinado fazer junto:
 
-`update-agent-access` é a mais barata: `PATCH /agents/{id}` **já aceita**
-`access_type` e `allowed_user_ids`, é só trocar a chamada e verificar.
-`update-agent-leadership` notifica o orquestrador — leia antes, porque a parte
-que importa é o efeito no gateway, não o `UPDATE`.
+- **Avisos aos agentes** (`_avisar_agente` em `app/routers/agents.py`). Mudar o
+  acesso ou a liderança de um agente manda mensagem de verdade para o
+  orquestrador, que entra no histórico dele. Testar: mudar o acesso de um agente
+  na tela e confirmar que a `nina` recebeu.
+- **`delete-agent`**, ainda não portada — apaga no gateway (`agents.delete`) e em
+  três tabelas (`agent_profiles`, `agent_avatars`, `agent_integrations`). Não dá
+  para verificar sem apagar um agente de verdade.
+- **O drawer inteiro na tela** — ver o item 1 abaixo, que é o que o desbloqueia.
+
+### 1. A `UsersPage` está vazia e esconde o Lote 2b inteiro
+
+O `AgentEditDrawer` é montado **só** em `UsersPage`, que aparece embutida em
+`/settings?tab=users`. Essa tela mostra **0 registros** porque o `fetchAll` dela
+(`frontend/src/pages/UsersPage.tsx:198-206`) ainda lê `profiles`, `user_roles`,
+`agent_profiles` e `agent_stats` direto do Supabase.
+
+Sem lista não há como abrir o drawer, então todo o trabalho do Lote 2b está
+entregue e invisível. As três primeiras leituras já têm endpoint pronto
+(`/profiles` e `/agents`, este último já devolvendo `leaderId`); `agent_stats`
+não tem, e serve só para o "última atividade".
+
+É escopo do Lote 4, mas é o que faz o 2b aparecer.
 
 ### 2. Criar e excluir agente — Lote 2c
 
