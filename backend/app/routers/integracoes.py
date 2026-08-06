@@ -10,6 +10,7 @@ porque separá-los em três módulos de 40 linhas não ajudaria ninguém a achá
 
 import json
 import logging
+import os
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -202,3 +203,49 @@ async def gravar_guardrails(
     if achado is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
     logger.info("Guardrails de %s atualizados (%d regras)", dados.agent_id, len(dados.guardrails))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Estado das chaves de integração — portado de `check-integration-keys`
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class ChavesOut(BaseModel):
+    checadas: int
+    configuradas: int
+
+
+@router.post("/checar-chaves", response_model=ChavesOut)
+async def checar_chaves(_: None = Depends(exige_segredo("BRIDGE_API_TOKEN"))):
+    """Marca cada integração como configurada ou não, olhando o ambiente.
+
+    A tabela `integrations` guarda o **nome** da variável (`key_name`), nunca o
+    valor. Este endpoint confere quais dessas variáveis existem de fato e grava
+    o resultado, mais uma prévia mascarada, para a tela mostrar "configurada"
+    sem nunca receber o segredo.
+
+    A prévia mostra 4 caracteres de cada ponta: o suficiente para alguém
+    reconhecer *qual* chave está lá, insuficiente para usá-la.
+    """
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch("SELECT id, key_name FROM public.integrations")
+
+        configuradas = 0
+        for linha in linhas:
+            valor = os.environ.get(linha["key_name"]) or ""
+            if valor:
+                configuradas += 1
+                previa = (
+                    f"{valor[:4]}●●●●●●●●{valor[-4:]}" if len(valor) > 8
+                    else f"●●●●{valor[-4:]}"
+                )
+            else:
+                previa = None
+            await conn.execute(
+                "UPDATE public.integrations SET is_configured = $2, key_preview = $3, "
+                "updated_at = now() WHERE id = $1",
+                linha["id"], bool(valor), previa,
+            )
+
+    logger.info("Chaves de integração: %d de %d configuradas", configuradas, len(linhas))
+    return ChavesOut(checadas=len(linhas), configuradas=configuradas)
