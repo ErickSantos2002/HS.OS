@@ -11,20 +11,35 @@ linha gravada** para a tela fazer essa troca sozinha — foi assim que
 aparecendo ao recarregar até o Realtime ser portado.
 """
 
+import asyncio
 import json
 import logging
+import re
 from datetime import datetime
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
+from app.gateway import config as cfg
+from app.gateway.client import ErroGateway, obter_cliente, obter_cliente_de_espera
 from app.realtime import hub, topico_canal
+from app.routers.conversations import _texto_da_resposta
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/channels", tags=["channels"])
+
+# Quanto se espera pelo agente numa menção. Bem mais que os 20s do chat: em
+# canal ninguém está olhando a tela esperando, e a alternativa a esperar é
+# publicar o aviso de falha para um agente que ainda vai responder.
+_ESPERA_CANAL_MS = 140_000
+
+# Tarefas de resposta em voo. O asyncio só guarda referência fraca — sem este
+# conjunto o coletor de lixo pode encerrar a tarefa no meio da resposta.
+_TAREFAS: set[asyncio.Task] = set()
 
 _TIPOS = {"public", "private", "dm"}
 _TIPOS_MEMBRO = {"human", "agent"}
@@ -348,3 +363,213 @@ async def mensagem(
     if linha is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Mensagem não encontrada.")
     return _msg_saida(linha)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resposta de agente no canal — portado de `channel-agent-reply`
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Respostas que o gateway devolve quando não tem o que dizer. Publicá-las no
+# canal era ruído — pior, ruído com cara de resposta.
+_RESPOSTAS_VAZIAS = {
+    "no response from openclaw.", "no response from openclaw",
+    "sem resposta do agente.", "no response from",
+}
+
+# Quantas mensagens de contexto o agente recebe. Eram 10 e viraram 30 na edge:
+# com 10 o agente perdia o pedido original quando a conversa andava no meio da
+# resposta e respondia à mensagem errada.
+_CONTEXTO = 30
+
+_AVISO_FALHA = (
+    "⚠️ Não consegui responder agora (o gateway falhou ou expirou). "
+    "Tente mencionar novamente em instantes."
+)
+
+
+def _nome_de_exibicao(agent_id: str) -> str:
+    normal = agent_id.strip().lower().removeprefix("openclaw:")
+    return " ".join(p.capitalize() for p in re.split(r"[-_\s]+", normal) if p) or normal
+
+
+async def _responder_no_canal(channel_id: str, agent_id: str) -> None:
+    """Roda em segundo plano: monta o contexto, pergunta ao agente, publica.
+
+    ⚠️ **Nunca levanta.** É uma tarefa solta — exceção aqui não chega a
+    requisição nenhuma, só morreria no log do asyncio. Falha vira uma mensagem
+    visível no canal, e o motivo é que silêncio é indistinguível de "o agente
+    está pensando": a pessoa fica esperando para sempre.
+    """
+    nome = _nome_de_exibicao(agent_id)
+    try:
+        async with sessao(role="service_role") as conn:
+            historico = await conn.fetch(
+                """
+                SELECT author_name, author_type, author_id, content,
+                       to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS created_at
+                  FROM public.channel_messages
+                 WHERE channel_id = $1::uuid
+                 ORDER BY created_at DESC
+                 LIMIT $2
+                """,
+                channel_id, _CONTEXTO,
+            )
+        historico = list(reversed(historico))
+        if not historico:
+            return
+
+        # Marco de deduplicação: se já existir resposta deste agente depois da
+        # última mensagem de quem não é ele, outra chamada já respondeu. Duas
+        # menções quase simultâneas disparavam duas tarefas.
+        gatilho = next((m for m in reversed(historico) if m["author_id"] != agent_id), None)
+        if gatilho is None:
+            return
+        marco = gatilho["created_at"]
+
+        # O contexto vai como texto porque o `chat.send` manda uma mensagem a um
+        # agente configurado — não existe array de `messages` como havia no
+        # /v1/chat/completions que a edge usava.
+        linhas = [
+            f"{m['author_name'] or m['author_id']}: {m['content']}"
+            for m in historico if (m["content"] or "").strip()
+        ]
+        pedido = (
+            f"Você está no canal e foi mencionado. Responda à última mensagem.\n\n"
+            f"--- conversa recente ---\n" + "\n".join(linhas)
+        )
+
+        c = await cfg.carregar()
+        if not c.configurado:
+            logger.warning("Menção a %s em %s ignorada: gateway não configurado.", agent_id, channel_id)
+            return
+
+        # Sessão nova a cada resposta, de propósito: o contexto vai inteiro na
+        # mensagem, então uma sessão persistente receberia a mesma conversa de
+        # novo a cada menção. A edge era stateless pelo mesmo motivo.
+        chave = f"channel:{channel_id}:{agent_id}:{uuid4()}"
+        run_id = f"hsos-{uuid4()}"
+        cliente = obter_cliente(c.url, c.token)
+        espera = obter_cliente_de_espera(c.url, c.token)
+
+        texto = ""
+        try:
+            await cliente.chamar("chat.send", {
+                "agentId": agent_id, "sessionKey": chave,
+                "message": pedido, "idempotencyKey": run_id,
+            })
+            r = await espera.chamar("agent.wait", {"runId": run_id, "timeoutMs": _ESPERA_CANAL_MS})
+            if r.get("status") != "timeout":
+                hist = await cliente.chamar("chat.history", {"sessionKey": chave, "limit": 20})
+                texto = _texto_da_resposta(hist.get("messages") or [], 0)
+        except ErroGateway as e:
+            logger.warning("Agente %s falhou em %s: %s", agent_id, channel_id, e)
+
+        if texto.strip().lower() in _RESPOSTAS_VAZIAS:
+            logger.info("Resposta vazia de %s em %s descartada.", agent_id, channel_id)
+            texto = ""
+
+        await _publicar_do_agente(channel_id, agent_id, nome, texto or _AVISO_FALHA, marco)
+    except Exception:  # noqa: BLE001
+        logger.exception("Resposta de %s em %s morreu", agent_id, channel_id)
+    finally:
+        async with sessao(role="service_role") as conn:
+            await conn.execute(
+                "UPDATE public.channel_agent_activity SET finished_at = now(), updated_at = now() "
+                " WHERE channel_id = $1::uuid AND agent_id = $2",
+                channel_id, agent_id,
+            )
+
+
+async def _publicar_do_agente(
+    channel_id: str, agent_id: str, nome: str, texto: str, marco: str
+) -> None:
+    """Grava a mensagem do agente, a menos que ele já tenha respondido depois do marco.
+
+    ⚠️ O marco vai como `$3::text::timestamptz`, não `$3::timestamptz`. Com o
+    cast direto o asyncpg deduz timestamptz do parâmetro e recusa a string com
+    `expected a datetime.date or datetime.datetime instance` — mesma armadilha
+    do `::jsonb`. O `::text::` no meio é o que faz o Postgres converter.
+    """
+    async with sessao(role="service_role") as conn:
+        ja = await conn.fetchval(
+            """
+            SELECT 1 FROM public.channel_messages
+             WHERE channel_id = $1::uuid AND author_id = $2 AND author_type = 'agent'
+               AND created_at > $3::text::timestamptz
+             LIMIT 1
+            """,
+            channel_id, agent_id, marco,
+        )
+        if ja:
+            logger.info("Duplicata evitada: %s já respondeu em %s.", agent_id, channel_id)
+            return
+
+        linha = await conn.fetchrow(
+            f"""
+            INSERT INTO public.channel_messages
+                (channel_id, author_id, author_type, author_name, content)
+            VALUES ($1::uuid, $2, 'agent', $3, $4)
+            RETURNING {_COLUNAS_MSG.replace('m.', '')}
+            """,
+            channel_id, agent_id, nome, texto,
+        )
+        # Notifica quem é gente. Agente não recebe notificação — ele não tem
+        # tela para olhar, e as linhas só encheriam a tabela.
+        await conn.execute(
+            """
+            INSERT INTO public.notifications (user_id, channel_id, author_name, content_preview)
+            SELECT user_id::uuid, $1::uuid, $2, $3
+              FROM public.channel_members
+             WHERE channel_id = $1::uuid AND member_type = 'human'
+            """,
+            channel_id, nome, texto[:100],
+        )
+
+    saida = _msg_saida(linha)
+    hub.publicar(topico_canal(channel_id), "mensagem", saida.model_dump())
+    logger.info("Agente %s respondeu em %s.", agent_id, channel_id)
+
+
+@router.post("/{channel_id}/agentes/{agent_id}/responder",
+             status_code=status.HTTP_202_ACCEPTED)
+async def acionar_agente(
+    channel_id: str,
+    agent_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Aciona um agente para responder no canal. Devolve 202 na hora.
+
+    A resposta leva de segundos a minutos e não cabe numa requisição — a tela
+    fica sabendo pelo WebSocket, como qualquer outra mensagem do canal.
+
+    Marca `channel_agent_activity` **antes** de soltar a tarefa: é o que faz o
+    canal inteiro ver que o agente está trabalhando. Antes disso só quem
+    mencionou via o indicador, e para os outros o canal parecia parado.
+    """
+    agente = agent_id.strip().lower().removeprefix("openclaw:")
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        canal = await conn.fetchval(
+            "SELECT 1 FROM public.channels WHERE id = $1::uuid", channel_id
+        )
+    if not canal:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Canal não encontrado.")
+
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            """
+            INSERT INTO public.channel_agent_activity
+                (channel_id, agent_id, started_at, updated_at, passo, finished_at)
+            VALUES ($1::uuid, $2, now(), now(), NULL, NULL)
+            ON CONFLICT (channel_id, agent_id) DO UPDATE
+                SET started_at = now(), updated_at = now(),
+                    passo = NULL, finished_at = NULL
+            """,
+            channel_id, agente,
+        )
+
+    # `create_task` e não `BackgroundTasks`: o BackgroundTasks só começa depois
+    # da resposta ser enviada, e queremos o agente andando enquanto o 202 volta.
+    tarefa = asyncio.create_task(_responder_no_canal(channel_id, agente))
+    _TAREFAS.add(tarefa)  # sem referência forte o coletor pode matar a tarefa no meio
+    tarefa.add_done_callback(_TAREFAS.discard)
+    return {"ok": True, "status": "processando"}

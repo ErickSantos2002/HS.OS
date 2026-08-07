@@ -315,7 +315,7 @@ async def sincronizar_status(_: Usuario = Depends(usuario_atual)):
                 continue
             marca = await conn.execute(
                 "UPDATE public.automations SET last_run_status = $2, "
-                "last_run_at = COALESCE($3::timestamptz, last_run_at), updated_at = now() "
+                "last_run_at = COALESCE($3::text::timestamptz, last_run_at), updated_at = now() "
                 "WHERE id = $1::uuid AND (last_run_status IS DISTINCT FROM $2)",
                 linha["id"], estado, job.get("lastRunAt"),
             )

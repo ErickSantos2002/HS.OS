@@ -1,5 +1,5 @@
 import { getAgentDisplayNameById, isLikelyAgentId, isOfficialAgentId, normalizeAgentId } from "@/lib/active-agents";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { getPendingAgentsForChannel, setChannelAgentPending } from "@/lib/channel-agent-pending";
 
 /** Extract @mentions from message text, returns array of matched agent IDs */
@@ -48,39 +48,28 @@ export function getRespondingAgents(
   return [];
 }
 
-/** Get agent member IDs from channel_members */
+/** Ids dos agentes que são membros do canal. */
 export async function getAgentMembersForChannel(channelId: string): Promise<string[]> {
-  const { data } = await supabase
-    .from("channel_members")
-    .select("user_id, member_type")
-    .eq("channel_id", channelId);
-
-  if (!data) return [];
-
-  // Filter to agent members
-  return (data as any[])
+  const membros = await api<{ user_id: string; member_type: string }[]>(
+    `/channels/${channelId}/members`,
+  );
+  return membros
     .filter((m) => m.member_type === "agent")
     .map((m) => normalizeAgentId(m.user_id))
     .filter(isOfficialAgentId);
 }
 
-/** Call the edge function to get an agent reply */
+/** Aciona o agente para responder no canal. Devolve assim que o backend aceita. */
 export async function triggerAgentReply(
   channelId: string,
   agentId: string,
-  latestUserMessage?: string
+  _latestUserMessage?: string
 ): Promise<void> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const userId = session?.user?.id ?? undefined;
-
-  await supabase.functions.invoke("channel-agent-reply", {
-    body: {
-      channel_id: channelId,
-      agent_id: agentId,
-      message_count: 10,
-      latest_user_message: latestUserMessage ?? null,
-      user_id: userId ?? null,
-    },
+  // O contexto não vai mais daqui: o backend monta a partir de
+  // `channel_messages`, que é a fonte, e assim a mensagem que dispara não
+  // precisa dar a volta pelo navegador.
+  await api(`/channels/${channelId}/agentes/${encodeURIComponent(agentId)}/responder`, {
+    method: "POST",
   });
 }
 
