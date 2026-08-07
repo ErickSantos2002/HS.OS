@@ -187,7 +187,7 @@ async def _registrar_acesso(conn, autor_id: str, acao: str, metadata: dict) -> N
     escrita dá errado é pior que log nenhum, porque dá falsa confiança."""
     await conn.execute(
         "INSERT INTO public.access_logs (user_id, action, metadata) "
-        "VALUES ($1::uuid, $2, $3::jsonb)",
+        "VALUES ($1::uuid, $2, $3::text::jsonb)",
         autor_id, acao, json.dumps(metadata),
     )
 

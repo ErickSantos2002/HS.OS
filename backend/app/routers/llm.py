@@ -433,7 +433,7 @@ async def salvar(dados: SalvarIn, _: Usuario = Depends(exige_papel("super_admin"
         async with sessao(role="service_role") as conn:
             await conn.execute(
                 "INSERT INTO public.llm_provider_ops (op, provider_id, payload) "
-                "VALUES ('upsert_provider', $1, $2::jsonb)",
+                "VALUES ('upsert_provider', $1, $2::text::jsonb)",
                 ident,
                 json.dumps({"node": no, "catalogo": catalogo_novo,
                             "catalogo_remover": catalogo_remover}),
@@ -531,7 +531,7 @@ async def remover(dados: RemocaoIn, _: Usuario = Depends(exige_papel("super_admi
     async with sessao(role="service_role") as conn:
         await conn.execute(
             "INSERT INTO public.llm_provider_ops (op, provider_id, payload) "
-            "VALUES ('remove_provider', $1, $2::jsonb)",
+            "VALUES ('remove_provider', $1, $2::text::jsonb)",
             ident, json.dumps({"catalogo_remover": catalogo}),
         )
     # Remoção a quente nunca foi provada, e o hot-add crasha o reload. Mesmo
@@ -589,7 +589,7 @@ async def ops_resultado(
         for r in resultados:
             if r.ok and r.result:
                 await conn.execute(
-                    "UPDATE public.llm_provider_ops SET status = 'done', result = $2::jsonb, "
+                    "UPDATE public.llm_provider_ops SET status = 'done', result = $2::text::jsonb, "
                     "payload = NULL WHERE id = $1::uuid",
                     r.id, json.dumps(r.result),
                 )

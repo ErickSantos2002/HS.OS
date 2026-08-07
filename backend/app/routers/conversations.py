@@ -172,7 +172,7 @@ async def anexar(
         linha = await conn.fetchrow(
             f"""
             INSERT INTO public.conversations (agent_id, user_id, role, content, media, created_at)
-            VALUES ($1, $2::uuid, $3, $4, $5::jsonb, COALESCE($6, now()))
+            VALUES ($1, $2::uuid, $3, $4, $5::text::jsonb, COALESCE($6, now()))
             RETURNING {_COLUNAS}
             """,
             agent_id, usuario.id, dados.role, dados.content,

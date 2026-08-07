@@ -19,6 +19,7 @@ from app.routers.gateway import router as gateway_router
 from app.routers.llm import router as llm_router
 from app.routers.integracoes import router as integracoes_router
 from app.routers.profiles import router as profiles_router
+from app.routers.tarefas import router as tarefas_router
 from app.routers.uso import router as uso_router
 from app.routers.storage import preparar_diretorios, router as storage_router
 from app.routers.ws import router as ws_router, sinalizar_desligamento
@@ -89,4 +90,5 @@ app.include_router(llm_router)
 app.include_router(profiles_router)
 app.include_router(storage_router)
 app.include_router(uso_router)
+app.include_router(tarefas_router)
 app.include_router(ws_router)

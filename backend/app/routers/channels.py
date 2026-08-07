@@ -310,7 +310,7 @@ async def enviar(
             INSERT INTO public.channel_messages
                 (channel_id, author_id, author_type, author_name, author_avatar,
                  content, audio_url, attachments, thread_id)
-            VALUES ($1::uuid, $2, $3::public.author_type, $4, $5, $6, $7, $8::jsonb,
+            VALUES ($1::uuid, $2, $3::public.author_type, $4, $5, $6, $7, $8::text::jsonb,
                     NULLIF($9, '')::uuid)
             RETURNING {_COLUNAS_MSG.replace('m.', '')}
             """,

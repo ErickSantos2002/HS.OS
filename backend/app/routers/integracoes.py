@@ -72,7 +72,7 @@ async def iniciar_atividade(
             """
             INSERT INTO public.agent_activity
                 (agent_id, activity_type, title, status, steps, user_id, channel, metadata)
-            VALUES ($1, $2, $3, $4, $5::jsonb, NULLIF($6,'')::uuid, $7, $8::jsonb)
+            VALUES ($1, $2, $3, $4, $5::text::jsonb, NULLIF($6,'')::uuid, $7, $8::text::jsonb)
             RETURNING id::text
             """,
             dados.agent_id, dados.activity_type, dados.title, dados.status,
@@ -100,7 +100,7 @@ async def atualizar_atividade(
     atribuicoes, valores = [], []
     for i, (nome, valor) in enumerate(campos.items(), start=1):
         if nome in ("steps", "result", "metadata"):
-            atribuicoes.append(f"{nome} = ${i}::jsonb")
+            atribuicoes.append(f"{nome} = ${i}::text::jsonb")
             valores.append(json.dumps(valor))
         else:
             atribuicoes.append(f"{nome} = ${i}")
@@ -204,7 +204,7 @@ async def gravar_guardrails(
     """
     async with sessao(role="service_role") as conn:
         achado = await conn.fetchval(
-            "UPDATE public.agent_profiles SET guardrails = $2::jsonb, updated_at = now() "
+            "UPDATE public.agent_profiles SET guardrails = $2::text::jsonb, updated_at = now() "
             "WHERE agent_id = $1 RETURNING agent_id",
             dados.agent_id, json.dumps(dados.guardrails),
         )
@@ -431,7 +431,7 @@ async def registrar_integracao(
                     key_preview = COALESCE($5, key_preview),
                     agents_using = $6::text[], description = $7, icon = $8,
                     is_configured = $9, integration_type = $10,
-                    credentials = $11::jsonb, template_id = COALESCE($12, template_id),
+                    credentials = $11::text::jsonb, template_id = COALESCE($12, template_id),
                     updated_at = now()
                  WHERE id = $1
                 """,
@@ -448,7 +448,7 @@ async def registrar_integracao(
                     (name, category, key_name, key_preview, agents_using, description,
                      icon, added_by_agent, is_configured, integration_type,
                      credentials, template_id)
-                VALUES ($1,$2,$3,$4,$5::text[],$6,$7,$8,$9,$10,$11::jsonb,$12)
+                VALUES ($1,$2,$3,$4,$5::text[],$6,$7,$8,$9,$10,$11::text::jsonb,$12)
                 """,
                 dados.name, dados.category, dados.key_name, dados.key_preview,
                 dados.agents_using, dados.description, dados.icon,
