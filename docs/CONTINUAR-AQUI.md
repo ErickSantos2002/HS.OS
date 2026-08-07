@@ -21,7 +21,7 @@ Tudo abaixo está verificado **no navegador**, não só por endpoint:
 
 ## Placar
 
-**57 de 73** edge functions com substituto · **28** ainda na pasta ·
+**58 de 73** edge functions com substituto · **27** ainda na pasta ·
 **20 de 113** arquivos do front sem Supabase.
 
 O `ls backend/supabase/functions | grep -v _shared | wc -l` agora é a medida

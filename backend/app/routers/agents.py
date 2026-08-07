@@ -1313,3 +1313,107 @@ async def reenviar_briefing(
     await _avisar_lider(f"resend-briefing:{agent_id}", mensagem)
     logger.info("Briefing de %s reenviado ao orquestrador", agent_id)
     return {"ok": True, "agent_id": agent_id}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arquivos do workspace do agente — portado de `gateway-files-proxy`
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# A edge existia porque o navegador não alcança o gateway direto (CORS, e o
+# token não pode ir ao cliente). Aqui o motivo é o mesmo, só que o proxy é nosso.
+#
+# ⚠️ **Não há remoção.** A edge chamava `agents.files.delete`, e o gateway
+# responde `unknown method` — confirmado em 07/08/2026. O método não existe.
+# Para "apagar", grave conteúdo vazio.
+
+
+class ArquivoWorkspaceOut(BaseModel):
+    name: str
+    path: str | None = None
+    size: int | None = None
+    missing: bool = False
+
+
+class ConteudoOut(BaseModel):
+    name: str
+    content: str
+    size: int | None = None
+
+
+class GravarArquivoIn(BaseModel):
+    content: str
+
+
+@router.get("/{agent_id}/arquivos", response_model=list[ArquivoWorkspaceOut])
+async def listar_arquivos(agent_id: str, _: Usuario = Depends(usuario_atual)):
+    """Os arquivos canônicos do agente: SOUL, IDENTITY, TOOLS, AGENTS, MEMORY…"""
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
+    try:
+        r = await obter_cliente(c.url, c.token).chamar(
+            "agents.files.list", {"agentId": agent_id}
+        )
+    except ErroGateway as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+    return [
+        ArquivoWorkspaceOut(
+            name=f.get("name", ""), path=f.get("path"),
+            size=f.get("size"), missing=bool(f.get("missing")),
+        )
+        for f in (r.get("files") or [])
+        if f.get("name")
+    ]
+
+
+@router.get("/{agent_id}/arquivos/{nome}", response_model=ConteudoOut)
+async def ler_arquivo(agent_id: str, nome: str, _: Usuario = Depends(usuario_atual)):
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
+    try:
+        r = await obter_cliente(c.url, c.token).chamar(
+            "agents.files.get", {"agentId": agent_id, "name": nome}
+        )
+    except ErroGateway as e:
+        msg = str(e).lower()
+        # O gateway responde `unsupported file "X"` — ele só aceita os nomes
+        # canônicos (SOUL.md, IDENTITY.md, …), não um caminho qualquer. Isso é
+        # pedido inválido, não falha nossa: 404 em vez de 502.
+        if any(x in msg for x in ("unsupported file", "not found", "no such")):
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND,
+                f'O gateway não reconhece o arquivo "{nome}". Use os nomes '
+                "canônicos que o GET /agents/{id}/arquivos lista.",
+            )
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+    arquivo = r.get("file") or {}
+    return ConteudoOut(
+        name=arquivo.get("name") or nome,
+        content=arquivo.get("content") or "",
+        size=arquivo.get("size"),
+    )
+
+
+@router.put("/{agent_id}/arquivos/{nome}", status_code=status.HTTP_204_NO_CONTENT)
+async def gravar_arquivo(
+    agent_id: str,
+    nome: str,
+    dados: GravarArquivoIn,
+    usuario: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Escreve o arquivo no workspace do agente.
+
+    Só `super_admin`: estes arquivos são a identidade e as instruções do agente
+    — quem os edita muda como ele se comporta com todo mundo.
+    """
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
+    try:
+        await obter_cliente(c.url, c.token).chamar(
+            "agents.files.set", {"agentId": agent_id, "name": nome, "content": dados.content}
+        )
+    except ErroGateway as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+    logger.info("Arquivo %s de %s gravado por %s", nome, agent_id, usuario.id)
