@@ -15,7 +15,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import StatCard from "@/components/dashboard/StatCard";
-import { supabase } from "@/integrations/supabase/client";
 import { getAgentDisplayNameById, normalizeAgentId, getModelForAgent } from "@/lib/active-agents";
 import type { GatewayAgent, ChannelConfig, AgentTool } from "@/hooks/use-agents";
 import { useAgents } from "@/hooks/use-agents";
@@ -131,13 +130,11 @@ function useAgentStats(shortId: string) {
       const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
       const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
 
-      const { data: rows, error: err } = await supabase
-        .from("usage_events")
-        .select("total_tokens, input_tokens, output_tokens, cost_usd, model, ts")
-        .eq("agent_id", shortId)
-        .gte("ts", startOfYesterday.toISOString())
-        .order("ts", { ascending: true })
-        .limit(5000);
+      const { data: rows, error: err } = await api<any[]>(
+        `/agents/${encodeURIComponent(shortId)}/consumo` +
+          `?desde=${encodeURIComponent(startOfYesterday.toISOString())}`,
+      ).then((d) => ({ data: d, error: null as Error | null }),
+             (e: Error) => ({ data: null, error: e }));
 
       if (cancelled) return;
       if (err) { setError(err.message); setLoading(false); return; }
@@ -200,11 +197,8 @@ function useAgentMeta(shortId: string) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    (supabase as any)
-      .from("agent_stats")
-      .select("session_count, latest_updated_at, top_sessions, model")
-      .eq("agent_id", shortId)
-      .maybeSingle()
+    api<any>(`/agents/${encodeURIComponent(shortId)}/estatisticas`)
+      .then((d) => ({ data: d, error: null }), (e: Error) => ({ data: null, error: e }))
       .then(({ data, error }: any) => {
         if (cancelled) return;
         if (error) setError(error.message);
@@ -630,12 +624,10 @@ function useAgentIntegrationsTable(agentId: string, typeFilter?: string) {
     let cancelled = false;
     setLoading(true);
     (async () => {
-      let query = supabase
-        .from("agent_integrations")
-        .select("*")
-        .eq("agent_id", agentId);
-      if (typeFilter) query = query.eq("type", typeFilter);
-      const { data } = await query.order("name");
+      const data = await api<AgentIntegrationRow[]>(
+        `/agents/${encodeURIComponent(agentId)}/integracoes` +
+          (typeFilter ? `?tipo=${encodeURIComponent(typeFilter)}` : ""),
+      ).catch(() => null);
       if (!cancelled) {
         setRows((data ?? []) as AgentIntegrationRow[]);
         setLoading(false);
@@ -967,12 +959,11 @@ function useGatewayCrons(agentId: string) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    (supabase as any)
-      .from("cron_jobs")
-      .select("id, name, cron_expression, last_run, next_run, status, enabled, agent")
-      .eq("agent", agentId)
-      .neq("agent", "system")
-      .order("next_run", { ascending: true })
+    // ⚠️ Estes são os crons do GATEWAY (tabela `cron_jobs`), não os da
+    // plataforma (`agent_crons`). Podem divergir — é para isso que existe o
+    // sincronizar-status.
+    api<any[]>(`/agents/${encodeURIComponent(agentId)}/agendamentos-do-gateway`)
+      .then((d) => ({ data: d }), () => ({ data: [] }))
       .then(({ data }: any) => {
         if (cancelled) return;
         setCrons((data ?? []) as CronJobRow[]);
@@ -1264,11 +1255,18 @@ function VoiceSection({ agentId }: { agentId: string }) {
 
       if (syncAllArenas && arenas.rows.length > 0) {
         const ids = arenas.rows.map((a) => a.arena_id);
-        const { error } = await (supabase as any)
-          .from("arenas")
-          .update({ voice_id: newId })
-          .in("id", ids);
-        if (!error) toast.success(`Voz aplicada em ${ids.length} arena(s)`);
+        // Uma chamada por arena: são poucas, e o PUT de arena já existe com a
+        // conferência de dono. Um endpoint em lote só para isto não se paga.
+        const falhas = (
+          await Promise.all(
+            ids.map((id) =>
+              api(`/arenas/${id}`, { method: "PUT", body: { id, voice_id: newId } })
+                .then(() => null, () => id),
+            ),
+          )
+        ).filter(Boolean);
+        if (falhas.length === 0) toast.success(`Voz aplicada em ${ids.length} arena(s)`);
+        else toast.error(`Falhou em ${falhas.length} de ${ids.length} arena(s)`);
       }
     } catch (e: any) {
       toast.error(e?.message ?? "Falha ao salvar voz");
@@ -1425,15 +1423,12 @@ function UsageCostCard({ agentId }: { agentId: string }) {
       setLoading(true);
       setError(null);
       // Medido (task #19): usage_events em vez de agent_token_snapshots.
-      let q = supabase
-        .from("usage_events")
-        .select("total_tokens, input_tokens, output_tokens, cached_tokens, cost_usd, model, ts")
-        .eq("agent_id", agentId)
-        .order("ts", { ascending: true })
-        .limit(20000);
       const since = periodSince(period);
-      if (since) q = q.gte("ts", since);
-      const { data: rows, error: err } = await q;
+      const { data: rows, error: err } = await api<any[]>(
+        `/agents/${encodeURIComponent(agentId)}/consumo?limite=20000` +
+          (since ? `&desde=${encodeURIComponent(since)}` : ""),
+      ).then((d) => ({ data: d, error: null as Error | null }),
+             (e: Error) => ({ data: null, error: e }));
       if (cancelled) return;
       if (err) {
         setError(err.message);

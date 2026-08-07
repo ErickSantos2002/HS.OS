@@ -14,7 +14,7 @@ na pasta. **Todo número aqui vem de um comando**, e o comando está ao lado.
 | | Hoje | Total | Como medir |
 |---|---|---|---|
 | Edge functions fora da pasta | **60** | 73 | `73 - $(ls backend/supabase/functions \| grep -v _shared \| wc -l)` |
-| Arquivos do front sem Supabase | **59** | 113 | `113 - $(grep -rl "integrations/supabase/client" frontend/src \| wc -l)` |
+| Arquivos do front sem Supabase | **71** | 113 | `113 - $(grep -rl "integrations/supabase/client" frontend/src \| wc -l)` |
 | Rotas na API própria | **160** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
 
 **Duas linhas têm que andar juntas.** "Tem substituto no backend" e "a tela usa o
@@ -34,34 +34,25 @@ diferentes, e o resumo antigo ("Realtime ✅ portado") escondia isso:
 | **Storage** | ✅ `UPLOADS_DIR` em disco | ✅ **completo** | nada |
 | **Realtime** | ✅ WebSocket + LISTEN/NOTIFY (`app/escuta_banco.py`) | ✅ **completo** | nada — `postgres_changes` zerado |
 | **Edge Functions** | 🟡 60 de 73 | ✅ sem pendências | 4 de trabalho real, 9 bloqueadas |
-| **Banco** (RLS direto do browser) | 🟡 163 rotas | 🔴 **59 de 113** | 56 chamadas `.from("…")` |
+| **Banco** (RLS direto do browser) | 🟡 186 rotas | 🟡 **71 de 113** | **4** chamadas vivas (+9 em `_legado/`) |
 
 O **banco é o único subsistema que ainda pesa.** Os outros quatro estão prontos
 ou perto disso.
 
-### Onde estão as 56 chamadas restantes
-
-Nove delas estão em `_legado/`, que não está roteado.
-
-**Zeradas em 07/08**, em ordem de tamanho: `live_artifacts` (21),
-`channel_messages` (9), `channel_members` (9), `integrations` (9),
-`agent_profiles` (10), `profiles` (15), `company_profile` (8),
-`agent_results` (6), `wiki_documents` (5), `arena_agents` (5),
-`arena_sessions` (4), `arena_messages` (4), `wiki_spaces` (4),
-`agent_crons` (4).
-
-O que sobra são tabelas de 5 ou menos usos cada — `conversations`,
-`automations`, `teams`, `drafts`, `artifacts_published`, `notifications` e
-uma cauda de tabelas com uma ou duas chamadas.
-
-E os arquivos mais pesados, que é por onde não começar:
+### As 4 chamadas que restam
 
 ```
-19 components/agents/AgentDetailPanel.tsx     12 components/LiveArtifactViewer.tsx
-14 pages/ChatPage.tsx                         10 pages/AutomacoesPage.tsx
-14 components/users/AddAgentDialog.tsx         8 hooks/use-arena-sessions.ts
-13 hooks/use-notifications.ts                  8 components/settings/ConnectorsTab.tsx
+3  pages/SkillsPage.tsx        agent_skills
+1  pages/ResetPasswordPage.tsx profiles
 ```
+
+`agent_skills` depende do `skill-manage`, que ainda não foi portado — portar a
+leitura sem a escrita deixaria a tela meio funcionando.
+
+`ResetPasswordPage` faz parte do fluxo de recuperação por e-mail, que não existe
+mais desde a saída do Supabase Auth. O destino dela está em *Decisões pendentes*.
+
+Mais 9 chamadas vivem em `_legado/`, que não está roteado.
 
 ---
 

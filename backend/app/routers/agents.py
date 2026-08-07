@@ -1872,3 +1872,85 @@ async def atividades_do_agente(
             agent_id, usuario.id, limite,
         )
     return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+
+
+@router.get("/{agent_id}/consumo")
+async def consumo_do_agente(
+    agent_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+    desde: str | None = Query(default=None, description="ISO-8601."),
+    limite: int = Query(default=5000, ge=1, le=20_000),
+):
+    """Os eventos de consumo deste agente, em ordem cronológica.
+
+    Sem `desde`, olha os últimos dois dias — o painel de hoje/ontem. A aba de
+    período manda a janela explícita.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """
+            SELECT total_tokens, input_tokens, output_tokens, cached_tokens,
+                   cost_usd, model,
+                   to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS ts
+              FROM public.usage_events
+             WHERE agent_id = $1
+               AND ts >= COALESCE(NULLIF($2,'')::text::timestamptz, now() - interval '2 days')
+             ORDER BY ts
+             LIMIT $3
+            """,
+            agent_id, desde or "", limite,
+        )
+    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+
+
+@router.get("/{agent_id}/estatisticas")
+async def estatisticas_do_agente(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """A última coleta de estatísticas deste agente, ou `null` se nunca houve."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            "SELECT session_count, latest_updated_at, top_sessions, model "
+            "  FROM public.agent_stats WHERE agent_id = $1 "
+            " ORDER BY collected_at DESC LIMIT 1",
+            agent_id,
+        )
+    return json.loads(json.dumps(dict(linha), default=str)) if linha else None
+
+
+@router.get("/{agent_id}/integracoes")
+async def integracoes_do_agente(
+    agent_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+    tipo: str | None = Query(default=None),
+):
+    """As integrações vinculadas a este agente."""
+    condicoes, args = ["agent_id = $1"], [agent_id]
+    if tipo:
+        args.append(tipo)
+        condicoes.append(f"type = ${len(args)}")
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            f"SELECT * FROM public.agent_integrations WHERE {' AND '.join(condicoes)} ORDER BY name",
+            *args,
+        )
+    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+
+
+@router.get("/{agent_id}/agendamentos-do-gateway")
+async def agendamentos_do_gateway(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """Os crons que o **gateway** executa para este agente, como o coletor os viu.
+
+    ⚠️ Não confundir com `GET /{id}/crons`, que é a tabela da plataforma. Esta
+    aqui é `cron_jobs`, espelho do que está rodando lá — pode divergir, e é
+    exatamente por isso que existe o `POST /automacoes/sincronizar-status`.
+
+    O `agent <> 'system'` exclui os jobs da instalação, que não pertencem a
+    agente nenhum e apareceriam em todos.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            "SELECT id, name, cron_expression, last_run, next_run, status, enabled, agent "
+            "  FROM public.cron_jobs WHERE agent = $1 AND agent <> 'system' "
+            " ORDER BY next_run NULLS LAST",
+            agent_id,
+        )
+    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
