@@ -11,7 +11,7 @@
  * and returns the persisted document row for the card to render.
  */
 import { useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 
 const GENERATE_DOC_REGEX =
   /<generate_document([^>]*)>([\s\S]*?)<\/generate_document>/g;
@@ -75,23 +75,20 @@ export function useGenerateDocumentParser() {
       parsed: ParsedGenerateDocument,
       agentId?: string | null,
     ): Promise<GeneratedDocument | null> => {
-      const { data, error } = await supabase.functions.invoke(
-        "generate-document",
-        {
+      try {
+        return await api<GeneratedDocument>("/storage/documentos/gerar", {
+          method: "POST",
           body: {
             type: parsed.type,
             title: parsed.title,
             agent_id: agentId ?? null,
             definition: parsed.definition,
           },
-        },
-      );
-      if (error) {
-        console.warn("[generate-document] invoke failed:", error.message);
+        });
+      } catch (e: any) {
+        console.warn("[gerar-documento] falhou:", e?.message);
         return null;
       }
-      const doc = (data as any)?.document as GeneratedDocument | undefined;
-      return doc ?? null;
     },
     [],
   );

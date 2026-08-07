@@ -20,15 +20,18 @@ que havia antes, nem mais nem menos.
 Escrever exige autenticação em **todos** os buckets, inclusive nos públicos.
 """
 
+import io
 import logging
 import mimetypes
 import re
 import time
+from html import escape
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.database import sessao
@@ -217,6 +220,150 @@ async def documento_gerado(
         title=linha["title"],
         doc_type=linha["doc_type"],
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Gerar PDF/DOCX — portado de `generate-document`
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# O agente escreve uma tag no chat com a definição do documento; a tela extrai
+# e chama aqui. A definição é uma lista de seções — deliberadamente pobre, para
+# o agente conseguir produzir sem errar o formato.
+
+_NIVEIS = {"H1": 0, "H2": 1, "H3": 2}
+
+
+class SecaoIn(BaseModel):
+    heading: str | None = None
+    text: str | None = None
+    bold: bool = False
+
+
+class DefinicaoIn(BaseModel):
+    title: str | None = None
+    sections: list[SecaoIn] = []
+
+
+class DocumentoIn(BaseModel):
+    type: str = Field(description="pdf ou docx")
+    title: str = Field(default="Documento", max_length=200)
+    agent_id: str | None = None
+    definition: DefinicaoIn
+
+
+class DocumentoGeradoOut(BaseModel):
+    id: str
+    title: str
+    doc_type: str
+    size_bytes: int
+    created_at: str
+
+
+def _montar_docx(definicao: DefinicaoIn) -> bytes:
+    from docx import Document as Docx
+
+    doc = Docx()
+    if definicao.title:
+        doc.add_heading(definicao.title, level=0)
+    for secao in definicao.sections:
+        if secao.heading in _NIVEIS:
+            doc.add_heading(secao.text or "", level=_NIVEIS[secao.heading] + 1)
+            continue
+        if not secao.text:
+            continue
+        paragrafo = doc.add_paragraph()
+        paragrafo.add_run(secao.text).bold = secao.bold
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+def _montar_pdf(definicao: DefinicaoIn) -> bytes:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+    estilos = getSampleStyleSheet()
+    partes = []
+    if definicao.title:
+        partes += [Paragraph(escape(definicao.title), estilos["Title"]), Spacer(1, 12)]
+    for secao in definicao.sections:
+        if secao.heading in _NIVEIS:
+            partes += [
+                Paragraph(escape(secao.text or ""), estilos[f"Heading{_NIVEIS[secao.heading] + 1}"]),
+                Spacer(1, 6),
+            ]
+            continue
+        if not secao.text:
+            continue
+        # `escape` porque o reportlab interpreta um mini-HTML no parágrafo: um
+        # `<` no texto do agente quebraria a geração inteira.
+        texto = escape(secao.text)
+        partes += [
+            Paragraph(f"<b>{texto}</b>" if secao.bold else texto, estilos["BodyText"]),
+            Spacer(1, 6),
+        ]
+
+    buffer = io.BytesIO()
+    SimpleDocTemplate(buffer, pagesize=A4).build(partes or [Spacer(1, 1)])
+    return buffer.getvalue()
+
+
+@router.post("/documentos/gerar", response_model=DocumentoGeradoOut,
+             status_code=status.HTTP_201_CREATED)
+async def gerar_documento(dados: DocumentoIn, usuario: Usuario = Depends(usuario_atual)):
+    """Gera o arquivo, grava no bucket privado e registra em `generated_documents`.
+
+    O arquivo vai para `generated-documents/<usuário>/<id>.<ext>` — a pasta por
+    usuário é o que sustenta o download privado, que confere o dono pelo
+    primeiro segmento do caminho.
+
+    Se o registro no banco falhar, o arquivo é apagado. Arquivo órfão em disco
+    não aparece em lugar nenhum e só ocupa espaço para sempre.
+    """
+    if dados.type not in ("pdf", "docx"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Tipo inválido. Use pdf ou docx.")
+    if not dados.definition.sections and not dados.definition.title:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "A definição do documento está vazia."
+        )
+
+    try:
+        bytes_ = _montar_pdf(dados.definition) if dados.type == "pdf" else _montar_docx(dados.definition)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Geração de %s falhou: %s", dados.type, e)
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Não foi possível gerar o documento: {e}",
+        )
+
+    doc_id = str(uuid4())
+    caminho = f"{usuario.id}/{doc_id}.{dados.type}"
+    destino = _resolver("generated-documents", caminho)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_bytes(bytes_)
+
+    try:
+        async with sessao(role="service_role") as conn:
+            linha = await conn.fetchrow(
+                """
+                INSERT INTO public.generated_documents
+                    (id, user_id, agent_id, title, doc_type, storage_path, size_bytes)
+                VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
+                RETURNING id::text AS id, title, doc_type, size_bytes,
+                          to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS created_at
+                """,
+                doc_id, usuario.id, dados.agent_id, dados.title, dados.type,
+                caminho, len(bytes_),
+            )
+    except Exception:
+        destino.unlink(missing_ok=True)
+        raise
+
+    logger.info("Documento %s (%s, %d bytes) gerado por %s",
+                doc_id, dados.type, len(bytes_), usuario.id)
+    return DocumentoGeradoOut(**dict(linha))
 
 
 @router.post("/{bucket}/{caminho:path}", response_model=ArquivoOut,
