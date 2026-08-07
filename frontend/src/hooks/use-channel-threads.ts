@@ -1,3 +1,4 @@
+import { assinar } from "@/lib/realtime";
 import { useEffect, useState } from "react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -142,40 +143,15 @@ export function useThreadCounts(channelId: string | null) {
 
     load();
 
-    const channel = supabase
-      .channel(`channel-thread-counts-${channelId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "channel_messages",
-          filter: `channel_id=eq.${channelId}`,
-        },
-        (payload) => {
-          const msg = payload.new as ChannelMessage;
-          if (!msg.thread_id) return;
-          setMeta((prev) => {
-            const cur = prev[msg.thread_id!];
-            const curTs = cur ? new Date(cur.lastReplyAt).getTime() : 0;
-            const newTs = new Date(msg.created_at).getTime();
-            const keepLast = cur && newTs < curTs;
-            return {
-              ...prev,
-              [msg.thread_id!]: {
-                count: (cur?.count ?? 0) + 1,
-                lastReplyAt: keepLast ? cur!.lastReplyAt : msg.created_at,
-                lastAuthorName: keepLast ? cur!.lastAuthorName : msg.author_name,
-                lastAuthorAvatar: keepLast ? cur!.lastAuthorAvatar : (msg.author_avatar ?? null),
-              },
-            };
-          });
-        },
-      )
-      .subscribe();
+    // Vai pelo tópico do canal: o backend roteia por `channel_id`, e assinar o
+    // canal exigiu provar que se é membro. Recarrega em vez de acumular a
+    // mensagem do payload — o evento não a carrega.
+    const cancelar = assinar(`canal:${channelId}`, (_tipo, dados) => {
+      if ((dados as { tabela?: string })?.tabela === "channel_messages") void load();
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelar();
     };
   }, [channelId]);
 
@@ -222,60 +198,12 @@ export function useThreadMessages(channelId: string | null, rootMessageId: strin
 
     load();
 
-    const channel = supabase
-      .channel(`channel-thread-${channelId}-${rootMessageId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "channel_messages",
-          filter: `channel_id=eq.${channelId}`,
-        },
-        (payload) => {
-          const msg = payload.new as ChannelMessage;
-          if (msg.thread_id !== rootMessageId) return;
-
-          setMessages((prev) => {
-            // Drop any optimistic placeholder for the same author+content
-            const withoutOptimistic = prev.filter(
-              (item) =>
-                !(
-                  item.id.startsWith("optimistic-") &&
-                  item.author_id === msg.author_id &&
-                  item.content === msg.content
-                ),
-            );
-            if (withoutOptimistic.some((item) => item.id === msg.id)) {
-              threadMessageCache[key] = withoutOptimistic;
-              return withoutOptimistic;
-            }
-            const nextMessages = [...withoutOptimistic, msg];
-            threadMessageCache[key] = nextMessages;
-            return nextMessages;
-          });
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "channel_messages",
-          filter: `channel_id=eq.${channelId}`,
-        },
-        (payload) => {
-          const msg = payload.new as ChannelMessage;
-          if (msg.thread_id !== rootMessageId) return;
-
-          setMessages((prev) => {
-            const nextMessages = prev.map((item) => (item.id === msg.id ? msg : item));
-            threadMessageCache[key] = nextMessages;
-            return nextMessages;
-          });
-        },
-      )
-      .subscribe();
+    // Recarregar a thread inteira em vez de aplicar a mensagem do evento: além
+    // de o evento não carregar a linha, `load()` já derruba os placeholders
+    // otimistas — era o que o append fazia à mão logo abaixo.
+    const cancelar = assinar(`canal:${channelId}`, (_tipo, dados) => {
+      if ((dados as { tabela?: string })?.tabela === "channel_messages") void load();
+    });
 
     const handleOptimistic = (event: Event) => {
       const detail = (event as CustomEvent).detail as
@@ -293,7 +221,7 @@ export function useThreadMessages(channelId: string | null, rootMessageId: strin
     window.addEventListener("thread-message-optimistic", handleOptimistic);
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelar();
       window.removeEventListener("thread-message-optimistic", handleOptimistic);
     };
   }, [channelId, rootMessageId]);

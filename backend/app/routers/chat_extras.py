@@ -15,7 +15,7 @@ nosso Postgres, então a assinatura antiga nunca dispararia de qualquer forma.
 import json
 import logging
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
@@ -296,3 +296,81 @@ async def atividade(
             desde or "", dias,
         )
     return json.loads(json.dumps([dict(l) for l in linhas], default=str))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Notificações
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class NotificacaoOut(BaseModel):
+    id: str
+    user_id: str
+    channel_id: str | None = None
+    message_id: str | None = None
+    author_name: str | None = None
+    content_preview: str | None = None
+    read: bool = False
+    created_at: str
+
+
+_COLUNAS_NOTIF = """
+    id::text AS id, user_id::text AS user_id, channel_id::text AS channel_id,
+    message_id::text AS message_id, author_name, content_preview, read,
+    to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at
+"""
+
+
+@router.get("/notificacoes", response_model=list[NotificacaoOut])
+async def notificacoes(
+    usuario: Usuario = Depends(usuario_atual),
+    apenas_nao_lidas: bool = Query(default=True),
+    limite: int = Query(default=50, ge=1, le=200),
+):
+    """As notificações desta pessoa. Só as dela — o `user_id` vem do token.
+
+    Não há parâmetro de usuário de propósito: ler notificação alheia não é caso
+    de uso de ninguém, e um parâmetro aqui seria uma porta a vigiar.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            f"""
+            SELECT {_COLUNAS_NOTIF} FROM public.notifications
+             WHERE user_id = $1::uuid AND ($2 IS FALSE OR read = false)
+             ORDER BY created_at DESC LIMIT $3
+            """,
+            usuario.id, apenas_nao_lidas, limite,
+        )
+    return [NotificacaoOut(**dict(l)) for l in linhas]
+
+
+class MarcarLidasIn(BaseModel):
+    ids: list[str] = []
+    channel_id: str | None = None
+
+
+@router.post("/notificacoes/lidas", status_code=status.HTTP_204_NO_CONTENT)
+async def marcar_lidas(dados: MarcarLidasIn, usuario: Usuario = Depends(usuario_atual)):
+    """Marca notificações como lidas, por id ou por canal inteiro.
+
+    Por canal existe porque abrir uma conversa zera tudo dela de uma vez, e
+    mandar 40 ids para isso seria a tela fazendo o trabalho do banco.
+
+    O `user_id` entra no WHERE mesmo com o RLS ativo: é barato e não depende de
+    a policy estar como se espera.
+    """
+    if not dados.ids and not dados.channel_id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Informe `ids` ou `channel_id`."
+        )
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        await conn.execute(
+            """
+            UPDATE public.notifications SET read = true
+             WHERE user_id = $1::uuid
+               AND ( ($2::text[] IS NOT NULL AND array_length($2::text[],1) > 0
+                      AND id = ANY($2::uuid[]))
+                  OR (NULLIF($3,'') IS NOT NULL AND channel_id = $3::uuid) )
+            """,
+            usuario.id, dados.ids or None, dados.channel_id or "",
+        )

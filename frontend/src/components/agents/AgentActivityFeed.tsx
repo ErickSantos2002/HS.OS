@@ -1,3 +1,4 @@
+import { assinarTabela } from "@/lib/realtime";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -119,42 +120,19 @@ export function AgentActivityFeed({ className, maxItems = 100 }: AgentActivityFe
       if (mounted) await refetch();
     })();
 
-    const channel = supabase
-      .channel("agent-activity")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "agent_activity_log" },
-        (payload) => {
-          const row = payload.new as Activity;
-          setItems((prev) => {
-            if (prev.some((p) => p.id === row.id)) return prev;
-            return [row, ...prev].slice(0, capRef.current);
-          });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "agent_activity_log" },
-        (payload) => {
-          const row = payload.new as Activity;
-          setItems((prev) => prev.map((p) => (p.id === row.id ? row : p)));
-        }
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") {
-          setConnected(true);
-          void refetch();
-        } else {
-          setConnected(false);
-        }
-      });
+    // `refetch` já mescla por id e ordena, então recarregar dá no mesmo que o
+    // append incremental que havia aqui — e não depende do evento carregar a
+    // linha, que ele deliberadamente não carrega.
+    const cancelar = assinarTabela("agent_activity_log", () => { void refetch(); });
+    setConnected(true);
 
     const tick = setInterval(() => setNow(Date.now()), 15000);
 
     return () => {
       mounted = false;
       clearInterval(tick);
-      supabase.removeChannel(channel);
+      cancelar();
+      setConnected(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

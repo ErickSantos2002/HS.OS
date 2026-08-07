@@ -1,3 +1,5 @@
+import { api } from "@/lib/api";
+import { assinar } from "@/lib/realtime";
 import { createElement, useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getAgentIdAliases } from "@/lib/agent-id";
@@ -121,13 +123,7 @@ export function useNotifications(userId: string | undefined) {
     initialLoadDone.current = false;
 
     (async () => {
-      const { data } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", userId)
-        .eq("read", false)
-        .order("created_at", { ascending: false })
-        .limit(50);
+      const data = await api<Notification[]>("/notificacoes").catch(() => null);
       if (data) {
         const typed = data as unknown as Notification[];
 
@@ -149,10 +145,10 @@ export function useNotifications(userId: string | undefined) {
           if (unreadIdsForActive.length > 0) {
             setNotifications((prev) => prev.filter((n) => n.channel_id !== active));
             setUnreadCount((c) => Math.max(0, c - unreadIdsForActive.length));
-            void supabase
-              .from("notifications")
-              .update({ read: true })
-              .in("id", unreadIdsForActive);
+            void api("/notificacoes/lidas", {
+              method: "POST",
+              body: { ids: unreadIdsForActive },
+            });
           }
         }
       }
@@ -165,15 +161,10 @@ export function useNotifications(userId: string | undefined) {
   // vezes as notificações não chegam".
   useEffect(() => {
     if (!userId) return;
-
-    let currentChannel: ReturnType<typeof supabase.channel> | null = null;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let cancelled = false;
     // Last known status of the realtime channel. Used so visibilitychange
     // doesn't resubscribe a perfectly healthy channel (which caused the
     // CLOSED → retry loop and the notification delays).
-    let lastStatus: string | null = null;
-    let retryAttempt = 0;
 
     const handleInsert = (payload: any) => {
       const newNotif = payload.new as unknown as Notification;
@@ -211,10 +202,7 @@ export function useNotifications(userId: string | undefined) {
       // NOT a reason to suppress future notifications — that was the bug
       // making messages disappear after switching channels.
       if (!wasManualUnread && (isActiveChannel || isActiveAgent) && tabActive) {
-        void supabase
-          .from("notifications")
-          .update({ read: true })
-          .eq("id", newNotif.id);
+        void api("/notificacoes/lidas", { method: "POST", body: { ids: [newNotif.id] } });
         return;
       }
 
@@ -281,84 +269,57 @@ export function useNotifications(userId: string | undefined) {
       setUnreadCount((c) => Math.max(0, c - 1));
     };
 
-    const subscribe = async () => {
+    /**
+     * Reconcilia a lista com o servidor depois de uma mudança.
+     *
+     * O evento de tempo real diz que `notifications` mudou, não o que mudou —
+     * ver `docs/PLANO-REALTIME.md`. Então buscamos as não lidas e comparamos:
+     * o que apareceu passa pelo `handleInsert` (que decide toast, badge e
+     * notificação do sistema), o que sumiu foi lido em outro lugar.
+     *
+     * Reconciliar em vez de aplicar o payload tem um efeito bom de brinde: se
+     * uma notificação se perder — aba dormindo, conexão caída —, a próxima
+     * sincronização a recupera. O caminho antigo dependia de nunca perder um
+     * evento.
+     */
+    const sincronizar = async () => {
       if (cancelled) return;
-      // Tear down any previous channel and WAIT for the server to confirm,
-      // otherwise the new socket races the old one and the server closes it
-      // (which produced the endless CLOSED → retry loop).
-      if (currentChannel) {
-        try { await supabase.removeChannel(currentChannel); } catch { /* noop */ }
-        currentChannel = null;
-      }
-      if (cancelled) return;
+      const atuais = await api<Notification[]>("/notificacoes").catch(() => null);
+      if (cancelled || !atuais) return;
 
-      // Stable channel name — no Date.now() — so we don't churn server-side
-      // subscriptions every time visibilitychange fires.
-      const ch = supabase
-        .channel(`notifications-${userId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${userId}`,
-          },
-          handleInsert
-        )
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${userId}`,
-          },
-          handleUpdate
-        )
-        .subscribe((status) => {
-          lastStatus = status;
-          if (status === "SUBSCRIBED") {
-            retryAttempt = 0;
-            console.log("[notifications] realtime SUBSCRIBED");
-          } else if (
-            status === "CHANNEL_ERROR" ||
-            status === "TIMED_OUT" ||
-            status === "CLOSED"
-          ) {
-            // Exponential backoff capped at 30s — avoids hammering the
-            // server when the connection is flapping.
-            const delay = Math.min(30000, 2000 * Math.pow(2, retryAttempt));
-            retryAttempt = Math.min(retryAttempt + 1, 5);
-            console.warn(
-              "[notifications] realtime status:",
-              status,
-              `→ retry in ${Math.round(delay / 1000)}s`
-            );
-            if (retryTimer) clearTimeout(retryTimer);
-            retryTimer = setTimeout(() => { void subscribe(); }, delay);
-          }
-        });
-      currentChannel = ch;
+      const conhecidas = new Set(notificationsRef.current.map((n) => n.id));
+      for (const nova of atuais) {
+        if (!conhecidas.has(nova.id)) handleInsert({ new: nova });
+      }
+
+      const noServidor = new Set(atuais.map((n) => n.id));
+      for (const antiga of notificationsRef.current) {
+        if (!noServidor.has(antiga.id)) {
+          handleUpdate({ new: { ...antiga, read: true }, old: antiga });
+        }
+      }
     };
 
-    void subscribe();
+    // Tópico da PESSOA, não da tabela: o backend roteia por `user_id`, então
+    // ninguém recebe aviso de notificação alheia. Era o que o
+    // `filter: user_id=eq.…` fazia, agora do lado do servidor.
+    const cancelarRealtime = assinar(`usuario:${userId}`, (_tipo, dados) => {
+      if ((dados as { tabela?: string })?.tabela === "notifications") void sincronizar();
+    });
 
-    // Only resubscribe on visibility change if the channel is NOT currently
-    // SUBSCRIBED — a healthy channel should be left alone.
+    // A reconexão e a espera crescente vivem no `lib/realtime.ts`, que é uma
+    // conexão só para a aba inteira. O controle de status que existia aqui
+    // duplicava isso por hook e produzia o laço CLOSED → retry.
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      if (lastStatus === "SUBSCRIBED") return;
-      console.log("[notifications] tab visible & channel not subscribed → refreshing realtime channel");
-      void subscribe();
+      void sincronizar();
     };
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisible);
-      if (retryTimer) clearTimeout(retryTimer);
-      if (currentChannel) void supabase.removeChannel(currentChannel);
+      cancelarRealtime();
     };
   }, [userId]);
 
@@ -370,7 +331,7 @@ export function useNotifications(userId: string | undefined) {
       setUnreadCount((c) => Math.max(0, c - 1));
     }
 
-    await supabase.from("notifications").update({ read: true }).eq("id", notifId);
+    await api("/notificacoes/lidas", { method: "POST", body: { ids: [notifId] } });
   }
 
   async function markAllAsReadForChannel(channelId: string) {
@@ -379,12 +340,9 @@ export function useNotifications(userId: string | undefined) {
     removeNotificationsForChannel(channelId);
     clearedChannelsRef.current.add(channelId);
 
-    await supabase
-      .from("notifications")
-      .update({ read: true })
-      .eq("user_id", userId)
-      .eq("channel_id", channelId)
-      .eq("read", false);
+    // Por canal, não por lista de ids: abrir uma conversa zera tudo dela de uma
+    // vez, e mandar 40 ids seria a tela fazendo o trabalho do banco.
+    await api("/notificacoes/lidas", { method: "POST", body: { channel_id: channelId } });
   }
 
   /**
