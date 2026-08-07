@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.database import sessao
 from app.dependencies import Usuario, exige_papel, usuario_atual
@@ -363,3 +363,166 @@ async def importar_crons(_: Usuario = Depends(exige_papel("super_admin"))):
 
     logger.info("Crons importados: %d novos, %d ignorados", importados, ignorados)
     return {"importados": importados, "ignorados": ignorados, "jobs_no_gateway": len(jobs)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CRUD das automações — o que a tela usa
+# ─────────────────────────────────────────────────────────────────────────────
+
+_TIPOS = {"scheduled", "trigger"}
+_DIAS_VALIDOS = set(_DIAS) | {"daily"}
+
+_COLS = """
+    id::text AS id, name, agent_id, type, scheduled_day, scheduled_time,
+    trigger_event, instruction, is_active, last_run_status,
+    created_by::text AS created_by,
+    to_char(last_run_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS last_run_at,
+    to_char(created_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS created_at
+"""
+
+
+class AutomacaoOut(BaseModel):
+    id: str
+    name: str
+    agent_id: str | None = None
+    type: str
+    scheduled_day: str | None = None
+    scheduled_time: str | None = None
+    trigger_event: str | None = None
+    instruction: str
+    is_active: bool
+    last_run_status: str | None = None
+    last_run_at: str | None = None
+    created_by: str | None = None
+    created_at: str
+
+
+class AutomacaoIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    instruction: str = Field(min_length=1)
+    type: str = "scheduled"
+    agent_id: str | None = None
+    scheduled_day: str | None = None
+    scheduled_time: str | None = None
+    trigger_event: str | None = None
+    is_active: bool = True
+
+
+def _validar(d: AutomacaoIn) -> None:
+    if d.type not in _TIPOS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"type inválido. Use: {', '.join(sorted(_TIPOS))}.")
+    if d.type == "scheduled":
+        if not d.scheduled_time or not re.match(r"^\d{2}:\d{2}$", d.scheduled_time):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "scheduled_time obrigatório no formato HH:MM (UTC).")
+        if d.scheduled_day not in _DIAS_VALIDOS:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"scheduled_day inválido. Use: {', '.join(sorted(_DIAS_VALIDOS))}.",
+            )
+    elif d.trigger_event not in _EVENTOS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"trigger_event inválido. Use: {', '.join(sorted(_EVENTOS))}.",
+        )
+
+
+def _limpar(d: AutomacaoIn) -> tuple:
+    """Zera os campos que não pertencem ao tipo escolhido.
+
+    Automação agendada não tem evento e vice-versa. Deixar o campo antigo
+    preenchido ao trocar o tipo faria a automação disparar pelos dois caminhos.
+    """
+    agendada = d.type == "scheduled"
+    return (
+        d.scheduled_day if agendada else None,
+        d.scheduled_time if agendada else None,
+        None if agendada else d.trigger_event,
+    )
+
+
+@router.get("", response_model=list[AutomacaoOut])
+async def listar_automacoes(usuario: Usuario = Depends(usuario_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            f"SELECT {_COLS} FROM public.automations ORDER BY created_at DESC"
+        )
+    return [AutomacaoOut(**dict(l)) for l in linhas]
+
+
+@router.post("", response_model=AutomacaoOut, status_code=status.HTTP_201_CREATED)
+async def criar_automacao(dados: AutomacaoIn, usuario: Usuario = Depends(usuario_atual)):
+    _validar(dados)
+    dia, hora, evento = _limpar(dados)
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            f"""
+            INSERT INTO public.automations
+                (name, agent_id, type, scheduled_day, scheduled_time, trigger_event,
+                 instruction, is_active, created_by)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::uuid)
+            RETURNING {_COLS}
+            """,
+            dados.name, dados.agent_id, dados.type, dia, hora, evento,
+            dados.instruction, dados.is_active, usuario.id,
+        )
+    logger.info("Automação %s criada por %s", linha["id"], usuario.id)
+    return AutomacaoOut(**dict(linha))
+
+
+@router.patch("/{automacao_id}", response_model=AutomacaoOut)
+async def editar_automacao(
+    automacao_id: str,
+    dados: AutomacaoIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    _validar(dados)
+    dia, hora, evento = _limpar(dados)
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            f"""
+            UPDATE public.automations SET
+                name = $2, agent_id = $3, type = $4, scheduled_day = $5,
+                scheduled_time = $6, trigger_event = $7, instruction = $8,
+                is_active = $9, updated_at = now()
+             WHERE id = $1::uuid
+            RETURNING {_COLS}
+            """,
+            automacao_id, dados.name, dados.agent_id, dados.type, dia, hora,
+            evento, dados.instruction, dados.is_active,
+        )
+    if linha is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Automação não encontrada.")
+    return AutomacaoOut(**dict(linha))
+
+
+@router.delete("/{automacao_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def excluir_automacao(automacao_id: str, usuario: Usuario = Depends(usuario_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        marca = await conn.execute(
+            "DELETE FROM public.automations WHERE id = $1::uuid", automacao_id
+        )
+    if marca.rsplit(" ", 1)[-1] == "0":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Automação não encontrada.")
+
+
+@router.get("/{automacao_id}/execucoes")
+async def execucoes(
+    automacao_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+    limite: int = Query(default=20, ge=1, le=100),
+):
+    """Histórico de execuções, da mais recente para a mais antiga."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """
+            SELECT id::text AS id, status, output, error_message,
+                   to_char(started_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS started_at,
+                   to_char(finished_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS finished_at
+              FROM public.automation_runs WHERE automation_id = $1::uuid
+             ORDER BY started_at DESC LIMIT $2
+            """,
+            automacao_id, limite,
+        )
+    return [dict(l) for l in linhas]
