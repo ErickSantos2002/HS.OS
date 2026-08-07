@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { postProxyAction } from "@/hooks/use-monitoring-data";
-import { supabase } from "@/integrations/supabase/client";
 
 /* ---------- types ---------- */
 interface GatewayTabProps {
@@ -66,14 +66,9 @@ export function GatewayTab({
   useEffect(() => () => { if (pollingRef.current) clearInterval(pollingRef.current); }, []);
 
   useEffect(() => {
-    supabase
-      .from("gateway_health")
-      .select("*")
-      .order("collected_at", { ascending: false })
-      .limit(100)
-      .then(({ data: rows }) => {
-        if (rows) setHealthHistory(rows);
-      });
+    api<any[]>("/gateway/monitoramento/historico")
+      .then((rows) => { if (rows) setHealthHistory(rows); })
+      .catch(() => { /* o gráfico simplesmente não desenha */ });
   }, [data]);
 
   const handleRestart = useCallback(async () => {

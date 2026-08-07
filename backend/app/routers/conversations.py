@@ -112,6 +112,33 @@ def _para_saida(linha) -> MensagemOut:
     )
 
 
+@router.get("/minhas/respostas", response_model=list[MensagemOut])
+async def minhas_respostas(
+    usuario: Usuario = Depends(usuario_atual),
+    limite: int = Query(default=500, ge=1, le=1000),
+):
+    """Tudo que os agentes já responderam a esta pessoa, de todos eles juntos.
+
+    A aba de artefatos varre essas respostas atrás de blocos de código, e por
+    isso precisa cruzar agentes — o histórico por agente não serve.
+
+    ⚠️ **Precisa vir antes de `GET /{agent_id}`**, senão "minhas" é lido como
+    nome de agente e esta rota nunca é alcançada.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            f"""
+            SELECT {_COLUNAS}
+              FROM public.conversations
+             WHERE user_id = $1::uuid AND role = 'agent'
+             ORDER BY created_at DESC
+             LIMIT $2
+            """,
+            usuario.id, limite,
+        )
+    return [_para_saida(l) for l in linhas]
+
+
 @router.get("/{agent_id}", response_model=PaginaOut)
 async def historico(
     agent_id: str,

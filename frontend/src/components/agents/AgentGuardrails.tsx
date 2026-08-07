@@ -1,6 +1,6 @@
+import { api } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { normalizeAgentId } from "@/lib/active-agents";
 
@@ -20,14 +20,9 @@ export default function AgentGuardrails({ agentId }: Props) {
   const { data, isLoading } = useQuery({
     queryKey: ["agent-guardrails", shortId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("agent_profiles")
-        .select("guardrails")
-        .eq("agent_id", shortId)
-        .maybeSingle();
-      if (error) throw error;
-      const raw = (data?.guardrails ?? []) as unknown;
-      return (Array.isArray(raw) ? raw : []) as Guardrail[];
+      return await api<Guardrail[]>(
+        `/agents/${encodeURIComponent(shortId)}/guardrails`,
+      );
     },
     staleTime: 30_000,
   });

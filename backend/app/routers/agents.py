@@ -18,6 +18,7 @@ existe para alimentar o `GatewayAgent` do frontend — traduzir aqui evita uma
 camada de renomeação em `use-agents.ts`.
 """
 
+import json
 import logging
 import re
 from uuid import UUID, uuid4
@@ -1507,3 +1508,20 @@ async def definir_acesso(
                 agent_id, dados.access_type, len(permitidos))
     return AcessoOut(agent_id=agent_id, access_type=dados.access_type,
                      allowed_user_ids=permitidos)
+
+
+@router.get("/{agent_id}/guardrails", response_model=list)
+async def guardrails(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """As regras de guarda do agente, escritas pela VPS via `PUT /integracoes/guardrails`.
+
+    Devolve lista vazia para agente sem regras **e** para agente inexistente. É
+    de propósito: a tela desenha "nenhum guardrail" nos dois casos, e um 404
+    aqui viraria erro vermelho num painel que só está mostrando o normal.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        bruto = await conn.fetchval(
+            "SELECT guardrails FROM public.agent_profiles WHERE agent_id = $1", agent_id
+        )
+    if isinstance(bruto, str):
+        bruto = json.loads(bruto)
+    return bruto if isinstance(bruto, list) else []

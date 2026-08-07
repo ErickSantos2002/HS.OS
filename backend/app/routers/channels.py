@@ -573,3 +573,32 @@ async def acionar_agente(
     _TAREFAS.add(tarefa)  # sem referência forte o coletor pode matar a tarefa no meio
     tarefa.add_done_callback(_TAREFAS.discard)
     return {"ok": True, "status": "processando"}
+
+
+@router.get("/{channel_id}/arquivos", response_model=list[MensagemCanalOut])
+async def arquivos(
+    channel_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+    limite: int = Query(default=500, ge=1, le=1000),
+):
+    """Só as mensagens do canal que carregam anexo — é o painel de arquivos.
+
+    Filtrar aqui e não na tela importa: um canal ativo tem milhares de
+    mensagens e o painel precisa de umas dezenas. Trazer tudo para peneirar no
+    navegador era o que fazia o painel demorar a abrir em canal movimentado.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            f"""
+            SELECT {_COLUNAS_MSG}
+              FROM public.channel_messages m
+             WHERE m.channel_id = $1::uuid
+               AND m.attachments IS NOT NULL
+               AND jsonb_array_length(m.attachments) > 0
+               AND m.deleted_at IS NULL
+             ORDER BY m.created_at DESC
+             LIMIT $2
+            """,
+            channel_id, limite,
+        )
+    return [_msg_saida(l) for l in linhas]

@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 const HEARTBEAT_INTERVAL_MS = 60_000;
 
@@ -15,10 +15,7 @@ export function usePresence(userId: string | undefined) {
 
     const ping = async () => {
       try {
-        await supabase
-          .from("profiles")
-          .update({ last_seen_at: new Date().toISOString() } as any)
-          .eq("id", userId);
+        await api("/profiles/me/presenca", { method: "POST" });
       } catch (err) {
         // Silent fail — presence is best-effort
         console.debug("[usePresence] heartbeat failed", err);

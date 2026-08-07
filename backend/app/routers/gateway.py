@@ -225,3 +225,17 @@ async def manutencao(acao: str, _: Usuario = Depends(exige_papel("super_admin"))
         return r.json()
     except ValueError:
         return {"success": True}
+
+
+@router.get("/monitoramento/historico")
+async def historico_de_saude(
+    _: Usuario = Depends(exige_papel("super_admin")),
+    limite: int = 100,
+):
+    """As últimas coletas de saúde do gateway, para o gráfico da aba Gateway."""
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            "SELECT * FROM public.gateway_health ORDER BY collected_at DESC LIMIT $1",
+            min(max(limite, 1), 1000),
+        )
+    return json.loads(json.dumps([dict(l) for l in linhas], default=str))

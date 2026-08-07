@@ -309,3 +309,34 @@ async def excluir_conta(
             )
 
     logger.info("Conta %s excluída por %s", user_id, usuario.id)
+
+
+@router.post("/me/presenca", status_code=status.HTTP_204_NO_CONTENT)
+async def bater_presenca(usuario: Usuario = Depends(usuario_atual)):
+    """Marca que a pessoa está online agora. Chamado em intervalo pela tela.
+
+    Nunca falha para quem chamou: presença é enfeite, e um erro aqui não pode
+    aparecer como problema no meio de uma conversa. O `use-presence` já tratava
+    assim do lado do navegador.
+    """
+    try:
+        async with sessao(role="authenticated", user_id=usuario.id) as conn:
+            await conn.execute(
+                "UPDATE public.profiles SET last_seen_at = now() WHERE id = $1::uuid",
+                usuario.id,
+            )
+    except Exception as e:  # noqa: BLE001
+        logger.debug("Presença de %s não gravada: %s", usuario.id, e)
+
+
+@router.get("/{user_id}", response_model=PerfilOut)
+async def obter(user_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """Perfil de outra pessoa. O RLS decide o que se enxerga."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            f"SELECT {_COLUNAS}, {_PAPEL} FROM public.profiles p WHERE p.id = $1::uuid",
+            user_id,
+        )
+    if linha is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Perfil não encontrado.")
+    return PerfilOut(**dict(linha))

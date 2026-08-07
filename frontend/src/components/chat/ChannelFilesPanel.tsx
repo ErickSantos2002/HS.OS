@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Search, FileText, Image as ImageIcon, Loader2, Download } from "lucide-react";
 import { formatFileSize, downloadAttachment } from "@/lib/file-upload";
@@ -36,14 +36,16 @@ export default function ChannelFilesPanel({ channelId, open, onClose }: Props) {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("channel_messages")
-        .select("id, created_at, author_name, attachments")
-        .eq("channel_id", channelId)
-        .not("attachments", "is", null)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(500);
+      // O filtro de anexo é do servidor: um canal ativo tem milhares de
+      // mensagens e trazer todas para peneirar aqui era o que fazia o painel
+      // demorar a abrir.
+      let data: any[] | null = null;
+      let error: unknown = null;
+      try {
+        data = await api<any[]>(`/channels/${channelId}/arquivos`);
+      } catch (e) {
+        error = e;
+      }
       if (cancelled) return;
       if (error) {
         console.error("[ChannelFilesPanel] load error", error);

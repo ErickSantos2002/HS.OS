@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useState, useEffect, useMemo } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
 import { extractAllArtifacts, buildArtifactHtml } from "@/lib/artifact-extractor";
 import { getAgentDisplayNameById } from "@/lib/active-agents";
@@ -40,13 +40,7 @@ export default function CreatedArtifactsTab() {
       setLoading(true);
 
       // Fetch all agent messages for this user that likely contain code blocks
-      const { data: rows } = await supabase
-        .from("conversations")
-        .select("id, agent_id, content, created_at, role")
-        .eq("user_id", user.id)
-        .eq("role", "agent")
-        .order("created_at", { ascending: false })
-        .limit(500);
+      const rows = await api<any[]>("/conversations/minhas/respostas").catch(() => null);
 
       if (!rows || rows.length === 0) {
         setArtifacts([]);

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Shield, Eye, EyeOff, Copy, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 
@@ -14,14 +14,7 @@ export default function GuardrailsTokenCard() {
   async function reveal() {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Sessão expirada");
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reveal-guardrails-token`,
-        { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` } },
-      );
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error ?? `HTTP ${res.status}`);
+      const body = await api<{ token?: string }>("/integracoes/guardrails/token");
       if (!body.token) throw new Error("Token não configurado no backend");
       setToken(body.token);
       setVisible(true);

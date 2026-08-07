@@ -24,9 +24,8 @@ import { EditorToolbar } from "./EditorToolbar";
 import type { WikiDocument } from "@/hooks/use-wiki-documents";
 import { useUpdateWikiDocument, useDeleteWikiDocument } from "@/hooks/use-wiki-documents";
 import type { WikiSpace } from "@/hooks/use-wiki-spaces";
-import { supabase } from "@/integrations/supabase/client";
 import { enviarArquivo, urlPublica } from "@/lib/storage";
-import { lerUsuarioDoToken } from "@/lib/api";
+import { api, lerUsuarioDoToken } from "@/lib/api";
 import { SpaceIcon } from "./SpaceIcon";
 import { ResizableImage } from "./ResizableImage";
 import { VideoNode } from "./VideoNode";
@@ -61,14 +60,11 @@ export function DocumentEditor({ document, space, onDeleted }: Props) {
     let cancelled = false;
     const uid = document.updated_by || document.created_by;
     if (!uid) return;
-    supabase
-      .from("profiles")
-      .select("full_name,email")
-      .eq("id", uid)
-      .maybeSingle()
-      .then(({ data }) => {
+    api<{ full_name?: string; email?: string }>(`/profiles/${uid}`)
+      .then((data) => {
         if (!cancelled) setEditorName(data?.full_name || data?.email || "alguém");
-      });
+      })
+      .catch(() => { /* o nome do editor é enfeite */ });
     return () => { cancelled = true; };
   }, [document.updated_by, document.created_by]);
 

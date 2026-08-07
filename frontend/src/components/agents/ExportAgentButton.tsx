@@ -2,7 +2,6 @@ import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 
 interface Props {
   agentId: string;

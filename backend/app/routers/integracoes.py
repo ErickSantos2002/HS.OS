@@ -187,6 +187,27 @@ async def registrar_consumo(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+@router.get("/guardrails/token")
+async def revelar_token_guardrails(_: Usuario = Depends(exige_papel("super_admin"))):
+    """Mostra o token que a VPS usa para escrever guardrails. Só `super_admin`.
+
+    Existe porque quem configura a VPS precisa **conferir** o token, não
+    adivinhá-lo: sem isto o caminho era cadastrar um valor lá e descobrir que
+    estava errado quando a escrita começasse a dar 401.
+
+    Lê do mesmo lugar que a validação (`ler_segredo`), e é isso que garante que
+    o que se mostra é o que se aceita — duas fontes divergiriam em silêncio.
+    """
+    token = await ler_segredo("GUARDRAILS_API_TOKEN")
+    if not token:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "GUARDRAILS_API_TOKEN não está configurado neste backend.",
+        )
+    logger.info("Token de guardrails revelado para um super_admin")
+    return {"token": token}
+
+
 class GuardrailsIn(BaseModel):
     agent_id: str = Field(min_length=1)
     guardrails: list = []
