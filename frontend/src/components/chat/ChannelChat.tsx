@@ -1520,18 +1520,19 @@ export default function ChannelChat({
 
   const handleEditSave = async (msgId: string, newContent: string) => {
     setEditingId(null);
-    await supabase
-      .from("channel_messages")
-      .update({ content: newContent, edited_at: new Date().toISOString() } as any)
-      .eq("id", msgId);
+    // O `edited_at` é do servidor, e a rota confere que a mensagem é de quem
+    // está editando — antes bastava saber o id.
+    await api(`/channels/${channel.id}/messages/${msgId}`, {
+      method: "PATCH",
+      body: { content: newContent },
+    }).catch(() => { /* a tela já saiu do modo de edição */ });
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteConfirmId) return;
-    await supabase
-      .from("channel_messages")
-      .update({ deleted_at: new Date().toISOString() } as any)
-      .eq("id", deleteConfirmId);
+    await api(`/channels/${channel.id}/messages/${deleteConfirmId}`, {
+      method: "DELETE",
+    }).catch(() => { /* idem */ });
     setDeleteConfirmId(null);
   };
 

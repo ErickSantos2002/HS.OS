@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { assinarTabela } from "@/lib/realtime";
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -89,12 +90,9 @@ export function useMessageReactions(channelId: string | null) {
       return;
     }
 
-    const { data: messagesData } = await supabase
-      .from("channel_messages")
-      .select("id")
-      .eq("channel_id", channelId)
-      .order("created_at", { ascending: false })
-      .limit(200);
+    const messagesData = await api<{ id: string }[]>(
+      `/channels/${channelId}/messages?limite=200`,
+    ).catch(() => null);
 
     const messageIds = messagesData?.map((message: any) => message.id) ?? [];
 

@@ -356,14 +356,13 @@ export function useNotifications(userId: string | undefined) {
     const aliases = getAgentIdAliases(agentId);
     if (aliases.length === 0) return;
 
-    // 1. Find all DM channels where this agent is a member
-    const { data: memberRows } = await supabase
-      .from("channel_members")
-      .select("channel_id")
-      .in("user_id", aliases)
-      .eq("member_type", "agent");
-
-    const channelIds = (memberRows ?? []).map((r: any) => r.channel_id);
+    // 1. As DMs deste agente — o endpoint só devolve as que são minhas também.
+    const pares = await api<{ channel_id: string; agent_id: string }[]>(
+      "/channels/dms/agentes",
+    ).catch(() => []);
+    const channelIds = pares
+      .filter((p) => aliases.includes(p.agent_id))
+      .map((p) => p.channel_id);
 
     // Mark channel DMs as cleared locally so future realtime inserts auto-read
     for (const cid of channelIds) clearedChannelsRef.current.add(cid);

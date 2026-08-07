@@ -48,10 +48,7 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, open,
   }, [open, channelId]);
 
   const loadMembers = async () => {
-    const { data } = await supabase
-      .from("channel_members")
-      .select("user_id, member_type")
-      .eq("channel_id", channelId);
+    const data = await api<any[]>(`/channels/${channelId}/members`).catch(() => null);
     if (!data) return;
 
     const infos: MemberInfo[] = [];
@@ -104,10 +101,11 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, open,
   };
 
   const addMember = async (id: string, type: "human" | "agent") => {
-    await supabase.from("channel_members").upsert(
-      { channel_id: channelId, user_id: id, member_type: type } as any,
-      { onConflict: "channel_id,user_id", ignoreDuplicates: true }
-    );
+    // Quem já está é ignorado pelo servidor — era o `ignoreDuplicates` daqui.
+    await api(`/channels/${channelId}/members`, {
+      method: "POST",
+      body: type === "agent" ? { agent_ids: [id] } : { user_ids: [id] },
+    }).catch(() => { /* o loadMembers abaixo mostra o estado real */ });
     setShowInvite(false);
     await loadMembers();
     onMembersChanged();
@@ -116,11 +114,10 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, open,
   const removeMember = async (userId: string) => {
     setRemovingMemberId(userId);
 
-    const { error } = await supabase
-      .from("channel_members")
-      .delete()
-      .eq("channel_id", channelId)
-      .eq("user_id", userId);
+    const error = await api(
+      `/channels/${channelId}/members/${encodeURIComponent(userId)}`,
+      { method: "DELETE" },
+    ).then(() => null, (e: Error) => e);
 
     setRemovingMemberId(null);
 

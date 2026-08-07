@@ -81,13 +81,7 @@ export function useThreadCounts(channelId: string | null) {
     }
 
     const load = async () => {
-      const { data } = await supabase
-        .from("channel_messages")
-        .select("thread_id, created_at, author_id, author_type, author_name, author_avatar")
-        .eq("channel_id", channelId)
-        .not("thread_id", "is", null)
-        .order("created_at", { ascending: true })
-        .limit(1000);
+      const data = await api<any[]>(`/channels/${channelId}/threads`).catch(() => null);
 
       type Row = { thread_id: string | null; created_at: string; author_id: string; author_type: string; author_name: string; author_avatar: string | null };
       const next: ThreadMetaMap = {};
@@ -180,13 +174,9 @@ export function useThreadMessages(channelId: string | null, rootMessageId: strin
     }
 
     const load = async () => {
-      const { data } = await supabase
-        .from("channel_messages")
-        .select("*")
-        .eq("channel_id", channelId)
-        .eq("thread_id", rootMessageId)
-        .order("created_at", { ascending: true })
-        .limit(200);
+      const data = await api<ChannelMessage[]>(
+        `/channels/${channelId}/threads/${rootMessageId}`,
+      ).catch(() => null);
 
       const nextMessages = (data as unknown as ChannelMessage[]) ?? [];
       threadMessageCache[key] = nextMessages;

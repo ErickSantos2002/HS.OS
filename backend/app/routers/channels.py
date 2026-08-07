@@ -274,6 +274,72 @@ async def interlocutores(usuario: Usuario = Depends(usuario_atual)):
     return [InterlocutorOut(**dict(l)) for l in linhas]
 
 
+class AgenteDeDmOut(BaseModel):
+    channel_id: str
+    agent_id: str
+
+
+@router.get("/dms/agentes", response_model=list[AgenteDeDmOut])
+async def agentes_de_dm(usuario: Usuario = Depends(usuario_atual)):
+    """Qual DM minha pertence a qual agente.
+
+    ⚠️ **Antes de `GET /{channel_id}`**, senão "dms" vira id de canal.
+
+    A tela montava isso com duas consultas — achar os canais onde o agente é
+    membro, depois cruzar com os canais onde eu sou — e um `Set` no meio. O
+    cruzamento é do banco.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """
+            SELECT a.channel_id::text AS channel_id, a.user_id AS agent_id
+              FROM public.channel_members a
+             WHERE a.member_type = 'agent'
+               AND EXISTS (
+                     SELECT 1 FROM public.channel_members eu
+                      WHERE eu.channel_id = a.channel_id
+                        AND eu.user_id = $1 AND eu.member_type = 'human'
+                   )
+            """,
+            usuario.id,
+        )
+    return [AgenteDeDmOut(**dict(l)) for l in linhas]
+
+
+class MembrosDeCanaisOut(BaseModel):
+    channel_id: str
+    agents: list[str] = []
+    humans: list[str] = []
+
+
+@router.get("/membros", response_model=list[MembrosDeCanaisOut])
+async def membros_dos_meus_canais(usuario: Usuario = Depends(usuario_atual)):
+    """Os membros de todos os canais de que participo, agrupados por canal.
+
+    ⚠️ **Antes de `GET /{channel_id}`.**
+
+    Existe para a detecção de canal fantasma — DM cujo agente já não existe. A
+    tela pedia os membros de vários canais de uma vez e agrupava; agrupar aqui
+    poupa a volta e o `Record` intermediário.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """
+            SELECT m.channel_id::text AS channel_id,
+                   array_remove(array_agg(m.user_id) FILTER (WHERE m.member_type = 'agent'), NULL) AS agents,
+                   array_remove(array_agg(m.user_id) FILTER (WHERE m.member_type = 'human'), NULL) AS humans
+              FROM public.channel_members m
+             WHERE EXISTS (
+                     SELECT 1 FROM public.channel_members eu
+                      WHERE eu.channel_id = m.channel_id AND eu.user_id = $1
+                   )
+             GROUP BY m.channel_id
+            """,
+            usuario.id,
+        )
+    return [MembrosDeCanaisOut(**dict(l)) for l in linhas]
+
+
 @router.delete("/{channel_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def excluir(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
     """Apaga o canal. Quem pode é decidido pelo RLS, não por regra daqui."""
@@ -713,3 +779,166 @@ async def notificar(
             channel_id, dados.message_id or "", dados.author_name,
             dados.content_preview[:100], usuario.id,
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Threads
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/{channel_id}/threads", response_model=list[MensagemCanalOut])
+async def threads(
+    channel_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+    limite: int = Query(default=1000, ge=1, le=2000),
+):
+    """Todas as respostas de thread do canal, em ordem cronológica.
+
+    A tela deriva daqui a contagem e o último autor de cada thread. Ela faz essa
+    agregação porque também precisa da lista de autores para buscar avatares —
+    agregar no servidor devolveria menos e obrigaria a uma segunda consulta.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            f"""
+            SELECT {_COLUNAS_MSG}
+              FROM public.channel_messages m
+             WHERE m.channel_id = $1::uuid AND m.thread_id IS NOT NULL
+               AND m.deleted_at IS NULL
+             ORDER BY m.created_at
+             LIMIT $2
+            """,
+            channel_id, limite,
+        )
+    return [_msg_saida(l) for l in linhas]
+
+
+@router.get("/{channel_id}/threads/{raiz_id}", response_model=list[MensagemCanalOut])
+async def thread(
+    channel_id: str,
+    raiz_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+    limite: int = Query(default=200, ge=1, le=500),
+):
+    """As mensagens de uma thread."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            f"""
+            SELECT {_COLUNAS_MSG}
+              FROM public.channel_messages m
+             WHERE m.channel_id = $1::uuid AND m.thread_id = $2::uuid
+               AND m.deleted_at IS NULL
+             ORDER BY m.created_at
+             LIMIT $3
+            """,
+            channel_id, raiz_id, limite,
+        )
+    return [_msg_saida(l) for l in linhas]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Editar, apagar e membros
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class EdicaoMensagemIn(BaseModel):
+    content: str = Field(min_length=1)
+
+
+@router.patch("/{channel_id}/messages/{message_id}", response_model=MensagemCanalOut)
+async def editar_mensagem(
+    channel_id: str,
+    message_id: str,
+    dados: EdicaoMensagemIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Edita a própria mensagem, carimbando `edited_at`.
+
+    O `author_id = $3` no WHERE não é redundância do RLS: é o que garante que
+    editar mensagem alheia responda 404 em vez de depender de a policy estar
+    escrita como se espera.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            f"""
+            UPDATE public.channel_messages m SET
+                content = $4, edited_at = now()
+             WHERE m.id = $2::uuid AND m.channel_id = $1::uuid AND m.author_id = $3
+               AND m.deleted_at IS NULL
+            RETURNING {_COLUNAS_MSG.replace('m.', '')}
+            """,
+            channel_id, message_id, usuario.id, dados.content,
+        )
+    if linha is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Mensagem não encontrada ou não é sua."
+        )
+    saida = _msg_saida(linha)
+    hub.publicar(topico_canal(channel_id), "mensagem-editada", saida.model_dump())
+    return saida
+
+
+@router.delete("/{channel_id}/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def apagar_mensagem(
+    channel_id: str,
+    message_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Apaga a própria mensagem. **Exclusão lógica.**
+
+    A linha fica porque outras podem referenciá-la como raiz de thread — apagar
+    de verdade levaria as respostas junto, e "a conversa sumiu" é pior do que
+    "esta mensagem foi removida".
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        achado = await conn.fetchval(
+            "UPDATE public.channel_messages SET deleted_at = now() "
+            " WHERE id = $2::uuid AND channel_id = $1::uuid AND author_id = $3 "
+            "   AND deleted_at IS NULL RETURNING id",
+            channel_id, message_id, usuario.id,
+        )
+    if achado is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Mensagem não encontrada ou não é sua."
+        )
+    hub.publicar(topico_canal(channel_id), "mensagem-removida", {"id": message_id})
+
+
+@router.delete("/{channel_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remover_membro(
+    channel_id: str,
+    user_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Tira alguém do canal. Serve também para sair sozinho."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        marca = await conn.execute(
+            "DELETE FROM public.channel_members WHERE channel_id = $1::uuid AND user_id = $2",
+            channel_id, user_id,
+        )
+    if marca.rsplit(" ", 1)[-1] == "0":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Membro não encontrado neste canal.")
+
+
+class MembrosIn(BaseModel):
+    user_ids: list[str] = []
+    agent_ids: list[str] = []
+
+
+@router.post("/{channel_id}/members", status_code=status.HTTP_204_NO_CONTENT)
+async def adicionar_membros(
+    channel_id: str,
+    dados: MembrosIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Acrescenta pessoas e agentes ao canal. Quem já está é ignorado."""
+    membros = [(u, "human") for u in dados.user_ids] + [(a, "agent") for a in dados.agent_ids]
+    if not membros:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nenhum membro informado.")
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        for membro_id, tipo in membros:
+            await conn.execute(
+                "INSERT INTO public.channel_members (channel_id, user_id, member_type) "
+                "VALUES ($1::uuid, $2, $3) ON CONFLICT DO NOTHING",
+                channel_id, membro_id, tipo,
+            )

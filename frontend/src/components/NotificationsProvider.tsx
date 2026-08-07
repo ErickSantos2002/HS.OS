@@ -5,7 +5,6 @@ import { useAuthContext } from "@/contexts/auth-context";
 import { AGENT_UNREAD_EVENT, clearUnreadAgent, getUnreadAgentCount, getUnreadAgentIds } from "@/lib/chat-sender";
 import { getAgentIdAliases } from "@/lib/agent-id";
 import { NotificationsPermissionBanner } from "@/components/NotificationsPermissionBanner";
-import { supabase } from "@/integrations/supabase/client";
 
 interface NotificationsContextValue {
   notifications: Notification[];
@@ -102,14 +101,15 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
           const { data: profile } = await api<any>("/profiles/me").then((d) => ({ data: d })).catch(() => ({ data: null }));
           const displayName =
             (profile?.full_name?.trim()) || user.email?.split("@")[0] || "Usuário";
-          await supabase.from("channel_messages").insert({
-            channel_id: data.channelId,
-            author_id: user.id,
-            author_type: "human",
-            author_name: displayName,
-            content: data.text,
-            author_avatar: profile?.avatar_url || null,
-          } as any);
+          await api(`/channels/${data.channelId}/messages`, {
+            method: "POST",
+            body: {
+              author_type: "human",
+              author_name: displayName,
+              content: data.text,
+              author_avatar: profile?.avatar_url || null,
+            },
+          });
           await notifs.markAllAsReadForChannel(data.channelId);
         } catch (e) {
           console.warn("[NotificationsProvider] quick-reply from SW failed:", e);
@@ -156,18 +156,17 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     }
     let cancelled = false;
     void (async () => {
-      const { data } = await supabase
-        .from("channel_members")
-        .select("channel_id, user_id, member_type")
-        .in("channel_id", channelIds);
+      // O agrupamento por canal vem pronto do servidor — era um Record montado
+      // aqui a partir de uma lista solta.
+      const data = await api<{ channel_id: string; agents: string[]; humans: string[] }[]>(
+        "/channels/membros",
+      ).catch(() => null);
       if (cancelled || !data) return;
       const validId = /^[a-z0-9_-]+$/;
       const ghosts = new Set<string>();
       const byChannel: Record<string, { agents: string[]; humans: string[] }> = {};
-      for (const row of data as any[]) {
-        if (!byChannel[row.channel_id]) byChannel[row.channel_id] = { agents: [], humans: [] };
-        if (row.member_type === "agent") byChannel[row.channel_id].agents.push(row.user_id);
-        else byChannel[row.channel_id].humans.push(row.user_id);
+      for (const row of data) {
+        byChannel[row.channel_id] = { agents: row.agents, humans: row.humans };
       }
       for (const cid of channelIds) {
         const m = byChannel[cid];
@@ -189,32 +188,18 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
     let cancelled = false;
     void (async () => {
-      // Find DM channels where these agents are members AND the current user is also a member
-      const { data: agentRows } = await supabase
-        .from("channel_members")
-        .select("channel_id, user_id")
-        .in("user_id", missing)
-        .eq("member_type", "agent");
-
-      if (cancelled || !agentRows || agentRows.length === 0) return;
-
-      const channelIds = Array.from(new Set(agentRows.map((r: any) => r.channel_id)));
-      const { data: userRows } = await supabase
-        .from("channel_members")
-        .select("channel_id")
-        .eq("user_id", user.id)
-        .eq("member_type", "human")
-        .in("channel_id", channelIds);
-
-      if (cancelled) return;
-      const userChannelSet = new Set((userRows ?? []).map((r: any) => r.channel_id));
+      // O cruzamento "canal onde o agente é membro E eu também" é do banco.
+      // Eram duas consultas e um Set no meio.
+      const pares = await api<{ channel_id: string; agent_id: string }[]>(
+        "/channels/dms/agentes",
+      ).catch(() => null);
+      if (cancelled || !pares) return;
 
       const next: Record<string, string> = {};
-      for (const row of agentRows as any[]) {
-        if (userChannelSet.has(row.channel_id)) {
-          next[row.user_id] = row.channel_id;
-          clearUnreadAgent(row.user_id);
-        }
+      for (const par of pares) {
+        if (!missing.includes(par.agent_id)) continue;
+        next[par.agent_id] = par.channel_id;
+        clearUnreadAgent(par.agent_id);
       }
       if (Object.keys(next).length > 0) {
         setAgentToDmChannel((prev) => ({ ...prev, ...next }));

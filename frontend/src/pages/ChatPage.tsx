@@ -2295,24 +2295,17 @@ export default function ChatPage() {
     let cancelled = false;
     const dmIds = dmChannelIdsKey.split(",");
     (async () => {
-      const { data } = await supabase
-        .from("channel_members")
-        .select("channel_id, user_id")
-        .in("channel_id", dmIds)
-        .eq("member_type", "agent");
-      if (cancelled || !data) return;
-      const { data: ownRows } = await supabase
-        .from("channel_members")
-        .select("channel_id")
-        .in("channel_id", dmIds)
-        .eq("user_id", user.id)
-        .eq("member_type", "human");
-      if (cancelled) return;
-      const ownDmChannelIds = new Set((ownRows ?? []).map((row: any) => row.channel_id));
+      // O cruzamento "canal do agente E meu" é do banco — eram duas consultas
+      // e um Set no meio, e o endpoint só devolve canais dos quais participo.
+      const pares = await api<{ channel_id: string; agent_id: string }[]>(
+        "/channels/dms/agentes",
+      ).catch(() => null);
+      if (cancelled || !pares) return;
+      const data = pares
+        .filter((p) => dmIds.includes(p.channel_id))
+        .map((p) => ({ channel_id: p.channel_id, user_id: p.agent_id }));
       const map: Record<string, string> = {};
-      for (const row of data as any[]) {
-        if (!ownDmChannelIds.has(row.channel_id)) continue;
-        map[row.user_id] = row.channel_id;
+      for (const row of data) {
         for (const alias of getAgentIdAliases(row.user_id)) {
           map[alias] = row.channel_id;
         }
@@ -2394,16 +2387,19 @@ export default function ChatPage() {
     let cancelled = false;
     const dmIds = dmChannelIdsKey.split(",");
     (async () => {
-      const { data } = await supabase
-        .from("channel_messages")
-        .select("channel_id, created_at")
-        .in("channel_id", dmIds)
-        .order("created_at", { ascending: false })
-        .limit(200);
-      if (cancelled || !data) return;
+      // Uma consulta por DM em vez de um `in(...)`: são poucas, e o endpoint de
+      // mensagens já existe com paginação e RLS.
+      const porCanal = await Promise.all(
+        dmIds.map((id) =>
+          api<{ created_at: string }[]>(`/channels/${id}/messages?limite=1`)
+            .then((m) => [id, m[0]?.created_at ?? null] as const)
+            .catch(() => [id, null] as const),
+        ),
+      );
+      if (cancelled) return;
       const map: Record<string, string> = {};
-      for (const row of data as any[]) {
-        if (!map[row.channel_id]) map[row.channel_id] = row.created_at;
+      for (const [id, quando] of porCanal) {
+        if (quando) map[id] = quando;
       }
       setDmLastActivity(map);
     })();

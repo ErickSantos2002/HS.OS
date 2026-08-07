@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { format } from "date-fns";
@@ -529,18 +530,19 @@ export default function ThreadPanel({
 
   const handleEditSave = async (msgId: string, newContent: string) => {
     setEditingId(null);
-    await supabase
-      .from("channel_messages")
-      .update({ content: newContent, edited_at: new Date().toISOString() } as any)
-      .eq("id", msgId);
+    // O `edited_at` é carimbado pelo servidor, e a rota confere que a mensagem
+    // é de quem está editando — antes bastava saber o id.
+    await api(`/channels/${channelId}/messages/${msgId}`, {
+      method: "PATCH",
+      body: { content: newContent },
+    }).catch(() => { /* a tela já saiu do modo de edição */ });
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteConfirmId) return;
-    await supabase
-      .from("channel_messages")
-      .update({ deleted_at: new Date().toISOString() } as any)
-      .eq("id", deleteConfirmId);
+    await api(`/channels/${channelId}/messages/${deleteConfirmId}`, {
+      method: "DELETE",
+    }).catch(() => { /* idem */ });
     setDeleteConfirmId(null);
   };
 
