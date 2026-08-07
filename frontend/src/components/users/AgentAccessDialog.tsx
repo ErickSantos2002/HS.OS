@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import {
   Dialog,
@@ -67,14 +68,20 @@ export function AgentAccessDialog({ open, onOpenChange, agentId, agentName, onSa
 
   async function save() {
     setSaving(true);
-    const { data, error } = await supabase.functions.invoke("update-agent-access", {
-      body: {
-        agent_id: agentId,
-        agent_name: agentName,
-        access_type: accessType,
-        allowed_user_ids: accessType === "specific_users" ? allowedUserIds : [],
-      },
-    });
+    let data: any = null;
+    let error: Error | null = null;
+    try {
+      data = await api<any>(`/agents/${encodeURIComponent(agentId)}/acesso`, {
+        method: "PUT",
+        body: {
+          agent_name: agentName,
+          access_type: accessType,
+          allowed_user_ids: accessType === "specific_users" ? allowedUserIds : [],
+        },
+      });
+    } catch (e: any) {
+      error = e;
+    }
     setSaving(false);
     if (error || data?.success === false) {
       toast({

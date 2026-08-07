@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Upload, X, Bot, CheckCircle2, AlertTriangle, Loader2, FileUp, Info } from "lucide-react";
 import { toast } from "sonner";
@@ -142,8 +143,9 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
         }
       }
 
-      // 2. Create agent in OpenClaw + agent_profiles (via edge function)
-      const { data: createRes, error: createErr } = await supabase.functions.invoke("create-agent", {
+      // 2. Cria o agente no OpenClaw + agent_profiles
+      const createRes = await api<any>("/agents", {
+        method: "POST",
         body: {
           openclaw_id: agentId,
           name: dnos.agent.name,
@@ -160,7 +162,6 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
           lia_onboarding: false,
         },
       });
-      if (createErr) throw new Error(createErr.message);
       if (createRes && createRes.success === false) {
         throw new Error(createRes.error || "Falha ao criar agente");
       }

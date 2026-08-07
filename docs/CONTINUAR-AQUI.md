@@ -23,8 +23,9 @@ Tudo abaixo está verificado **no navegador**, não só por endpoint:
 
 **60 de 73** edge functions fora da pasta · **13** ainda lá, **9 delas
 bloqueadas** por chave externa (ElevenLabs e Lovable AI Gateway) ·
-**18 de 113** arquivos do front sem Supabase · **15** nomes de function ainda
-invocados pelo front (4 deles só dentro de `_legado/`).
+**18 de 113** arquivos do front sem Supabase · **13** nomes de function ainda
+invocados pelo front, **e nenhum deles é dívida**: 4 só aparecem em `_legado/`
+(não roteado) e os 9 vivos são exatamente as que faltam portar.
 
 ⚠️ **Os dois últimos números não fecham com o primeiro, e isso é o achado.**
 Telas continuavam chamando `supabase.functions.invoke` de functions que já
@@ -33,18 +34,23 @@ em 07/08: `agent-task` (TaskLoopPanel, use-agent-tasks, use-pending-agent-task),
 `trigger-automation`, `export-agent`, `resend-agent-briefing` e
 `configure-llm-provider` (LlmProvidersSection e ConnectorsTab).
 
-**Ainda penduradas — próximo trabalho, antes de portar mais:**
+**Nenhuma pendurada.** As últimas duas — `create-agent` no `ImportAgentDialog`
+e `update-agent-access` no `AgentAccessDialog` — foram religadas em 07/08; a
+segunda ganhou o endpoint que faltava (`PUT /agents/{id}/acesso`).
 
-| Function | Tela | Situação |
-|---|---|---|
-| `create-agent` | `ImportAgentDialog` | `POST /agents` existe |
-| `update-agent-access` | `AgentAccessDialog` | **sem endpoint ainda** |
+O que ainda chama o Supabase e é legítimo:
+
+| Function | Por quê |
+|---|---|
+| `skill-manage`, `warroom-feed` | ainda não portadas |
+| `arena-convai-*`, `arena-generate`, `list-elevenlabs-voices` | ElevenLabs |
+| `transcribe-audio`, `parse-company-context` | Lovable AI Gateway |
 
 `agent-task`, `automations-api`, `configure-instance-vault` e
 `save-install-block` só aparecem dentro de `_legado/`, que não está roteado.
 
-É o que separa "tem substituto" de "a tela usa" — a régua honesta é o
-`grep functions.invoke`, não o contador de ports.
+A régua honesta é o `grep functions.invoke` sem `_legado/`, não o contador de
+ports: é o que separa "tem substituto" de "a tela usa".
 
 O `ls backend/supabase/functions | grep -v _shared | wc -l` agora é a medida
 honesta: tudo que tem substituto saiu da pasta.
