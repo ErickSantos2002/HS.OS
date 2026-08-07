@@ -12,6 +12,7 @@ from app.routers.agents import router as agents_router
 from app.routers.automacoes import router as automacoes_router
 from app.routers.artefatos import router as artefatos_router
 from app.routers.branding import router as branding_router
+from app.routers.broadcast import router as broadcast_router
 from app.routers.channels import router as channels_router
 from app.routers.chat_extras import router as chat_extras_router
 from app.routers.conversations import router as conversations_router
@@ -84,6 +85,7 @@ app.include_router(auth_router)
 app.include_router(branding_router)
 app.include_router(conversations_router)
 app.include_router(channels_router)
+app.include_router(broadcast_router)
 app.include_router(chat_extras_router)
 app.include_router(gateway_router)
 app.include_router(integracoes_router)
