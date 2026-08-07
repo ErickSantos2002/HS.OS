@@ -734,3 +734,67 @@ async def revelar_credenciais_conector(
         linha["name"], usuario.id, len(encontradas),
     )
     return {"success": True, "credentials": encontradas}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Onboarding da empresa — portado de `notify-orchestrator-onboarding`
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/onboarding-empresa", status_code=status.HTTP_202_ACCEPTED)
+async def onboarding_empresa(usuario: Usuario = Depends(exige_papel("super_admin"))):
+    """Manda o orquestrador escrever o `COMPANY.md` no workspace de cada agente.
+
+    O arquivo é injetado no contexto de todo agente, e é o que faz o time saber
+    para qual empresa trabalha. Sem ele, cada agente responde no vácuo.
+
+    Marca `onboarding_notified_at` ao fim — é o que a tela usa para saber se o
+    time já foi apresentado à empresa.
+    """
+    async with sessao(role="service_role") as conn:
+        p = await conn.fetchrow("SELECT * FROM public.company_profile LIMIT 1")
+    if p is None or not (p["company_name"] or "").strip():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Preencha o perfil da empresa antes de apresentar o time a ela.",
+        )
+
+    campos = [
+        ("Nome", p["company_name"]), ("Fundador / CEO", p["founder_name"]),
+        ("Segmento", p["segment"]), ("Descrição", p["description"]),
+        ("Público-alvo", p["target_audience"]),
+        ("Produtos/Serviços", p["products_services"]),
+        ("Faturamento", p["revenue"]), ("Funcionários", p["employees_count"]),
+        ("Tom de comunicação", p["tone"]),
+    ]
+    linhas = ["# Empresa", ""]
+    linhas += [f"**{r}:** {v}" for r, v in campos if v]
+    if p["extra_context"]:
+        linhas.append(f"\n**Contexto adicional:**\n{p['extra_context']}")
+    company_md = "\n".join(linhas).strip()
+
+    mensagem = (
+        "Você precisa atualizar o contexto de todos os agentes do time com as "
+        "informações da empresa cliente.\n"
+        "Siga estes passos:\n"
+        "1. Leia o arquivo de configuração do OpenClaw em ~/.openclaw/openclaw.json "
+        "para obter a lista de agentes e seus workspaces\n"
+        "2. Para cada agente listado em agents.list, escreva ou sobrescreva o arquivo "
+        "COMPANY.md no workspace desse agente com o conteúdo abaixo\n"
+        "3. Confirme quando todos os arquivos tiverem sido escritos\n\n"
+        "Conteúdo do COMPANY.md a ser escrito em cada workspace:\n---\n"
+        f"{company_md}\n---\n\n"
+        "Este arquivo será injetado automaticamente no contexto de cada agente e "
+        "permitirá que eles conheçam a empresa para qual trabalham."
+    )
+
+    from app.routers.agents import _avisar_lider
+
+    await _avisar_lider("onboarding-empresa", mensagem)
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE public.company_profile SET onboarding_notified_at = now() WHERE id = $1",
+            p["id"],
+        )
+    logger.info("Onboarding da empresa disparado por %s", usuario.id)
+    return {"dispatched": True}

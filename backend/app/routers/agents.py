@@ -1247,3 +1247,69 @@ async def criar(
     return AgenteNovoOut(
         agent_id=dados.openclaw_id, criado_no_gateway=True, orquestrador_avisado=avisado
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Reenvio de briefing — portado de `resend-agent-briefing`
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.post("/{agent_id}/briefing", status_code=status.HTTP_202_ACCEPTED)
+async def reenviar_briefing(
+    agent_id: str,
+    _: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Manda o orquestrador refazer os arquivos do agente no VPS.
+
+    Existe para quando o onboarding não terminou, ou os arquivos foram perdidos:
+    remonta o briefing a partir do perfil **atual** — não do que foi mandado na
+    criação. Se alguém editou a persona depois, o reenvio leva a versão nova.
+    """
+    async with sessao(role="service_role") as conn:
+        a = await conn.fetchrow(
+            "SELECT agent_id, name, emoji, model, workspace, channels, specialty, "
+            "skills_description, skills_tags, integrations_used, persona_description, "
+            "behavior, crons_description FROM public.agent_profiles WHERE agent_id = $1",
+            agent_id,
+        )
+    if a is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
+
+    integracoes = ", ".join(a["integrations_used"] or []) or "Nenhuma selecionada"
+    crons = (
+        f'AUTOMAÇÕES:\n"{a["crons_description"]}"' if a["crons_description"]
+        else "Sem automações configuradas."
+    )
+    mensagem = (
+        f"🤖 REENVIO DE BRIEFING — REEXECUTE O ONBOARDING DO AGENTE {a['name']}\n\n"
+        "⚠️ INSTRUÇÃO CRÍTICA: você DEVE executar as ferramentas (SSH/file write) "
+        "para criar/atualizar os arquivos no VPS. NÃO responda apenas com texto — "
+        "EXECUTE. Ao final, liste cada arquivo criado/atualizado com o caminho "
+        "completo.\n\n"
+        "Dados técnicos:\n"
+        f"- ID: {a['agent_id']}\n"
+        f"- Nome: {a['name']} {a['emoji'] or ''}\n"
+        f"- Modelo: {a['model']}\n"
+        f"- Workspace: {a['workspace']}\n"
+        f"- Canais: {', '.join(a['channels'] or ['webchat'])}\n\n"
+        f"Especialidade: {a['specialty'] or a['skills_description'] or 'Não definida'}\n"
+        f"Tags: {', '.join(a['skills_tags'] or []) or 'Nenhuma'}\n"
+        f"Integrações: {integracoes}\n\n"
+        f'PERSONA:\n"{a["persona_description"] or "Não definida — use a especialidade como referência"}"\n\n'
+        f'Restrições:\n"{a["behavior"] or "Nenhuma definida"}"\n\n'
+        f"{crons}\n\n"
+        f"Verifique se SOUL.md, IDENTITY.md, TOOLS.md, AGENTS.md, MEMORY.md e "
+        f"HEARTBEAT.md existem no workspace {a['workspace']}. Se não existirem, crie. "
+        "Se existirem mas estiverem incompletos, atualize. Confirme no "
+        "AGENTS_DIRECTORY.md, reinicie o gateway e liste os arquivos "
+        "criados/atualizados."
+    )
+
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            "INSERT INTO public.agent_creation_log (agent_id, briefing) VALUES ($1, $2)",
+            agent_id, mensagem,
+        )
+    await _avisar_lider(f"resend-briefing:{agent_id}", mensagem)
+    logger.info("Briefing de %s reenviado ao orquestrador", agent_id)
+    return {"ok": True, "agent_id": agent_id}
