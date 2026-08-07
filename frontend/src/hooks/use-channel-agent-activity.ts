@@ -1,3 +1,4 @@
+import { assinar } from "@/lib/realtime";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -38,16 +39,14 @@ export function useChannelAgentActivity(channelId: string | null | undefined) {
     // Recarrega a lista inteira a cada evento em vez de aplicar o delta: são
     // poucas linhas por canal, e reconciliar delta de INSERT/UPDATE/DELETE à
     // mão é onde esse tipo de código costuma divergir da verdade.
-    const canal = supabase
-      .channel(`atividade-agente-${channelId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "channel_agent_activity", filter: `channel_id=eq.${channelId}` },
-        puxar,
-      )
-      .subscribe();
+    const cancelar =
+      // Vai pelo tópico do canal, não pelo da tabela: o backend roteia por
+      // `channel_id`, e assinar o canal já exigiu provar que se é membro.
+      assinar(`canal:${channelId}`, (_tipo, dados) => {
+        if ((dados as { tabela?: string })?.tabela === "channel_agent_activity") puxar();
+      });
 
-    return () => { vivo = false; supabase.removeChannel(canal); };
+    return () => { vivo = false; cancelar(); };
   }, [channelId]);
 
   return trabalhando;

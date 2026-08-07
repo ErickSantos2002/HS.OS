@@ -1,3 +1,4 @@
+import { assinarTabela } from "@/lib/realtime";
 import { useEffect, useMemo, useState } from "react";
 import { useAuthContext } from "@/contexts/auth-context";
 import { supabase } from "@/integrations/supabase/client";
@@ -243,12 +244,10 @@ export default function AutomacoesPage() {
 
   useEffect(() => {
     refresh();
-    const channel = supabase
-      .channel("automations-rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "automations" }, () => refresh())
-      .subscribe();
+    const cancelar =
+      assinarTabela("automations", () => refresh());
     return () => {
-      supabase.removeChannel(channel);
+      cancelar();
     };
   }, []);
 

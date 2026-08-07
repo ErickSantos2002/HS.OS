@@ -1,3 +1,4 @@
+import { assinarTabela } from "@/lib/realtime";
 import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -63,18 +64,15 @@ export function usePendingAgentTask(agentId: string | null | undefined) {
 
     refresh();
 
-    const channel = supabase
-      .channel(`pending-agent-task-${id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "agent_tasks", filter: `agent_id=eq.${id}` },
-        () => { refresh(); },
-      )
-      .subscribe();
+    const cancelar =
+      assinarTabela("agent_tasks", (m) => {
+        if (m.agent_id && m.agent_id !== id) return;
+        refresh();
+      });
 
     return () => {
       cancelled = true;
-      supabase.removeChannel(channel);
+      cancelar();
     };
   }, [id]);
 

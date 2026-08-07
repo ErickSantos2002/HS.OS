@@ -6,6 +6,7 @@
  * the React Query cache; realtime changes on `agent_profiles` invalidate.
  */
 
+import { assinarTabela } from "@/lib/realtime";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -55,19 +56,11 @@ export function useAgentCatalog() {
 
   // Realtime: refetch on any agent_profiles change.
   useEffect(() => {
-    const channel = supabase
-      .channel("agent-catalog-sync")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "agent_profiles" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: QUERY_KEY });
-        },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    const cancelar =
+      assinarTabela("agent_profiles", () => {
+        queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      });
+    return cancelar;
   }, [queryClient]);
 
   return query;

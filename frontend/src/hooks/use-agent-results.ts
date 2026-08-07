@@ -1,3 +1,4 @@
+import { assinarTabela } from "@/lib/realtime";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
@@ -36,13 +37,12 @@ export function useAgentResults(agentId: string, category?: string) {
 
   useEffect(() => {
     if (!agentId) return;
-    const channel = supabase
-      .channel(`agent-results-${agentId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "agent_results", filter: `agent_id=eq.${agentId}` }, () => {
+    const cancelar =
+      assinarTabela("agent_results", (m) => {
+        if (m.agent_id && m.agent_id !== agentId) return;
         qc.invalidateQueries({ queryKey: ["agent-results", agentId] });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      });
+    return cancelar;
   }, [agentId]);
 
   const addResult = useMutation({

@@ -1,3 +1,4 @@
+import { assinarTabela } from "@/lib/realtime";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
@@ -35,13 +36,14 @@ export function useAgentCrons(agentId: string) {
   // Realtime
   useEffect(() => {
     if (!agentId) return;
-    const channel = supabase
-      .channel(`agent-crons-${agentId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "agent_crons", filter: `agent_id=eq.${agentId}` }, () => {
+    const cancelar =
+      assinarTabela("agent_crons", (m) => {
+        // O filtro por coluna do Supabase virou este `if`: o evento carrega o
+        // `agent_id` justamente para a tela não recarregar por causa de outro.
+        if (m.agent_id && m.agent_id !== agentId) return;
         qc.invalidateQueries({ queryKey: key });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      });
+    return cancelar;
   }, [agentId]);
 
   const addCron = useMutation({

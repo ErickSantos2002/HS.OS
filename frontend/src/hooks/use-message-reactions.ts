@@ -1,3 +1,4 @@
+import { assinarTabela } from "@/lib/realtime";
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -115,16 +116,10 @@ export function useMessageReactions(channelId: string | null) {
 
     load();
 
-    const sub = supabase
-      .channel(`reactions-${channelId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "message_reactions" },
-        () => { load(); }
-      )
-      .subscribe();
+    const cancelar =
+      assinarTabela("message_reactions", () => { load(); });
 
-    return () => { supabase.removeChannel(sub); };
+    return cancelar;
   }, [channelId, load]);
 
   const toggleReaction = useCallback(async (messageId: string, emoji: string, userId: string) => {

@@ -58,9 +58,9 @@ de alguém esquecer no próximo endpoint novo.
 UPDATE na tabela
    └─► trigger  →  pg_notify('hsos_mudancas', {tabela, op, id})
                         └─► listener no backend (conexão dedicada)
-                                └─► busca a linha completa
-                                        └─► hub.publicar(tópico da tabela, linha)
-                                                └─► WebSocket → navegador
+                                └─► hub.publicar(tópico da tabela, {tabela, op, id})
+                                        └─► WebSocket → navegador
+                                                └─► a tela refaz a busca (com RLS)
 ```
 
 **O evento carrega `{tabela, op, id}` e nada mais** — nem no NOTIFY, nem no
@@ -80,18 +80,18 @@ ida a mais para as poucas telas que usavam `payload.new`.
 
 ## Ordem de execução
 
-1. **`migrations/003_realtime.sql`** — a função de trigger genérica e os
-   gatilhos nas 19 tabelas. A função é uma só; o `TG_TABLE_NAME` diz de onde
-   veio.
-2. **Listener no backend** — conexão asyncpg dedicada com `add_listener`,
-   erguida no `lifespan`. Precisa reconectar sozinha: `LISTEN` morre com a
-   conexão, e sem reconexão o tempo real morre em silêncio.
-3. **Tópico de tabela no hub** — `topico_tabela(nome)`, e o `/ws` aceitando
-   `?tabelas=a,b,c`.
-4. **`frontend/src/lib/realtime.ts`** — assinar tabela, com o mesmo formato de
-   evento que os hooks já esperam.
+1. ✅ **`migrations/003_realtime.sql`** — função de trigger genérica e gatilhos
+   em 16 tabelas (`usage_events` ficou de fora, ver *Armadilhas*). Aplicada em
+   07/08 com o superusuário; o `hsos_app` não tem CREATE no schema public.
+2. ✅ **Listener no backend** — `app/escuta_banco.py`, conexão asyncpg dedicada,
+   erguida no `lifespan`, reconectando com espera crescente.
+3. ✅ **Tópico de tabela no hub** e `/ws?tabelas=a,b,c`. Junto veio a correção
+   de um furo: o `/ws` assinava qualquer canal sem conferir se a pessoa era
+   membro.
+4. **`frontend/src/lib/realtime.ts`** — assinar tabela, com uma API parecida o
+   bastante com a do Supabase para os hooks trocarem sem reescrever a lógica.
 5. **Religar os 21**, começando pelos 14 que só refazem a busca (mecânicos) e
-   deixando os 7 do payload por último.
+   deixando os 7 do payload por último — estes precisam buscar por id.
 
 ## Armadilhas previstas
 

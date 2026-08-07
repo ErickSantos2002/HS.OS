@@ -1,3 +1,4 @@
+import { assinarTabela } from "@/lib/realtime";
 import { useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -147,14 +148,12 @@ export function useResults(filters: ResultsFilters) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const channel = supabase
-      .channel("results-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "agent_results" }, () => {
+    const cancelar =
+      assinarTabela("agent_results", () => {
         queryClient.invalidateQueries({ queryKey: ["results-page-data"] });
         queryClient.invalidateQueries({ queryKey: ["results-overview"] });
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+      });
+    return cancelar;
   }, [queryClient]);
 
   const { data, isLoading, error } = useQuery({

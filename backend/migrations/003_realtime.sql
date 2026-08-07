@@ -41,22 +41,25 @@ CREATE OR REPLACE FUNCTION public.notificar_mudanca() RETURNS trigger
     SET search_path TO 'public'
 AS $$
 DECLARE
-    identificador text;
+    linha jsonb;
 BEGIN
-    -- `to_jsonb(...)->>'id'` em vez de `NEW.id`: nem toda tabela observada tem
-    -- coluna `id` (as de junção usam chave composta), e referenciar um campo
-    -- inexistente é erro de compilação do plpgsql em tempo de execução.
-    identificador := COALESCE(
-        to_jsonb(NEW) ->> 'id',
-        to_jsonb(OLD) ->> 'id'
-    );
+    -- `to_jsonb(...)` em vez de `NEW.id`: nem toda tabela observada tem as
+    -- mesmas colunas, e referenciar um campo inexistente estoura em tempo de
+    -- execução. Em DELETE o NEW é nulo, daí o COALESCE.
+    linha := COALESCE(to_jsonb(NEW), to_jsonb(OLD));
 
+    -- Vão junto o `id` e as três colunas que **roteiam** o evento. Não são
+    -- conteúdo: são o endereço de quem tem direito de saber. É o backend que
+    -- decide o destino a partir delas — ver `app/escuta_banco.py`.
     PERFORM pg_notify(
         'hsos_mudancas',
         json_build_object(
-            'tabela', TG_TABLE_NAME,
-            'op',     TG_OP,
-            'id',     identificador
+            'tabela',     TG_TABLE_NAME,
+            'op',         TG_OP,
+            'id',         linha ->> 'id',
+            'user_id',    linha ->> 'user_id',
+            'channel_id', linha ->> 'channel_id',
+            'agent_id',   linha ->> 'agent_id'
         )::text
     );
 
@@ -66,8 +69,8 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.notificar_mudanca() IS
-    'Avisa o backend que uma linha mudou. Carrega só tabela/op/id — a linha '
-    'completa é buscada do outro lado, porque o pg_notify limita a 8000 bytes.';
+    'Avisa o backend que uma linha mudou. Carrega o id e as colunas que roteiam '
+    'o evento (user_id, channel_id, agent_id) — nunca conteúdo.';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Os gatilhos

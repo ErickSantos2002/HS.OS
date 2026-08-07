@@ -1,3 +1,4 @@
+import { assinarTabela } from "@/lib/realtime";
 import { api } from "@/lib/api";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -81,18 +82,12 @@ export function useAgentTasks() {
   // Realtime: keep the panel in sync with chunk/checkpoint progress written
   // by the agent-task edge function during a running loop.
   useEffect(() => {
-    const channel = supabase
-      .channel("agent-tasks-feed")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "agent_tasks" },
-        () => {
-          qc.invalidateQueries({ queryKey: ["agent-tasks"] });
-        },
-      )
-      .subscribe();
+    const cancelar =
+      assinarTabela("agent_tasks", () => {
+        qc.invalidateQueries({ queryKey: ["agent-tasks"] });
+      });
     return () => {
-      supabase.removeChannel(channel);
+      cancelar();
     };
   }, [qc]);
 

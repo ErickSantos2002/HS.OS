@@ -32,6 +32,10 @@ function urlDoSocket(): string | null {
     .filter((t) => t.startsWith("canal:"))
     .map((t) => t.slice("canal:".length));
 
+  const tabelas = [...ouvintes.keys()]
+    .filter((t) => t.startsWith("tabela:"))
+    .map((t) => t.slice("tabela:".length));
+
   // `/api` é caminho relativo: vira ws:// ou wss:// conforme a página, o que
   // mantém o mesmo esquema de segurança do resto do site.
   const base = BASE.startsWith("http")
@@ -40,6 +44,7 @@ function urlDoSocket(): string | null {
 
   const params = new URLSearchParams({ token });
   if (canais.length) params.set("canais", canais.join(","));
+  if (tabelas.length) params.set("tabelas", tabelas.join(","));
   return `${base}/ws?${params}`;
 }
 
@@ -99,7 +104,8 @@ function conectar() {
  * Assina um tópico. Devolve a função de cancelar.
  *
  * Tópicos: `canal:<id>` para mensagens de um canal, `usuario:<id>` para o que é
- * dirigido à pessoa (resposta de agente, por exemplo).
+ * dirigido à pessoa (resposta de agente), `tabela:<nome>` para mudanças numa
+ * tabela do banco.
  */
 export function assinar(topico: string, ouvinte: Ouvinte): () => void {
   const existentes = ouvintes.get(topico) ?? new Set<Ouvinte>();
@@ -134,4 +140,43 @@ export function encerrarRealtime() {
   assinaturaAtual = "";
   socket?.close();
   socket = null;
+}
+
+
+/** O que chega quando uma linha muda. */
+export interface MudancaDeTabela {
+  tabela: string;
+  op: "INSERT" | "UPDATE" | "DELETE";
+  id: string | null;
+  /**
+   * Vem preenchido quando a linha tem essa coluna. É o que substitui o
+   * `filter: "agent_id=eq.X"` do Supabase — filtrar aqui evita a tela
+   * recarregar por causa de mudança em outro agente.
+   *
+   * `user_id` e `channel_id` **não** aparecem aqui de propósito: no tópico de
+   * tabela eles seriam metadado vazando. Quem precisa deles assina o tópico da
+   * pessoa ou do canal, onde o direito já foi conferido.
+   */
+  agent_id?: string | null;
+}
+
+/**
+ * Observa mudanças numa tabela — o substituto do `postgres_changes`.
+ *
+ * ⚠️ **O evento diz o que mudou, não o que a linha virou.** Vem `{tabela, op,
+ * id}` e nada mais. Não é limitação de transporte: um tópico de tabela é
+ * assinado por todos que observam aquela tabela, e mandar a linha junto
+ * entregaria conteúdo a quem o RLS negaria. Quem precisa do conteúdo busca pelo
+ * endpoint normal, onde a autorização acontece.
+ *
+ * Na prática isso é o que 14 dos 21 usos já faziam: refazer a busca ao saber
+ * que algo mudou.
+ */
+export function assinarTabela(
+  tabela: string,
+  aoMudar: (mudanca: MudancaDeTabela) => void,
+): () => void {
+  return assinar(`tabela:${tabela}`, (_tipo, dados) => {
+    aoMudar(dados as MudancaDeTabela);
+  });
 }
