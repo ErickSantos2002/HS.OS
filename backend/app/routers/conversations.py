@@ -13,6 +13,7 @@ a própria conversa), não só a defesa.
 
 import json
 import logging
+import re
 from datetime import datetime
 from uuid import uuid4
 
@@ -23,6 +24,7 @@ from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
 from app.gateway import config as cfg
 from app.gateway.client import ErroGateway, obter_cliente, obter_cliente_de_espera
+from app.integracoes import exige_segredo
 from app.realtime import hub, topico_usuario
 
 logger = logging.getLogger(__name__)
@@ -413,3 +415,76 @@ async def resposta(
                  {"agent_id": agent_id, "message": saida.model_dump()})
     logger.info("Resposta de %s gravada (run %s, %d chars)", agent_id, run_id, len(texto))
     return RespostaOut(status="pronta", message=saida)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resposta que chega por conta própria — portado de `agent-reply-webhook`
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# O agente empurra a resposta quando termina, em vez de esperar alguém buscar.
+# Continua fazendo sentido depois da portagem do chat: o `/reply` só grava
+# quando a tela está aberta perguntando. Se o usuário fechou a aba durante uma
+# tarefa longa, é este webhook que salva a resposta.
+
+
+class RespostaDoAgenteIn(BaseModel):
+    agent_id: str = Field(min_length=1)
+    user_id: str = Field(min_length=1)
+    # Uma string ou várias — o agente pode quebrar a resposta em pedaços.
+    content: str | list[str] = ""
+    status: str = "completed"
+    error: str | None = None
+
+
+# Emojis que abrem mensagem de andamento ("🔄 Analisando…"). São status, não
+# resposta: gravá-los como mensagem enche a conversa de ruído.
+_HEARTBEAT = re.compile(
+    r"^\s*(?:🔄|✅|⏳|🔍|⚙️|📥|📤|🎬|📝|🎯|🧠|🟢|🟡|🔴|▶️|⏱️|🚀|📊|💾|🔎|📡|⌛|✨|🛠️|🧪)"
+)
+
+
+@router.post("/webhook/resposta", status_code=status.HTTP_201_CREATED)
+async def resposta_do_agente(
+    dados: RespostaDoAgenteIn,
+    _: None = Depends(exige_segredo("AGENT_REPLY_WEBHOOK_SECRET")),
+):
+    """Grava a resposta que o agente empurrou.
+
+    Falha vira mensagem visível com ⚠️, não silêncio: o usuário precisa saber
+    que a tarefa terminou mal, e uma conversa que simplesmente para é pior que
+    um erro explícito.
+    """
+    if dados.status == "failed":
+        partes = [f"⚠️ {(dados.error or '').strip() or 'Não foi possível concluir a tarefa.'}"]
+    else:
+        bruto = dados.content if isinstance(dados.content, list) else [dados.content]
+        partes = [p.strip() for p in bruto if isinstance(p, str) and p.strip()]
+        # Mensagem de andamento não vira linha na conversa.
+        partes = [p for p in partes if not _HEARTBEAT.match(p)]
+
+    if not partes:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Sem conteúdo para gravar (vazio, ou só mensagens de andamento).",
+        )
+
+    async with sessao(role="service_role") as conn:
+        gravadas = []
+        for i, texto in enumerate(partes):
+            # Milissegundos crescentes: sem isso as partes teriam o mesmo
+            # `created_at` e a tela poderia mostrá-las fora de ordem.
+            linha = await conn.fetchrow(
+                f"""
+                INSERT INTO public.conversations (agent_id, user_id, role, content, created_at)
+                VALUES ($1, $2::uuid, 'agent', $3, now() + ($4 || ' milliseconds')::interval)
+                RETURNING {_COLUNAS}
+                """,
+                dados.agent_id, dados.user_id, texto, str(i),
+            )
+            gravadas.append(_para_saida(linha))
+
+    for m in gravadas:
+        hub.publicar(topico_usuario(dados.user_id), "resposta-agente",
+                     {"agent_id": dados.agent_id, "message": m.model_dump()})
+    logger.info("Webhook gravou %d mensagem(ns) de %s", len(gravadas), dados.agent_id)
+    return {"gravadas": len(gravadas)}
