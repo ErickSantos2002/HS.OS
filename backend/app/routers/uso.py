@@ -272,3 +272,41 @@ async def eventos(
             desde or "", ate or "", dias, limite,
         )
     return json.loads(json.dumps([dict(l) for l in linhas], default=str))
+
+
+@router.get("/snapshots")
+async def snapshots(
+    usuario: Usuario = Depends(usuario_atual),
+    desde: str | None = Query(default=None, description="ISO-8601."),
+    limite: int = Query(default=2000, ge=1, le=10_000),
+):
+    """As fotografias de consumo por agente, para os gráficos de Monitoramento."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """
+            SELECT agent_id, model, total_tokens, input_tokens, output_tokens,
+                   to_char(snapshot_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS snapshot_at
+              FROM public.agent_token_snapshots
+             WHERE snapshot_at >= COALESCE(NULLIF($1,'')::text::timestamptz, now() - interval '7 days')
+             ORDER BY snapshot_at
+             LIMIT $2
+            """,
+            desde or "", limite,
+        )
+    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+
+
+@router.get("/estatisticas-de-agente")
+async def estatisticas_de_agente(
+    usuario: Usuario = Depends(usuario_atual),
+    limite: int = Query(default=500, ge=1, le=2000),
+):
+    """As coletas de `agent_stats`, da mais recente para a mais antiga."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            "SELECT agent_id, session_count, "
+            "       to_char(collected_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS') || 'Z' AS collected_at "
+            "  FROM public.agent_stats ORDER BY collected_at DESC LIMIT $1",
+            limite,
+        )
+    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]

@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
 import { Link2, Copy, Eye, Trash2, Loader2, Globe, Lock } from "lucide-react";
 import { toast } from "sonner";
@@ -22,12 +22,8 @@ export default function PublishedArtifactsTab() {
   const fetchArtifacts = async () => {
     if (!user) return;
     setLoading(true);
-    const { data } = await supabase
-      .from("artifacts_published" as any)
-      .select("id, title, is_public, views, created_at, expires_at")
-      .eq("created_by", user.id)
-      .order("created_at", { ascending: false });
-    setArtifacts((data as any[]) || []);
+    const data = await api<any[]>("/artefatos/publicados").catch(() => []);
+    setArtifacts(data || []);
     setLoading(false);
   };
 
@@ -40,16 +36,17 @@ export default function PublishedArtifactsTab() {
   };
 
   const togglePublic = async (id: string, current: boolean) => {
-    await supabase
-      .from("artifacts_published" as any)
-      .update({ is_public: !current } as any)
-      .eq("id", id);
+    await api(`/artefatos/publicados/${id}`, {
+      method: "PATCH",
+      body: { is_public: !current },
+    }).catch(() => { /* a tela já refletiu */ });
     setArtifacts((prev) => prev.map((a) => a.id === id ? { ...a, is_public: !current } : a));
     toast.success(!current ? "Artefato tornado público" : "Artefato tornado privado");
   };
 
   const deleteArtifact = async (id: string) => {
-    await supabase.from("artifacts_published" as any).delete().eq("id", id);
+    await api(`/artefatos/publicados/${id}`, { method: "DELETE" })
+      .catch(() => { /* a tela já removeu da lista */ });
     setArtifacts((prev) => prev.filter((a) => a.id !== id));
     toast.success("Artefato removido");
   };

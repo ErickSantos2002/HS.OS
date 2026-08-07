@@ -225,6 +225,27 @@ class BuscaPublicacaoIn(BaseModel):
     html_content: str
 
 
+@router.get("/publicados")
+async def meus_publicados(usuario: Usuario = Depends(usuario_atual)):
+    """Os artefatos que **eu** publiquei, para a aba de gerenciamento.
+
+    Sem o `html_content`: a aba lista títulos e estatísticas, não renderiza.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """
+            SELECT id::text AS id, title, is_public, views,
+                   to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS created_at,
+                   to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS expires_at
+              FROM public.artifacts_published
+             WHERE created_by = $1::uuid
+             ORDER BY created_at DESC
+            """,
+            usuario.id,
+        )
+    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+
+
 @router.post("/publicados/procurar")
 async def procurar_publicacao(
     dados: BuscaPublicacaoIn, usuario: Usuario = Depends(usuario_atual)
@@ -547,4 +568,82 @@ async def excluir_vivo(artefato_id: str, usuario: Usuario = Depends(usuario_atua
             artefato_id,
         )
     if achado is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Artefato não encontrado.")
+
+
+class VisibilidadeIn(BaseModel):
+    is_public: bool
+
+
+@router.patch("/publicados/{artefato_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def alternar_visibilidade(
+    artefato_id: str, dados: VisibilidadeIn, usuario: Usuario = Depends(usuario_atual)
+):
+    """Torna o artefato público ou privado.
+
+    O `created_by` entra no WHERE: mexer na visibilidade de artefato alheio
+    responde 404, em vez de depender só do RLS.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        achado = await conn.fetchval(
+            "UPDATE public.artifacts_published SET is_public = $3 "
+            " WHERE id = $1::uuid AND created_by = $2::uuid RETURNING id",
+            artefato_id, usuario.id, dados.is_public,
+        )
+    if achado is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Artefato não encontrado.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Títulos dados a artefatos do chat
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/titulos")
+async def titulos(usuario: Usuario = Depends(usuario_atual)):
+    """Os títulos que a pessoa deu a artefatos das conversas dela.
+
+    Vem tudo de uma vez: são poucos por usuário, e a tela pedia por lista de
+    ids de mensagem — o que obrigava a montar a lista antes de saber se havia
+    algum.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            "SELECT message_id::text AS message_id, title FROM public.artifact_titles "
+            " WHERE user_id = $1::uuid ORDER BY created_at DESC",
+            usuario.id,
+        )
+    return [dict(l) for l in linhas]
+
+
+class TituloIn(BaseModel):
+    message_id: str
+    title: str = Field(min_length=1, max_length=300)
+
+
+@router.put("/titulos", status_code=status.HTTP_204_NO_CONTENT)
+async def gravar_titulo(dados: TituloIn, usuario: Usuario = Depends(usuario_atual)):
+    """Renomeia um artefato do chat. O dono sai do token."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        await conn.execute(
+            "INSERT INTO public.artifact_titles (user_id, message_id, title) "
+            "VALUES ($1::uuid, $2::uuid, $3) "
+            "ON CONFLICT (user_id, message_id) DO UPDATE SET title = EXCLUDED.title",
+            usuario.id, dados.message_id, dados.title.strip(),
+        )
+
+
+@router.delete("/publicados/{artefato_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def despublicar(artefato_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """Apaga a publicação. O link para de funcionar imediatamente.
+
+    Diferente do live artifact, aqui a exclusão é **real**: a publicação é uma
+    cópia congelada do HTML, não algo referenciado por conversas.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        marca = await conn.execute(
+            "DELETE FROM public.artifacts_published WHERE id = $1::uuid AND created_by = $2::uuid",
+            artefato_id, usuario.id,
+        )
+    if marca.rsplit(" ", 1)[-1] == "0":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Artefato não encontrado.")

@@ -154,3 +154,18 @@ async def cancelar_inscricao(endpoint: str = Query(description="O endpoint devol
         await conn.execute(
             "DELETE FROM public.push_subscriptions WHERE endpoint = $1", endpoint
         )
+
+
+@router.get("/inscricoes/contagem")
+async def contar_inscricoes(usuario: Usuario = Depends(usuario_atual)):
+    """Quantos aparelhos meus estão inscritos. É diagnóstico da tela de ajustes.
+
+    Serve para a pessoa entender por que o push de teste não chegou: zero
+    inscrições explica o silêncio melhor do que "enviado para 0 dispositivos".
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        total = await conn.fetchval(
+            "SELECT count(*) FROM public.push_subscriptions WHERE user_id = $1::uuid",
+            usuario.id,
+        )
+    return {"count": total}

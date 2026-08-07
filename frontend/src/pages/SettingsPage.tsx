@@ -6,7 +6,6 @@ import { useTheme } from "next-themes";
 import { getGatewayConfig, loadGatewayConfig, saveGatewayConfig, testConnection } from "@/lib/gateway";
 import { useBranding } from "@/hooks/use-branding";
 import { useAuthContext } from "@/contexts/auth-context";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Settings, Wifi, WifiOff, Loader2, Save, Upload, RotateCcw, Paintbrush, Image, Building2, User, Lock, AlertTriangle, Link2, FileText, UserCog, BookOpen, Bell, Download, Palette, KeyRound, Activity, Zap, DollarSign, Server, Clock, CheckCircle, XCircle, Timer } from "lucide-react";
 import { generateDesignSystemYaml } from "@/lib/dnos-design-system-yaml";
@@ -149,35 +148,24 @@ export default function SettingsPage() {
         return;
       }
       // Confirma se a row foi salva
-      const { count } = await supabase
-        .from("push_subscriptions")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id);
-      // Dispara um push real via edge function
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-push`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            user_id: user.id,
-            title: "Teste Web Push 🚀",
-            body: "Se você está vendo isso fora do app, está tudo OK!",
-            tag: `webpush-test-${Date.now()}`,
-          }),
-        }
-      );
-      const json = await res.json().catch(() => ({}));
+      const { count } = await api<{ count: number }>("/push/inscricoes/contagem")
+        .catch(() => ({ count: 0 }));
+
+      const json = await api<any>("/push/enviar", {
+        method: "POST",
+        body: {
+          user_id: user.id,
+          title: "Teste Web Push 🚀",
+          body: "Se você está vendo isso fora do app, está tudo OK!",
+          tag: `webpush-test-${Date.now()}`,
+        },
+      }).catch((e: Error) => ({ erro: e.message, sent: 0 }));
+
+      const enviados = json?.sent ?? 0;
       toast({
-        title: res.ok ? `Push enviado (${json.sent ?? 0} dispositivo(s))` : "send-push falhou",
-        description: `Inscrições no DB: ${count ?? "?"} | resposta: ${JSON.stringify(json)}`,
-        variant: res.ok && (json.sent ?? 0) > 0 ? "default" : "destructive",
+        title: enviados > 0 ? `Push enviado (${enviados} dispositivo(s))` : "Push não chegou a ninguém",
+        description: `Inscrições no banco: ${count} | resposta: ${JSON.stringify(json)}`,
+        variant: enviados > 0 ? "default" : "destructive",
       });
     } catch (e: any) {
       toast({

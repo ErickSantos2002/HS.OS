@@ -4,7 +4,6 @@
  * All queries are scoped to the current user via user_id.
  */
 
-import { supabase } from "@/integrations/supabase/client";
 import { api } from "@/lib/api";
 
 /** Uma linha de `conversations` como a nossa API devolve. */
@@ -266,18 +265,16 @@ export async function loadArtifactTitles(
   const map: Record<string, string> = {};
   if (messageIds.length === 0) return map;
 
-  const { data, error } = await supabase
-    .from("artifact_titles")
-    .select("message_id, title")
-    .in("message_id", messageIds)
-    .order("created_at", { ascending: false });
+  // O endpoint devolve todos os títulos desta pessoa de uma vez: são poucos, e
+  // a tela precisava montar a lista de ids antes de saber se havia algum.
+  const linhas = await api<{ message_id: string; title: string }[]>(
+    "/artefatos/titulos",
+  ).catch(() => null);
+  if (!linhas) return map;
 
-  if (error) {
-    console.error("[chat-persistence] Failed to load artifact titles:", error);
-    return map;
-  }
-  for (const row of (data ?? []) as { message_id: string; title: string }[]) {
-    map[row.message_id] = row.title;
+  const pedidos = new Set(messageIds);
+  for (const row of linhas) {
+    if (pedidos.has(row.message_id)) map[row.message_id] = row.title;
   }
   return map;
 }
@@ -289,21 +286,11 @@ export async function saveArtifactTitle(
   messageId: string,
   title: string
 ): Promise<void> {
-  const { data: userData } = await supabase.auth.getUser();
-  const userId = userData.user?.id;
-  if (!userId) throw new Error("User not authenticated");
-
-  const { error } = await supabase
-    .from("artifact_titles")
-    .upsert(
-      { user_id: userId, message_id: messageId, title: title.trim() },
-      { onConflict: "user_id,message_id" }
-    );
-
-  if (error) {
-    console.error("[chat-persistence] Failed to save artifact title:", error);
-    throw error;
-  }
+  // O dono sai do token no servidor.
+  await api("/artefatos/titulos", {
+    method: "PUT",
+    body: { message_id: messageId, title },
+  });
 }
 
 /**
@@ -315,15 +302,13 @@ export async function loadLastMessagesPerAgent(
 ): Promise<Record<string, { content: string; created_at: string }>> {
   if (agentIds.length === 0) return {};
 
-  const { data, error } = await supabase.rpc("get_agents_last_activity", {
-    _agent_ids: agentIds,
-    _user_id: userId,
+  // A agregação continua na função do banco; só o transporte mudou.
+  const data = await api<any[]>(
+    `/conversations/ultimas/por-agente?agent_ids=${encodeURIComponent(agentIds.join(","))}`,
+  ).catch((e: Error) => {
+    console.error("[chat-persistence] Failed to load last messages:", e);
+    return null;
   });
-
-  if (error) {
-    console.error("[chat-persistence] Failed to load last messages:", error);
-    return {};
-  }
 
   const map: Record<string, { content: string; created_at: string }> = {};
   if (data) {

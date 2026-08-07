@@ -139,6 +139,29 @@ async def minhas_respostas(
     return [_para_saida(l) for l in linhas]
 
 
+@router.get("/ultimas/por-agente")
+async def ultimas_por_agente(
+    usuario: Usuario = Depends(usuario_atual),
+    agent_ids: str = Query(default="", description="Ids separados por vírgula."),
+):
+    """A última mensagem de cada agente na minha conversa — a prévia da lista.
+
+    ⚠️ **Antes de `GET /{agent_id}`**, senão "ultimas" vira id de agente.
+
+    A agregação continua na função `get_agents_last_activity` do banco: ela já
+    existia e reimplementá-la aqui criaria duas versões da mesma conta.
+    """
+    ids = [a.strip() for a in agent_ids.split(",") if a.strip()]
+    if not ids:
+        return []
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            "SELECT * FROM public.get_agents_last_activity($1::text[], $2::uuid)",
+            ids, usuario.id,
+        )
+    return json.loads(json.dumps([dict(l) for l in linhas], default=str))
+
+
 @router.get("/{agent_id}/respostas", response_model=list[MensagemOut])
 async def respostas_do_agente(
     agent_id: str,

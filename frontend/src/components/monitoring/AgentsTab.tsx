@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +9,6 @@ import {
   Bot, Circle, MessageSquare, Cpu, Clock, AlertTriangle,
   Users, Zap, ExternalLink, Globe,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { getModelLabel } from "@/lib/model-pricing";
 import { useAgentCatalog } from "@/hooks/use-agent-catalog";
 import { getOfficialAgentEntries } from "@/lib/active-agents";
@@ -95,24 +95,19 @@ export function AgentsTab({ data, isLoading, gatewayOnline }: AgentsTabProps) {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
       const [snapsRes, statsRes, modelsRes] = await Promise.all([
-        supabase
-          .from("agent_token_snapshots")
-          .select("agent_id,total_tokens,input_tokens,output_tokens,snapshot_at")
-          .gte("snapshot_at", todayStart.toISOString())
-          .order("snapshot_at", { ascending: true }),
-        supabase
-          .from("agent_stats")
-          .select("agent_id,session_count,collected_at")
-          .order("collected_at", { ascending: false })
-          .limit(500),
-        supabase
-          .from("agent_token_snapshots")
-          .select("agent_id,model,snapshot_at")
-          .gte("snapshot_at", sevenDaysAgo.toISOString())
-          .not("model", "is", null)
-          .neq("model", "unknown")
-          .order("snapshot_at", { ascending: false })
-          .limit(2000),
+        api<any[]>(`/uso/snapshots?desde=${encodeURIComponent(todayStart.toISOString())}`)
+          .then((d) => ({ data: d, error: null })).catch((e) => ({ data: [], error: e })),
+        api<any[]>("/uso/estatisticas-de-agente")
+          .then((d) => ({ data: d, error: null })).catch((e) => ({ data: [], error: e })),
+        // O filtro de modelo (não nulo, não "unknown") ficou no cliente: são
+        // duas condições sobre uma coluna que a lista já traz, e um parâmetro a
+        // mais no endpoint só para isso não se paga.
+        api<any[]>(`/uso/snapshots?desde=${encodeURIComponent(sevenDaysAgo.toISOString())}`)
+          .then((d) => ({
+            data: d.filter((r) => r.model && r.model !== "unknown"),
+            error: null,
+          }))
+          .catch((e) => ({ data: [], error: e })),
       ]);
 
       if (cancelled) return;
