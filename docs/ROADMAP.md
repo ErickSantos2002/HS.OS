@@ -13,7 +13,7 @@ backend não é o mesmo que a tela usar o endpoint.
 
 | | Feito | Total |
 |---|---|---|
-| Edge functions **com substituto no backend** | 60 | 73 |
+| Edge functions **com substituto no backend** | 63 | 73 |
 | Edge functions **que o front já parou de chamar** | 21 | 73 |
 | Arquivos do front sem Supabase | 20 | 113 |
 | Functions distintas ainda referenciadas pelo front | 23 | — |
@@ -101,6 +101,16 @@ Três caminhos, todos com custo:
 A metade determinística do `extract-file-text` **já foi portada** e funciona sem
 LLM nenhuma: `POST /storage/extrair-texto/{bucket}/{caminho}` devolve o texto de
 txt, md, pdf e docx.
+
+**Removidas sem portar** (07/08/2026) — não é dívida, é código morto:
+- `seed-agents` — semeava agentes pelo wizard de `/setup`, que foi aposentado
+  para `frontend/src/_legado/`. O caminho vivo é `POST /agents` + `POST /agents/sync`.
+- `routine-phrases` — pedia a uma LLM para deixar nome de cron legível, por uma
+  rota que hoje é 404. A parte útil virou `_nome_legivel()` em
+  `app/routers/automacoes.py`, determinística e sem custo de token.
+- `marketing-analytics-proxy` — proxy para a API de analytics **da dn.ia**
+  (`kfhojzdcnpuntynodsff`), a empresa de origem. Não é nossa e não há para onde
+  apontar.
 
 **Melhorias adiadas** (portadas como estavam, corrigir depois da reconstrução):
 - 🟠 **A descoberta de avatar faz 1.022 requisições numa sessão.**
