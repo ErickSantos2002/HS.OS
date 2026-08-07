@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -94,19 +95,18 @@ export function visualDoProvedor(id: string): { nome: string; logo: string | nul
   return { nome: id.charAt(0).toUpperCase() + id.slice(1), logo: null };
 }
 
+/** A edge recebia a ação no corpo; o backend expõe uma rota por ação. */
 async function chamar(body: Record<string, unknown>) {
-  const { data, error } = await supabase.functions.invoke("configure-llm-provider", { body });
-  if (error) {
-    // O invoke esconde o corpo em erros não-2xx ("Edge Function returned a
-    // non-2xx status code") — o motivo real está no context. Sem isto, todo
-    // erro vira adivinhação.
-    const ctx = (error as { context?: Response }).context;
-    if (ctx) {
-      const corpo = await ctx.json().catch(() => null);
-      if (corpo?.error) throw new Error(corpo.error);
-    }
-    throw new Error(error.message);
-  }
+  const { action, ...resto } = body as any;
+  const rota: Record<string, () => Promise<any>> = {
+    list: () => api("/llm/provedores"),
+    save: () => api("/llm/provedores", { method: "POST", body: resto }),
+    remove: () => api("/llm/provedores/remover", { method: "POST", body: resto }),
+    discover: () => api("/llm/descobrir", { method: "POST", body: resto }),
+    discover_status: () => api(`/llm/descobrir/${encodeURIComponent(resto.op_id)}`),
+  };
+  if (!rota[action]) throw new Error(`Ação desconhecida: ${action}`);
+  const data: any = await rota[action]();
   if (data?.error) throw new Error(data.error);
   return data;
 }

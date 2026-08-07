@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -52,11 +53,11 @@ export default function LiaOnboardingLog({ agentId }: { agentId: string }) {
   async function resend() {
     setResending(true);
     try {
-      const { data, error } = await supabase.functions.invoke("resend-agent-briefing", {
-        body: { agent_id: agentId },
+      const data = await api<any>(`/agents/${encodeURIComponent(agentId)}/briefing`, {
+        method: "POST",
       });
-      if (error || (data as any)?.success === false) {
-        throw new Error(error?.message || (data as any)?.error || "Falha ao reenviar");
+      if ((data as any)?.success === false) {
+        throw new Error((data as any)?.error || "Falha ao reenviar");
       }
       toast({ title: "Briefing reenviado para a Lia", description: "Aguardando resposta..." });
       setTimeout(load, 2000);

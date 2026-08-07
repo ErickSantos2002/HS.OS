@@ -1,3 +1,5 @@
+import { LLM_PROVIDERS } from "@/lib/connector-templates";
+import { api } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -262,10 +264,20 @@ export default function ConnectorsTab() {
   const migrarChave = useCallback(async (row: ConnectorRow) => {
     setMigrando(row.id);
     try {
-      const { data, error } = await supabase.functions.invoke("configure-llm-provider", {
-        body: { integration_id: row.id },
+      // O backend precisa saber QUAL provedor é; a edge deduzia isso do lado
+      // dela lendo a linha da integração. Aqui a dedução é a mesma: o nome ou
+      // o key_name do conector legado carregam o provedor.
+      const alvo = `${row.key_name} ${row.name}`.toLowerCase();
+      const tipo = LLM_PROVIDERS.find((p) => alvo.includes(p));
+      if (!tipo) {
+        throw new Error(
+          `Não deu para identificar o provedor de "${row.name}". Configure-o pela lista de provedores.`,
+        );
+      }
+      const data = await api<any>("/llm/provedores", {
+        method: "POST",
+        body: { provider_type: tipo, integration_id: row.id },
       });
-      if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
       toast({
         title: data?.verified ? "Chave enviada e confirmada no gateway" : "Chave enviada ao gateway",

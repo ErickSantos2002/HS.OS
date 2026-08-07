@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -51,20 +52,7 @@ export default function ExportAgentButton({ agentId, agentName, variant = "icon"
     if (busy) return;
     setBusy(true);
     try {
-      const { data, error } = await supabase.functions.invoke("export-agent", {
-        body: { agent_id: agentId },
-      });
-      if (error) {
-        let msg = error.message || "Falha ao exportar";
-        try {
-          const ctx = (error as any).context;
-          if (ctx && typeof ctx.json === "function") {
-            const parsed = await ctx.json();
-            if (parsed?.error) msg = parsed.error;
-          }
-        } catch { /* ignore */ }
-        throw new Error(msg);
-      }
+      const data = await api<any>(`/agents/${encodeURIComponent(agentId)}/export`);
       if (!data || typeof data !== "object" || !(data as any).dnos_version || !(data as any).agent?.agent_id) {
         throw new Error((data as any)?.error || "Resposta inválida do servidor");
       }

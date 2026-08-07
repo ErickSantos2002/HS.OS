@@ -23,26 +23,28 @@ Tudo abaixo está verificado **no navegador**, não só por endpoint:
 
 **60 de 73** edge functions fora da pasta · **13** ainda lá, **9 delas
 bloqueadas** por chave externa (ElevenLabs e Lovable AI Gateway) ·
-**16 de 113** arquivos do front sem Supabase · **19** nomes de function ainda
-invocados pelo front.
+**18 de 113** arquivos do front sem Supabase · **15** nomes de function ainda
+invocados pelo front (4 deles só dentro de `_legado/`).
 
 ⚠️ **Os dois últimos números não fecham com o primeiro, e isso é o achado.**
-Dez telas continuam chamando `supabase.functions.invoke` de functions que já
-saíram da pasta — o backend foi portado e o front não foi religado. Corrigidas
-em 07/08: agent-task (3 telas) e trigger-automation. **Ainda penduradas:**
+Telas continuavam chamando `supabase.functions.invoke` de functions que já
+saíram da pasta — o backend foi portado e o front não foi religado. Religadas
+em 07/08: `agent-task` (TaskLoopPanel, use-agent-tasks, use-pending-agent-task),
+`trigger-automation`, `export-agent`, `resend-agent-briefing` e
+`configure-llm-provider` (LlmProvidersSection e ConnectorsTab).
 
-| Function | Tela | Endpoint que já existe |
+**Ainda penduradas — próximo trabalho, antes de portar mais:**
+
+| Function | Tela | Situação |
 |---|---|---|
-| `configure-llm-provider` | `LlmProvidersSection`, `ConnectorsTab` | `POST /llm/provedores` |
-| `create-agent` | `ImportAgentDialog` | `POST /agents` |
-| `export-agent` | `ExportAgentButton` | `GET /agents/{id}/exportar` |
-| `resend-agent-briefing` | `LiaOnboardingLog` | `POST /agents/{id}/briefing` |
-| `update-agent-access` | `AgentAccessDialog` | ver `agents.py` |
-| `automations-api` | — (só em `_legado/`) | `/automacoes` |
-| `configure-instance-vault`, `save-install-block` | só em `_legado/setup/` | — |
+| `create-agent` | `ImportAgentDialog` | `POST /agents` existe |
+| `update-agent-access` | `AgentAccessDialog` | **sem endpoint ainda** |
 
-Religar essas é o próximo trabalho, antes de portar mais: é o que separa
-"tem substituto" de "a tela usa".
+`agent-task`, `automations-api`, `configure-instance-vault` e
+`save-install-block` só aparecem dentro de `_legado/`, que não está roteado.
+
+É o que separa "tem substituto" de "a tela usa" — a régua honesta é o
+`grep functions.invoke`, não o contador de ports.
 
 O `ls backend/supabase/functions | grep -v _shared | wc -l` agora é a medida
 honesta: tudo que tem substituto saiu da pasta.
