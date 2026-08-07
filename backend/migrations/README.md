@@ -100,3 +100,15 @@ tabelas 69/69 · views 3/3 · policies 191/191 · FKs 32/32 · triggers 21/21 ·
 Teste funcional: com `app.current_user_id` setado, o INSERT em `arenas` preenche
 `created_by` via `auth.uid()` e a leitura respeita a policy; sem o setting, a
 transação é negada.
+
+
+## `003_realtime.sql` — substitui o `postgres_changes`
+
+Cria a função `notificar_mudanca()` e um trigger em 16 tabelas observadas pelo
+front. Ver `docs/PLANO-REALTIME.md`.
+
+⚠️ **Precisa de superusuário.** O `hsos_app` não tem CREATE no schema public, e
+é assim de propósito. Aplicar com o `administrador`.
+
+⚠️ **Ainda não aplicada** em 07/08/2026 — a senha do superusuário não está no
+`.env` do backend, e nem deve estar.
