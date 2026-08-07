@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getArena, deleteArena, type Arena } from "@/lib/arena-store";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { useArenaSessions } from "@/hooks/use-arena-sessions";
 import { getAgentAvatar } from "@/hooks/use-agent-avatar";
 import { useArenaAgents } from "@/hooks/use-arena-agents";
@@ -26,23 +26,13 @@ import { toast } from "sonner";
 type CallStatus = "idle" | "connecting" | "active" | "ended";
 
 async function fetchPersonaResponse(userText: string, systemPrompt: string, agentModel: string): Promise<string> {
-  // Route via gateway-chat edge function — browser never holds the admin token,
-  // and openclaw models expect /v1/chat/completions on the gateway.
-  const { data, error } = await supabase.functions.invoke("gateway-chat", {
-    body: {
-      model: agentModel,
-      stream: false,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userText },
-      ],
-    },
-  });
-  if (error) throw new Error(error.message || "gateway-chat failed");
-  if (data?.error) throw new Error(data.detail || data.error);
-  const text = data?.choices?.[0]?.message?.content;
-  if (!text) throw new Error("Resposta vazia do gateway");
-  return text;
+  // `agentModel` vem como "openclaw:kira" — o que interessa é o agente.
+  const agentId = agentModel.includes(":") ? agentModel.split(":").pop()! : agentModel;
+  const { resposta } = await api<{ resposta: string }>(
+    `/conversations/${encodeURIComponent(agentId)}/pergunta-avulsa`,
+    { method: "POST", body: { pergunta: userText, persona: systemPrompt } },
+  );
+  return resposta;
 }
 
 export default function ArenaViewPage() {

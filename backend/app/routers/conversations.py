@@ -347,6 +347,62 @@ _SEQ_DO_RUN: dict[str, tuple[str, str, int]] = {}
 _ESPERA_MS = 20_000
 
 
+class ComandoIn(BaseModel):
+    comando: str = Field(min_length=1)
+
+
+@router.post("/{agent_id}/comando", status_code=status.HTTP_202_ACCEPTED)
+async def comando(
+    agent_id: str,
+    dados: ComandoIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Manda um comando de barra (`/stop`, `/new`, `/compact`) para a sessão.
+
+    **Não há lista de comandos permitidos, e é de propósito.** Quem interpreta
+    a barra é o próprio OpenClaw; uma allowlist aqui só criaria uma segunda
+    lista para manter em dia e faria comando novo do gateway nascer bloqueado.
+    O que se exige é que comece com `/` — texto normal tem caminho próprio, e
+    passar por aqui pularia a persistência da conversa.
+
+    Vai para a **mesma sessão** do chat da pessoa, senão o `/stop` pararia uma
+    sessão que não é a que está rodando na tela.
+
+    Dispara e devolve 202 sem esperar: o `/stop` só vale se chegar depressa, e
+    a tela não usa a resposta para nada — ela observa o efeito na conversa.
+    """
+    texto = dados.comando.strip()
+    if not texto.startswith("/"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Isto não é um comando. Comando começa com barra, ex.: /stop.",
+        )
+
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado."
+        )
+
+    try:
+        await obter_cliente(c.url, c.token).chamar(
+            "chat.send",
+            {
+                "agentId": agent_id,
+                "sessionKey": _chave_sessao(agent_id, usuario.id),
+                "message": texto,
+                "idempotencyKey": f"cmd-{uuid4()}",
+            },
+        )
+    except ErroGateway as e:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"O comando não chegou ao agente: {e}"
+        )
+
+    logger.info("Comando %s em %s por %s", texto.split()[0], agent_id, usuario.id)
+    return {"ok": True}
+
+
 @router.get("/{agent_id}/reply", response_model=RespostaOut)
 async def resposta(
     agent_id: str,
@@ -488,3 +544,78 @@ async def resposta_do_agente(
                      {"agent_id": dados.agent_id, "message": m.model_dump()})
     logger.info("Webhook gravou %d mensagem(ns) de %s", len(gravadas), dados.agent_id)
     return {"gravadas": len(gravadas)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Pergunta avulsa — a Arena
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class PerguntaAvulsaIn(BaseModel):
+    pergunta: str = Field(min_length=1)
+    persona: str | None = Field(default=None, description="Instrução de papel para esta pergunta.")
+
+
+class PerguntaAvulsaOut(BaseModel):
+    resposta: str
+
+
+@router.post("/{agent_id}/pergunta-avulsa", response_model=PerguntaAvulsaOut)
+async def pergunta_avulsa(
+    agent_id: str,
+    dados: PerguntaAvulsaIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Pergunta única, fora de qualquer conversa. É o que a Arena usa.
+
+    **Sessão descartável a cada chamada**, não a do chat da pessoa. Na Arena o
+    mesmo agente responde várias vezes com personas diferentes, e memória entre
+    elas contaminaria a comparação — que é justamente o ponto da tela. O preço é
+    não haver histórico: cada pergunta parte do zero.
+
+    A persona vai **junto da mensagem**, não como system prompt: o `chat.send`
+    do gateway manda texto para um agente já configurado, não monta um prompt.
+    É mais fraco que o `messages[{role:"system"}]` que a edge usava contra o
+    `/v1/chat/completions` — que nesta versão do gateway não existe mais.
+
+    Espera a resposta em vez de devolver um `run_id`: a Arena roda uma rodada de
+    debate inteira e a tela precisa dos textos juntos para comparar.
+    """
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
+
+    chave = f"arena:{usuario.id}:{uuid4()}"
+    run_id = f"hsos-{uuid4()}"
+    texto = f"{dados.persona.strip()}\n\n---\n\n{dados.pergunta}" if dados.persona else dados.pergunta
+
+    cliente = obter_cliente(c.url, c.token)
+    try:
+        await cliente.chamar(
+            "chat.send",
+            {
+                "agentId": agent_id,
+                "sessionKey": chave,
+                "message": texto,
+                "idempotencyKey": run_id,
+            },
+        )
+    except ErroGateway as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"O agente não pôde ser acionado: {e}")
+
+    espera = obter_cliente_de_espera(c.url, c.token)
+    try:
+        r = await espera.chamar("agent.wait", {"runId": run_id, "timeoutMs": _ESPERA_MS})
+        if r.get("status") == "timeout":
+            raise HTTPException(
+                status.HTTP_504_GATEWAY_TIMEOUT,
+                "O agente demorou demais para responder. Tente de novo.",
+            )
+        hist = await cliente.chamar("chat.history", {"sessionKey": chave, "limit": 20})
+    except ErroGateway as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Falha ao obter a resposta: {e}")
+
+    resposta = _texto_da_resposta(hist.get("messages") or [], 0)
+    if not resposta:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "O agente respondeu vazio.")
+    return PerguntaAvulsaOut(resposta=resposta)

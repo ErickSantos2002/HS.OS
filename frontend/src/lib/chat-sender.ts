@@ -14,7 +14,7 @@ import { getModelForAgent } from "@/lib/active-agents";
 import { appendToConversations, conversationRowToMessage } from "@/lib/chat-persistence";
 import { getModelOverride } from "@/lib/agent-model-override";
 import { enviarParaAgente } from "@/lib/agent-chat";
-import { lerUsuarioDoToken } from "@/lib/api";
+import { api, lerUsuarioDoToken } from "@/lib/api";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 import type { ChatMessage, MediaAttachment } from "@/lib/mock-data";
 import { QueryClient } from "@tanstack/react-query";
@@ -154,7 +154,7 @@ export function stopAgentResponse(agentId: string) {
   if (isRealStopEnabled()) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10_000);
-    runSlashCommandViaEdge(agentId, "/stop", controller.signal)
+    enviarComando(agentId, "/stop", controller.signal)
       .catch((err) => console.warn("[chat-sender] /stop ao gateway falhou:", err?.message))
       .finally(() => clearTimeout(timer));
   }
@@ -580,11 +580,6 @@ async function toChatMessages(messages: ChatMessage[], agentId?: string): Promis
 }
 
 
-interface ExtractedReply {
-  text: string;
-  media?: MediaAttachment[];
-}
-
 /**
  * Convention separator that splits a single completion into multiple
  * chat bubbles. Emitted by the stream reader whenever the gateway signals
@@ -603,326 +598,25 @@ export function splitIntoMessages(text: string): string[] {
   return parts.length > 0 ? parts : [text.trim()].filter(Boolean);
 }
 
-function extractImagesFromPayload(data: any): MediaAttachment[] | undefined {
-  const images: MediaAttachment[] = [];
 
-  // Format: data.images (array of {url, base64, b64_json, mime_type})
-  const topImages = data?.images;
-  if (Array.isArray(topImages)) {
-    for (const img of topImages) {
-      const src = img.url || img.b64_json || img.base64;
-      if (!src) continue;
-      images.push({
-        type: "image",
-        url: src.startsWith("http") ? src : undefined,
-        base64: src.startsWith("http") ? undefined : src,
-        mimeType: img.mime_type || "image/png",
-        name: img.name || "generated-image.png",
-      });
-    }
-  }
-
-  // Format: choices[0].message.images
-  const choiceImages = data?.choices?.[0]?.message?.images;
-  if (Array.isArray(choiceImages)) {
-    for (const img of choiceImages) {
-      const src = img.url || img.b64_json || img.base64;
-      if (!src) continue;
-      images.push({
-        type: "image",
-        url: src.startsWith("http") ? src : undefined,
-        base64: src.startsWith("http") ? undefined : src,
-        mimeType: img.mime_type || "image/png",
-        name: img.name || "generated-image.png",
-      });
-    }
-  }
-
-  // Format: output[].content[].image (inline_data)
-  if (Array.isArray(data?.output)) {
-    for (const item of data.output) {
-      if (Array.isArray(item?.content)) {
-        for (const part of item.content) {
-          if (part?.type === "image" && part?.image) {
-            const src = part.image.url || part.image.b64_json || part.image.base64;
-            if (src) {
-              images.push({
-                type: "image",
-                url: src.startsWith("http") ? src : undefined,
-                base64: src.startsWith("http") ? undefined : src,
-                mimeType: part.image.mime_type || "image/png",
-                name: "generated-image.png",
-              });
-            }
-          }
-          // inline_data format (Gemini)
-          if (part?.inline_data?.data && part?.inline_data?.mime_type?.startsWith("image/")) {
-            images.push({
-              type: "image",
-              base64: part.inline_data.data,
-              mimeType: part.inline_data.mime_type,
-              name: "generated-image.png",
-            });
-          }
-        }
-      }
-    }
-  }
-
-  // Format: choices[0].message.content as array with inline_data parts
-  const choiceContent = data?.choices?.[0]?.message?.content;
-  if (Array.isArray(choiceContent)) {
-    for (const part of choiceContent) {
-      if (part?.inline_data?.data && part?.inline_data?.mime_type?.startsWith("image/")) {
-        images.push({
-          type: "image",
-          base64: part.inline_data.data,
-          mimeType: part.inline_data.mime_type,
-          name: "generated-image.png",
-        });
-      }
-    }
-  }
-
-  return images.length > 0 ? images : undefined;
-}
-
-function extractResponsesReply(data: any): ExtractedReply {
-  const media = extractImagesFromPayload(data);
-  
-  let text = "";
-  if (Array.isArray(data?.output)) {
-    for (const item of data.output) {
-      if (item.type === "message" && item.role === "assistant") {
-        if (typeof item.content === "string") { text = item.content; break; }
-        if (Array.isArray(item.content)) {
-          const texts = item.content
-            .filter((c: any) => c.type === "output_text" || c.type === "text")
-            .map((c: any) => c.text)
-            .filter(Boolean);
-          if (texts.length > 0) { text = texts.join("\n"); break; }
-        }
-      }
-    }
-  }
-  if (!text && typeof data?.output_text === "string") text = data.output_text;
-  if (!text && typeof data?.content === "string") text = data.content;
-  
-  // For choices format, extract text
-  if (!text && Array.isArray(data?.choices)) {
-    const content = data.choices[0]?.message?.content;
-    if (typeof content === "string") text = content;
-    else if (Array.isArray(content)) {
-      text = content
-        .filter((p: any) => p.type === "text" || typeof p.text === "string")
-        .map((p: any) => p.text)
-        .filter(Boolean)
-        .join("\n");
-    }
-  }
-  
-  // Don't fabricate a placeholder "Sem resposta do agente." text — that gets
-  // persisted as a real reply and hides the fact that the agent is still
-  // working. Empty payloads are routed to the extended-polling path instead.
-  return { text: text ?? "", media };
-}
-
-/* ── OpenClaw preview line detection ── */
-
-const OPENCLAW_PREVIEW_PATTERNS = [
-  /pesquisando/i,
-  /buscando/i,
-  /\blendo\b/i,
-  /executando/i,
-  /chamando/i,
-  /acessando/i,
-  /processando/i,
-  /analisando/i,
-  /consultando/i,
-  /searching/i,
-  /reading/i,
-  /running/i,
-  /fetching/i,
-  /calling/i,
-  /thinking/i,
-];
-
-function isOpenClawPreviewChunk(text: string): boolean {
-  const trimmed = text.trim();
-  if (!trimmed || trimmed.length > 120) return false;
-  // Markdown / code fences / lists are real content
-  if (/[`{}<>]/.test(trimmed)) return false;
-  if (trimmed.includes("\n\n")) return false;
-  return OPENCLAW_PREVIEW_PATTERNS.some((p) => p.test(trimmed));
-}
-
-/* ── Gateway error detection ── */
-
-const GATEWAY_ERROR_PATTERNS = [
-  "temporarily overloaded",
-  "service is temporarily",
-  "rate limit",
-  "server is overloaded",
-  "too many requests",
-  "503 service unavailable",
-  "502 bad gateway",
-];
-
-function isGatewayOverloadError(text: string): boolean {
-  const lower = text.toLowerCase();
-  return GATEWAY_ERROR_PATTERNS.some((p) => lower.includes(p));
-}
-
-/* ── Context overflow auto-reset ── */
-
-const CONTEXT_OVERFLOW_PATTERNS = [
-  "context overflow",
-  "prompt too large",
-  "context length",
-  "context window",
-  "maximum context",
-  "token limit",
-  "too many tokens",
-  "request too large",
-  "input too long",
-  "context_length_exceeded",
-];
-
-function isContextOverflowError(text: string): boolean {
-  if (!text) return false;
-  const lower = text.toLowerCase();
-  return CONTEXT_OVERFLOW_PATTERNS.some((p) => lower.includes(p));
-}
 
 /**
- * Feature flag (A1 — fim do falso-positivo de overflow): quando ligada, para
- * de checar essas palavras-chave dentro de RESPOSTAS BEM-SUCEDIDAS do agente
- * (reply.text). Hoje, se o agente só MENCIONA "context window"/"rate limit"
- * numa resposta normal (ex.: debugando um problema de tokens), a sessão é
- * resetada no meio do trabalho — foi o gatilho do rabbit hole do incidente
- * original. A checagem sobre ERROS DE VERDADE (exceção lançada, err.message)
- * continua ativa sempre — é legítima e agora reforçada pelo A3 (erro
- * estruturado do gateway). Testar: localStorage.setItem(
- * 'dnos_flag_fix_overflow_falsepositive','on'). OFF = comportamento atual.
+ * Comando de barra (`/stop`, `/new`, `/compact`) para a sessão do agente.
+ *
+ * O backend não espera a resposta do gateway e nem nós: o `/stop` só serve se
+ * chegar depressa, e o efeito aparece na conversa, não no retorno.
  */
-function isOverflowFalsePositiveFixEnabled(): boolean {
-  try {
-    return localStorage.getItem("dnos_flag_fix_overflow_falsepositive") === "on";
-  } catch {
-    return false;
-  }
+async function enviarComando(agentId: string, comando: string, signal: AbortSignal): Promise<void> {
+  await api(`/conversations/${encodeURIComponent(agentId)}/comando`, {
+    method: "POST",
+    body: { comando },
+    signal,
+  });
 }
-
-/* ── Empty / placeholder reply detection ── */
-
-const EMPTY_REPLY_PATTERNS = [
-  "sem resposta do agente",
-  "no response from openclaw",
-  "no response from",
-];
-
-function isEmptyReply(reply: ExtractedReply | undefined): boolean {
-  if (!reply) return true;
-  const txt = (reply.text ?? "").replace(/\s+/g, " ").trim().toLowerCase();
-  const hasMedia = Array.isArray(reply.media) && reply.media.length > 0;
-  if (!txt) return !hasMedia;
-  if (hasMedia) return false;
-  return EMPTY_REPLY_PATTERNS.some((p) => txt === p || txt === `${p}.`);
-}
-
-/**
- * Attempt to reset the agent session at the gateway.
- * Best-effort: if the endpoint isn't available, we still proceed —
- * the next request will start a fresh session-id naturally.
- */
-async function resetAgentSession(agentId: string): Promise<void> {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-    const url = `${supabaseUrl}/functions/v1/gateway-chat`;
-
-    await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session?.access_token || anonKey}`,
-        apikey: anonKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ action: "reset_session", agentId }),
-    }).catch((err) => {
-      console.warn("[chat-sender] Session reset endpoint unavailable:", err?.message);
-    });
-  } catch (err) {
-    console.warn("[chat-sender] resetAgentSession failed:", err);
-  }
-}
-
-async function runSlashCommandViaEdge(agentId: string, commandText: string, signal: AbortSignal): Promise<string> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const accessToken = session?.access_token;
-  if (!accessToken) throw new Error("Sessão expirada. Recarregue a página e faça login novamente.");
-  const canonicalAgentId = toCanonicalAgentId(agentId);
-  const sessionUser = session.user?.id ? buildSessionUser(session.user.id, canonicalAgentId) : undefined;
-
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-  const url = `${supabaseUrl}/functions/v1/gateway-chat`;
-
-  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          apikey: anonKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ action: "command_session", agentId: canonicalAgentId, commandText, sessionUser }),
-        signal,
-      });
-
-      const raw = await res.text().catch(() => "");
-      let json: any = null;
-      try {
-        json = raw ? JSON.parse(raw) : null;
-      } catch {
-        json = null;
-      }
-
-      if (!res.ok) {
-        throw new Error(json?.error || raw || `Backend respondeu ${res.status}`);
-      }
-      if (json?.ok === false) {
-        if (isResetCommand(commandText)) {
-          // Reset commands succeed on the gateway even when the ack fails/aborts
-          return "Nova sessão iniciada.";
-        }
-        return `Comando falhou: ${json.error || json.raw || "gateway indisponível"}`;
-      }
-
-      const data = json?.data;
-      return data?.text || data?.message || data?.reply || json?.raw || `✅ Comando ${commandText} executado.`;
-    } catch (err: any) {
-      lastError = err;
-      const transient = err?.name === "AbortError" || err instanceof TypeError || /failed to fetch|network|timeout/i.test(String(err?.message ?? ""));
-      if (!transient || attempt === 2 || signal.aborted) break;
-      await wait(750 * (attempt + 1));
-    }
-  }
-
-  const message = lastError instanceof Error ? lastError.message : String(lastError ?? "Erro desconhecido");
-  throw new Error(/failed to fetch/i.test(message) ? "Falha de comunicação com o backend do comando. Tente novamente." : message);
-}
-
 
 /* ── Pending requests tracker ── */
 
 const pendingAgents = new Set<string>();
-const contextResetInFlight = new Set<string>();
 
 export function isAgentPending(agentId: string) {
   return pendingAgents.has(agentId);
@@ -940,189 +634,6 @@ function emitPending() {
 
 const MAX_HISTORY = 30;
 
-function limitHistory(messages: ChatMessage[]): ChatMessage[] {
-  if (messages.length <= MAX_HISTORY) return messages;
-  return messages.slice(-MAX_HISTORY);
-}
-
-/* ── SSE Stream reader ── */
-
-async function streamFromEdgeFunction(
-  body: any,
-  agentId: string,
-  controller: AbortController,
-  timeoutMs: number,
-  accumulatedRef?: { current: string },
-  onFirstToken?: () => void,
-): Promise<ExtractedReply> {
-  const tid = setTimeout(() => controller.abort("stream-timeout"), timeoutMs);
-
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-    const url = `${supabaseUrl}/functions/v1/gateway-chat`;
-
-    console.log('[chat-sender] Chamando edge function proxy para stream');
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${session?.access_token || anonKey}`,
-        apikey: anonKey,
-        "Content-Type": "application/json",
-        Accept: "text/event-stream",
-      },
-      body: JSON.stringify({ ...body, stream: true }),
-      signal: controller.signal,
-    });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.error('[chat-sender] Edge function stream erro:', res.status, errText);
-      throw new Error(`Erro ${res.status}: ${errText}`);
-    }
-
-    // A3 (flag): o gateway-chat devolve erro como HTTP 200 + JSON {error, detail}.
-    // Se o Content-Type não é event-stream, é um erro disfarçado — extrai o motivo
-    // real e lança um erro DEFINITIVO, em vez de tentar ler como stream (o que
-    // levava ao STREAM_EMPTY → poll de 15 min mostrando "trabalhando…").
-    if (isStructuredErrorsEnabled()) {
-      const contentType = res.headers.get("content-type") || "";
-      if (!contentType.includes("text/event-stream")) {
-        const errBody = await res.json().catch(() => null);
-        const detail = errBody?.detail || errBody?.error || "Falha do gateway";
-        const gatewayErr: any = new Error(String(detail));
-        gatewayErr.gatewayError = true; // erro definitivo — não faz fallback/poll
-        throw gatewayErr;
-      }
-    }
-
-    const reader = res.body?.getReader();
-    if (!reader) throw new Error("Stream não suportado pelo navegador");
-
-    const decoder = new TextDecoder();
-    let accumulated = "";
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const data = line.slice(6).trim();
-          if (data === "[DONE]") continue;
-
-          try {
-            const parsed = JSON.parse(data);
-
-            // Detect tool_use / tool_calls events
-            if (parsed?.type === "tool_use" || parsed?.tool_calls || parsed?.choices?.[0]?.delta?.tool_calls) {
-              const toolCalls = parsed.tool_calls || parsed?.choices?.[0]?.delta?.tool_calls || [parsed];
-              for (const tc of (Array.isArray(toolCalls) ? toolCalls : [toolCalls])) {
-                const toolName = tc.name || tc.function?.name || tc.type || "tool";
-                const toolId = tc.id || `tool-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
-                let parsedArgs: Record<string, unknown> | undefined = tc.input;
-                if (!parsedArgs && tc.function?.arguments) {
-                  try { parsedArgs = JSON.parse(tc.function.arguments); } catch { parsedArgs = undefined; }
-                }
-                let desc = toolName;
-                if (parsedArgs?.path) desc = `${toolName}: ${parsedArgs.path}`;
-                else if (parsedArgs?.query) desc = `${toolName}: "${parsedArgs.query}"`;
-                const lname = String(toolName).toLowerCase();
-                const actType: ActivityItem["type"] =
-                  /search|web|perplexity|fetch|url|browse/.test(lname) ? "search" :
-                  /read|file|memory|workspace|document/.test(lname) ? "read_file" :
-                  /code|execute|run|bash|python/.test(lname) ? "executing" :
-                  /api|http|request|post|call/.test(lname) ? "calling" :
-                  "tool_use";
-                emitActivity(agentId, { id: toolId, type: actType, description: desc, status: "running", timestamp: Date.now() });
-
-              }
-            }
-
-            // Detect tool results (mark as done)
-            if (parsed?.type === "tool_result" && parsed?.tool_use_id) {
-              emitActivity(agentId, { id: parsed.tool_use_id, type: "tool_use", description: "", status: "done", timestamp: Date.now() });
-            }
-
-
-
-            let chunk: string | undefined;
-            if (typeof parsed?.delta === "string") chunk = parsed.delta;
-            else if (typeof parsed?.delta?.content === "string") chunk = parsed.delta.content;
-            else if (typeof parsed?.choices?.[0]?.delta?.content === "string") chunk = parsed.choices[0].delta.content;
-            else if (typeof parsed?.text === "string") chunk = parsed.text;
-            else if (typeof parsed?.content === "string") chunk = parsed.content;
-
-            // Multi-message support: when the gateway signals end-of-message
-            // mid-stream (finish_reason: stop / end_turn) and more content
-            // arrives afterwards, insert MSG_BREAK_TOKEN so the final text
-            // splits into multiple bubbles.
-            const finishReason =
-              parsed?.choices?.[0]?.finish_reason ||
-              parsed?.finish_reason ||
-              parsed?.stop_reason;
-            const isFinish = typeof finishReason === "string" && /stop|end_turn|complete/i.test(finishReason);
-            if (isFinish && accumulated && !accumulated.endsWith(MSG_BREAK_TOKEN)) {
-              accumulated += `\n${MSG_BREAK_TOKEN}\n`;
-              if (accumulatedRef) accumulatedRef.current = accumulated;
-            }
-
-            if (chunk) {
-              // Detect OpenClaw preview lines (status hints) before real content starts.
-              // These should appear in the activity indicator, NOT in the message text.
-              if (!accumulated && isOpenClawPreviewChunk(chunk)) {
-                emitActivity(agentId, {
-                  id: "preview",
-                  type: "preview",
-                  description: chunk.trim().replace(/^[\s>•\-*]+/, "").slice(0, 120),
-                  status: "running",
-                  timestamp: Date.now(),
-                });
-                continue;
-              }
-              if (!accumulated) { emitStream(agentId, ""); onFirstToken?.(); }
-              accumulated += chunk;
-              if (accumulatedRef) accumulatedRef.current = accumulated;
-              emitStream(agentId, accumulated);
-            }
-          } catch {
-            if (data && data !== "[DONE]") {
-              accumulated += data;
-              if (accumulatedRef) accumulatedRef.current = accumulated;
-              emitStream(agentId, accumulated);
-            }
-          }
-        }
-      }
-    }
-
-    if (accumulated) {
-      // Strip a trailing dangling break (last message had no content after stop)
-      const cleaned = accumulated.replace(/(\s*\[\[MSG_BREAK\]\]\s*)+$/g, "").trim();
-      return { text: cleaned };
-    }
-
-    try {
-      const fullText = decoder.decode();
-      if (fullText) {
-        const json = JSON.parse(fullText);
-        return extractResponsesReply(json);
-      }
-    } catch { /* ignore */ }
-
-    throw new Error("STREAM_EMPTY");
-  } finally {
-    clearTimeout(tid);
-  }
-}
 
 /* ── Polling for background reply ── */
 
