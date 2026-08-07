@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     # Uploads — substitui supabase.storage. Em produção, volume persistente.
     UPLOADS_DIR: str = "/app/uploads"
 
+    # Web Push. O par é gerado localmente e não custa nada; sem ele o envio
+    # responde 503 e a tela não oferece notificação.
+    VAPID_PUBLIC_KEY: str = ""
+    VAPID_PRIVATE_KEY: str = ""
+    VAPID_SUBJECT: str = ""
+
     # OpenClaw Gateway (VPS). O token NUNCA vai para o browser: toda chamada
     # ao gateway passa por este backend. Fallback para a tabela vps_config,
     # como já fazia a edge function _shared/gateway-config.ts.
