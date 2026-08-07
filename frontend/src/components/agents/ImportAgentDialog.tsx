@@ -130,11 +130,9 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
       const agentId = dnos.agent.agent_id;
 
       if (!force) {
-        const { data: existing } = await supabase
-          .from("agent_profiles")
-          .select("agent_id")
-          .eq("agent_id", agentId)
-          .maybeSingle();
+        const existing = await api<any>(
+          `/agents/${encodeURIComponent(agentId)}`,
+        ).then(() => true, () => false);
 
         if (existing) {
           setImporting(false);
@@ -228,14 +226,14 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
       }
 
       // 4. Patch profile with role/department/color (create-agent doesn't set these)
-      await (supabase as any)
-        .from("agent_profiles")
-        .update({
+      await api(`/agents/${encodeURIComponent(agentId)}`, {
+        method: "PATCH",
+        body: {
           role: dnos.agent.role ?? null,
           department: dnos.agent.department ?? null,
           color: dnos.agent.color ?? null,
-        })
-        .eq("agent_id", agentId);
+        },
+      }).catch(() => { /* o agente já foi criado; o cargo é acabamento */ });
 
       toast.success(`${dnos.agent.name} importado com sucesso.`);
       onImported?.(agentId);

@@ -322,12 +322,10 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
     if (!open) return;
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
-        .from("agent_profiles")
-        .select("agent_id, openclaw_id, name");
+      const data = await api<any[]>("/agents").catch(() => []);
       if (cancelled) return;
       const agents = (data ?? []).map((row: any) => ({
-        id: String(row.openclaw_id ?? row.agent_id ?? "").trim().toLowerCase(),
+        id: String(row.openclawId ?? row.id ?? "").trim().toLowerCase(),
         name: String(row.name ?? "").trim().toLowerCase(),
       })).filter((a) => a.id || a.name);
       setExistingAgents(agents);
@@ -342,16 +340,13 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
     if (!open || step !== 8 || leaderOptions.length > 0) return;
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
-        .from("agent_profiles")
-        .select("agent_id, name, emoji, is_leader")
-        .order("name", { ascending: true });
+      const data = await api<any[]>("/agents").catch(() => null);
       if (cancelled || !data) return;
-      const opts: LeaderOption[] = (data as any[])
-        .filter((a) => a.agent_id !== agentId)
+      const opts: LeaderOption[] = data
+        .filter((a) => a.id !== agentId)
         .map((a) => ({
-          agent_id: a.agent_id,
-          name: a.name ?? a.agent_id,
+          agent_id: a.id,
+          name: a.name ?? a.id,
           emoji: a.emoji ?? "🤖",
           is_leader: !!a.is_leader,
         }));
@@ -438,12 +433,10 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
     if (!ID_RE.test(agentId)) return;
     setCheckingId(true);
     setIdExists(false);
-    const { data } = await supabase
-      .from("agent_profiles")
-      .select("agent_id, openclaw_id")
-      .or(`openclaw_id.eq.${agentId},agent_id.eq.${agentId}`)
-      .maybeSingle();
-    setIdExists(!!data);
+    // Confere pelos dois ids: o agente pode estar gravado pelo `openclaw_id`
+    // ou pelo `agent_id`, e as duas formas convivem por herança.
+    const todos = await api<any[]>("/agents").catch(() => []);
+    setIdExists(todos.some((a) => a.id === agentId || a.openclawId === agentId));
     setCheckingId(false);
   }
 

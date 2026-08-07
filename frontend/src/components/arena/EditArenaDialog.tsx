@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -111,11 +112,9 @@ export default function EditArenaDialog({ arena, agents, open, onOpenChange, onS
         } | null = null;
 
         if (primary) {
-          const { data } = await supabase
-            .from("agent_profiles")
-            .select("name, role, persona_description, behavior, tts_voice_id")
-            .eq("agent_id", primary.agent_id)
-            .maybeSingle();
+          const data = await api<any>(
+            `/agents/${encodeURIComponent(primary.agent_id)}`,
+          ).catch(() => null);
           profile = data ?? null;
         }
 

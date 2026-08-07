@@ -68,6 +68,9 @@ class AgenteOut(BaseModel):
     profileStatus: str = "active"
     isOfficial: bool = False
     color: str | None = None
+    # Ordem de exibição no catálogo. Sai do banco porque a ordem é curadoria —
+    # ordenar por nome faria o líder aparecer no meio da lista.
+    sortOrder: int | None = None
 
 
 class ListaAgentesOut(BaseModel):
@@ -191,6 +194,7 @@ async def listar(
                 lastActive=p.get("last_active"),
                 profileStatus=p.get("status") or "active",
                 isOfficial=bool(p.get("is_official")),
+                sortOrder=p.get("sort_order"),
                 color=p.get("color"),
             )
         )
@@ -375,6 +379,13 @@ class PerfilAgentePatch(BaseModel):
     crons_description: str | None = None
     leader_id: str | None = None
     status: str | None = None
+    # `role` é o cargo do agente ("SDR", "analista"), distinto do papel de acesso.
+    # Vem da importação de agente, que traz o cargo junto com o resto do perfil.
+    role: str | None = Field(default=None, max_length=200)
+    # Voz do agente na Arena. Fica no perfil e não numa tabela à parte porque é
+    # um atributo dele, não uma configuração da tela.
+    tts_voice_id: str | None = Field(default=None, max_length=120)
+    tts_voice_name: str | None = Field(default=None, max_length=200)
 
 
 _ACESSOS = {"all", "admins_only", "specific_users"}
@@ -685,7 +696,7 @@ async def atualizar(
             """
             SELECT agent_id, name, emoji, avatar_url, model, channels, status,
                    department, description, specialty, workspace,
-                   is_leader, leader_id, is_official, color
+                   is_leader, leader_id, is_official, color, sort_order
             FROM public.agent_profiles WHERE agent_id = $1
             """,
             agent_id,
@@ -738,6 +749,7 @@ async def atualizar(
         isLeader=bool(d.get("is_leader")),
         leaderId=d.get("leader_id"),
         isOfficial=bool(d.get("is_official")),
+        sortOrder=d.get("sort_order"),
         color=d.get("color"),
     )
 

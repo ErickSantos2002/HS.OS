@@ -77,13 +77,13 @@ export async function getVoiceForAgent(agentId: string): Promise<VoiceConfig> {
 export async function setVoiceForAgent(agentId: string, config: VoiceConfig) {
   const short = stripPrefix(agentId);
 
-  // Primary write target: agent_profiles
-  await supabase
-    .from("agent_profiles")
-    .upsert(
-      { agent_id: short, tts_voice_id: config.voiceId, tts_voice_name: config.voiceName },
-      { onConflict: "agent_id" }
-    );
+  // A voz é atributo do perfil do agente, então vai pelo PATCH dele. Era um
+  // upsert, mas o agente sempre existe quando se escolhe a voz dele — criar
+  // uma linha aqui esconderia um id errado em vez de falhar.
+  await api(`/agents/${encodeURIComponent(short)}`, {
+    method: "PATCH",
+    body: { tts_voice_id: config.voiceId, tts_voice_name: config.voiceName },
+  });
 
   // Keep legacy map in sync so other readers stay consistent until fully migrated
   const map = await loadVoiceMap();

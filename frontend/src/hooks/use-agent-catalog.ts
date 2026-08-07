@@ -6,6 +6,7 @@
  * the React Query cache; realtime changes on `agent_profiles` invalidate.
  */
 
+import { api } from "@/lib/api";
 import { assinarTabela } from "@/lib/realtime";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,20 +20,16 @@ import {
 const QUERY_KEY = ["agent-catalog"] as const;
 
 async function fetchCatalog(): Promise<AgentCatalogEntry[]> {
-  const { data, error } = await supabase
-    .from("agent_profiles")
-    .select("agent_id, name, emoji, color, is_leader, sort_order")
-    .eq("is_official", true);
+  const todos = await api<any[]>("/agents");
+  const data = (todos ?? []).filter((a) => a.isOfficial);
 
-  if (error) throw error;
-
-  return (data ?? []).map((row: any) => ({
-    id: String(row.agent_id ?? ""),
+  return data.map((row: any) => ({
+    id: String(row.id ?? ""),
     name: row.name ?? "",
     emoji: row.emoji ?? null,
     color: row.color ?? null,
-    isLeader: !!row.is_leader,
-    sortOrder: row.sort_order ?? null,
+    isLeader: !!row.isLeader,
+    sortOrder: row.sortOrder ?? null,
   })).filter((e) => e.id);
 }
 

@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -214,11 +215,9 @@ export default function ArenaCreatePage() {
         } | null = null;
 
         if (primaryAgentId) {
-          const { data: profile } = await supabase
-            .from("agent_profiles")
-            .select("name, role, persona_description, behavior, tts_voice_id")
-            .eq("agent_id", primaryAgentId)
-            .maybeSingle();
+          const profile = await api<any>(
+            `/agents/${encodeURIComponent(primaryAgentId)}`,
+          ).catch(() => null);
           agentProfile = profile ?? null;
         }
 
