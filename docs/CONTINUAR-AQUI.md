@@ -21,7 +21,7 @@ Tudo abaixo está verificado **no navegador**, não só por endpoint:
 
 ## Placar
 
-**69 de 73** edge functions resolvidas · **16** ainda na pasta ·
+**70 de 73** edge functions resolvidas · **15** ainda na pasta ·
 **20 de 113** arquivos do front sem Supabase.
 
 O `ls backend/supabase/functions | grep -v _shared | wc -l` agora é a medida

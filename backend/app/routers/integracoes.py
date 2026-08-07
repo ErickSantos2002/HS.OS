@@ -14,13 +14,14 @@ import os
 import re
 
 import httpx
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, exige_papel
+from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.integracoes import exige_segredo, ler_segredo
 from app.realtime import hub, topico_usuario
 
@@ -798,3 +799,285 @@ async def onboarding_empresa(usuario: Usuario = Depends(exige_papel("super_admin
         )
     logger.info("Onboarding da empresa disparado por %s", usuario.id)
     return {"dispatched": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Chamar a API de uma integração — portado de `invoke-integration`
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# É o backend do `window.dnos.invoke()` que os live artifacts usam. A regra que
+# sustenta tudo: **a credencial nunca chega ao navegador.** O artefato pede
+# "integração meta, endpoint insights" e recebe só o resultado.
+
+# Playbook mínimo para quando `integration_templates` ainda não tem a linha.
+# Existe porque a Meta é a integração que já estava em uso quando o template
+# virou tabela — sem isto, uma instalação nova responderia "playbook não
+# encontrado" para algo que sempre funcionou.
+_PLAYBOOKS_PADRAO: dict[str, dict] = {
+    "meta": {
+        "base_url": "https://graph.facebook.com/v20.0",
+        "data_endpoints": {
+            "insights": {"method": "GET", "path": "/{account_id}/insights"},
+            "campaigns": {"method": "GET", "path": "/{account_id}/campaigns"},
+        },
+    },
+}
+
+
+def _tipo_canonico(linha) -> str:
+    """Reduz as várias formas de dizer "Meta" a uma só.
+
+    As linhas de `integrations` foram criadas em épocas diferentes e a Meta
+    aparece ora como `integration_type`, ora só no nome, ora como
+    `prisma_user_token` no `key_name`. Comparar só o `integration_type` fazia a
+    integração já conectada parecer ausente.
+    """
+    tipo = str(linha["integration_type"] or "").lower()
+    nome = str(linha["name"] or "").lower()
+    chave = str(linha["key_name"] or "").lower()
+    if tipo == "meta" or "meta" in nome or "meta" in chave or "prisma_user_token" in chave:
+        return "meta"
+    return tipo
+
+
+def _token_da_integracao(credenciais, key_name: str | None) -> str | None:
+    """Acha o token, aceitando os dois formatos que convivem na tabela.
+
+    `credentials` é ora um objeto `{access_token: ...}`, ora uma lista de pares
+    `{key_name, value}` — as telas de integração gravaram das duas formas ao
+    longo do tempo. A variável de ambiente é o último recurso, para credencial
+    que nunca foi para o banco.
+    """
+    if isinstance(credenciais, str):
+        try:
+            credenciais = json.loads(credenciais)
+        except ValueError:
+            credenciais = None
+
+    if isinstance(credenciais, list):
+        def pegar(nome: str):
+            for c in credenciais:
+                if str(c.get("key_name") or c.get("key") or "").lower() == nome:
+                    return c.get("value")
+            return None
+        token = pegar("access_token") or pegar("token") or pegar("api_key")
+        if not token and credenciais:
+            token = credenciais[0].get("value")
+        if token:
+            return str(token)
+    elif isinstance(credenciais, dict):
+        for campo in ("access_token", "token", "api_key"):
+            if credenciais.get(campo):
+                return str(credenciais[campo])
+
+    return os.environ.get(key_name or "") or None
+
+
+async def _conta_de_anuncio_meta(token: str) -> str | None:
+    """Descobre a conta de anúncios quando o chamador não informa.
+
+    A Meta exige `act_<id>` no caminho e o artefato raramente sabe o número.
+    Perguntar à própria API é mais confiável que pedir a quem escreve o prompt.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=20) as cliente:
+            r = await cliente.get(
+                "https://graph.facebook.com/v20.0/me/adaccounts",
+                params={"fields": "id,account_id,name,account_status", "limit": 1},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+        if r.status_code != 200:
+            return None
+        primeiro = (r.json().get("data") or [None])[0]
+    except (httpx.HTTPError, ValueError):
+        return None
+    ident = (primeiro or {}).get("id") or (primeiro or {}).get("account_id")
+    if not ident:
+        return None
+    return str(ident) if str(ident).startswith("act_") else f"act_{ident}"
+
+
+class ChamadaIn(BaseModel):
+    integration: str = Field(min_length=1)
+    endpoint: str = Field(min_length=1)
+    params: dict = {}
+
+
+def _recusa(mensagem: str, codigo: str) -> dict:
+    """Erro esperado, devolvido com HTTP 200.
+
+    Não é descuido: quem chama é um live artifact rodando dentro do navegador
+    da pessoa, e um 4xx aqui vira erro vermelho no console para uma situação
+    normal — "essa integração ainda não foi conectada". O artefato lê o `code`.
+    """
+    return {"ok": False, "error": mensagem, "code": codigo}
+
+
+@router.post("/invocar")
+async def invocar(dados: ChamadaIn, usuario: Usuario = Depends(usuario_atual)):
+    """Chama um endpoint do playbook da integração e devolve a resposta crua."""
+    pedida = dados.integration.strip().lower()
+
+    async with sessao(role="service_role") as conn:
+        # Limite por pessoa. A integração gasta cota e dinheiro da empresa, e
+        # qualquer usuário logado dispara via artefato. Falha do limitador
+        # **libera** a chamada: derrubar uso legítimo por erro do contador é
+        # pior que deixar passar uma rajada.
+        try:
+            liberado = await conn.fetchval(
+                "SELECT public.check_invoke_rate($1::uuid, $2, $3)", usuario.id, 100, 60
+            )
+            if liberado is False:
+                return _recusa(
+                    "Muitas chamadas de integração em pouco tempo. Aguarde um instante.",
+                    "rate_limited",
+                )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Limitador de integração indisponível: %s", e)
+
+        linhas = await conn.fetch(
+            "SELECT name, key_name, integration_type, credentials FROM public.integrations "
+            " WHERE is_configured = true ORDER BY updated_at DESC"
+        )
+        linha = next((l for l in linhas if _tipo_canonico(l) == pedida), None)
+        if linha is None:
+            return _recusa(
+                f"Integração '{dados.integration}' não configurada.",
+                "integration_not_configured",
+            )
+
+        modelo = await conn.fetchval(
+            "SELECT playbook FROM public.integration_templates WHERE integration_type = $1", pedida
+        )
+
+    if isinstance(modelo, str):
+        modelo = json.loads(modelo)
+    playbook = modelo or _PLAYBOOKS_PADRAO.get(pedida)
+    if not playbook:
+        return _recusa(
+            f"Playbook não encontrado para '{dados.integration}'.", "playbook_not_found"
+        )
+
+    destino = (playbook.get("data_endpoints") or {}).get(dados.endpoint)
+    if not destino:
+        return _recusa(
+            f"Endpoint '{dados.endpoint}' não existe no playbook de '{dados.integration}'.",
+            "endpoint_not_found",
+        )
+
+    token = _token_da_integracao(linha["credentials"], linha["key_name"])
+    if not token:
+        return _recusa(
+            f"Integração '{dados.integration}' está marcada como configurada, mas não tem "
+            "um token utilizável. Reconecte em Configurações → Integrações.",
+            "integration_token_missing",
+        )
+
+    base = playbook.get("base_url")
+    if not base:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "O playbook desta integração está sem `base_url`.",
+        )
+
+    caminho = destino.get("path") or ""
+    parametros = dict(dados.params)
+
+    if pedida == "meta":
+        parametros = await _ajustar_meta(parametros, caminho, token)
+        if not parametros.get("account_id") and "{account_id}" in caminho:
+            return _recusa("account_id ausente para consulta Meta.", "missing_account_id")
+
+    consulta: dict[str, str] = {}
+    for chave, valor in parametros.items():
+        if valor is None:
+            continue
+        if f"{{{chave}}}" in caminho:
+            caminho = caminho.replace(f"{{{chave}}}", quote(str(valor), safe=""))
+        elif chave == "filtering":
+            consulta[chave] = json.dumps(_como_lista(valor))
+        elif isinstance(valor, (list, dict)):
+            consulta[chave] = json.dumps(valor)
+        else:
+            consulta[chave] = str(valor)
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as cliente:
+            r = await cliente.request(
+                destino.get("method") or "GET",
+                f"{base}{caminho}",
+                params=consulta,
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            )
+    except httpx.HTTPError as e:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"A API de '{dados.integration}' não respondeu: {e}"
+        )
+
+    try:
+        corpo = r.json()
+    except ValueError:
+        corpo = r.text
+
+    if r.status_code >= 400:
+        # O corpo do upstream vai junto: sem ele, "erro 400 da Meta" não diz
+        # qual parâmetro estava errado, e o artefato não tem como se corrigir.
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            {"error": f"A API respondeu {r.status_code}.", "upstream": corpo},
+        )
+
+    logger.info("Integração %s/%s chamada por %s", pedida, dados.endpoint, usuario.id)
+    return {"success": True, "data": corpo}
+
+
+def _como_lista(valor) -> list:
+    """A Meta recusa `filtering` que não seja array JSON.
+
+    Quem escreve o artefato manda um objeto ou uma string com frequência, e o
+    erro que volta — "(#100) param filtering must be an array" — não ajuda em
+    nada. Normalizar aqui é mais barato que ensinar a regra ao agente.
+    """
+    if isinstance(valor, list):
+        return valor
+    if isinstance(valor, str):
+        texto = valor.strip()
+        if texto.startswith(("[", "{")):
+            try:
+                lido = json.loads(texto)
+            except ValueError:
+                return [texto]
+            return lido if isinstance(lido, list) else [lido]
+        return [texto]
+    return [valor]
+
+
+async def _ajustar_meta(parametros: dict, caminho: str, token: str) -> dict:
+    """Preenche o que a Meta exige e o chamador costuma esquecer."""
+    if not parametros.get("account_id"):
+        conta = next(
+            (os.environ[v] for v in
+             ("META_AD_ACCOUNT_ID", "META_ACCOUNT_ID", "PRISMA_META_AD_ACCOUNT_ID")
+             if os.environ.get(v)),
+            None,
+        )
+        if conta:
+            parametros["account_id"] = conta if conta.startswith("act_") else f"act_{conta}"
+        else:
+            parametros["account_id"] = await _conta_de_anuncio_meta(token)
+
+    # Insights sem janela de tempo é erro na Meta, e o padrão dela não serve.
+    # 30 dias é o que a tela mostrava antes de existir seletor de período.
+    quer_insights = "insights" in str(parametros.get("fields", "")) or "insights" in caminho
+    intervalo = parametros.get("time_range")
+    tem_intervalo = bool(
+        (isinstance(intervalo, dict) and intervalo.get("since") and intervalo.get("until"))
+        or (isinstance(intervalo, str) and len(intervalo.strip()) > 2)
+    )
+    if quer_insights and not tem_intervalo and not parametros.get("date_preset"):
+        hoje = datetime.now(UTC).date()
+        parametros["time_range"] = {
+            "since": str(hoje - timedelta(days=30)),
+            "until": str(hoje),
+        }
+    return parametros

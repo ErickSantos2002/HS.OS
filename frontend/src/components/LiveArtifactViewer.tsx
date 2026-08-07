@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { useAuthContext } from "@/contexts/auth-context";
 import {
   Zap, X, RefreshCw, Pause, Code as CodeIcon, Link2, Trash2, Save, Loader2, ArrowLeft,
@@ -456,22 +457,25 @@ export default function LiveArtifactViewer({
           return;
         }
         try {
-          const res = await fetch(`${supabaseUrl}/functions/v1/invoke-integration`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${jwt}`,
-              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
-            },
-            body: JSON.stringify({
-              integration: data.integration,
-              endpoint: data.endpoint,
-              params: data.params,
-            }),
-          });
-          const body = await res.json().catch(() => ({}));
-          if (!res.ok || body?.error) {
-            const message = body?.error || `HTTP ${res.status}`;
+          let body: any = {};
+          let falhou = false;
+          try {
+            body = await api<any>("/integracoes/invocar", {
+              method: "POST",
+              body: {
+                integration: data.integration,
+                endpoint: data.endpoint,
+                params: data.params,
+              },
+            });
+          } catch (e: any) {
+            // Integração não conectada volta como 200 com `error` no corpo — é
+            // situação esperada. O que cai aqui é falha de verdade.
+            body = { error: e?.message ?? "Falha ao chamar a integração." };
+            falhou = true;
+          }
+          if (falhou || body?.error) {
+            const message = body?.error || "Falha ao chamar a integração.";
             setDataError(message);
             post({ type: "dnos_invoke_result", id: data.id, error: message });
           } else {
