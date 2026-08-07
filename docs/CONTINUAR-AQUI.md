@@ -15,7 +15,7 @@ na pasta. **Todo número aqui vem de um comando**, e o comando está ao lado.
 |---|---|---|---|
 | Edge functions fora da pasta | **60** | 73 | `73 - $(ls backend/supabase/functions \| grep -v _shared \| wc -l)` |
 | Arquivos do front sem Supabase | **52** | 113 | `113 - $(grep -rl "integrations/supabase/client" frontend/src \| wc -l)` |
-| Rotas na API própria | **120** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
+| Rotas na API própria | **129** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
 
 **Duas linhas têm que andar juntas.** "Tem substituto no backend" e "a tela usa o
 substituto" são coisas diferentes, e confundi-las já deixou telas quebradas em
@@ -34,12 +34,14 @@ diferentes, e o resumo antigo ("Realtime ✅ portado") escondia isso:
 | **Storage** | ✅ `UPLOADS_DIR` em disco | ✅ **completo** | nada |
 | **Realtime** | ✅ WebSocket + LISTEN/NOTIFY (`app/escuta_banco.py`) | ✅ **completo** | nada — `postgres_changes` zerado |
 | **Edge Functions** | 🟡 60 de 73 | ✅ sem pendências | 4 de trabalho real, 9 bloqueadas |
-| **Banco** (RLS direto do browser) | 🟡 ~135 rotas | 🔴 **52 de 113** | ~165 chamadas `.from("…")` |
+| **Banco** (RLS direto do browser) | 🟡 129 rotas | 🔴 **52 de 113** | 124 chamadas `.from("…")` vivas |
 
-O **banco é o subsistema que sobrou quase inteiro** e é o maior dos cinco. O
-Realtime é o segundo: o hub existe e funciona, mas só o `use-channels.ts` o usa.
+O **banco é o único subsistema que ainda pesa.** Os outros quatro estão prontos
+ou perto disso.
 
-### Onde estão as 185 chamadas ao banco
+### Onde estão as 124 chamadas vivas ao banco
+
+(133 no total; 9 estão em `_legado/`, que não está roteado.)
 
 ```
 10 agent_profiles    6 agent_results      5 arena_agents
@@ -104,31 +106,25 @@ parametrizada. Assim a decisão vira configuração, não código.
 
 ## Próximo passo, em ordem de valor
 
-### 1. Realtime — em andamento, 13 arquivos restantes
+### 1. O banco — é o que sobrou
 
-A infraestrutura está **pronta e verificada ao vivo**: trigger → `pg_notify` →
-listener → hub → WebSocket. Oito telas já foram religadas.
+**124 chamadas `.from("…")` vivas.** Eram ~222 no início de 07/08, então já caiu
+quase pela metade — mas é o único subsistema que ainda pesa, e portá-lo é o que
+falta para o front deixar de ser um cliente Supabase com endpoints por cima.
 
-Os 13 que faltam se dividem em dois grupos:
+Portar por **tabela**, não por tela. Foi o que funcionou: uma tabela some do
+front de uma vez, e o endpoint nasce coerente em vez de recortado pela
+necessidade de uma tela só.
 
-- **6 mecânicos** (`use-managed-skills`, `use-channels`, `use-notifications`,
-  `use-agents`, `AgentDetailPanel`, `lib/realtime.ts`) — só refazem a busca
-- **7 que leem `payload.new`/`payload.old`** (`use-agent-activities`,
-  `use-dm-reads`, `use-persistent-draft`, `use-channel-threads`,
-  `AgentActivityFeed`, `chat-sender.ts`, `ChatPage`) — estes precisam **buscar
-  por id**, porque o evento não carrega conteúdo (ver o plano)
+**Comece pelos conectores.** O CRUD já está pronto e testado no backend
+(`GET/POST/PATCH/DELETE /integracoes/conectores` e
+`GET /integracoes/modelos-de-conector`) e o front **não** foi religado — 9
+chamadas em 5 arquivos, sendo `ConnectorsTab` a maior. É trabalho mecânico com o
+servidor já verificado.
 
-⚠️ **`usage_events` ficou de fora dos triggers** — recebe escrita em lote e um
-evento por linha faria tempestade. `use-agents` e `AgentDetailPanel` a observam;
-essas duas perdem o tempo real de consumo e recarregam por outro caminho.
-
-**O plano está em [`docs/PLANO-REALTIME.md`](PLANO-REALTIME.md)** — levantado em
-07/08. Resumo: LISTEN/NOTIFY do Postgres, não publicação nos endpoints, porque
-`postgres_changes` captura mudança no **banco** e hoje escrevem nele também os
-agentes, o coletor da VPS e a ponte de arquivos. E o `pg_notify` carrega só o
-id: quem monta o payload completo é o backend, porque 7 dos 21 arquivos leem
-`payload.new` e o limite de 8000 bytes do NOTIFY não comporta uma mensagem de
-chat.
+Depois, por tamanho: `channel_members` (9) e `channel_messages` (9), que
+compartilham o `channels.py` e boa parte dos endpoints já existe;
+`agent_profiles` (10, metade já saiu); `agent_results` (6).
 
 ### 2. As 4 edge functions de trabalho real
 
@@ -139,18 +135,12 @@ chat.
 | `warroom-feed` | 582 | a parede de TV |
 | `collect-agent-stats` | 552 | webhook do coletor da VPS; **duas formas de payload**, e o payload real não está documentado — conferir antes |
 
-### 3. O banco, tabela a tabela
+### 3. Resíduos de autenticação
 
-Portar por **tabela**, não por tela — foi o que funcionou em 07/08.
-
-**Próximo passo imediato:** o CRUD de conectores já está pronto no backend
-(`GET/POST/PATCH/DELETE /integracoes/conectores` e
-`GET /integracoes/modelos-de-conector`), **mas o front ainda não foi religado**.
-São 9 chamadas em 5 arquivos, sendo `ConnectorsTab` a maior. É trabalho
-mecânico e já testado do lado do servidor.
-
-Depois: `channel_members` (9), `channel_messages` (9), `agent_profiles` (10 —
-metade já saiu).
+11 chamadas a `supabase.auth.` espalhadas, quase todas `getSession()`/`getUser()`
+que já não fazem falta — o token vem do `lib/api`. A exceção é a
+`ResetPasswordPage`, que depende do fluxo de recuperação por e-mail; esse não
+existe mais e o destino dela está em *Decisões pendentes*.
 
 ---
 
