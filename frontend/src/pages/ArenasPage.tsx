@@ -1,10 +1,10 @@
+import { api } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { loadArenas, deleteArena, type Arena } from "@/lib/arena-store";
 import { Plus, Trash2, Swords, ArrowRight, Settings, Mic, MessageSquare } from "lucide-react";
 import EditArenaDialog from "@/components/arena/EditArenaDialog";
-import { supabase } from "@/integrations/supabase/client";
 import type { ArenaAgentRole } from "@/hooks/use-arena-agents";
 
 export default function ArenasPage() {
@@ -34,15 +34,14 @@ export default function ArenasPage() {
   };
 
   const handleOpenEdit = async (arena: Arena) => {
-    const { data, error } = await supabase
-      .from("arena_agents")
-      .select("*")
-      .eq("arena_id", arena.id);
-    if (error) {
-      toast.error(`Erro ao carregar agentes: ${error.message}`);
+    let data: ArenaAgentRole[];
+    try {
+      data = await api<ArenaAgentRole[]>(`/arenas/${arena.id}/agentes`);
+    } catch (e) {
+      toast.error(`Erro ao carregar agentes: ${(e as Error).message}`);
       return;
     }
-    setEditingAgents((data ?? []) as ArenaAgentRole[]);
+    setEditingAgents(data ?? []);
     setEditing(arena);
   };
 

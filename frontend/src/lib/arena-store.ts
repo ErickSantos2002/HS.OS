@@ -1,8 +1,8 @@
+import { api } from "@/lib/api";
 /**
  * Arena persistence layer – Supabase based.
  */
 
-import { supabase } from "@/integrations/supabase/client";
 
 export interface ArenaAgent {
   id: string;
@@ -41,15 +41,13 @@ function rowToArena(row: any): Arena {
 }
 
 export async function loadArenas(): Promise<Arena[]> {
-  const { data, error } = await supabase
-    .from("arenas")
-    .select("*")
-    .order("created_at", { ascending: false });
-  if (error) {
-    console.error("[arena-store] loadArenas:", error.message);
+  try {
+    const data = await api<any[]>("/arenas");
+    return (data ?? []).map(rowToArena);
+  } catch (e) {
+    console.error("[arena-store] loadArenas:", (e as Error).message);
     return [];
   }
-  return (data ?? []).map(rowToArena);
 }
 
 /**
@@ -57,45 +55,48 @@ export async function loadArenas(): Promise<Arena[]> {
  * Retorna { error } para o caller decidir rollback / toast.
  */
 export async function saveArena(arena: Arena): Promise<{ error: Error | null }> {
-  const { data: userData } = await supabase.auth.getUser();
-  const userId = userData.user?.id;
-  if (!userId) return { error: new Error("Usuário não autenticado.") };
-
-  const { error } = await supabase.from("arenas").upsert({
-    id: arena.id,
-    name: arena.name,
-    description: arena.description,
-    emoji: arena.emoji ?? "",
-    agents: arena.agents as any,
-    react_code: arena.reactCode,
-    prompt: arena.prompt,
-    created_at: arena.createdAt,
-    created_by: userId,
-    voice_id: arena.voiceId ?? null,
-    opening_message: arena.openingMessage ?? null,
-    convai_agent_id: arena.convaiAgentId ?? null,
-  } as any);
-
-  if (error) console.error("[arena-store] saveArena:", error.message);
-  return { error: error ? new Error(error.message) : null };
+  // O dono sai do token no backend — mandá-lo no corpo era abrir para gravar
+  // em nome de outra pessoa.
+  try {
+    await api(`/arenas/${arena.id}`, {
+      method: "PUT",
+      body: {
+        id: arena.id,
+        name: arena.name,
+        description: arena.description,
+        emoji: arena.emoji ?? "",
+        agents: arena.agents,
+        react_code: arena.reactCode,
+        prompt: arena.prompt,
+        created_at: arena.createdAt,
+        voice_id: arena.voiceId ?? null,
+        opening_message: arena.openingMessage ?? null,
+        convai_agent_id: arena.convaiAgentId ?? null,
+      },
+    });
+    return { error: null };
+  } catch (e) {
+    console.error("[arena-store] saveArena:", (e as Error).message);
+    return { error: e as Error };
+  }
 }
 
 export async function deleteArena(id: string): Promise<{ error: Error | null }> {
   // FKs têm ON DELETE CASCADE — banco cuida de arena_agents / arena_sessions / arena_messages.
-  const { error } = await supabase.from("arenas").delete().eq("id", id);
-  if (error) console.error("[arena-store] deleteArena:", error.message);
-  return { error: error ? new Error(error.message) : null };
+  try {
+    await api(`/arenas/${id}`, { method: "DELETE" });
+    return { error: null };
+  } catch (e) {
+    console.error("[arena-store] deleteArena:", (e as Error).message);
+    return { error: e as Error };
+  }
 }
 
 export async function getArena(id: string): Promise<Arena | undefined> {
-  const { data, error } = await supabase
-    .from("arenas")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  if (error) {
-    console.error("[arena-store] getArena:", error.message);
+  try {
+    return rowToArena(await api<any>(`/arenas/${id}`));
+  } catch (e) {
+    console.error("[arena-store] getArena:", (e as Error).message);
     return undefined;
   }
-  return data ? rowToArena(data) : undefined;
 }

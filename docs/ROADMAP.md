@@ -14,7 +14,7 @@ backend não é o mesmo que a tela usar o endpoint.
 | | Feito | Total |
 |---|---|---|
 | Edge functions **fora da pasta** | 60 | 73 |
-| Arquivos do front sem Supabase | 46 | 113 |
+| Arquivos do front sem Supabase | 49 | 113 |
 | Functions distintas ainda invocadas pelo front | 13 | — |
 
 > Os números acima são **medidos**, não mantidos à mão — venho incrementando o

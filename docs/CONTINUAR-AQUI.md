@@ -23,7 +23,7 @@ Tudo abaixo está verificado **no navegador**, não só por endpoint:
 
 **60 de 73** edge functions fora da pasta · **13** ainda lá, **9 delas
 bloqueadas** por chave externa (ElevenLabs e Lovable AI Gateway) ·
-**46 de 113** arquivos do front sem Supabase · **13** nomes de function ainda
+**49 de 113** arquivos do front sem Supabase · **13** nomes de function ainda
 invocados pelo front, **e nenhum deles é dívida**: 4 só aparecem em `_legado/`
 (não roteado) e os 9 vivos são exatamente as que faltam portar.
 

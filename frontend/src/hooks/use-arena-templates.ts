@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 export interface ArenaTemplate {
   id: string;
@@ -18,12 +18,11 @@ export function useArenaTemplates() {
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase
-        .from("arena_templates" as any)
-        .select("*")
-        .order("name");
-      if (error) {
-        console.error("[use-arena-templates]:", error.message);
+      let data: any[];
+      try {
+        data = await api<any[]>("/arenas/modelos");
+      } catch (e) {
+        console.error("[use-arena-templates]:", (e as Error).message);
         setTemplates([]);
         setLoading(false);
         return;
