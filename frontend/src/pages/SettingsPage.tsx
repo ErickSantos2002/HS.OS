@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { useSearchParams } from "react-router-dom";
@@ -62,6 +63,7 @@ export default function SettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? "");
   const [profileSaving, setProfileSaving] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -349,13 +351,23 @@ export default function SettingsPage() {
 
   const handleChangePassword = async () => {
     setPasswordError("");
-    if (newPassword.length < 6) { setPasswordError("Mínimo de 6 caracteres."); return; }
+    if (newPassword.length < 8) { setPasswordError("Mínimo de 8 caracteres."); return; }
     if (newPassword !== confirmPassword) { setPasswordError("As senhas não coincidem."); return; }
     setPasswordSaving(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    // A senha atual é exigida: o token fica no navegador, e sem essa
+    // conferência quem sentasse numa máquina destravada tomaria a conta.
+    let error: Error | null = null;
+    try {
+      await api("/auth/trocar-senha", {
+        method: "POST",
+        body: { senha_atual: currentPassword, senha_nova: newPassword },
+      });
+    } catch (e) {
+      error = e as Error;
+    }
     if (error) { setPasswordError(error.message); } else {
       toast({ title: "Senha atualizada" });
-      setNewPassword(""); setConfirmPassword("");
+      setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
     }
     setPasswordSaving(false);
   };
@@ -618,6 +630,16 @@ export default function SettingsPage() {
               <div className="glass-input px-3 py-0">
                 <input
                   type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Senha atual"
+                  autoComplete="current-password"
+                  className="w-full bg-transparent py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none"
+                />
+              </div>
+              <div className="glass-input px-3 py-0">
+                <input
+                  type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Nova senha"
@@ -641,7 +663,7 @@ export default function SettingsPage() {
               )}
               <button
                 onClick={handleChangePassword}
-                disabled={passwordSaving || !newPassword}
+                disabled={passwordSaving || !currentPassword || !newPassword}
                 className="flex items-center gap-2 px-4 py-2 text-sm rounded-full border border-border/40 bg-secondary/30 text-foreground hover:bg-secondary/60 transition-colors disabled:opacity-50"
               >
                 {passwordSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
