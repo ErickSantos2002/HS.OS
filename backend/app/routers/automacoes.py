@@ -6,12 +6,16 @@ qualquer coisa que rode a automação) chama ao terminar.
 
 import json
 import logging
+import re
+import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.database import sessao
+from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.integracoes import exige_segredo
 
 logger = logging.getLogger(__name__)
@@ -103,3 +107,259 @@ async def registrar_resultado(
             )
 
     logger.info("Automação %s: execução %s terminou em %s", automation_id, run_id, situacao)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Disparo de automação — portado de `trigger-automation` e `automation-scheduler`
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# As duas terminam no mesmo lugar: criar uma execução e mandar o gateway rodar a
+# instrução num `cron.add` de tiro único. A diferença é só o que as aciona —
+# evento de sistema numa, relógio na outra.
+#
+# ⚠️ `pg_cron` **não existe** no Postgres da VPS, então o agendamento não roda
+# sozinho: `POST /automacoes/agendadas/disparar` precisa ser chamado a cada
+# minuto por um serviço externo (o `worker` previsto em `docs/ROADMAP.md`).
+# Enquanto isso não existir, automação agendada só roda se alguém chamar.
+
+_EVENTOS = {"gateway.offline", "integration.added", "integration.expired",
+            "user.joined", "agent.error"}
+
+_DIAS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+
+class GatilhoIn(BaseModel):
+    event: str
+    payload: dict = {}
+
+
+async def _despachar(conn, automacao, contexto: str) -> str | None:
+    """Cria a execução e manda o gateway rodar. Devolve o id da execução.
+
+    O `cron.add` com `schedule.kind = "at"` daqui a 3 segundos é o jeito de pedir
+    "rode uma vez, agora" — o gateway não tem um `run once` direto. A folga de 3s
+    existe porque um horário no passado é recusado.
+    """
+    from app.gateway import config as gcfg
+    from app.gateway.client import ErroGateway as _Erro, obter_cliente as _cliente
+
+    nome_job = f"hsos-auto-{automacao['id']}-{int(time.time() * 1000)}"
+    run_id = await conn.fetchval(
+        "INSERT INTO public.automation_runs (automation_id, cron_job_name, status) "
+        "VALUES ($1, $2, 'running') RETURNING id::text",
+        automacao["id"], nome_job,
+    )
+
+    c = await gcfg.carregar()
+    if not c.configurado:
+        await conn.execute(
+            "UPDATE public.automation_runs SET status = 'error', "
+            "error_message = 'Gateway não configurado', finished_at = now() WHERE id = $1::uuid",
+            run_id,
+        )
+        return None
+
+    quando = datetime.now(timezone.utc) + timedelta(seconds=3)
+    try:
+        await _cliente(c.url, c.token).chamar("cron.add", {
+            "name": nome_job,
+            "schedule": {"kind": "at", "at": quando.isoformat().replace("+00:00", "Z")},
+            "sessionTarget": "isolated",
+            "agentId": automacao["agent_id"],
+            "payload": {
+                "kind": "agentTurn",
+                "message": (automacao["instruction"] or "") + contexto,
+                "timeoutSeconds": 300,
+            },
+        })
+    except _Erro as e:
+        await conn.execute(
+            "UPDATE public.automation_runs SET status = 'error', error_message = $2, "
+            "finished_at = now() WHERE id = $1::uuid",
+            run_id, str(e)[:2000],
+        )
+        logger.warning("Automação %s não despachou: %s", automacao["id"], e)
+        return None
+
+    logger.info("Automação %s despachada (execução %s)", automacao["id"], run_id)
+    return run_id
+
+
+@router.post("/gatilho")
+async def disparar_por_evento(
+    dados: GatilhoIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Roda as automações ligadas a um evento de sistema.
+
+    ⚠️ **Exige usuário autenticado.** A edge aceitava também um segredo em
+    cabeçalho, e a auditoria registrou que ela estava **aberta na internet** —
+    o segredo era opcional e, sem ele configurado, qualquer um disparava
+    automação. Aqui não há caminho anônimo.
+    """
+    if dados.event not in _EVENTOS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Evento desconhecido. Use um de: {', '.join(sorted(_EVENTOS))}.",
+        )
+
+    contexto = ""
+    if dados.payload:
+        contexto = f"\n\nContexto do evento:\n{json.dumps(dados.payload, ensure_ascii=False)}"
+
+    async with sessao(role="service_role") as conn:
+        automacoes = await conn.fetch(
+            "SELECT id::text AS id, name, agent_id, instruction FROM public.automations "
+            "WHERE type = 'trigger' AND trigger_event = $1 AND is_active = true",
+            dados.event,
+        )
+        despachadas = [r for a in automacoes if (r := await _despachar(conn, a, contexto))]
+
+    logger.info("Evento %s: %d/%d automações despachadas por %s",
+                dados.event, len(despachadas), len(automacoes), usuario.id)
+    return {"event": dados.event, "encontradas": len(automacoes), "despachadas": len(despachadas)}
+
+
+@router.post("/agendadas/disparar")
+async def disparar_agendadas(_: None = Depends(exige_segredo("AUTOMATION_WEBHOOK_SECRET"))):
+    """Roda as automações cujo horário bate com **este minuto**.
+
+    Feito para ser chamado a cada minuto. A comparação é por minuto exato e em
+    UTC — chamar duas vezes no mesmo minuto dispara duas vezes, então quem
+    agenda precisa não se sobrepor.
+    """
+    agora = datetime.now(timezone.utc)
+    hora = agora.strftime("%H:%M")
+    dia = _DIAS[agora.weekday()]
+
+    async with sessao(role="service_role") as conn:
+        automacoes = await conn.fetch(
+            """
+            SELECT id::text AS id, name, agent_id, instruction FROM public.automations
+             WHERE type = 'scheduled' AND is_active = true
+               AND scheduled_time = $1
+               AND (scheduled_day = 'daily' OR scheduled_day = $2)
+            """,
+            hora, dia,
+        )
+        despachadas = [r for a in automacoes if (r := await _despachar(conn, a, ""))]
+
+    if automacoes:
+        logger.info("Agendadas %s %s: %d despachadas", dia, hora, len(despachadas))
+    return {"hora": hora, "dia": dia, "encontradas": len(automacoes),
+            "despachadas": len(despachadas)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Espelho do estado dos crons — `sync-automation-status` e `import-cron-jobs`
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _nome_legivel(bruto: str, agente: str | None) -> str:
+    """Nome de cron é escrito por engenheiro, não para uma tela.
+
+    `monitor-recursos-vps` vira "Monitor recursos VPS". Nome que **já** tem
+    espaço e maiúscula passa intacto — alguém já o escreveu para ser lido.
+    """
+    n = re.sub(r"^cron:\s*", "", bruto.strip(), flags=re.I)
+    if agente:
+        n = re.sub(rf"^{re.escape(agente)}\s*[—–-]\s*", "", n, flags=re.I).strip()
+    if " " in n or not re.search(r"[-_:.]", n):
+        return n
+    palavras = re.sub(r"[-_:.]+", " ", n).split()
+    siglas = {"vps", "db", "api", "crm", "llm", "cs", "seo", "kpi", "ia", "url", "os", "mkt"}
+    return " ".join(
+        p.upper() if p.lower() in siglas else (p.capitalize() if i == 0 else p)
+        for i, p in enumerate(palavras)
+    )
+
+
+async def _crons_do_gateway() -> list[dict]:
+    from app.gateway import config as gcfg
+    from app.gateway.client import ErroGateway as _Erro, obter_cliente as _cliente
+
+    c = await gcfg.carregar()
+    if not c.configurado:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
+    try:
+        r = await _cliente(c.url, c.token).chamar("cron.list", {})
+    except _Erro as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"cron.list falhou: {e}")
+    jobs = r.get("jobs") if isinstance(r.get("jobs"), list) else r
+    return jobs if isinstance(jobs, list) else []
+
+
+@router.post("/sincronizar-status")
+async def sincronizar_status(_: Usuario = Depends(usuario_atual)):
+    """Traz do gateway o último resultado de cada cron para as automações.
+
+    O gateway é a fonte da verdade sobre execução — ele é quem roda. Sem este
+    espelho, a tela mostraria "nunca executada" para automação que roda há meses.
+    """
+    jobs = {j.get("name"): j for j in await _crons_do_gateway() if j.get("name")}
+    if not jobs:
+        return {"atualizadas": 0, "jobs_no_gateway": 0}
+
+    atualizadas = 0
+    async with sessao(role="service_role") as conn:
+        for linha in await conn.fetch(
+            "SELECT id::text AS id, name FROM public.automations WHERE is_active = true"
+        ):
+            # O cron do gateway carrega o id da automação no nome — é o que
+            # liga os dois lados sem precisar de uma tabela de-para.
+            job = next((j for n, j in jobs.items() if linha["id"] in n), None)
+            if not job:
+                continue
+            estado = str(job.get("lastRunStatus") or "").lower()
+            if estado not in ("success", "error", "running"):
+                continue
+            marca = await conn.execute(
+                "UPDATE public.automations SET last_run_status = $2, "
+                "last_run_at = COALESCE($3::timestamptz, last_run_at), updated_at = now() "
+                "WHERE id = $1::uuid AND (last_run_status IS DISTINCT FROM $2)",
+                linha["id"], estado, job.get("lastRunAt"),
+            )
+            if marca.rsplit(" ", 1)[-1] != "0":
+                atualizadas += 1
+
+    logger.info("Status de automações sincronizado: %d atualizadas", atualizadas)
+    return {"atualizadas": atualizadas, "jobs_no_gateway": len(jobs)}
+
+
+@router.post("/importar-crons")
+async def importar_crons(_: Usuario = Depends(exige_papel("super_admin"))):
+    """Traz para `automations` os crons que já existem no gateway.
+
+    Serve para instalação que herdou crons configurados à mão: eles passam a
+    aparecer na tela em vez de rodarem invisíveis. Idempotente pelo nome — rodar
+    duas vezes não duplica.
+    """
+    jobs = await _crons_do_gateway()
+    importados = ignorados = 0
+
+    async with sessao(role="service_role") as conn:
+        for job in jobs:
+            nome = str(job.get("name") or "").strip()
+            if not nome or nome.startswith("hsos-auto-") or nome.startswith("dnos-"):
+                # Job criado pela própria plataforma: já tem automação por trás,
+                # importá-lo criaria uma duplicata que dispara em dobro.
+                ignorados += 1
+                continue
+            agente = job.get("agentId")
+            legivel = _nome_legivel(nome, agente)
+            instrucao = str(((job.get("payload") or {}).get("message")) or legivel)
+            marca = await conn.execute(
+                """
+                INSERT INTO public.automations (name, agent_id, type, instruction, is_active)
+                VALUES ($1, $2, 'scheduled', $3, $4)
+                ON CONFLICT DO NOTHING
+                """,
+                legivel, agente, instrucao, bool(job.get("enabled", True)),
+            )
+            if marca.rsplit(" ", 1)[-1] == "0":
+                ignorados += 1
+            else:
+                importados += 1
+
+    logger.info("Crons importados: %d novos, %d ignorados", importados, ignorados)
+    return {"importados": importados, "ignorados": ignorados, "jobs_no_gateway": len(jobs)}
