@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
 
 export interface WikiDocument {
@@ -20,14 +20,7 @@ export function useWikiDocuments(spaceId: string | null) {
     queryKey: ["wiki-documents", spaceId],
     queryFn: async () => {
       if (!spaceId) return [];
-      const { data, error } = await supabase
-        .from("wiki_documents")
-        .select("*")
-        .eq("space_id", spaceId)
-        .order("is_pinned", { ascending: false })
-        .order("order_index", { ascending: true })
-        .order("updated_at", { ascending: false });
-      if (error) throw error;
+      const data = await api<WikiDocument[]>(`/wiki/espacos/${spaceId}/documentos`);
       return (data ?? []) as WikiDocument[];
     },
     enabled: !!spaceId,
@@ -39,8 +32,7 @@ export function useWikiDocument(id: string | null) {
     queryKey: ["wiki-document", id],
     queryFn: async () => {
       if (!id) return null;
-      const { data, error } = await supabase.from("wiki_documents").select("*").eq("id", id).single();
-      if (error) throw error;
+      const data = await api<WikiDocument>(`/wiki/documentos/${id}`);
       return data as WikiDocument;
     },
     enabled: !!id,
@@ -53,18 +45,10 @@ export function useCreateWikiDocument() {
   return useMutation({
     mutationFn: async (spaceId: string) => {
       if (!user) throw new Error("Não autenticado");
-      const { data, error } = await supabase
-        .from("wiki_documents")
-        .insert({
-          space_id: spaceId,
-          title: "Sem título",
-          content: "",
-          created_by: user.id,
-          updated_by: user.id,
-        })
-        .select()
-        .single();
-      if (error) throw error;
+      const data = await api<WikiDocument>("/wiki/documentos", {
+        method: "POST",
+        body: { space_id: spaceId, title: "Sem título", content: "" },
+      });
       return data as WikiDocument;
     },
     onSuccess: (doc) => {
@@ -83,17 +67,17 @@ export function useUpdateWikiDocument() {
       content?: string;
       is_pinned?: boolean;
     }) => {
-      const patch: Record<string, unknown> = { updated_by: user?.id };
+      // `updated_by` e `updated_at` são carimbados pelo servidor. O horário
+      // vinha do navegador, e adiantado fazia "editado há 5 minutos" virar
+      // "daqui a 5 minutos" para quem via.
+      const patch: Record<string, unknown> = {};
       if (input.title !== undefined) patch.title = input.title;
       if (input.content !== undefined) patch.content = input.content;
       if (input.is_pinned !== undefined) patch.is_pinned = input.is_pinned;
-      const { data, error } = await supabase
-        .from("wiki_documents")
-        .update(patch)
-        .eq("id", input.id)
-        .select()
-        .single();
-      if (error) throw error;
+      const data = await api<WikiDocument>(`/wiki/documentos/${input.id}`, {
+        method: "PATCH",
+        body: patch,
+      });
       return data as WikiDocument;
     },
     onSuccess: (doc) => {
@@ -107,8 +91,7 @@ export function useDeleteWikiDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (doc: { id: string; space_id: string }) => {
-      const { error } = await supabase.from("wiki_documents").delete().eq("id", doc.id);
-      if (error) throw error;
+      await api(`/wiki/documentos/${doc.id}`, { method: "DELETE" });
       return doc;
     },
     onSuccess: (doc) => {

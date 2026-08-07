@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
 
 export interface WikiSpace {
@@ -18,12 +18,7 @@ export function useWikiSpaces() {
   return useQuery({
     queryKey: ["wiki-spaces"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("wiki_spaces")
-        .select("*")
-        .order("order_index", { ascending: true })
-        .order("created_at", { ascending: true });
-      if (error) throw error;
+      const data = await api<WikiSpace[]>("/wiki/espacos");
       return (data ?? []) as WikiSpace[];
     },
   });
@@ -35,19 +30,18 @@ export function useCreateWikiSpace() {
   return useMutation({
     mutationFn: async (input: { name: string; description?: string; icon?: string; color?: string; parent_id?: string | null }) => {
       if (!user) throw new Error("Não autenticado");
-      const { data, error } = await supabase
-        .from("wiki_spaces")
-        .insert({
+      // O `created_by` sai do token no servidor — mandá-lo daqui era abrir para
+      // criar em nome de outra pessoa.
+      const data = await api<WikiSpace>("/wiki/espacos", {
+        method: "POST",
+        body: {
           name: input.name,
           description: input.description ?? "",
           icon: input.icon ?? "BookOpen",
           color: input.color ?? "#3D61FF",
           parent_id: input.parent_id ?? null,
-          created_by: user.id,
-        })
-        .select()
-        .single();
-      if (error) throw error;
+        },
+      });
       return data as WikiSpace;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["wiki-spaces"] }),
@@ -59,13 +53,7 @@ export function useUpdateWikiSpace() {
   return useMutation({
     mutationFn: async (input: { id: string; name?: string; description?: string; icon?: string; color?: string; parent_id?: string | null; order_index?: number }) => {
       const { id, ...patch } = input;
-      const { data, error } = await supabase
-        .from("wiki_spaces")
-        .update(patch)
-        .eq("id", id)
-        .select()
-        .single();
-      if (error) throw error;
+      const data = await api<WikiSpace>(`/wiki/espacos/${id}`, { method: "PATCH", body: patch });
       return data as WikiSpace;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["wiki-spaces"] }),
@@ -76,8 +64,7 @@ export function useDeleteWikiSpace() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("wiki_spaces").delete().eq("id", id);
-      if (error) throw error;
+      await api(`/wiki/espacos/${id}`, { method: "DELETE" });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["wiki-spaces"] });

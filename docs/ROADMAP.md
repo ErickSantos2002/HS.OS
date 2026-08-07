@@ -17,7 +17,7 @@ ainda na pasta.
 | Edge functions **fora da pasta** | 60 | 73 | `ls backend/supabase/functions \| grep -v _shared \| wc -l` |
 | Arquivos do front **sem Supabase** | 52 | 113 | `grep -rl "integrations/supabase/client" frontend/src \| wc -l` (63 hoje; 113 menos isso) |
 | Rotas na API própria | 120 | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
-| Chamadas `.from("…")` restantes | 185 | — | `grep -rho '\.from(\s*"' frontend/src \| wc -l` |
+| Chamadas `.from("…")` restantes | 63 | — | `grep -rho '\.from(\s*"' frontend/src \| wc -l` |
 | Arquivos ainda em `postgres_changes` | **0** | — | `grep -rl "postgres_changes" frontend/src \| grep -v _legado` |
 
 **Um lote só fecha quando duas linhas andam:** ter o endpoint no backend não é o

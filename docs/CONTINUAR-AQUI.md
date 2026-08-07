@@ -14,8 +14,8 @@ na pasta. **Todo número aqui vem de um comando**, e o comando está ao lado.
 | | Hoje | Total | Como medir |
 |---|---|---|---|
 | Edge functions fora da pasta | **60** | 73 | `73 - $(ls backend/supabase/functions \| grep -v _shared \| wc -l)` |
-| Arquivos do front sem Supabase | **52** | 113 | `113 - $(grep -rl "integrations/supabase/client" frontend/src \| wc -l)` |
-| Rotas na API própria | **129** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
+| Arquivos do front sem Supabase | **57** | 113 | `113 - $(grep -rl "integrations/supabase/client" frontend/src \| wc -l)` |
+| Rotas na API própria | **160** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
 
 **Duas linhas têm que andar juntas.** "Tem substituto no backend" e "a tela usa o
 substituto" são coisas diferentes, e confundi-las já deixou telas quebradas em
@@ -34,24 +34,25 @@ diferentes, e o resumo antigo ("Realtime ✅ portado") escondia isso:
 | **Storage** | ✅ `UPLOADS_DIR` em disco | ✅ **completo** | nada |
 | **Realtime** | ✅ WebSocket + LISTEN/NOTIFY (`app/escuta_banco.py`) | ✅ **completo** | nada — `postgres_changes` zerado |
 | **Edge Functions** | 🟡 60 de 73 | ✅ sem pendências | 4 de trabalho real, 9 bloqueadas |
-| **Banco** (RLS direto do browser) | 🟡 129 rotas | 🔴 **52 de 113** | 124 chamadas `.from("…")` vivas |
+| **Banco** (RLS direto do browser) | 🟡 160 rotas | 🔴 **57 de 113** | 63 chamadas `.from("…")` |
 
 O **banco é o único subsistema que ainda pesa.** Os outros quatro estão prontos
 ou perto disso.
 
-### Onde estão as 124 chamadas vivas ao banco
+### Onde estão as 63 chamadas restantes
 
-(133 no total; 9 estão em `_legado/`, que não está roteado.)
+Nove delas estão em `_legado/`, que não está roteado.
 
-```
-10 agent_profiles    6 agent_results      5 arena_agents
- 9 integrations      5 wiki_documents     4 wiki_spaces
- 9 channel_messages  5 conversations      1 profiles
- 9 channel_members   5 automations
-```
+**Zeradas em 07/08**, em ordem de tamanho: `live_artifacts` (21),
+`channel_messages` (9), `channel_members` (9), `integrations` (9),
+`agent_profiles` (10), `profiles` (15), `company_profile` (8),
+`agent_results` (6), `wiki_documents` (5), `arena_agents` (5),
+`arena_sessions` (4), `arena_messages` (4), `wiki_spaces` (4),
+`agent_crons` (4).
 
-Zeradas em 07/08: `live_artifacts` (era 21), `profiles` (15) e
-`company_profile` (8) — as três mais quentes do dia.
+O que sobra são tabelas de 5 ou menos usos cada — `conversations`,
+`automations`, `teams`, `drafts`, `artifacts_published`, `notifications` e
+uma cauda de tabelas com uma ou duas chamadas.
 
 E os arquivos mais pesados, que é por onde não começar:
 
