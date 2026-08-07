@@ -1,7 +1,11 @@
 # Continuar aqui
 
-Ponto de retomada da portagem. Atualizado em **07/08/2026**, ao fim de uma sessão
-longa. Leia isto, depois `CLAUDE.md` e `docs/ROADMAP.md`.
+Ponto de retomada da portagem. Atualizado em **07/08/2026**, ao fim de três dias
+de trabalho. Leia isto, depois `CLAUDE.md` e `docs/ROADMAP.md`.
+
+👉 **Vai testar o sistema?** Comece por [`TESTAR-SEGUNDA.md`](TESTAR-SEGUNDA.md)
+— roteiro em ordem, o que já se sabe que não funciona, e o que precisa ser
+testado junto porque tem efeito real.
 
 ---
 
