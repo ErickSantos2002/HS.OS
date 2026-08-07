@@ -305,10 +305,20 @@ export default function LiveArtifactViewer({
     (async () => {
       setLoading(true);
       setError(null);
-      const query = supabase.from("live_artifacts" as any).select("*");
-      const { data, error } = artifactId
-        ? await query.eq("id", artifactId).is("deleted_at", null).maybeSingle()
-        : await query.eq("published_slug", slug).eq("is_published", true).is("deleted_at", null).maybeSingle();
+      // A contagem de visualização acontece no servidor, dentro do mesmo
+      // UPDATE que devolve a linha — era um segundo update disparado daqui, que
+      // qualquer um podia repetir e que não contava nada sem JavaScript.
+      let data: any = null;
+      let error: Error | null = null;
+      try {
+        data = artifactId
+          ? await api<any>(`/artefatos/vivos/${encodeURIComponent(artifactId)}`)
+          : await api<any>(`/artefatos/vivos/publico/${encodeURIComponent(slug!)}`, {
+              autenticar: false,
+            });
+      } catch (e) {
+        error = e as Error;
+      }
       if (cancelled) return;
       if (error) setError(error.message);
       else if (!data) setError("Artefato não encontrado.");
@@ -318,12 +328,6 @@ export default function LiveArtifactViewer({
         setDataError(null);
         setPublishSlug(((data as any).published_slug as string) || "");
         // increment view_count for public views (best-effort, fire and forget)
-        if (publicMode) {
-          void supabase
-            .from("live_artifacts" as any)
-            .update({ view_count: ((data as any).view_count ?? 0) + 1 } as any)
-            .eq("id", (data as any).id);
-        }
       }
       setLoading(false);
     })();
@@ -437,10 +441,10 @@ export default function LiveArtifactViewer({
             const refreshedAt = new Date();
             setLastRefreshed(refreshedAt);
             if (!publicMode && artifactId) {
-              void supabase
-                .from("live_artifacts" as any)
-                .update({ last_refreshed_at: refreshedAt.toISOString() } as any)
-                .eq("id", artifactId);
+              void api(`/artefatos/vivos/${artifactId}`, {
+                method: "PATCH",
+                body: { tocar_refresh: true },
+              });
             }
             post({ type: "dnos_query_result", id: data.id, data: body?.data ?? body });
           }
@@ -483,10 +487,10 @@ export default function LiveArtifactViewer({
             const refreshedAt = new Date();
             setLastRefreshed(refreshedAt);
             if (!publicMode && artifactId) {
-              void supabase
-                .from("live_artifacts" as any)
-                .update({ last_refreshed_at: refreshedAt.toISOString() } as any)
-                .eq("id", artifactId);
+              void api(`/artefatos/vivos/${artifactId}`, {
+                method: "PATCH",
+                body: { tocar_refresh: true },
+              });
             }
             post({ type: "dnos_invoke_result", id: data.id, data: body?.data ?? body });
           }
@@ -544,10 +548,10 @@ export default function LiveArtifactViewer({
 
   const changeInterval = useCallback(async (value: number) => {
     if (!artifact) return;
-    const { error } = await supabase
-      .from("live_artifacts" as any)
-      .update({ refresh_interval: value } as any)
-      .eq("id", artifact.id);
+    const error = await api(`/artefatos/vivos/${artifact.id}`, {
+      method: "PATCH",
+      body: { refresh_interval: value },
+    }).then(() => null, (e: Error) => e);
     if (error) {
       toast.error("Falha ao alterar intervalo.");
       return;
@@ -558,10 +562,10 @@ export default function LiveArtifactViewer({
   const saveHtml = useCallback(async () => {
     if (!artifact || editingHtml == null) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("live_artifacts" as any)
-      .update({ html_content: editingHtml } as any)
-      .eq("id", artifact.id);
+    const error = await api(`/artefatos/vivos/${artifact.id}`, {
+      method: "PATCH",
+      body: { html_content: editingHtml },
+    }).then(() => null, (e: Error) => e);
     setSaving(false);
     if (error) {
       toast.error("Falha ao salvar HTML.");
@@ -605,19 +609,18 @@ export default function LiveArtifactViewer({
         ? null
         : new Date(Date.now() + parseInt(publishExpiration) * 24 * 60 * 60 * 1000).toISOString();
 
-    const { error } = await supabase
-      .from("live_artifacts" as any)
-      .update({
+    const error = await api(`/artefatos/vivos/${artifact.id}/publicar`, {
+      method: "POST",
+      body: {
         title: finalTitle,
-        is_published: true,
         published_slug: slug,
-        published_at: new Date().toISOString(),
         is_public: publishIsPublic,
         expires_at: expiresAt,
-      } as any)
-      .eq("id", artifact.id);
+      },
+    }).then(() => null, (e: Error) => e);
     if (error) {
-      toast.error(error.message.includes("unique") ? "Slug já em uso." : "Falha ao publicar.");
+      // O backend devolve 409 com a mensagem certa quando o slug já existe.
+      toast.error(error.message || "Falha ao publicar.");
       return;
     }
     setArtifact({
@@ -649,10 +652,11 @@ export default function LiveArtifactViewer({
 
   const remove = useCallback(async () => {
     if (!artifact) return;
-    const { error } = await supabase
-      .from("live_artifacts" as any)
-      .update({ deleted_at: new Date().toISOString(), is_published: false, refresh_interval: 0 } as any)
-      .eq("id", artifact.id);
+    // Exclusão lógica: o servidor marca `deleted_at`, despublica e congela.
+    // Não apaga a linha porque o artefato pode estar linkado numa conversa.
+    const error = await api(`/artefatos/vivos/${artifact.id}`, {
+      method: "DELETE",
+    }).then(() => null, (e: Error) => e);
     if (error) {
       toast.error("Falha ao excluir.");
       return;

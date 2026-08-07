@@ -1164,14 +1164,12 @@ export default function ChatPage() {
       const titles = await loadArtifactTitles(messageIds);
       if (!cancelled) setArtifactTitles(titles);
 
-      const { data: liveRows } = await supabase
-        .from("live_artifacts" as any)
-        .select("id, title, html_content, refresh_interval, updated_at")
-        .eq("user_id", user.id)
-        .eq("agent_id", effectiveAgentId)
-        .is("deleted_at", null)
-        .order("updated_at", { ascending: false });
-      if (!cancelled) setLiveArtifactRows((liveRows as any) ?? []);
+      // `com_html` porque a aba renderiza o painel ali mesmo. São poucos e
+      // filtrados por agente — a lista geral continua sem o HTML.
+      const liveRows = await api<any[]>(
+        `/artefatos/vivos?agent_id=${encodeURIComponent(effectiveAgentId)}&meus=true&com_html=true`,
+      ).catch(() => []);
+      if (!cancelled) setLiveArtifactRows(liveRows ?? []);
     })();
     return () => { cancelled = true; };
   }, [effectiveAgentId, user?.id, lastAgentArtifactSig]);
@@ -1198,10 +1196,10 @@ export default function ChatPage() {
     const trimmed = newTitle.trim();
     if (messageId.startsWith("live:")) {
       const liveId = messageId.slice(5);
-      const { error } = await supabase
-        .from("live_artifacts" as any)
-        .update({ title: trimmed } as any)
-        .eq("id", liveId);
+      const error = await api(`/artefatos/vivos/${liveId}`, {
+        method: "PATCH",
+        body: { title: trimmed },
+      }).then(() => null, (e: Error) => e);
       if (error) return;
       setLiveArtifactRows((prev) => prev.map((r) => (r.id === liveId ? { ...r, title: trimmed } : r)));
       return;
@@ -1225,10 +1223,9 @@ export default function ChatPage() {
       const liveId = messageId.slice(5);
       setLiveArtifactRows((prev) => prev.filter((r) => r.id !== liveId));
       setActiveLiveArtifactId((cur) => (cur === liveId ? null : cur));
-      await supabase
-        .from("live_artifacts" as any)
-        .update({ deleted_at: new Date().toISOString(), is_published: false, refresh_interval: 0 } as any)
-        .eq("id", liveId);
+      await api(`/artefatos/vivos/${liveId}`, { method: "DELETE" }).catch(() => {
+        /* a linha já saiu da tela; falhar aqui não deve reverter o que a pessoa viu */
+      });
       return;
     }
     // Remove from local state immediately

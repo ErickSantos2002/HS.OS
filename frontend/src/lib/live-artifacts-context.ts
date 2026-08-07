@@ -1,3 +1,5 @@
+import { api } from "@/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 /**
  * Builds system-prompt blocks that teach the current agent about:
  *   1. The <live_artifact> tag format and window.dnos runtime API.
@@ -9,7 +11,6 @@
  * (they run under the logged-in user's session), so no server-side privilege
  * escalation happens here.
  */
-import { supabase } from "@/integrations/supabase/client";
 
 const LIVE_ARTIFACT_FORMAT_PROMPT = `ARTEFATOS VIVOS
 
@@ -132,12 +133,8 @@ export async function buildLiveArtifactsSystemBlocks(): Promise<string[]> {
 
   // Existing user artifacts (RLS scopes to auth.uid())
   try {
-    const { data: artifacts } = await supabase
-      .from("live_artifacts" as any)
-      .select("id, title, refresh_interval, agent_id, updated_at")
-      .is("deleted_at", null)
-      .order("updated_at", { ascending: false })
-      .limit(5);
+    const todos = await api<any[]>("/artefatos/vivos").catch(() => []);
+    const artifacts = (todos ?? []).slice(0, 5);
 
     if (Array.isArray(artifacts) && artifacts.length > 0) {
       const lines = (artifacts as any[]).map((a) => {

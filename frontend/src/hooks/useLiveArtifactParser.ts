@@ -10,8 +10,8 @@
  * `saveLiveArtifact()` once per message (dedup via sessionStorage), and shows
  * a <LiveArtifactCard> in its place with the persisted id.
  */
+import { api } from "@/lib/api";
 import { useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
 
 const LIVE_ARTIFACT_REGEX = /<live_artifact([^>]*)>([\s\S]*?)<\/live_artifact>/g;
@@ -78,69 +78,29 @@ export function useLiveArtifactParser() {
     ): Promise<string | null> => {
       if (!user) return null;
 
-      if (parsed.existingId) {
-        const { data, error } = await supabase
-          .from("live_artifacts" as any)
-          .update({
-            html_content: parsed.html,
+      // A desduplicação por título é do servidor agora: eram três idas ao banco
+      // (procurar, decidir, gravar), com uma janela no meio em que dois turnos
+      // simultâneos criavam dois artefatos com o mesmo nome.
+      let data: { id: string } | null = null;
+      let error: Error | null = null;
+      try {
+        data = await api<{ id: string }>("/artefatos/vivos", {
+          method: "POST",
+          body: {
             title: parsed.title,
-            refresh_interval: parsed.refreshInterval,
-          } as any)
-          .eq("id", parsed.existingId)
-          .eq("user_id", user.id)
-          .is("deleted_at", null)
-          .select("id")
-          .maybeSingle();
-        if (error || !data) {
-          console.warn("[live-artifact] update failed:", error?.message ?? "not found or deleted");
-          return null;
-        }
-        return parsed.existingId;
-      }
-
-      // No explicit id: dedupe by (user_id, agent_id, title). If an artifact
-      // with the same title already exists for this user+agent, UPDATE it
-      // instead of inserting a new row. This prevents the gallery from filling
-      // with duplicates when agents re-emit <live_artifact> without an id.
-      const { data: existing } = await supabase
-        .from("live_artifacts" as any)
-        .select("id, deleted_at")
-        .eq("user_id", user.id)
-        .eq("agent_id", agentId ?? null)
-        .eq("title", parsed.title)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existing && (existing as any).id) {
-        if ((existing as any).deleted_at) return null;
-        const existingId = (existing as any).id as string;
-        const { error: updErr } = await supabase
-          .from("live_artifacts" as any)
-          .update({
             html_content: parsed.html,
+            agent_id: agentId ?? null,
             refresh_interval: parsed.refreshInterval,
-          } as any)
-          .eq("id", existingId)
-          .eq("user_id", user.id);
-        if (updErr) {
-          console.warn("[live-artifact] dedupe update failed:", updErr.message);
-          return null;
-        }
-        return existingId;
+            existing_id: parsed.existingId ?? null,
+            // Sem id explícito, reaproveita o do mesmo (agente, título) — é o
+            // que impede a galeria de encher de cópias quando o agente reemite
+            // o painel a cada turno.
+            deduplicar: !parsed.existingId,
+          },
+        });
+      } catch (e) {
+        error = e as Error;
       }
-
-      const { data, error } = await supabase
-        .from("live_artifacts" as any)
-        .insert({
-          user_id: user.id,
-          agent_id: agentId ?? null,
-          title: parsed.title,
-          html_content: parsed.html,
-          refresh_interval: parsed.refreshInterval,
-        } as any)
-        .select("id")
-        .single();
 
       if (error || !data) {
         console.warn("[live-artifact] insert failed:", error?.message);

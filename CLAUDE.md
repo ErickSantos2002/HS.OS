@@ -29,7 +29,7 @@ escondeu telas quebradas em produção. O placar tem que separar as duas:
 | Storage | ✅ | ✅ **completo** | `UPLOADS_DIR` em disco, `app/routers/storage.py` |
 | Realtime (`postgres_changes`) | ✅ | ✅ **completo** | WebSocket + LISTEN/NOTIFY, `app/escuta_banco.py` |
 | Edge Functions | 🟡 60 de 73 | ✅ sem pendências | routers FastAPI |
-| Banco (via RLS, direto do browser) | 🟡 120 rotas | 🔴 **50 de 113 arquivos** | endpoints FastAPI |
+| Banco (via RLS, direto do browser) | 🟡 ~135 rotas | 🔴 **52 de 113 arquivos** | endpoints FastAPI |
 
 O **banco** é o subsistema que sobrou quase inteiro — 185 chamadas `.from("…")`.
 O **Realtime saiu inteiro**: a captura é por trigger + `pg_notify`, o backend

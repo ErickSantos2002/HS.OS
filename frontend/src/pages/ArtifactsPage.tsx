@@ -1,6 +1,6 @@
+import { api } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
 import LiveArtifactViewer from "@/components/LiveArtifactViewer";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -211,12 +211,11 @@ export default function ArtifactsPage() {
   const load = async () => {
     if (!user) return;
     setLoading(true);
-    const { data } = await supabase
-      .from("live_artifacts" as any)
-      .select("id, agent_id, title, refresh_interval, is_published, published_slug, updated_at, view_count")
-      .is("deleted_at", null)
-      .order("updated_at", { ascending: false });
-    setItems((data as any[]) || []);
+    // A lista não traz o `html_content`: são páginas inteiras, e trazer trinta
+    // delas para desenhar títulos é o tipo de coisa que faz a tela demorar sem
+    // ninguém entender por quê. O backend já as omite.
+    const data = await api<any[]>("/artefatos/vivos").catch(() => []);
+    setItems(data || []);
     setLoading(false);
   };
 
@@ -237,16 +236,11 @@ export default function ArtifactsPage() {
     if (!user) return;
     const title = newTitle.trim() || "Artefato vivo";
     setSaving(true);
-    const { data, error } = await supabase
-      .from("live_artifacts" as any)
-      .insert({
-        user_id: user.id,
-        title,
-        html_content: newHtml,
-        refresh_interval: newInterval,
-      } as any)
-      .select("id")
-      .single();
+    const { data, error } = await api<{ id: string }>("/artefatos/vivos", {
+      method: "POST",
+      body: { title, html_content: newHtml, refresh_interval: newInterval },
+    }).then((d) => ({ data: d, error: null as Error | null }),
+            (e: Error) => ({ data: null, error: e }));
     setSaving(false);
     if (error || !data) {
       toast.error("Falha ao criar artefato.");
@@ -263,10 +257,9 @@ export default function ArtifactsPage() {
 
   const handleDelete = async (id: string) => {
     if (!window.confirm("Excluir este artefato?")) return;
-    const { error } = await supabase
-      .from("live_artifacts" as any)
-      .update({ deleted_at: new Date().toISOString(), is_published: false, refresh_interval: 0 } as any)
-      .eq("id", id);
+    // Exclusão lógica no servidor, que despublica e congela junto.
+    const error = await api(`/artefatos/vivos/${id}`, { method: "DELETE" })
+      .then(() => null, (e: Error) => e);
     if (error) { toast.error("Falha ao excluir."); return; }
     setItems((prev) => prev.filter((a) => a.id !== id));
     toast.success("Artefato removido.");
@@ -274,22 +267,17 @@ export default function ArtifactsPage() {
 
   const handleDuplicate = async (id: string) => {
     if (!user) return;
-    const { data: src } = await supabase
-      .from("live_artifacts" as any)
-      .select("title, html_content, refresh_interval")
-      .eq("id", id)
-      .maybeSingle();
+    const src = await api<any>(`/artefatos/vivos/${id}`).catch(() => null);
     if (!src) return;
-    const { data, error } = await supabase
-      .from("live_artifacts" as any)
-      .insert({
-        user_id: user.id,
-        title: `${(src as any).title} (cópia)`,
-        html_content: (src as any).html_content,
-        refresh_interval: (src as any).refresh_interval,
-      } as any)
-      .select("id")
-      .single();
+    const { data, error } = await api<{ id: string }>("/artefatos/vivos", {
+      method: "POST",
+      body: {
+        title: `${src.title} (cópia)`,
+        html_content: src.html_content,
+        refresh_interval: src.refresh_interval,
+      },
+    }).then((d) => ({ data: d, error: null as Error | null }),
+            (e: Error) => ({ data: null, error: e }));
     if (error || !data) { toast.error("Falha ao duplicar."); return; }
     toast.success("Duplicado.");
     void load();
