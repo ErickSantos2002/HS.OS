@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { assinarTabela } from "@/lib/realtime";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,13 +23,7 @@ export function useAgentCrons(agentId: string) {
   const { data: crons = [], isLoading } = useQuery({
     queryKey: key,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("agent_crons")
-        .select("*")
-        .eq("agent_id", agentId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as AgentCron[];
+      return await api<AgentCron[]>(`/agents/${encodeURIComponent(agentId)}/crons`);
     },
     enabled: !!agentId,
   });
@@ -48,24 +43,24 @@ export function useAgentCrons(agentId: string) {
 
   const addCron = useMutation({
     mutationFn: async (cron: { name: string; expression: string; description?: string }) => {
-      const { error } = await supabase.from("agent_crons").insert({ agent_id: agentId, ...cron });
-      if (error) throw error;
+      await api(`/agents/${encodeURIComponent(agentId)}/crons`, { method: "POST", body: cron });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   });
 
   const toggleCron = useMutation({
     mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
-      const { error } = await supabase.from("agent_crons").update({ enabled }).eq("id", id);
-      if (error) throw error;
+      await api(`/agents/${encodeURIComponent(agentId)}/crons/${id}`, {
+        method: "PATCH",
+        body: { enabled },
+      });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   });
 
   const deleteCron = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("agent_crons").delete().eq("id", id);
-      if (error) throw error;
+      await api(`/agents/${encodeURIComponent(agentId)}/crons/${id}`, { method: "DELETE" });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),
   });

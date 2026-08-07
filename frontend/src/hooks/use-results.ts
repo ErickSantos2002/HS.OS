@@ -90,20 +90,13 @@ async function fetchAllAgentResults<T>({
   let from = 0;
 
   while (true) {
-    let query = supabase
-      .from("agent_results")
-      .select(select)
-      .order("created_at", { ascending: false })
-      .range(from, from + RESULTS_BATCH_SIZE - 1);
+    const params = new URLSearchParams({
+      limite: String(RESULTS_BATCH_SIZE),
+      inicio: String(from),
+    });
+    if (since) params.set("desde", since.toISOString());
 
-    if (since) {
-      query = query.gte("created_at", since.toISOString());
-    }
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const batch = (data ?? []) as T[];
+    const batch = (await api<T[]>(`/agents/resultados?${params}`)) ?? [];
     rows.push(...batch);
 
     if (batch.length < RESULTS_BATCH_SIZE) break;
@@ -118,16 +111,13 @@ export function useResultsOverview(period: Exclude<ResultsPeriod, "all"> = "30d"
     queryKey: ["results-overview", period],
     queryFn: async () => {
       const since = getPeriodStart(period);
-      let query = supabase
-        .from("agent_results")
-        .select("id", { count: "exact", head: true });
-
-      if (since) {
-        query = query.gte("created_at", since.toISOString());
-      }
+      const params = new URLSearchParams({ apenas_contagem: "true" });
+      if (since) params.set("desde", since.toISOString());
 
       const [{ count, error }, economyRows] = await Promise.all([
-        query,
+        api<{ count: number }>(`/agents/resultados?${params}`)
+          .then((d) => ({ count: d.count, error: null as Error | null }),
+                (e: Error) => ({ count: 0, error: e })),
         fetchAllAgentResults<Pick<ResultRecord, "value" | "category">>({ select: "value, category", since }),
       ]);
 

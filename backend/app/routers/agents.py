@@ -239,6 +239,90 @@ class PerfilCompletoOut(BaseModel):
     tts_voice_name: str | None = None
 
 
+@router.get("/resultados")
+async def resultados(
+    usuario: Usuario = Depends(usuario_atual),
+    agent_id: str | None = Query(default=None),
+    category: str | None = Query(default=None),
+    desde: str | None = Query(default=None, description="ISO-8601."),
+    limite: int = Query(default=200, ge=1, le=2000),
+    inicio: int = Query(default=0, ge=0, description="Deslocamento, para paginar."),
+    apenas_contagem: bool = Query(default=False, description="Devolve só `{count}`."),
+):
+    """Os resultados registrados pelos agentes.
+
+    ⚠️ **Dois segmentos** (`/agents/resultados`) seria engolido por
+    `GET /agents/{agent_id}` — por isso este caminho e não `/agents/{id}/…`
+    para a listagem geral. A por agente usa o filtro.
+    """
+    condicoes, args = ["true"], []
+    for coluna, valor in (("agent_id", agent_id), ("category", category)):
+        if valor:
+            args.append(valor)
+            condicoes.append(f"{coluna} = ${len(args)}")
+    if desde:
+        args.append(desde)
+        condicoes.append(f"created_at >= ${len(args)}::text::timestamptz")
+
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        if apenas_contagem:
+            # `head: true` do Supabase virava um COUNT sem trazer linha. Aqui é
+            # explícito: a tela do painel só quer o número do dia.
+            total = await conn.fetchval(
+                f"SELECT count(*) FROM public.agent_results WHERE {' AND '.join(condicoes)}",
+                *args,
+            )
+            return {"count": total}
+
+        linhas = await conn.fetch(
+            f"SELECT {_COLUNAS_RESULTADO} FROM public.agent_results "
+            f" WHERE {' AND '.join(condicoes)} ORDER BY created_at DESC "
+            f" LIMIT ${len(args) + 1} OFFSET ${len(args) + 2}",
+            *args, limite, inicio,
+        )
+    return [_resultado(l) for l in linhas]
+
+
+class ResultadoIn(BaseModel):
+    agent_id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    description: str | None = None
+    category: str | None = None
+    value: float | None = None
+    metadata: dict = {}
+
+
+@router.post("/resultados", status_code=status.HTTP_201_CREATED)
+async def registrar_resultado(dados: ResultadoIn, usuario: Usuario = Depends(usuario_atual)):
+    """Registra um resultado **em nome da pessoa**.
+
+    ⚠️ Não confundir com `POST /broadcast/resultado`, que é o caminho do agente e
+    autentica por segredo compartilhado. Aqui o `user_id` sai do token.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            f"""
+            INSERT INTO public.agent_results
+                (agent_id, title, description, category, value, metadata, user_id)
+            VALUES ($1,$2,$3,$4,$5,$6::text::jsonb,$7::uuid)
+            RETURNING {_COLUNAS_RESULTADO}
+            """,
+            dados.agent_id, dados.title, dados.description, dados.category,
+            dados.value, json.dumps(dados.metadata), usuario.id,
+        )
+    return _resultado(linha)
+
+
+@router.delete("/resultados/{resultado_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def excluir_resultado(resultado_id: str, usuario: Usuario = Depends(usuario_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        marca = await conn.execute(
+            "DELETE FROM public.agent_results WHERE id = $1::uuid", resultado_id
+        )
+    if marca.rsplit(" ", 1)[-1] == "0":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Resultado não encontrado.")
+
+
 @router.get("/{agent_id}", response_model=PerfilCompletoOut)
 async def obter(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
@@ -1628,3 +1712,91 @@ async def produtividade(usuario: Usuario = Depends(usuario_atual), dias: int = Q
             dias,
         )
     return json.loads(json.dumps([dict(l) for l in linhas], default=str))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Resultados e crons — sub-recursos do agente
+# ─────────────────────────────────────────────────────────────────────────────
+
+_COLUNAS_RESULTADO = """
+    id::text AS id, agent_id, title, description, category, value, metadata,
+    user_id::text AS user_id,
+    to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS created_at
+"""
+
+
+def _resultado(linha) -> dict:
+    d = dict(linha)
+    bruto = d.get("metadata")
+    d["metadata"] = (json.loads(bruto) if isinstance(bruto, str) else bruto) or {}
+    return json.loads(json.dumps(d, default=str))
+
+
+@router.get("/{agent_id}/crons")
+async def crons(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """Os agendamentos do agente, do mais recente para o mais antigo."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            "SELECT * FROM public.agent_crons WHERE agent_id = $1 ORDER BY created_at DESC",
+            agent_id,
+        )
+    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+
+
+class CronIn(BaseModel):
+    name: str = Field(min_length=1)
+    expression: str = Field(min_length=1)
+    description: str | None = None
+
+
+@router.post("/{agent_id}/crons", status_code=status.HTTP_201_CREATED)
+async def criar_cron(
+    agent_id: str, dados: CronIn, usuario: Usuario = Depends(usuario_atual)
+):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            "INSERT INTO public.agent_crons (agent_id, name, expression, description) "
+            "VALUES ($1,$2,$3,$4) RETURNING *",
+            agent_id, dados.name, dados.expression, dados.description,
+        )
+    return json.loads(json.dumps(dict(linha), default=str))
+
+
+class CronPatchIn(BaseModel):
+    enabled: bool
+
+
+@router.patch("/{agent_id}/crons/{cron_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def alternar_cron(
+    agent_id: str,
+    cron_id: str,
+    dados: CronPatchIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Liga e desliga o agendamento. Só isso — mudar a expressão é apagar e criar.
+
+    ⚠️ **Isto não desliga o cron no gateway**, que é quem de fato executa. A
+    tabela é o registro da plataforma; a sincronização é do
+    `POST /automacoes/sincronizar-status`.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        achado = await conn.fetchval(
+            "UPDATE public.agent_crons SET enabled = $3 "
+            " WHERE id = $2::uuid AND agent_id = $1 RETURNING id",
+            agent_id, cron_id, dados.enabled,
+        )
+    if achado is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agendamento não encontrado.")
+
+
+@router.delete("/{agent_id}/crons/{cron_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def excluir_cron(
+    agent_id: str, cron_id: str, usuario: Usuario = Depends(usuario_atual)
+):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        marca = await conn.execute(
+            "DELETE FROM public.agent_crons WHERE id = $2::uuid AND agent_id = $1",
+            agent_id, cron_id,
+        )
+    if marca.rsplit(" ", 1)[-1] == "0":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Agendamento não encontrado.")

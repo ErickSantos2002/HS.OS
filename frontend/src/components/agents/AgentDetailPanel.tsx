@@ -274,15 +274,18 @@ function useTasksTodayCount(shortId: string) {
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
 
-    supabase
-      .from("agent_results")
-      .select("id", { count: "exact", head: true })
-      .eq("agent_id", shortId)
-      .gte("created_at", startOfDay.toISOString())
-      .then(({ count, error }) => {
+    api<{ count: number }>(
+      `/agents/resultados?apenas_contagem=true&agent_id=${encodeURIComponent(shortId)}` +
+        `&desde=${encodeURIComponent(startOfDay.toISOString())}`,
+    )
+      .then(({ count }) => {
         if (cancelled) return;
-        if (error) setError(error.message);
-        else setCount(count ?? 0);
+        setCount(count ?? 0);
+        setLoading(false);
+      })
+      .catch((e: Error) => {
+        if (cancelled) return;
+        setError(e.message);
         setLoading(false);
       });
     return () => { cancelled = true; };

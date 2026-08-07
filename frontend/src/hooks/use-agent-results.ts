@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { assinarTabela } from "@/lib/realtime";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,16 +22,9 @@ export function useAgentResults(agentId: string, category?: string) {
   const { data: results = [], isLoading } = useQuery({
     queryKey: key,
     queryFn: async () => {
-      let q = supabase
-        .from("agent_results")
-        .select("*")
-        .eq("agent_id", agentId)
-        .order("created_at", { ascending: false })
-        .limit(50);
-      if (category) q = q.eq("category", category);
-      const { data, error } = await q;
-      if (error) throw error;
-      return data as AgentResult[];
+      const params = new URLSearchParams({ agent_id: agentId, limite: "50" });
+      if (category) params.set("category", category);
+      return await api<AgentResult[]>(`/agents/resultados?${params}`);
     },
     enabled: !!agentId,
   });
@@ -47,17 +41,14 @@ export function useAgentResults(agentId: string, category?: string) {
 
   const addResult = useMutation({
     mutationFn: async (r: { title: string; description?: string; category?: string; value?: number; user_id?: string | null }) => {
-      const payload = { agent_id: agentId, ...r };
-      const { error } = await supabase.from("agent_results").insert(payload as never);
-      if (error) throw error;
+      await api("/agents/resultados", { method: "POST", body: { agent_id: agentId, ...r } });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["agent-results", agentId] }),
   });
 
   const deleteResult = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("agent_results").delete().eq("id", id);
-      if (error) throw error;
+      await api(`/agents/resultados/${id}`, { method: "DELETE" });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["agent-results", agentId] }),
   });
