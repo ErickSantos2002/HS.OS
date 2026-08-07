@@ -91,10 +91,10 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
     }
     const catalog = KNOWN_CONNECTORS.filter((c) => required.includes(c.id));
     const allKeyNames = catalog.flatMap((c) => c.keyNames ?? []);
-    const { data: integ } = await supabase
-      .from("integrations")
-      .select("key_name, is_configured")
-      .in("key_name", allKeyNames.length > 0 ? allKeyNames : ["__none__"]);
+    // Filtrar pelos key_names aqui em vez de na consulta: são poucos conectores
+    // por instalação, e evita um endpoint com filtro por lista.
+    const todosConectores = await api<any[]>("/integracoes/conectores").catch(() => []);
+    const integ = todosConectores.filter((r) => allKeyNames.includes(r.key_name));
     const configuredKeys = new Set(
       (integ ?? [])
         .filter((r: { key_name: string; is_configured: boolean }) => r.is_configured)

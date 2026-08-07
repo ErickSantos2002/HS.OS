@@ -305,11 +305,9 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
     let cancelled = false;
     setIntegrationsLoading(true);
     (async () => {
-      const { data, error } = await supabase
-        .from("integrations")
-        .select("id, name, icon, category, key_name, is_configured")
-        .order("category", { ascending: true })
-        .order("name", { ascending: true });
+      const { data, error } = await api<IntegrationRow[]>("/integracoes/conectores")
+        .then((d) => ({ data: d, error: null as Error | null }),
+              (e: Error) => ({ data: null, error: e }));
       if (cancelled) return;
       if (!error && data) setIntegrations(data as IntegrationRow[]);
       setIntegrationsLoading(false);

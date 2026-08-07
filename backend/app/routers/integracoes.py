@@ -1219,6 +1219,7 @@ class ConectorIn(BaseModel):
     # dá "COALESCE types uuid and text cannot be matched" no UPDATE.
     template_id: str | None = None
     credentials: list | dict | None = None
+    agents_using: list[str] = []
 
 
 def _previa(credenciais) -> tuple[str | None, bool]:
@@ -1233,21 +1234,42 @@ def _previa(credenciais) -> tuple[str | None, bool]:
 async def criar_conector(
     dados: ConectorIn, _: Usuario = Depends(exige_papel("super_admin"))
 ):
+    """Cria um conector. **Nunca sobrescreve um existente.**
+
+    Nome e `key_name` são únicos, e criar "por cima" de um conector que já
+    existe apagaria as credenciais e os vínculos de agentes dele. Por isso a
+    resposta a um duplicado é 409 com o nome do que já está lá — e não um
+    UPSERT silencioso nem o erro cru de constraint, que não diz o que fazer.
+    """
     previa, configurado = _previa(dados.credentials)
     async with sessao(role="service_role") as conn:
+        duplicado = await conn.fetchrow(
+            "SELECT name, key_name FROM public.integrations "
+            " WHERE name = $1 OR key_name = $2 LIMIT 1",
+            dados.name, dados.key_name,
+        )
+        if duplicado:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f'Já existe a conexão "{duplicado["name"]}" com esta chave '
+                f'({duplicado["key_name"]}). Edite a existente em vez de criar outra — '
+                "sobrescrever apagaria credenciais e vínculos.",
+            )
+
         ident = await conn.fetchval(
             """
             INSERT INTO public.integrations
                 (name, category, key_name, integration_type, description, icon,
-                 type, template_id, credentials, key_preview, is_configured)
+                 type, template_id, credentials, key_preview, is_configured,
+                 agents_using)
             VALUES ($1,$2,$3,$4,$5,$6,$7, NULLIF($8,''),
-                    $9::text::jsonb, $10, $11)
+                    $9::text::jsonb, $10, $11, $12)
             RETURNING id::text
             """,
             dados.name, dados.category, dados.key_name, dados.integration_type,
             dados.description, dados.icon, dados.type, dados.template_id or "",
             json.dumps(dados.credentials) if dados.credentials is not None else None,
-            previa, configurado,
+            previa, configurado, dados.agents_using,
         )
     logger.info("Conector %s criado.", dados.name)
     return {"id": ident}
@@ -1276,6 +1298,7 @@ async def editar_conector(
                 credentials   = COALESCE($10::text::jsonb, credentials),
                 key_preview   = COALESCE($11, key_preview),
                 is_configured = CASE WHEN $10 IS NULL THEN is_configured ELSE $12 END,
+                agents_using = $13,
                 updated_at = now()
              WHERE id = $1::uuid
             RETURNING id
@@ -1284,7 +1307,7 @@ async def editar_conector(
             dados.integration_type, dados.description, dados.icon, dados.type,
             dados.template_id or "",
             json.dumps(dados.credentials) if dados.credentials is not None else None,
-            previa, configurado,
+            previa, configurado, dados.agents_using,
         )
     if achado is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conector não encontrado.")
@@ -1311,3 +1334,68 @@ async def modelos_de_conector(usuario: Usuario = Depends(usuario_atual)):
             "  FROM public.integration_templates ORDER BY label"
         )
     return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+
+
+# Sufixos convencionais de variável de ambiente. A edge tentava esta lista
+# porque não há registro de qual variável pertence a qual conector — a
+# convenção `{TEMPLATE}_{CAMPO}` é o que existe de acordo.
+_SUFIXOS_CONVENCIONAIS = (
+    "API_KEY", "ACCESS_TOKEN", "CLIENT_ID", "CLIENT_SECRET", "REFRESH_TOKEN",
+    "SECRET_KEY", "WEBHOOK_SECRET", "BOT_TOKEN", "ACCOUNT_SID", "AUTH_TOKEN",
+    "PHONE_NUMBER_ID", "PAGE_ID", "AD_ACCOUNT_ID", "APP_ID", "BASE_URL", "TOKEN",
+)
+
+
+@router.get("/conectores/{conector_id}/credenciais")
+async def revelar_credenciais(
+    conector_id: str, _: Usuario = Depends(exige_papel("super_admin"))
+):
+    """Mostra as credenciais guardadas em variável de ambiente. Só `super_admin`.
+
+    ⚠️ **Este é o único ponto do sistema que devolve credencial ao navegador**, e
+    existe por um motivo estreito: o formulário de editar conector precisa
+    preencher os campos que já estão configurados, senão salvar uma alteração de
+    nome apagaria a chave por vir com o campo vazio.
+
+    Só lê **variáveis de ambiente do backend**, nunca o `credentials` do banco.
+    A diferença importa: o que está no banco a tela já sabe que existe (pelo
+    `is_configured`), e o que está no ambiente é o que ela não tem como
+    adivinhar.
+
+    A busca é por convenção porque não há registro de qual variável pertence a
+    qual conector: tenta o `key_name` de cada credencial, o `key_name` da linha,
+    e `{TEMPLATE}_{CAMPO}` para os sufixos usuais.
+    """
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            "SELECT name, key_name, credentials, template_id "
+            "  FROM public.integrations WHERE id = $1::uuid",
+            conector_id,
+        )
+    if linha is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conector não encontrado.")
+
+    nomes: list[str] = []
+    credenciais = linha["credentials"]
+    if isinstance(credenciais, str):
+        try:
+            credenciais = json.loads(credenciais)
+        except ValueError:
+            credenciais = None
+    if isinstance(credenciais, list):
+        nomes += [
+            str(c.get("key_name") or c.get("key") or "").strip()
+            for c in credenciais
+            if isinstance(c, dict)
+        ]
+    if linha["key_name"]:
+        nomes.append(str(linha["key_name"]))
+    if linha["template_id"]:
+        prefixo = re.sub(r"[^A-Z0-9]+", "_", str(linha["template_id"]).upper())
+        nomes += [f"{prefixo}_{s}" for s in _SUFIXOS_CONVENCIONAIS]
+
+    achadas = {n: os.environ[n] for n in nomes if n and os.environ.get(n)}
+    logger.info(
+        "Credenciais do conector %s reveladas: %d variáveis.", linha["name"], len(achadas)
+    )
+    return {"success": True, "credentials": achadas}

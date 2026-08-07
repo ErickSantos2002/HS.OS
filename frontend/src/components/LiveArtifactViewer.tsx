@@ -352,9 +352,13 @@ export default function LiveArtifactViewer({
     let cancelled = false;
     setIntegrationsReady(false);
     (async () => {
+      // A listagem já vem sem `credentials` — só o que a tela precisa saber.
       const [intRes, tplRes] = await Promise.all([
-        supabase.from("integrations").select("integration_type, name, key_name").eq("is_configured", true),
-        supabase.from("integration_templates").select("integration_type, playbook"),
+        api<any[]>("/integracoes/conectores")
+          .then((d) => ({ data: d.filter((r) => r.is_configured) }))
+          .catch(() => ({ data: [] as any[] })),
+        api<any[]>("/integracoes/modelos-de-conector")
+          .then((d) => ({ data: d })).catch(() => ({ data: [] as any[] })),
       ]);
       if (cancelled) return;
       const active = new Set(

@@ -160,13 +160,11 @@ export async function buildLiveArtifactsSystemBlocks(): Promise<string[]> {
   // Integrations with data_endpoints available for artifacts to consume
   try {
     const [integrationsRes, templatesRes] = await Promise.all([
-      supabase
-        .from("integrations")
-        .select("integration_type, name, key_name, is_configured")
-        .eq("is_configured", true),
-      supabase
-        .from("integration_templates")
-        .select("integration_type, label, playbook"),
+      api<any[]>("/integracoes/conectores")
+        .then((d) => ({ data: d.filter((r) => r.is_configured) }))
+        .catch(() => ({ data: [] as any[] })),
+      api<any[]>("/integracoes/modelos-de-conector")
+        .then((d) => ({ data: d })).catch(() => ({ data: [] as any[] })),
     ]);
 
     const configured = new Map<string, string>();

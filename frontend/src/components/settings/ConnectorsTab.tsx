@@ -1,7 +1,6 @@
 import { LLM_PROVIDERS } from "@/lib/connector-templates";
 import { api } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import {
   useLlmProviders,
   DialogoProvedor,
@@ -232,7 +231,9 @@ export default function ConnectorsTab() {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data, error }, agentsRes] = await Promise.all([
-      supabase.from("integrations").select(SELECT_COLS).order("name", { ascending: true }),
+      api<ConnectorRow[]>("/integracoes/conectores")
+        .then((d) => ({ data: d, error: null as Error | null }),
+              (e: Error) => ({ data: null, error: e })),
       api<any[]>("/agents").then((a) => ({ data: a, error: null })).catch((e) => ({ data: [] as any[], error: e })),
     ]);
     if (error) {
@@ -474,34 +475,21 @@ export default function ConnectorsTab() {
       updated_at: new Date().toISOString(),
     };
 
+    // A checagem de duplicata é do servidor: ele responde 409 com o nome do
+    // conector que já existe. Estava aqui, e uma consulta separada do INSERT
+    // deixa a janela em que dois cliques criam dois — além de repetir a regra
+    // em dois lugares.
     if (editing) {
-      const { error } = await supabase.from("integrations").update(record as any).eq("id", editing.id);
-      if (error) throw error;
+      await api(`/integracoes/conectores/${editing.id}`, { method: "PATCH", body: record });
     } else {
-      // Aviso explícito em vez de erro críptico de constraint (nome e
-      // key_name são únicos) — e nunca sobrescrever em silêncio: a conexão
-      // existente pode ter credenciais e vínculos de agentes que uma criação
-      // "por cima" apagaria.
-      const { data: dup } = await supabase
-        .from("integrations")
-        .select("id, name, key_name")
-        .or(`name.eq.${payload.name},key_name.eq.${key_name}`)
-        .limit(1)
-        .maybeSingle();
-      if (dup) {
-        throw new Error(
-          `Já existe a conexão "${dup.name}" com esta chave (${dup.key_name}). ` +
-          `Edite a existente em vez de criar outra — sobrescrever apagaria credenciais e vínculos.`,
-        );
-      }
-      const { error } = await supabase.from("integrations").insert(record as any);
-      if (error) throw error;
+      await api("/integracoes/conectores", { method: "POST", body: record });
     }
   }
 
   async function handleDelete() {
     if (!deleteTarget) return;
-    const { error } = await supabase.from("integrations").delete().eq("id", deleteTarget.id);
+    const error = await api(`/integracoes/conectores/${deleteTarget.id}`, { method: "DELETE" })
+      .then(() => null, (e: Error) => e);
     if (error) {
       toast({ title: "Erro ao remover", description: error.message, variant: "destructive" });
       return;
@@ -1023,10 +1011,9 @@ function TemplateModal({
     if (editing?.id) {
       const missing = template.fields.some((f) => !seed[f.key]);
       if (missing) {
-        supabase.functions
-          .invoke("reveal-connector-credentials", { body: { integration_id: editing.id } })
-          .then(({ data }) => {
-            const byEnv: Record<string, string> = (data as any)?.credentials ?? {};
+        api<any>(`/integracoes/conectores/${editing.id}/credenciais`)
+          .then((data) => {
+            const byEnv: Record<string, string> = data?.credentials ?? {};
             if (!byEnv || Object.keys(byEnv).length === 0) return;
             const prefix = template.id.toUpperCase().replace(/[^A-Z0-9]+/g, "_");
             setValues((prev) => {
@@ -1334,10 +1321,9 @@ function CustomModal({
 
     // Hydrate from env vars if nothing is stored in DB
     if (editing?.id && entries.length === 0) {
-      supabase.functions
-        .invoke("reveal-connector-credentials", { body: { integration_id: editing.id } })
-        .then(({ data }) => {
-          const byEnv: Record<string, string> = (data as any)?.credentials ?? {};
+      api<any>(`/integracoes/conectores/${editing.id}/credenciais`)
+        .then((data) => {
+          const byEnv: Record<string, string> = data?.credentials ?? {};
           const envEntries = Object.entries(byEnv);
           if (envEntries.length === 0) return;
           setPairs(envEntries.map(([k, v]) => ({ key: k, value: v })));
