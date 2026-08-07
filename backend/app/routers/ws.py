@@ -20,6 +20,14 @@ from app.realtime import hub, serializar, topico_canal, topico_usuario
 
 logger = logging.getLogger(__name__)
 
+# Erguido no shutdown da aplicação (ver `app/main.py`). É o que permite às
+# conexões abertas se despedirem em vez de segurar o processo.
+_desligando = asyncio.Event()
+
+
+def sinalizar_desligamento() -> None:
+    _desligando.set()
+
 router = APIRouter(tags=["realtime"])
 
 # Sem tráfego, um proxy no meio derruba a conexão por ociosidade. O ping é mais
@@ -75,7 +83,19 @@ async def eventos(
             await asyncio.sleep(_INTERVALO_PING)
             await websocket.send_text(serializar({"tipo": "ping"}))
 
-    tarefas = [asyncio.create_task(t()) for t in (bombear, escutar, pingar)]
+    async def vigiar_desligamento() -> None:
+        """Fecha a conexão quando a aplicação está desligando.
+
+        ⚠️ Sem isto o `uvicorn --reload` **trava**: o shutdown gracioso espera
+        toda conexão fechar, e um WebSocket que nunca termina segura o processo
+        para sempre. Descoberto em 07/08/2026 — o backend ficou preso em
+        "Waiting for connections to close" com uma aba do navegador aberta, e o
+        sintoma parecia endpoint lento.
+        """
+        while not _desligando.is_set():
+            await asyncio.sleep(0.5)
+
+    tarefas = [asyncio.create_task(t()) for t in (bombear, escutar, pingar, vigiar_desligamento)]
     try:
         # A primeira que terminar encerra a conexão — seja desconexão do
         # cliente (escutar) ou erro de escrita (bombear/pingar).

@@ -16,11 +16,12 @@ from app.routers.channels import router as channels_router
 from app.routers.chat_extras import router as chat_extras_router
 from app.routers.conversations import router as conversations_router
 from app.routers.gateway import router as gateway_router
+from app.routers.llm import router as llm_router
 from app.routers.integracoes import router as integracoes_router
 from app.routers.profiles import router as profiles_router
 from app.routers.uso import router as uso_router
 from app.routers.storage import preparar_diretorios, router as storage_router
-from app.routers.ws import router as ws_router
+from app.routers.ws import router as ws_router, sinalizar_desligamento
 
 # Conforme os domínios forem portados das Edge Functions (backend/supabase/),
 # registre os routers aqui. Um router por domínio, mesmo padrão do TalentHS:
@@ -34,6 +35,9 @@ async def lifespan(app: FastAPI):
     yield
     # A conexão com o gateway é persistente; fechar no shutdown evita deixar
     # socket pendurado no OpenClaw a cada reinício.
+    # Antes de tudo: solta os WebSockets abertos, senão o shutdown
+    # gracioso espera por eles para sempre.
+    sinalizar_desligamento()
     await encerrar_cliente()
     await close_db()
 
@@ -81,6 +85,7 @@ app.include_router(channels_router)
 app.include_router(chat_extras_router)
 app.include_router(gateway_router)
 app.include_router(integracoes_router)
+app.include_router(llm_router)
 app.include_router(profiles_router)
 app.include_router(storage_router)
 app.include_router(uso_router)
