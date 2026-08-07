@@ -830,15 +830,16 @@ function useArtifactsFeed(agentId: string) {
     let cancelled = false;
     setLoading(true);
     (async () => {
-      // Best-effort: artifacts_published has no agent_id column in current schema,
-      // so we try a metadata-style filter and gracefully fall back to empty.
+      // ⚠️ `artifacts_published` **não tem** coluna `agent_id` — conferido no
+      // schema em 07/08. O comentário anterior já suspeitava disso ("best-effort
+      // … gracefully fall back to empty"), e a consulta de fato nunca devolveu
+      // nada: era um erro engolido a cada abertura do painel.
+      //
+      // Enquanto não existir vínculo entre artefato publicado e agente, a lista
+      // fica vazia — mas agora explicitamente, e não por acidente.
       try {
-        const { data, error } = await (supabase as any)
-          .from("artifacts_published")
-          .select("id, title, created_at, agent_id")
-          .eq("agent_id", agentId)
-          .order("created_at", { ascending: false })
-          .limit(20);
+        const data: any[] = [];
+        const error = null;
         if (cancelled) return;
         if (error || !data) {
           setItems([]);
@@ -1061,14 +1062,11 @@ function useRecentSessions(agentId: string) {
     setLoading(true);
     (async () => {
       try {
-        const { data, error } = await supabase
-          .from("conversations")
-          .select("user_id, content, created_at")
-          .eq("agent_id", agentId)
-          .order("created_at", { ascending: false })
-          .limit(60);
+        const data = await api<any[]>(
+          `/agents/${encodeURIComponent(agentId)}/atividade-recente`,
+        ).catch(() => null);
         if (cancelled) return;
-        if (error || !data) {
+        if (!data) {
           setItems([]);
           setLoading(false);
           return;

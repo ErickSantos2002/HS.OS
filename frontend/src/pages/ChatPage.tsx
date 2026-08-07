@@ -1236,7 +1236,8 @@ export default function ChatPage() {
     setArtifactMessages(prev => prev.filter(m => m.id !== messageId));
     removeMessageFromHistoryCache(user.id, effectiveAgentId, messageId);
     // Delete from database
-    await supabase.from("conversations").delete().eq("id", messageId);
+    await api(`/conversations/mensagem/${messageId}`, { method: "DELETE" })
+      .catch(() => { /* a mensagem já saiu da tela */ });
   }, [effectiveAgentId, user?.id]);
   const [realtimePendingByAgent, setRealtimePendingByAgent] = useState<Record<string, boolean>>({});
   const [realtimeStatus, setRealtimeStatus] = useState<"connected" | "reconnecting">("connected");

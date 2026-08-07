@@ -139,6 +139,66 @@ async def minhas_respostas(
     return [_para_saida(l) for l in linhas]
 
 
+@router.get("/{agent_id}/respostas", response_model=list[MensagemOut])
+async def respostas_do_agente(
+    agent_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+    depois: str | None = Query(default=None, description="Só o que veio depois deste instante."),
+    com_codigo: bool = Query(default=False, description="Só as que contêm bloco de código."),
+    limite: int = Query(default=200, ge=1, le=500),
+):
+    """As respostas deste agente para mim, em ordem cronológica.
+
+    Dois usos, e por isso os dois filtros:
+
+    - o `chat-sender` pergunta "veio algo **depois** deste instante?" enquanto
+      espera a resposta — daí o `depois`
+    - a aba de artefatos procura mensagens com bloco de código — daí o
+      `com_codigo`, que era um `.or()` com cinco `ilike` do lado do cliente
+
+    ⚠️ **Antes de `GET /{agent_id}`** não é preciso: "respostas" é o segundo
+    segmento, e `/{agent_id}` só casa com um. Mas vale lembrar que
+    `/{agent_id}/algo` **casaria** com uma rota `/{a}/{b}` declarada antes.
+    """
+    condicoes = ["user_id = $1::uuid", "agent_id = $2", "role = 'agent'"]
+    args: list = [usuario.id, agent_id]
+    if depois:
+        args.append(depois)
+        condicoes.append(f"created_at > ${len(args)}::text::timestamptz")
+    if com_codigo:
+        # Os cinco tipos que a tela sabe renderizar como artefato.
+        condicoes.append(
+            "(content ILIKE '%```html%' OR content ILIKE '%```svg%' "
+            " OR content ILIKE '%```jsx%' OR content ILIKE '%```tsx%' "
+            " OR content ILIKE '%```react%')"
+        )
+
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            f"SELECT {_COLUNAS} FROM public.conversations "
+            f" WHERE {' AND '.join(condicoes)} ORDER BY created_at "
+            f" LIMIT ${len(args) + 1}",
+            *args, limite,
+        )
+    return [_para_saida(l) for l in linhas]
+
+
+@router.delete("/mensagem/{mensagem_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def excluir_mensagem(mensagem_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """Apaga uma mensagem da minha conversa.
+
+    O `user_id` entra no WHERE: apagar mensagem de outra pessoa responde 404 em
+    vez de depender de a policy estar escrita como se espera.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        marca = await conn.execute(
+            "DELETE FROM public.conversations WHERE id = $1::uuid AND user_id = $2::uuid",
+            mensagem_id, usuario.id,
+        )
+    if marca.rsplit(" ", 1)[-1] == "0":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mensagem não encontrada.")
+
+
 @router.get("/{agent_id}", response_model=PaginaOut)
 async def historico(
     agent_id: str,

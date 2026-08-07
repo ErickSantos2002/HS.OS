@@ -323,6 +323,34 @@ async def excluir_resultado(resultado_id: str, usuario: Usuario = Depends(usuari
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Resultado não encontrado.")
 
 
+@router.get("/{agent_id}/atividade-recente")
+async def atividade_recente(
+    agent_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+    limite: int = Query(default=60, ge=1, le=200),
+):
+    """As últimas conversas deste agente, **com quem quer que tenha sido**.
+
+    ⚠️ É a única leitura de `conversations` que **não** é escopada ao usuário do
+    token: o painel do agente mostra quem falou com ele, e limitar a "minhas
+    conversas" faria a tela dizer que ninguém usou um agente que a equipe inteira
+    usa. Roda como `authenticated`, então o RLS ainda decide o que aparece.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """
+            SELECT user_id::text AS user_id, content,
+                   to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS created_at
+              FROM public.conversations
+             WHERE agent_id = $1
+             ORDER BY created_at DESC
+             LIMIT $2
+            """,
+            agent_id, limite,
+        )
+    return [dict(l) for l in linhas]
+
+
 @router.get("/{agent_id}", response_model=PerfilCompletoOut)
 async def obter(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:

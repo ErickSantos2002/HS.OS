@@ -234,7 +234,7 @@ export default function AutomacoesPage() {
   async function refresh() {
     setLoading(true);
     const [autosRes, agentsRes] = await Promise.all([
-      supabase.from("automations").select("*").order("created_at", { ascending: false }),
+      api<any[]>("/automacoes").then((d) => ({ data: d, error: null })).catch((e) => ({ data: [] as any[], error: e })),
       api<any[]>("/agents").then((a) => ({ data: a, error: null })).catch((e) => ({ data: [] as any[], error: e })),
     ]);
     if (autosRes.error) toast.error(autosRes.error.message);
@@ -255,11 +255,11 @@ export default function AutomacoesPage() {
   async function toggleActive(a: Automation, next: boolean) {
     // Optimistic update so the UI reflects immediately.
     setItems((prev) => prev.map((it) => (it.id === a.id ? { ...it, is_active: next } : it)));
-    const { data, error } = await supabase
-      .from("automations")
-      .update({ is_active: next })
-      .eq("id", a.id)
-      .select("id,is_active");
+    const { data, error } = await api<any>(`/automacoes/${a.id}`, {
+      method: "PATCH",
+      body: { is_active: next },
+    }).then((d) => ({ data: [d], error: null as Error | null }),
+            (e: Error) => ({ data: null, error: e }));
     if (error) {
       // Roll back on failure.
       setItems((prev) => prev.map((it) => (it.id === a.id ? { ...it, is_active: a.is_active } : it)));
@@ -276,7 +276,8 @@ export default function AutomacoesPage() {
 
   async function handleDelete() {
     if (!deleteFor) return;
-    const { error } = await supabase.from("automations").delete().eq("id", deleteFor.id);
+    const error = await api(`/automacoes/${deleteFor.id}`, { method: "DELETE" })
+      .then(() => null, (e: Error) => e);
     if (error) toast.error(error.message);
     else toast.success("Automação excluída");
     setDeleteFor(null);
@@ -511,9 +512,12 @@ function AutomationForm({ open, onOpenChange, editing, agents, currentUserId, on
       is_active: isActive,
       created_by: editing?.created_by ?? currentUserId,
     };
-    const result = editing
-      ? await supabase.from("automations").update(payload).eq("id", editing.id).select().single()
-      : await supabase.from("automations").insert(payload).select().single();
+    // O `created_by` sai do token no servidor.
+    const result = await (editing
+      ? api<any>(`/automacoes/${editing.id}`, { method: "PATCH", body: payload })
+      : api<any>("/automacoes", { method: "POST", body: payload })
+    ).then((d) => ({ data: d, error: null as Error | null }),
+           (e: Error) => ({ data: null, error: e }));
     setSaving(false);
     if (result.error) {
       toast.error(result.error.message);

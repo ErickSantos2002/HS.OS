@@ -699,14 +699,10 @@ async function pollForBackgroundReply(
   try {
     while (Date.now() - start < timeoutMs) {
       if (options?.signal?.aborted) return null;
-      const { data } = await supabase
-        .from("conversations")
-        .select("id, content, created_at, media")
-        .eq("agent_id", agentId)
-        .eq("user_id", userId)
-        .eq("role", "agent")
-        .gt("created_at", cursor)
-        .order("created_at", { ascending: true });
+      const data = await api<any[]>(
+        `/conversations/${encodeURIComponent(agentId)}/respostas` +
+          `?depois=${encodeURIComponent(cursor)}`,
+      ).catch(() => null);
 
       if (data && data.length > 0) {
         if (options?.emitHeartbeats) {
@@ -863,18 +859,15 @@ async function runResumePoll(t: PendingLongTask, initialElapsed: number, budget:
 
   // If a real reply already landed while the page was closed, surface it and bail.
   try {
-    const { data } = await supabase
-      .from("conversations")
-      .select("id, content, created_at, media")
-      .eq("agent_id", t.agentId)
-      .eq("user_id", t.userId)
-      .eq("role", "agent")
-      .gt("created_at", t.sinceTimestamp)
-      .order("created_at", { ascending: false })
-      .limit(1);
-    if (data && data.length > 0 && data[0].content) {
+    // O endpoint devolve em ordem crescente; a última é a mais recente.
+    const data = await api<any[]>(
+      `/conversations/${encodeURIComponent(t.agentId)}/respostas` +
+        `?depois=${encodeURIComponent(t.sinceTimestamp)}`,
+    ).catch(() => null);
+    const ultima = data?.length ? data[data.length - 1] : null;
+    if (ultima?.content) {
       removePendingTask(t.agentId, t.userId);
-      emitUpdate(t.agentId, conversationRowToMessage(data[0], t.agentId));
+      emitUpdate(t.agentId, conversationRowToMessage(ultima, t.agentId));
       return;
     }
   } catch (err) {

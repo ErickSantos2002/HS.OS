@@ -243,22 +243,15 @@ export async function loadConversationArtifacts(
   userId: string,
   agentId: string
 ): Promise<ChatMessage[]> {
-  const { data, error } = await supabase
-    .from("conversations")
-    .select("*")
-    .eq("agent_id", agentId)
-    .eq("user_id", userId)
-    .eq("role", "agent")
-    .or(
-      "content.ilike.%```html%,content.ilike.%```svg%,content.ilike.%```jsx%,content.ilike.%```tsx%,content.ilike.%```react%"
-    )
-    .order("created_at", { ascending: true })
-    .limit(200);
-
-  if (error) {
-    console.error("[chat-persistence] Failed to load artifacts:", error);
-    return [];
-  }
+  // O `.or()` com cinco `ilike` virou o parâmetro `com_codigo` — a lista dos
+  // tipos que a tela sabe renderizar vive no servidor agora.
+  const data = await api<any[]>(
+    `/conversations/${encodeURIComponent(agentId)}/respostas?com_codigo=true`,
+  ).catch((e: Error) => {
+    console.error("[chat-persistence] Failed to load artifacts:", e);
+    return null;
+  });
+  if (!data) return [];
 
   return (data ?? []).map((row) => conversationRowToMessage(row, agentId));
 }

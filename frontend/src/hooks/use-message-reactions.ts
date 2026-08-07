@@ -1,7 +1,6 @@
 import { api } from "@/lib/api";
 import { assinarTabela } from "@/lib/realtime";
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 export interface Reaction {
   emoji: string;
@@ -16,17 +15,22 @@ export interface MessageReactions {
 export function useMessageReactions(channelId: string | null) {
   const [reactions, setReactions] = useState<MessageReactions>({});
 
-  const buildReactionsMap = (rows: any[]): MessageReactions => {
+  /**
+   * O agrupamento por (mensagem, emoji) agora vem do servidor — era montado
+   * aqui a partir de uma linha por reação. Só falta a contagem, que é o
+   * tamanho da lista.
+   */
+  const buildReactionsMap = (
+    rows: { message_id: string; emoji: string; user_ids: string[] }[],
+  ): MessageReactions => {
     const map: MessageReactions = {};
     for (const row of rows) {
       if (!map[row.message_id]) map[row.message_id] = [];
-      const existing = map[row.message_id].find((r) => r.emoji === row.emoji);
-      if (existing) {
-        existing.user_ids.push(row.user_id);
-        existing.count++;
-      } else {
-        map[row.message_id].push({ emoji: row.emoji, user_ids: [row.user_id], count: 1 });
-      }
+      map[row.message_id].push({
+        emoji: row.emoji,
+        user_ids: row.user_ids,
+        count: row.user_ids.length,
+      });
     }
     return map;
   };
@@ -90,21 +94,11 @@ export function useMessageReactions(channelId: string | null) {
       return;
     }
 
-    const messagesData = await api<{ id: string }[]>(
-      `/channels/${channelId}/messages?limite=200`,
+    // A busca das mensagens saiu daqui: o endpoint de reações já se limita às
+    // recentes do canal. Eram duas idas para o que é uma.
+    const data = await api<{ message_id: string; emoji: string; user_ids: string[] }[]>(
+      `/channels/${channelId}/reactions`,
     ).catch(() => null);
-
-    const messageIds = messagesData?.map((message: any) => message.id) ?? [];
-
-    if (messageIds.length === 0) {
-      setReactions({});
-      return;
-    }
-
-    const { data } = await supabase
-      .from("message_reactions")
-      .select("*")
-      .in("message_id", messageIds);
 
     setReactions(data ? buildReactionsMap(data) : {});
   }, [channelId]);
@@ -127,16 +121,12 @@ export function useMessageReactions(channelId: string | null) {
 
     setReactions((current) => applyReactionUpdate(current, messageId, emoji, userId, !alreadyReacted));
 
-    const { error } = alreadyReacted
-      ? await supabase
-        .from("message_reactions")
-        .delete()
-        .eq("message_id", messageId)
-        .eq("user_id", userId)
-        .eq("emoji", emoji)
-      : await supabase
-        .from("message_reactions")
-        .insert({ message_id: messageId, user_id: userId, emoji } as any);
+    // O `user_id` sai do token no servidor: reagir em nome de outra pessoa não
+    // é caso de uso, e mandá-lo daqui abria para isso.
+    const error = await api("/reactions", {
+      method: alreadyReacted ? "DELETE" : "POST",
+      body: { message_id: messageId, emoji },
+    }).then(() => null, (e: Error) => e);
 
     if (error) {
       setReactions(previousReactions);
