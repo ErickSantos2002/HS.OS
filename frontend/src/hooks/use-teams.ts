@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useState, useCallback, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 export interface Team {
   id: string;
@@ -18,7 +18,7 @@ interface DbTeamRow {
   color: string | null;
   emoji: string | null;
   created_at: string;
-  team_agents: { agent_id: string }[];
+  agent_ids: string[];
 }
 
 function rowToTeam(row: DbTeamRow): Team {
@@ -28,7 +28,9 @@ function rowToTeam(row: DbTeamRow): Team {
     description: row.description ?? "",
     color: row.color ?? "",
     emoji: row.emoji ?? "",
-    agentIds: row.team_agents.map((ta) => ta.agent_id),
+    // O elenco vem agregado do servidor. Era o join embutido do PostgREST
+    // (`*, team_agents(agent_id)`), sintaxe que só existe lá.
+    agentIds: row.agent_ids ?? [],
     createdAt: row.created_at,
   };
 }
@@ -37,11 +39,8 @@ export function useTeams() {
   const [teams, setTeams] = useState<Team[]>([]);
 
   const fetchTeams = useCallback(async () => {
-    const { data } = await supabase
-      .from("teams")
-      .select("*, team_agents(agent_id)")
-      .order("created_at", { ascending: true });
-    if (data) setTeams((data as unknown as DbTeamRow[]).map(rowToTeam));
+    const data = await api<DbTeamRow[]>("/times").catch(() => null);
+    if (data) setTeams(data.map(rowToTeam));
   }, []);
 
   useEffect(() => {
@@ -49,13 +48,12 @@ export function useTeams() {
   }, [fetchTeams]);
 
   const createTeam = useCallback(async (data: { name: string; description: string; color: string; emoji: string }) => {
-    const { data: inserted } = await supabase
-      .from("teams")
-      .insert({ name: data.name, description: data.description, color: data.color, emoji: data.emoji })
-      .select("*, team_agents(agent_id)")
-      .single();
+    const inserted = await api<DbTeamRow>("/times", {
+      method: "POST",
+      body: { name: data.name, description: data.description, color: data.color, emoji: data.emoji },
+    }).catch(() => null);
     if (inserted) {
-      const team = rowToTeam(inserted as unknown as DbTeamRow);
+      const team = rowToTeam(inserted);
       setTeams((prev) => [...prev, team]);
       return team;
     }
@@ -63,17 +61,17 @@ export function useTeams() {
   }, []);
 
   const updateTeam = useCallback(async (id: string, data: Partial<Omit<Team, "id" | "createdAt" | "agentIds">>) => {
-    await supabase.from("teams").update(data).eq("id", id);
+    await api(`/times/${id}`, { method: "PATCH", body: data });
     setTeams((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)));
   }, []);
 
   const deleteTeam = useCallback(async (id: string) => {
-    await supabase.from("teams").delete().eq("id", id);
+    await api(`/times/${id}`, { method: "DELETE" });
     setTeams((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
   const addAgentToTeam = useCallback(async (teamId: string, agentId: string) => {
-    await supabase.from("team_agents").insert({ team_id: teamId, agent_id: agentId });
+    await api(`/times/${teamId}/agentes/${encodeURIComponent(agentId)}`, { method: "PUT" });
     setTeams((prev) =>
       prev.map((t) =>
         t.id === teamId && !t.agentIds.includes(agentId)
@@ -84,7 +82,7 @@ export function useTeams() {
   }, []);
 
   const removeAgentFromTeam = useCallback(async (teamId: string, agentId: string) => {
-    await supabase.from("team_agents").delete().eq("team_id", teamId).eq("agent_id", agentId);
+    await api(`/times/${teamId}/agentes/${encodeURIComponent(agentId)}`, { method: "DELETE" });
     setTeams((prev) =>
       prev.map((t) =>
         t.id === teamId ? { ...t, agentIds: t.agentIds.filter((id) => id !== agentId) } : t

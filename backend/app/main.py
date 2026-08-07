@@ -26,6 +26,7 @@ from app.routers.push import router as push_router
 from app.routers.profiles import router as profiles_router
 from app.routers.tarefas import router as tarefas_router
 from app.routers.uso import router as uso_router
+from app.routers.times import router as times_router
 from app.routers.wiki import router as wiki_router
 from app.routers.storage import preparar_diretorios, router as storage_router
 from app.routers.ws import router as ws_router, sinalizar_desligamento
@@ -109,6 +110,7 @@ app.include_router(profiles_router)
 app.include_router(push_router)
 app.include_router(storage_router)
 app.include_router(uso_router)
+app.include_router(times_router)
 app.include_router(wiki_router)
 app.include_router(tarefas_router)
 app.include_router(ws_router)
