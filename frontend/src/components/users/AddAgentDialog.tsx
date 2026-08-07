@@ -322,7 +322,9 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
     if (!open) return;
     let cancelled = false;
     (async () => {
-      const data = await api<any[]>("/agents").catch(() => []);
+      // `/agents` devolve `{agents, defaultId, gatewayOk}`, não um array.
+      const { agents: data } = await api<{ agents: any[] }>("/agents")
+        .catch(() => ({ agents: [] as any[] }));
       if (cancelled) return;
       const agents = (data ?? []).map((row: any) => ({
         id: String(row.openclawId ?? row.id ?? "").trim().toLowerCase(),
@@ -340,7 +342,8 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
     if (!open || step !== 8 || leaderOptions.length > 0) return;
     let cancelled = false;
     (async () => {
-      const data = await api<any[]>("/agents").catch(() => null);
+      const { agents: data } = await api<{ agents: any[] }>("/agents")
+        .catch(() => ({ agents: null as any[] | null }));
       if (cancelled || !data) return;
       const opts: LeaderOption[] = data
         .filter((a) => a.id !== agentId)
@@ -435,7 +438,8 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
     setIdExists(false);
     // Confere pelos dois ids: o agente pode estar gravado pelo `openclaw_id`
     // ou pelo `agent_id`, e as duas formas convivem por herança.
-    const todos = await api<any[]>("/agents").catch(() => []);
+    const { agents: todos } = await api<{ agents: any[] }>("/agents")
+      .catch(() => ({ agents: [] as any[] }));
     setIdExists(todos.some((a) => a.id === agentId || a.openclawId === agentId));
     setCheckingId(false);
   }

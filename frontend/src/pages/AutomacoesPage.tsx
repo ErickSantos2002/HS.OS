@@ -235,7 +235,9 @@ export default function AutomacoesPage() {
     setLoading(true);
     const [autosRes, agentsRes] = await Promise.all([
       api<any[]>("/automacoes").then((d) => ({ data: d, error: null })).catch((e) => ({ data: [] as any[], error: e })),
-      api<any[]>("/agents").then((a) => ({ data: a, error: null })).catch((e) => ({ data: [] as any[], error: e })),
+      api<{ agents: any[] }>("/agents")
+        .then((a) => ({ data: a.agents ?? [], error: null }))
+        .catch((e) => ({ data: [] as any[], error: e })),
     ]);
     if (autosRes.error) toast.error(autosRes.error.message);
     else setItems((autosRes.data || []) as unknown as Automation[]);

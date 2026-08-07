@@ -105,6 +105,23 @@ produção. Testei só as guardas (404, 401, 403); o caminho feliz nunca rodou.
 
 ---
 
+## Verificação feita antes de entregar
+
+Além dos testes por endpoint de cada lote:
+
+- **Varredura das 48 rotas GET sem parâmetro** — 41 respondendo, 7 falhando pelo
+  motivo certo (túnel fechado, segredo de teste apagado, parâmetro obrigatório)
+- **Cruzamento de cada `api<T>("/rota")` do front com o formato real da
+  resposta** — achou um bug real: `/agents` devolve `{agents, defaultId,
+  gatewayOk}` e seis lugares religados hoje tratavam como array. Corrigido.
+- **Audit de `functions.invoke` atravessando quebra de linha** — achou
+  `notify-orchestrator-onboarding`, que dois audits anteriores tinham perdido
+- `tsc` limpo, build limpo, o único teste passando
+
+Nada disso substitui abrir a tela. É o que dá para garantir sem navegador.
+
+---
+
 ## Como relatar
 
 O que mais ajuda, em ordem:

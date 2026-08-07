@@ -234,7 +234,9 @@ export default function ConnectorsTab() {
       api<ConnectorRow[]>("/integracoes/conectores")
         .then((d) => ({ data: d, error: null as Error | null }),
               (e: Error) => ({ data: null, error: e })),
-      api<any[]>("/agents").then((a) => ({ data: a, error: null })).catch((e) => ({ data: [] as any[], error: e })),
+      api<{ agents: any[] }>("/agents")
+        .then((a) => ({ data: a.agents ?? [], error: null }))
+        .catch((e) => ({ data: [] as any[], error: e })),
     ]);
     if (error) {
       toast({ title: "Erro ao carregar conectores", description: error.message, variant: "destructive" });

@@ -20,7 +20,8 @@ import {
 const QUERY_KEY = ["agent-catalog"] as const;
 
 async function fetchCatalog(): Promise<AgentCatalogEntry[]> {
-  const todos = await api<any[]>("/agents");
+  // `/agents` devolve `{agents, defaultId, gatewayOk}`, não um array.
+  const { agents: todos } = await api<{ agents: any[] }>("/agents");
   const data = (todos ?? []).filter((a) => a.isOfficial);
 
   return data.map((row: any) => ({
