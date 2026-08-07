@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { assinar } from "@/lib/realtime";
 import { useEffect, useState } from "react";
 
@@ -122,10 +123,7 @@ export function useThreadCounts(channelId: string | null) {
         ),
       );
       if (missingHumanIds.length > 0) {
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("id, avatar_url, full_name")
-          .in("id", missingHumanIds);
+        const { data: profs } = await api<any[]>("/profiles").then((d) => ({ data: d })).catch(() => ({ data: [] as any[] }));
         const profMap = new Map((profs ?? []).map((p: any) => [p.id, p]));
         for (const [tid, meta] of Object.entries(next)) {
           const last = lastAuthorByThread[tid];

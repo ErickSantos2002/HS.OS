@@ -42,12 +42,13 @@ Realtime é o segundo: o hub existe e funciona, mas só o `use-channels.ts` o us
 ### Onde estão as 185 chamadas ao banco
 
 ```
-21 live_artifacts    9 integrations       6 agent_results
-17 agent_profiles    9 channel_messages   5 wiki_documents
-15 profiles          9 channel_members    5 conversations
-                     8 notifications      5 automations
-                     8 company_profile    5 arena_agents
+10 agent_profiles    8 company_profile    5 automations
+ 9 integrations      6 agent_results      5 arena_agents
+ 9 channel_messages  5 wiki_documents     4 wiki_spaces
+ 9 channel_members   5 conversations      1 profiles
 ```
+
+`live_artifacts` (era 21) e `profiles` (era 15) foram zeradas em 07/08.
 
 E os arquivos mais pesados, que é por onde não começar:
 

@@ -240,10 +240,7 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
     let cancelled = false;
     setUsersLoading(true);
     (async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, avatar_url")
-        .order("full_name", { ascending: true });
+      const { data } = await api<any[]>("/profiles").then((d) => ({ data: d })).catch(() => ({ data: [] as any[] }));
       if (cancelled) return;
       setPlatformUsers((data ?? []) as PlatformUser[]);
       setUsersLoading(false);

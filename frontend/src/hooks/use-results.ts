@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { assinarTabela } from "@/lib/realtime";
 import { useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -170,13 +171,8 @@ export function useResults(filters: ResultsFilters) {
 
       let profiles: ProfileLite[] = [];
       if (userIds.length > 0) {
-        const { data: profileRows, error: profilesError } = await supabase
-          .from("profiles")
-          .select("id, full_name, email")
-          .in("id", userIds);
-
-        if (profilesError) throw profilesError;
-        profiles = (profileRows ?? []) as ProfileLite[];
+        const profileRows = await api<ProfileLite[]>("/profiles");
+        profiles = profileRows ?? [];
       }
 
       return { results: officialResults, profiles };

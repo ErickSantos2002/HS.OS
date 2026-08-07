@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
@@ -40,13 +41,9 @@ export function useUserStatus() {
     }
     let cancelled = false;
     void (async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("custom_status, custom_status_emoji, custom_status_set_at")
-        .eq("id", user.id)
-        .maybeSingle();
+      const data = await api<any>("/profiles/me").catch(() => null);
       if (cancelled) return;
-      if (!error && data) {
+      if (data) {
         const row = data as unknown as ProfileStatusRow;
         const active: ActiveStatus | null =
           row.custom_status && row.custom_status_emoji && row.custom_status_set_at
@@ -69,15 +66,12 @@ export function useUserStatus() {
       const next: ActiveStatus = { label: preset.label, emoji: preset.emoji, setAt: nowIso };
       setStatus(next);
       setSelfStatusCache(next);
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          custom_status: preset.label,
-          custom_status_emoji: preset.emoji,
-          custom_status_set_at: nowIso,
-          updated_at: nowIso,
-        } as any)
-        .eq("id", user.id);
+      // O carimbo de quando o status foi posto é do servidor: com o relógio do
+      // navegador adiantado, "há 5 minutos" vira "daqui a 5 minutos" para quem vê.
+      const error = await api("/profiles/me", {
+        method: "PATCH",
+        body: { custom_status: preset.label, custom_status_emoji: preset.emoji },
+      }).then(() => null, (e: Error) => e);
       if (error) {
         toast.error("Não foi possível atualizar seu status.");
       } else {
@@ -91,15 +85,10 @@ export function useUserStatus() {
     if (!user?.id) return;
     setStatus(null);
     setSelfStatusCache(null);
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        custom_status: null,
-        custom_status_emoji: null,
-        custom_status_set_at: null,
-        updated_at: new Date().toISOString(),
-      } as any)
-      .eq("id", user.id);
+    const error = await api("/profiles/me", {
+      method: "PATCH",
+      body: { custom_status: null, custom_status_emoji: null },
+    }).then(() => null, (e: Error) => e);
     if (error) {
       toast.error("Não foi possível remover seu status.");
     } else {

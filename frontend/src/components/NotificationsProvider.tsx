@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import React, { createContext, useContext, useState, useEffect, useMemo } from "react";
 import { useNotifications, type Notification } from "@/hooks/use-notifications";
 import { useAuthContext } from "@/contexts/auth-context";
@@ -98,11 +99,7 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
       if (data.type === "quick-reply" && data.channelId && data.text) {
         try {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("full_name, avatar_url")
-            .eq("id", user.id)
-            .maybeSingle();
+          const { data: profile } = await api<any>("/profiles/me").then((d) => ({ data: d })).catch(() => ({ data: null }));
           const displayName =
             (profile?.full_name?.trim()) || user.email?.split("@")[0] || "Usuário";
           await supabase.from("channel_messages").insert({

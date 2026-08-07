@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { Fragment, memo, useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from "react";
 import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -1088,10 +1089,7 @@ export default function ChannelChat({
       }
 
       if (humanIds.length > 0) {
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, full_name, email")
-          .in("id", humanIds);
+        const { data: profiles } = await api<any[]>("/profiles").then((d) => ({ data: d })).catch(() => ({ data: [] as any[] }));
 
         if (profiles) {
           for (const profile of profiles) {

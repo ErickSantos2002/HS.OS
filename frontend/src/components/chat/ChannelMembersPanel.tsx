@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
@@ -63,11 +64,9 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, open,
           avatar_url: agentAvatars[m.user_id] || getAgentAvatar(m.user_id),
         });
       } else {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("full_name, email, avatar_url, custom_status, custom_status_emoji, custom_status_set_at")
-          .eq("id", m.user_id)
-          .maybeSingle();
+        const profile = await api<any>(
+          `/profiles/${encodeURIComponent(m.user_id)}`,
+        ).catch(() => null);
         infos.push({
           user_id: m.user_id,
           member_type: "human",
@@ -87,7 +86,7 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, open,
     setSearch("");
     const memberIds = new Set(members.map((m) => m.user_id));
 
-    const { data: profiles } = await supabase.from("profiles").select("id, full_name, email, avatar_url");
+    const { data: profiles } = await api<any[]>("/profiles").then((d) => ({ data: d })).catch(() => ({ data: [] as any[] }));
     const humans = (profiles ?? [])
       .filter((p: any) => !memberIds.has(p.id))
       .map((p: any) => ({ id: p.id, name: p.full_name || p.email, type: "human" as const, avatar_url: p.avatar_url }));

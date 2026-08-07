@@ -1081,10 +1081,7 @@ function useRecentSessions(agentId: string) {
         const userIds = distinct.map((d) => d.user_id);
         const profiles: Record<string, string> = {};
         if (userIds.length > 0) {
-          const { data: ppl } = await supabase
-            .from("profiles")
-            .select("id, full_name, email")
-            .in("id", userIds);
+          const { data: ppl } = await api<any[]>("/profiles").then((d) => ({ data: d })).catch(() => ({ data: [] as any[] }));
           (ppl ?? []).forEach((p: any) => {
             profiles[p.id] = p.full_name || (p.email ?? "").split("@")[0] || "Usuário";
           });
@@ -1608,10 +1605,7 @@ function RecentUsersSection({
     if (ids.length === 0) return;
     let cancelled = false;
     (async () => {
-      const { data } = await (supabase as any)
-        .from("profiles")
-        .select("id, full_name, email, avatar_url")
-        .in("id", ids);
+      const data = await api<any[]>("/profiles").catch(() => null);
       if (cancelled || !data) return;
       const map: Record<string, { name: string; email: string | null; avatar: string | null }> = {};
       for (const p of data as any[]) {

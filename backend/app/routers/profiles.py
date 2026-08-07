@@ -78,6 +78,12 @@ async def atualizar_meu_perfil(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nada para atualizar.")
 
     atribuicoes = ", ".join(f"{c} = ${i}" for i, c in enumerate(campos, start=1))
+
+    # Mexer no status personalizado carimba quando foi posto — com `now()` do
+    # SQL, não como parâmetro. O horário é do servidor: com o relógio do
+    # navegador adiantado, "há 5 minutos" vira "daqui a 5 minutos" para quem vê.
+    if "custom_status" in campos or "custom_status_emoji" in campos:
+        atribuicoes += ", custom_status_set_at = now()"
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         # `RETURNING` não enxerga alias de tabela, e `_COLUNAS` passou a ser
         # qualificado com `p.` para conviver com a subconsulta do papel. Só o id

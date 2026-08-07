@@ -341,10 +341,10 @@ export default function SettingsPage() {
   const handleSaveProfile = async () => {
     if (!user) return;
     setProfileSaving(true);
-    await supabase
-      .from("profiles")
-      .update({ full_name: fullName, avatar_url: avatarUrl || null, updated_at: new Date().toISOString() } as any)
-      .eq("id", user.id);
+    await api("/profiles/me", {
+      method: "PATCH",
+      body: { full_name: fullName, avatar_url: avatarUrl || null },
+    }).catch(() => toast({ title: "Não foi possível salvar o perfil", variant: "destructive" }));
     toast({ title: "Perfil atualizado" });
     setProfileSaving(false);
   };

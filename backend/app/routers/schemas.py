@@ -47,3 +47,7 @@ class PerfilPatch(BaseModel):
 
     full_name: str | None = Field(default=None, min_length=1, max_length=200)
     avatar_url: str | None = Field(default=None, max_length=2000)
+    # Status personalizado ("em reunião ☕"). Entra aqui e não numa rota própria
+    # porque é o mesmo gesto — a pessoa editando o próprio perfil.
+    custom_status: str | None = Field(default=None, max_length=200)
+    custom_status_emoji: str | None = Field(default=None, max_length=16)
