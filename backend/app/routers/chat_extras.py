@@ -347,6 +347,8 @@ async def notificacoes(
 class MarcarLidasIn(BaseModel):
     ids: list[str] = []
     channel_id: str | None = None
+    channel_ids: list[str] = []
+    agent_ids: list[str] = []
 
 
 @router.post("/notificacoes/lidas", status_code=status.HTTP_204_NO_CONTENT)
@@ -356,21 +358,64 @@ async def marcar_lidas(dados: MarcarLidasIn, usuario: Usuario = Depends(usuario_
     Por canal existe porque abrir uma conversa zera tudo dela de uma vez, e
     mandar 40 ids para isso seria a tela fazendo o trabalho do banco.
 
+    `channel_ids` e `agent_ids` cobrem "li tudo deste agente": a DM dele pode ter
+    sido criada com qualquer variação do id, então zerar por agente precisa
+    aceitar os apelidos e os canais de uma vez. Eram duas chamadas.
+
     O `user_id` entra no WHERE mesmo com o RLS ativo: é barato e não depende de
     a policy estar como se espera.
     """
-    if not dados.ids and not dados.channel_id:
+    if not (dados.ids or dados.channel_id or dados.channel_ids or dados.agent_ids):
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, "Informe `ids` ou `channel_id`."
+            status.HTTP_400_BAD_REQUEST,
+            "Informe `ids`, `channel_id`, `channel_ids` ou `agent_ids`.",
         )
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         await conn.execute(
             """
             UPDATE public.notifications SET read = true
-             WHERE user_id = $1::uuid
+             WHERE user_id = $1::uuid AND read = false
                AND ( ($2::text[] IS NOT NULL AND array_length($2::text[],1) > 0
                       AND id = ANY($2::uuid[]))
-                  OR (NULLIF($3,'') IS NOT NULL AND channel_id = $3::uuid) )
+                  OR (NULLIF($3,'') IS NOT NULL AND channel_id = $3::uuid)
+                  OR ($4::text[] IS NOT NULL AND array_length($4::text[],1) > 0
+                      AND channel_id = ANY($4::uuid[]))
+                  OR ($5::text[] IS NOT NULL AND array_length($5::text[],1) > 0
+                      AND agent_id = ANY($5::text[])) )
             """,
             usuario.id, dados.ids or None, dados.channel_id or "",
+            dados.channel_ids or None, dados.agent_ids or None,
         )
+
+
+class MarcarNaoLidaIn(BaseModel):
+    message_id: str
+    channel_id: str | None = None
+    agent_id: str | None = None
+    author_name: str = "Mensagem"
+    content_preview: str = ""
+
+
+@router.post("/notificacoes/nao-lida", status_code=status.HTTP_201_CREATED)
+async def marcar_nao_lida(
+    dados: MarcarNaoLidaIn, usuario: Usuario = Depends(usuario_atual)
+):
+    """Cria uma notificação para si mesmo — o "marcar como não lida" da tela.
+
+    O `user_id` sai do token: notificação é sempre para quem pediu. Marcar
+    mensagem como não lida para outra pessoa não é caso de uso de ninguém.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        ident = await conn.fetchval(
+            """
+            INSERT INTO public.notifications
+                (user_id, channel_id, agent_id, message_id, author_name,
+                 content_preview, read)
+            VALUES ($1::uuid, NULLIF($2,'')::text::uuid, $3, NULLIF($4,'')::text::uuid,
+                    $5, $6, false)
+            RETURNING id::text
+            """,
+            usuario.id, dados.channel_id or "", dados.agent_id,
+            dados.message_id, dados.author_name, dados.content_preview[:200],
+        )
+    return {"id": ident}

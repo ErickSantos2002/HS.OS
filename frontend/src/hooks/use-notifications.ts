@@ -1,7 +1,6 @@
 import { api } from "@/lib/api";
 import { assinar } from "@/lib/realtime";
 import { createElement, useState, useEffect, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { getAgentIdAliases } from "@/lib/agent-id";
 import { toast } from "sonner";
 import { playNotificationSound } from "@/lib/notification-sound";
@@ -383,21 +382,13 @@ export function useNotifications(userId: string | undefined) {
       setUnreadCount((c) => Math.max(0, c - removedUnread));
     }
 
-    // 3. Persist — two queries: by channel_id list, and by agent_id alias.
-    if (channelIds.length > 0) {
-      await supabase
-        .from("notifications")
-        .update({ read: true })
-        .eq("user_id", userId)
-        .eq("read", false)
-        .in("channel_id", channelIds);
-    }
-    await supabase
-      .from("notifications")
-      .update({ read: true })
-      .eq("user_id", userId)
-      .eq("read", false)
-      .in("agent_id", aliases);
+    // Uma chamada para os dois recortes: a DM do agente pode ter sido criada
+    // com qualquer variação do id, então zerar "tudo deste agente" precisa
+    // aceitar canais e apelidos juntos. Eram duas consultas.
+    await api("/notificacoes/lidas", {
+      method: "POST",
+      body: { channel_ids: channelIds, agent_ids: aliases },
+    }).catch(() => { /* a tela já zerou o contador */ });
   }
 
   /**
@@ -419,15 +410,17 @@ export function useNotifications(userId: string | undefined) {
     manualUnreadMessageIdsRef.current.add(args.messageId);
     if (args.channelId) clearedChannelsRef.current.delete(args.channelId);
 
-    const { error } = await supabase.from("notifications").insert({
-      user_id: userId,
-      channel_id: args.channelId ?? null,
-      agent_id: args.agentId ?? null,
-      message_id: args.messageId,
-      author_name: args.authorName || "Mensagem",
-      content_preview: (args.contentPreview || "").slice(0, 200),
-      read: false,
-    } as any);
+    // O `user_id` sai do token: notificação é sempre para quem pediu.
+    const error = await api("/notificacoes/nao-lida", {
+      method: "POST",
+      body: {
+        message_id: args.messageId,
+        channel_id: args.channelId ?? null,
+        agent_id: args.agentId ?? null,
+        author_name: args.authorName || "Mensagem",
+        content_preview: args.contentPreview || "",
+      },
+    }).then(() => null, (e: Error) => e);
 
     if (error) {
       manualUnreadMessageIdsRef.current.delete(args.messageId);

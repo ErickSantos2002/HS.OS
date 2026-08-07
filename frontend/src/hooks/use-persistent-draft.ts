@@ -3,7 +3,6 @@ import { assinar } from "@/lib/realtime";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuthContext } from "@/contexts/auth-context";
-import { supabase } from "@/integrations/supabase/client";
 
 const draftCache = new Map<string, string>();
 
@@ -38,23 +37,18 @@ function writeLocalDraft(userId: string, draftKey: string, content: string) {
 async function persistDraft(userId: string, draftKey: string, content: string, cacheKey: string) {
   const normalizedContent = content;
 
-  if (normalizedContent) {
-    const { error } = await supabase
-      .from("drafts")
-      .upsert({ user_id: userId, draft_key: draftKey, content: normalizedContent }, { onConflict: "user_id,draft_key" });
+  // Um PUT só para os dois casos: o servidor apaga a linha quando o conteúdo
+  // vem vazio, que era o `delete` separado daqui. Guardar rascunho vazio faria
+  // a tela restaurar string vazia por cima do que a pessoa digitou noutra aba.
+  await api(`/drafts/${encodeURIComponent(draftKey)}`, {
+    method: "PUT",
+    body: { content: normalizedContent },
+  });
 
-    if (error) throw error;
+  if (normalizedContent) {
     draftCache.set(cacheKey, normalizedContent);
     return normalizedContent;
   }
-
-  const { error } = await supabase
-    .from("drafts")
-    .delete()
-    .eq("user_id", userId)
-    .eq("draft_key", draftKey);
-
-  if (error) throw error;
   draftCache.delete(cacheKey);
   return "";
 }
@@ -153,12 +147,9 @@ export function usePersistentDraft(draftKey: string | null) {
     dirtyDuringLoadRef.current = false;
     setLoading(true);
 
-    void supabase
-      .from("drafts")
-      .select("content")
-      .eq("user_id", userId)
-      .eq("draft_key", draftKey)
-      .maybeSingle()
+    void api<{ content: string }>(`/drafts/${encodeURIComponent(draftKey)}`)
+      .then((d) => ({ data: d, error: null as Error | null }),
+            (e: Error) => ({ data: null, error: e }))
       .then(({ data, error }) => {
         if (cancelled) return;
 
@@ -251,12 +242,9 @@ export function usePersistentDraft(draftKey: string | null) {
     dirtyDuringLoadRef.current = false;
     setLoading(true);
 
-    void supabase
-      .from("drafts")
-      .select("content")
-      .eq("user_id", userId)
-      .eq("draft_key", draftKey)
-      .maybeSingle()
+    void api<{ content: string }>(`/drafts/${encodeURIComponent(draftKey)}`)
+      .then((d) => ({ data: d, error: null as Error | null }),
+            (e: Error) => ({ data: null, error: e }))
       .then(({ data, error }) => {
         if (cancelled) return;
 

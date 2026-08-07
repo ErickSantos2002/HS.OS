@@ -14,7 +14,7 @@ na pasta. **Todo número aqui vem de um comando**, e o comando está ao lado.
 | | Hoje | Total | Como medir |
 |---|---|---|---|
 | Edge functions fora da pasta | **60** | 73 | `73 - $(ls backend/supabase/functions \| grep -v _shared \| wc -l)` |
-| Arquivos do front sem Supabase | **57** | 113 | `113 - $(grep -rl "integrations/supabase/client" frontend/src \| wc -l)` |
+| Arquivos do front sem Supabase | **59** | 113 | `113 - $(grep -rl "integrations/supabase/client" frontend/src \| wc -l)` |
 | Rotas na API própria | **160** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
 
 **Duas linhas têm que andar juntas.** "Tem substituto no backend" e "a tela usa o
@@ -34,12 +34,12 @@ diferentes, e o resumo antigo ("Realtime ✅ portado") escondia isso:
 | **Storage** | ✅ `UPLOADS_DIR` em disco | ✅ **completo** | nada |
 | **Realtime** | ✅ WebSocket + LISTEN/NOTIFY (`app/escuta_banco.py`) | ✅ **completo** | nada — `postgres_changes` zerado |
 | **Edge Functions** | 🟡 60 de 73 | ✅ sem pendências | 4 de trabalho real, 9 bloqueadas |
-| **Banco** (RLS direto do browser) | 🟡 160 rotas | 🔴 **57 de 113** | 63 chamadas `.from("…")` |
+| **Banco** (RLS direto do browser) | 🟡 163 rotas | 🔴 **59 de 113** | 56 chamadas `.from("…")` |
 
 O **banco é o único subsistema que ainda pesa.** Os outros quatro estão prontos
 ou perto disso.
 
-### Onde estão as 63 chamadas restantes
+### Onde estão as 56 chamadas restantes
 
 Nove delas estão em `_legado/`, que não está roteado.
 
