@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 
 interface MonitoringState {
   agents: any[] | null;
@@ -18,20 +18,11 @@ interface MonitoringState {
 }
 
 export async function postProxyAction(action: string): Promise<any> {
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-  const url = `${supabaseUrl}/functions/v1/monitoring-proxy`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${anonKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ action }),
-  });
-
-  return res.json();
+  try {
+    return await api<any>(`/gateway/manutencao/${encodeURIComponent(action)}`, { method: "POST" });
+  } catch (e: any) {
+    return { success: false, error: e?.message ?? "Falha na manutenção do gateway." };
+  }
 }
 
 export function useMonitoringData(pollingInterval = 60_000) {
@@ -59,17 +50,17 @@ export function useMonitoringData(pollingInterval = 60_000) {
     try {
       const today = new Date().toISOString().split("T")[0];
 
-      const [agentsRes, healthRes, cronRes, usageRes] = await Promise.all([
-        supabase.from("agent_stats").select("*").order("collected_at", { ascending: false }).limit(200),
-        supabase.from("gateway_health").select("*").order("collected_at", { ascending: false }).limit(1),
-        supabase.from("cron_jobs").select("*").order("name", { ascending: true }),
-        supabase.from("usage_daily").select("*").order("date", { ascending: false }).limit(1),
-      ]);
+      const dados = await api<{
+        agents: any[];
+        health: any | null;
+        cron: any[];
+        usage: any | null;
+      }>("/gateway/monitoramento");
 
-      const agents = agentsRes.data || [];
-      const healthRow = healthRes.data?.[0] || null;
-      const cron = cronRes.data || [];
-      const usageRow = usageRes.data?.[0] || null;
+      const agents = dados.agents || [];
+      const healthRow = dados.health;
+      const cron = dados.cron || [];
+      const usageRow = dados.usage;
 
       const gatewayOnline = healthRow?.status === "online";
 
