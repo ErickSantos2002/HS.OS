@@ -9,6 +9,7 @@
  * Supabase → Edge Functions → Secrets.
  */
 
+import { api } from "@/lib/api";
 import { getSetting, setSetting } from "@/lib/app-settings";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -57,11 +58,7 @@ export async function getVoiceForAgent(agentId: string): Promise<VoiceConfig> {
 
   // 1) Primary source: agent_profiles
   try {
-    const { data } = await supabase
-      .from("agent_profiles")
-      .select("tts_voice_id, tts_voice_name")
-      .eq("agent_id", short)
-      .maybeSingle();
+    const data = await api<any>(`/agents/${encodeURIComponent(short)}`).catch(() => null);
     if (data?.tts_voice_id) {
       return { voiceId: data.tts_voice_id, voiceName: data.tts_voice_name ?? "" };
     }

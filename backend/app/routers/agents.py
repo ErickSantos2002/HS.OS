@@ -228,6 +228,11 @@ class PerfilCompletoOut(BaseModel):
     access_type: str = "all"
     allowed_user_ids: list[str] = []
     status: str = "active"
+    openclaw_id: str | None = None
+    role: str | None = None
+    behavior: str | None = None
+    tts_voice_id: str | None = None
+    tts_voice_name: str | None = None
 
 
 @router.get("/{agent_id}", response_model=PerfilCompletoOut)
@@ -238,7 +243,8 @@ async def obter(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
             SELECT agent_id, name, emoji, specialty, model, persona_description,
                    skills_description, skills_tags, crons_description, description,
                    department, color, avatar_url, workspace, is_leader, leader_id,
-                   access_type, allowed_user_ids, status
+                   access_type, allowed_user_ids, status,
+                   openclaw_id, role, behavior, tts_voice_id, tts_voice_name
             FROM public.agent_profiles WHERE agent_id = $1
             """,
             agent_id,
@@ -272,6 +278,11 @@ async def obter(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
         access_type=d.get("access_type") or "all",
         allowed_user_ids=[str(u) for u in (d.get("allowed_user_ids") or [])],
         status=d.get("status") or "active",
+        openclaw_id=d.get("openclaw_id"),
+        role=d.get("role"),
+        behavior=d.get("behavior"),
+        tts_voice_id=d.get("tts_voice_id"),
+        tts_voice_name=d.get("tts_voice_name"),
     )
 
 

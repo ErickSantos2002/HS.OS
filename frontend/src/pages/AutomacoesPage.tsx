@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { assinarTabela } from "@/lib/realtime";
 import { useEffect, useMemo, useState } from "react";
 import { useAuthContext } from "@/contexts/auth-context";
@@ -234,7 +235,7 @@ export default function AutomacoesPage() {
     setLoading(true);
     const [autosRes, agentsRes] = await Promise.all([
       supabase.from("automations").select("*").order("created_at", { ascending: false }),
-      supabase.from("agent_profiles").select("agent_id, name, specialty").order("name"),
+      api<any[]>("/agents").then((a) => ({ data: a, error: null })).catch((e) => ({ data: [] as any[], error: e })),
     ]);
     if (autosRes.error) toast.error(autosRes.error.message);
     else setItems((autosRes.data || []) as unknown as Automation[]);

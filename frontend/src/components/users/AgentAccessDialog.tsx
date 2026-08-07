@@ -41,20 +41,15 @@ export function AgentAccessDialog({ open, onOpenChange, agentId, agentName, onSa
     let cancelled = false;
     setLoading(true);
     (async () => {
-      const [{ data: auth }, profileRes, usersRes] = await Promise.all([
-        supabase.auth.getUser(),
-        supabase
-          .from("agent_profiles")
-          .select("access_type, allowed_user_ids")
-          .eq("agent_id", agentId)
-          .maybeSingle(),
-        supabase
-          .from("profiles")
-          .select("id, full_name, email, avatar_url")
-          .order("full_name", { ascending: true }),
+      const [eu, profileRes, usersRes] = await Promise.all([
+        api<{ id: string }>("/profiles/me").catch(() => null),
+        api<any>(`/agents/${encodeURIComponent(agentId)}`)
+          .then((d) => ({ data: d })).catch(() => ({ data: null })),
+        api<any[]>("/profiles")
+          .then((d) => ({ data: d })).catch(() => ({ data: [] as any[] })),
       ]);
       if (cancelled) return;
-      const uid = auth?.user?.id ?? null;
+      const uid = eu?.id ?? null;
       setCurrentUserId(uid);
       const at = (profileRes.data?.access_type as AccessType) ?? "all";
       const ids = (profileRes.data?.allowed_user_ids as string[] | null) ?? [];

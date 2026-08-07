@@ -233,7 +233,7 @@ export default function ConnectorsTab() {
     setLoading(true);
     const [{ data, error }, agentsRes] = await Promise.all([
       supabase.from("integrations").select(SELECT_COLS).order("name", { ascending: true }),
-      supabase.from("agent_profiles").select("agent_id, name").order("name", { ascending: true }),
+      api<any[]>("/agents").then((a) => ({ data: a, error: null })).catch((e) => ({ data: [] as any[], error: e })),
     ]);
     if (error) {
       toast({ title: "Erro ao carregar conectores", description: error.message, variant: "destructive" });

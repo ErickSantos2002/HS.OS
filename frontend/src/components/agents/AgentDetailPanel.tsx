@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
@@ -57,21 +58,21 @@ function useAgentProfile(shortId: string) {
     setLoading(true);
     setError(null);
     (async () => {
-      const { data: prof, error: err } = await (supabase as any)
-        .from("agent_profiles")
-        .select("avatar_url, department, role, description, is_leader, leader_id")
-        .eq("agent_id", shortId)
-        .maybeSingle();
+      let prof: any = null;
+      let err: Error | null = null;
+      try {
+        prof = await api<any>(`/agents/${encodeURIComponent(shortId)}`);
+      } catch (e) {
+        err = e as Error;
+      }
       if (cancelled) return;
       if (err) { setError(err.message); setLoading(false); return; }
       let leader_name: string | null = null;
       let leader_emoji: string | null = null;
       if (prof?.leader_id) {
-        const { data: lead } = await (supabase as any)
-          .from("agent_profiles")
-          .select("name, emoji")
-          .eq("agent_id", prof.leader_id)
-          .maybeSingle();
+        const lead = await api<any>(
+          `/agents/${encodeURIComponent(prof.leader_id)}`,
+        ).catch(() => null);
         leader_name = lead?.name ?? null;
         leader_emoji = lead?.emoji ?? null;
       }
@@ -1246,11 +1247,9 @@ function VoiceSection({ agentId }: { agentId: string }) {
     setLoading(true);
     (async () => {
       try {
-        const { data } = await (supabase as any)
-          .from("agent_profiles")
-          .select("tts_voice_id, tts_voice_name")
-          .eq("agent_id", agentId)
-          .maybeSingle();
+        const data = await api<any>(
+          `/agents/${encodeURIComponent(agentId)}`,
+        ).catch(() => null);
         if (cancelled) return;
         setVoiceId(data?.tts_voice_id ?? null);
         setVoiceName(data?.tts_voice_name ?? "");
