@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getContextWindowFor, getModelLabel, DEFAULT_CONTEXT_WINDOW } from "@/lib/model-pricing";
 import { useGatewayModels } from "@/hooks/use-gateway-models";
@@ -79,13 +79,10 @@ export function ContextWindowIndicator({ agentId, actions }: Props) {
       // Antes lia agent_token_snapshots — um snapshot que a compactação nunca
       // invalidava: a barra marcava 96% com o agente respondendo "estou em 4%".
       // A sessão mais recente do agente é a que o usuário está vendo.
-      const { data: row, error } = await supabase
-        .from("agent_context_state")
-        .select("total_tokens, context_tokens, model, updated_at")
-        .eq("agent_id", agentId)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const row = await api<any>(
+        `/agents/${encodeURIComponent(agentId)}/contexto`,
+      ).catch(() => null);
+      const error = null;
       if (!alive) return;
       const r: any = row;
       if (error || !r) {

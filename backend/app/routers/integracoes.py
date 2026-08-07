@@ -1102,3 +1102,18 @@ async def _ajustar_meta(parametros: dict, caminho: str, token: str) -> dict:
             "until": str(hoje),
         }
     return parametros
+
+
+@router.get("/empresa/perfil")
+async def perfil_da_empresa(usuario: Usuario = Depends(usuario_atual)):
+    """O perfil da empresa desta instalação, ou `null` se ainda não preencheram.
+
+    Há **uma** linha por instalação; o `LIMIT 1` é o que traduz isso em SQL.
+    `null` em vez de 404 porque a resposta esperada para instalação nova é
+    exatamente "ainda não tem" — é o que o banner de onboarding pergunta.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            "SELECT * FROM public.company_profile LIMIT 1"
+        )
+    return json.loads(json.dumps(dict(linha), default=str)) if linha else None

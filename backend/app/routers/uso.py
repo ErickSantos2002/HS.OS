@@ -7,16 +7,17 @@ aqui o dado exato vira fato registrado, e o custo sai da tabela de preços.
 Quem chama é o coletor da VPS, por segredo compartilhado.
 """
 
+import json
 import logging
 import re
 from datetime import datetime
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, exige_papel
+from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.gateway import config as cfg
 from app.gateway.client import ErroGateway, obter_cliente
 from app.integracoes import exige_segredo
@@ -235,3 +236,30 @@ async def varrer_contexto(_: Usuario = Depends(exige_papel("super_admin"))):
     return VarreduraOut(
         agentes=len(agentes), sessoes=vistas, contextos=contextos, removidos=removidos
     )
+
+
+@router.get("/eventos")
+async def eventos(
+    usuario: Usuario = Depends(usuario_atual),
+    dias: int = Query(default=30, ge=1, le=365),
+    limite: int = Query(default=20_000, ge=1, le=50_000),
+):
+    """Os eventos brutos de consumo, para a aba de Uso somar por agente e dia.
+
+    Vêm crus e em ordem cronológica porque é assim que a tela soma. Agregar
+    aqui exigiria decidir o recorte (agente? modelo? dia?) e a aba mostra os
+    três — a agregação é dela.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """
+            SELECT agent_id, model, total_tokens, input_tokens, output_tokens, cost_usd,
+                   to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS ts
+              FROM public.usage_events
+             WHERE ts >= now() - make_interval(days => $1)
+             ORDER BY ts
+             LIMIT $2
+            """,
+            dias, limite,
+        )
+    return json.loads(json.dumps([dict(l) for l in linhas], default=str))

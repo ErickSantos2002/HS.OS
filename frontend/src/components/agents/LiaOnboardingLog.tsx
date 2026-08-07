@@ -1,6 +1,5 @@
 import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -31,12 +30,13 @@ export default function LiaOnboardingLog({ agentId }: { agentId: string }) {
 
   async function load() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("agent_creation_log" as any)
-      .select("*")
-      .eq("agent_id", agentId)
-      .order("created_at", { ascending: false })
-      .limit(20);
+    let data: any[] | null = null;
+    let error: any = null;
+    try {
+      data = await api<any[]>(`/agents/${encodeURIComponent(agentId)}/log-criacao`);
+    } catch (e) {
+      error = e;
+    }
     if (error) {
       console.warn("[LiaOnboardingLog] load failed", error.message);
     }

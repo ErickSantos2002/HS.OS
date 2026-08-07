@@ -23,7 +23,7 @@ import logging
 import re
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
@@ -1525,3 +1525,83 @@ async def guardrails(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
     if isinstance(bruto, str):
         bruto = json.loads(bruto)
     return bruto if isinstance(bruto, list) else []
+
+
+@router.get("/{agent_id}/contexto")
+async def contexto(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """Quanto da janela de contexto o agente está usando, na última medição.
+
+    Devolve `null` quando não há medição — agente recém-criado ou que ainda não
+    conversou. A tela esconde o indicador nesse caso, então um 404 só criaria
+    ruído para o estado normal de quem acabou de chegar.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            """
+            SELECT total_tokens, context_tokens, model,
+                   to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS updated_at
+              FROM public.agent_context_state
+             WHERE agent_id = $1
+             ORDER BY updated_at DESC
+             LIMIT 1
+            """,
+            agent_id,
+        )
+    return dict(linha) if linha else None
+
+
+@router.get("/{agent_id}/log-criacao")
+async def log_de_criacao(
+    agent_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+    limite: int = Query(default=20, ge=1, le=200),
+):
+    """O diário do onboarding do agente, do mais recente para o mais antigo."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            "SELECT * FROM public.agent_creation_log WHERE agent_id = $1 "
+            " ORDER BY created_at DESC LIMIT $2",
+            agent_id, limite,
+        )
+    return json.loads(json.dumps([dict(l) for l in linhas], default=str))
+
+
+@router.get("/{agent_id}/arquivos-espelhados")
+async def arquivos_espelhados(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """Os arquivos do agente **como estão na tabela `agent_files`**.
+
+    ⚠️ Não confundir com `GET /{id}/arquivos`, que lê do gateway ao vivo. Esta
+    é a cópia que a ponte `dnos-files-bridge` espelha na VPS a cada 60s, e pode
+    estar atrasada. Existe porque a tela mostra o `synced_at` justamente para a
+    pessoa saber o quão velha é a informação.
+
+    Aceita o id curto e o `openclaw:<id>` na mesma consulta: as duas formas
+    convivem na tabela por herança, e escolher uma perderia linhas.
+    """
+    curto = agent_id.removeprefix("openclaw:")
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            "SELECT agent_id, file_name, content, "
+            "       to_char(synced_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS') || 'Z' AS synced_at "
+            "  FROM public.agent_files WHERE agent_id = ANY($1::text[]) ORDER BY file_name",
+            [curto, f"openclaw:{curto}"],
+        )
+    return [dict(l) for l in linhas]
+
+
+# ⚠️ Dois segmentos de propósito: `/agents/produtividade` seria engolido por
+# `GET /agents/{agent_id}`, que está declarado antes.
+@router.get("/frota/produtividade")
+async def produtividade(usuario: Usuario = Depends(usuario_atual), dias: int = Query(default=30, ge=1, le=365)):
+    """Produtividade da frota nos últimos N dias, agregada pela função do banco.
+
+    A soma fica no Postgres (`get_fleet_productivity`) e não aqui: o cálculo já
+    existia como função e reimplementá-lo em Python só criaria duas versões da
+    mesma conta para divergirem depois.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            "SELECT * FROM public.get_fleet_productivity((now() - make_interval(days => $1)))",
+            dias,
+        )
+    return json.loads(json.dumps([dict(l) for l in linhas], default=str))

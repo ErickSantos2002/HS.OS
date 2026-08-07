@@ -646,3 +646,26 @@ async def pergunta_avulsa(
     if not resposta:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "O agente respondeu vazio.")
     return PerguntaAvulsaOut(resposta=resposta)
+
+
+class DmIn(BaseModel):
+    target_user_id: str
+    target_name: str = ""
+
+
+@router.post("/dm/abrir")
+async def abrir_dm(dados: DmIn, usuario: Usuario = Depends(usuario_atual)):
+    """Devolve o canal de DM com a pessoa, criando-o se ainda não existir.
+
+    A decisão de achar-ou-criar fica na função `find_or_create_dm` do banco, e é
+    onde tem que ficar: dois cliques quase simultâneos em "conversar" criariam
+    dois canais se a verificação e a criação fossem passos separados aqui.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        canal = await conn.fetchval(
+            "SELECT public.find_or_create_dm($1::uuid, $2)",
+            dados.target_user_id, dados.target_name,
+        )
+    if canal is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Não foi possível abrir a conversa.")
+    return {"channel_id": str(canal)}

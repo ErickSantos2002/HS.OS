@@ -120,3 +120,55 @@ async def consultar(dados: ConsultaIn, usuario: Usuario = Depends(usuario_atual)
     # são serializáveis direto, e a alternativa seria enumerar tipo por tipo de
     # 19 tabelas diferentes.
     return {"success": True, "data": json.loads(json.dumps([dict(l) for l in linhas], default=str))}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Ciclo de vida dos live artifacts
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class ArtefatoIn(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    html_content: str
+    refresh_interval: int = Field(default=0, ge=0)
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
+async def criar(dados: ArtefatoIn, usuario: Usuario = Depends(usuario_atual)):
+    """Publica o artefato que o agente gerou no chat. O dono é quem publica."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        artefato = await conn.fetchval(
+            """
+            INSERT INTO public.live_artifacts (user_id, title, html_content, refresh_interval)
+            VALUES ($1::uuid, $2, $3, $4)
+            RETURNING id::text
+            """,
+            usuario.id, dados.title, dados.html_content, dados.refresh_interval,
+        )
+    logger.info("Artefato %s publicado por %s", artefato, usuario.id)
+    return {"id": artefato}
+
+
+class IntervaloIn(BaseModel):
+    refresh_interval: int = Field(ge=0)
+
+
+@router.patch("/{artefato_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def ajustar_intervalo(
+    artefato_id: str,
+    dados: IntervaloIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Muda de quanto em quanto tempo o artefato se atualiza. Zero congela.
+
+    Congelar é a razão de existir: um artefato que consulta a cada 30s custa
+    banco e cota o dia inteiro em cima de dado que talvez já não interesse.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        achado = await conn.fetchval(
+            "UPDATE public.live_artifacts SET refresh_interval = $2 WHERE id = $1::uuid "
+            "RETURNING id",
+            artefato_id, dados.refresh_interval,
+        )
+    if achado is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Artefato não encontrado.")

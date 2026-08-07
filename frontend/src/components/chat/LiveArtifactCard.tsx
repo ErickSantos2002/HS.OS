@@ -1,6 +1,6 @@
+import { api } from "@/lib/api";
 import { Zap, ExternalLink, Pause, Link2 } from "lucide-react";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface LiveArtifactCardProps {
@@ -38,10 +38,15 @@ export default function LiveArtifactCard({
 
   const makeStatic = async () => {
     setFreezing(true);
-    const { error } = await supabase
-      .from("live_artifacts" as any)
-      .update({ refresh_interval: 0 } as any)
-      .eq("id", artifactId);
+    let error: unknown = null;
+    try {
+      await api(`/artefatos/${artifactId}`, {
+        method: "PATCH",
+        body: { refresh_interval: 0 },
+      });
+    } catch (e) {
+      error = e;
+    }
     setFreezing(false);
     if (error) {
       toast.error("Não foi possível pausar o artefato.");

@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import { Code, Eye, Copy, Check, Maximize2, Minimize2, X, Download, ChevronDown, Link2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -6,7 +7,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { exportArtifactAsPdf, exportArtifactAsDocx } from "@/lib/artifact-export";
 import { toast } from "sonner";
 import PublishArtifactDialog from "./PublishArtifactDialog";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
 
 type Tab = "preview" | "code";
@@ -86,16 +86,17 @@ export default function ArtifactPanel({ type, code, onClose, className }: Artifa
     }
     setLiveSaving(true);
     const title = (liveTitle.trim() || "Artefato vivo").slice(0, 120);
-    const { data, error } = await supabase
-      .from("live_artifacts" as any)
-      .insert({
-        user_id: user.id,
-        title,
-        html_content: srcDoc,
-        refresh_interval: liveInterval,
-      } as any)
-      .select("id")
-      .single();
+    // O dono sai do token no backend — a tela não escolhe em nome de quem grava.
+    let data: { id: string } | null = null;
+    let error: unknown = null;
+    try {
+      data = await api<{ id: string }>("/artefatos", {
+        method: "POST",
+        body: { title, html_content: srcDoc, refresh_interval: liveInterval },
+      });
+    } catch (e) {
+      error = e;
+    }
     setLiveSaving(false);
     if (error || !data) {
       toast.error("Não foi possível ativar o modo vivo.");

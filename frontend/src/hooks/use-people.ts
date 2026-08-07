@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { api } from "@/lib/api";
 import { useAuthContext } from "@/contexts/auth-context";
 import { derivePresence, type Presence } from "@/lib/presence-status";
@@ -73,13 +72,14 @@ export async function findOrCreateDm(
 ): Promise<string | null> {
   // TODO: ainda no Supabase — pertence ao lote do chat (channels/conversations),
   // que será portado em seguida.
-  const { data, error } = await supabase.rpc("find_or_create_dm", {
-    _target_user_id: targetUserId,
-    _target_name: targetName,
-  });
-  if (error) {
+  try {
+    const { channel_id } = await api<{ channel_id: string }>("/conversations/dm/abrir", {
+      method: "POST",
+      body: { target_user_id: targetUserId, target_name: targetName },
+    });
+    return channel_id;
+  } catch (error) {
     console.error("Erro ao buscar/criar DM:", error);
     return null;
   }
-  return data as string;
 }

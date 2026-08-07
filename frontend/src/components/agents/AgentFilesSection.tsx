@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { FileText, FolderOpen, Loader2, RefreshCw } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { normalizeAgentId } from "@/lib/active-agents";
@@ -32,13 +32,11 @@ export default function AgentFilesSection({ agentId }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const { data, error } = await supabase
-        .from("agent_files")
-        .select("agent_id, file_name, content, synced_at")
-        .or(`agent_id.eq.${shortId},agent_id.eq.${agentId}`)
-        .order("file_name");
-      if (error) throw error;
-      setRows((data ?? []) as AgentFileRow[]);
+      // O backend já aceita o id curto e o `openclaw:<id>` na mesma consulta.
+      const data = await api<AgentFileRow[]>(
+        `/agents/${encodeURIComponent(shortId)}/arquivos-espelhados`,
+      );
+      setRows(data ?? []);
     } catch (e: any) {
       setError(e.message || "Falha ao carregar arquivos");
       setRows([]);

@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 
 export interface AgentProductivity {
   agentId: string;
@@ -32,9 +32,13 @@ export function useFleetProductivity(
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       // Use server-side aggregation RPC instead of fetching all rows
-      const { data: rows, error } = await supabase.rpc("get_fleet_productivity", {
-        _since: thirtyDaysAgo.toISOString(),
-      });
+      let rows: any[] | null = null;
+      let error: any = null;
+      try {
+        rows = await api<any[]>("/agents/frota/produtividade?dias=30");
+      } catch (e) {
+        error = e;
+      }
 
       if (error) {
         console.error("[fleet-productivity] RPC error:", error);
