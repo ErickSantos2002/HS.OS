@@ -136,3 +136,33 @@ export async function api<T = unknown>(caminho: string, opcoes: Opcoes = {}): Pr
 
   return corpo as T;
 }
+
+
+/**
+ * Baixa um arquivo de rota autenticada e dispara o "salvar como" do navegador.
+ *
+ * Precisa existir porque `<a href download>` **não manda cabeçalho**, e as
+ * rotas privadas exigem o token. O caminho é: buscar o blob com o token, virar
+ * um object URL e clicar nele. O `revokeObjectURL` no fim não é zelo — sem ele
+ * o blob fica na memória da aba até recarregar.
+ */
+export async function baixarComToken(caminho: string, nomeDoArquivo: string): Promise<void> {
+  const token = lerToken();
+  const resposta = await fetch(`${BASE}${caminho}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!resposta.ok) {
+    throw new Error(`Não foi possível baixar o arquivo (HTTP ${resposta.status}).`);
+  }
+  const url = URL.createObjectURL(await resposta.blob());
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nomeDoArquivo;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}

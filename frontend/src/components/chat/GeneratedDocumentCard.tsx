@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FileText, FileIcon, Download, Loader2, AlertCircle } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { api, baixarComToken } from "@/lib/api";
 import { toast } from "sonner";
 import { formatFileSize } from "@/lib/file-upload";
 
@@ -29,21 +29,12 @@ export default function GeneratedDocumentCard({
     if (!documentId) return;
     setDownloading(true);
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "sign-generated-document",
-        { body: { document_id: documentId } },
+      // Não há mais URL assinada: o bucket é privado e servido com token.
+      // Por isso o download passa pelo `baixarComToken` em vez de um href.
+      const { url } = await api<{ url: string }>(
+        `/storage/documento/${encodeURIComponent(documentId)}`,
       );
-      if (error) throw new Error(error.message);
-      const url = (data as any)?.url as string | undefined;
-      const filename = (data as any)?.filename as string | undefined;
-      if (!url) throw new Error("URL não recebida");
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename || `${title}.${docType}`;
-      a.rel = "noopener noreferrer";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      await baixarComToken(url, `${title}.${docType}`);
     } catch (err: any) {
       toast.error(err?.message || "Não foi possível baixar o documento.");
     } finally {
