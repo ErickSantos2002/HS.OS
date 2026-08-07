@@ -13,10 +13,19 @@ backend não é o mesmo que a tela usar o endpoint.
 
 | | Feito | Total |
 |---|---|---|
-| Edge functions **com substituto no backend** | 72 | 73 |
-| Edge functions **que o front já parou de chamar** | 21 | 73 |
-| Arquivos do front sem Supabase | 20 | 113 |
-| Functions distintas ainda referenciadas pelo front | 23 | — |
+| Edge functions **fora da pasta** | 60 | 73 |
+| Arquivos do front sem Supabase | 16 | 113 |
+| Functions distintas ainda invocadas pelo front | 19 | — |
+
+> Os números acima são **medidos**, não mantidos à mão — venho incrementando o
+> contador a cada port e ele derivou (chegou a dizer 72 de 73 com 13 functions
+> ainda na pasta). Comandos que os produzem:
+>
+> ```bash
+> ls backend/supabase/functions | grep -v _shared | wc -l          # 73 - este = fora da pasta
+> grep -rl "integrations/supabase/client" frontend/src | wc -l     # 113 - este
+> grep -rhoP 'functions\.invoke\(\s*"\K[a-z0-9-]+' frontend/src | sort -u | wc -l
+> ```
 
 Um lote só fecha quando as duas linhas andam.
 

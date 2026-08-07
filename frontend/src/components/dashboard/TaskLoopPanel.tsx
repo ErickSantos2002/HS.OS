@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -16,7 +17,6 @@ import { useAgentTasks, type AgentTask, type TaskChunk } from "@/hooks/use-agent
 import { useAgents } from "@/hooks/use-agents";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { TaskDetailsDialog } from "./TaskDetailsDialog";
 
@@ -206,14 +206,19 @@ export default function TaskLoopPanel() {
       return next;
     });
 
+  /** A edge recebia a ação no corpo; o backend expõe uma rota por ação. */
   const invokeAgentTask = async (body: Record<string, unknown>) => {
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData?.session?.access_token;
-    if (!token) throw new Error("Sessão expirada. Faça login novamente.");
-    return supabase.functions.invoke("agent-task", {
-      body,
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const { action, task_id: id, ...resto } = body as any;
+    try {
+      if (action === "delete") {
+        await api(`/tarefas/${id}`, { method: "DELETE" });
+      } else {
+        await api(`/tarefas/${id}/${action}`, { method: "POST", body: resto });
+      }
+      return { error: null };
+    } catch (e: any) {
+      return { error: e };
+    }
   };
 
   const handleDelete = async (task: AgentTask) => {

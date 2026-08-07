@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { AgentTask } from "@/hooks/use-agent-tasks";
@@ -44,15 +45,11 @@ export function usePendingAgentTask(agentId: string | null | undefined) {
 
     const refresh = async () => {
       try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const accessToken = sessionData?.session?.access_token;
-        if (!accessToken) return; // not signed in yet — skip to avoid 401
-        const { data, error } = await supabase.functions.invoke("agent-task", {
-          body: { action: "list", agent_id: id },
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        if (cancelled || error) return;
-        const list = Array.isArray(data) ? (data as AgentTask[]) : [];
+        const data = await api<AgentTask[]>(
+          `/tarefas?agent_id=${encodeURIComponent(id)}`,
+        ).catch(() => null);
+        if (cancelled || !data) return;
+        const list = Array.isArray(data) ? data : [];
         const pending = list.find((t) => t.status === "running" || t.status === "checkpoint") ?? null;
         if (pending) {
           setPendingAgentTask(id, pending);

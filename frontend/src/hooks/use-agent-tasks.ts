@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -58,14 +59,7 @@ function normalizeChunks(raw: unknown, checkpoint: AgentTask["checkpoint_data"])
 }
 
 async function fetchTasks(): Promise<AgentTask[]> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const token = sessionData?.session?.access_token;
-  if (!token) return [];
-  const { data, error } = await supabase.functions.invoke("agent-task", {
-    body: { action: "list" },
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (error) throw error;
+  const data = await api<any[]>("/tarefas");
   if (!Array.isArray(data)) return [];
   return data.map((t: any) => ({
     ...t,

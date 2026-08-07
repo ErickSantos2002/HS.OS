@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 
 export type AutomationEvent =
   | "gateway.offline"
@@ -16,9 +16,7 @@ export async function triggerAutomation(
   payload?: Record<string, unknown>,
 ): Promise<void> {
   try {
-    await supabase.functions.invoke("trigger-automation", {
-      body: { event, payload },
-    });
+    await api("/automacoes/gatilho", { method: "POST", body: { event, payload } });
   } catch (err) {
     console.warn("[trigger-automation] dispatch failed:", err);
   }

@@ -21,8 +21,28 @@ Tudo abaixo está verificado **no navegador**, não só por endpoint:
 
 ## Placar
 
-**72 de 73** edge functions resolvidas · **13** ainda na pasta ·
-**20 de 113** arquivos do front sem Supabase.
+**60 de 73** edge functions fora da pasta · **13** ainda lá, **9 delas
+bloqueadas** por chave externa (ElevenLabs e Lovable AI Gateway) ·
+**16 de 113** arquivos do front sem Supabase · **19** nomes de function ainda
+invocados pelo front.
+
+⚠️ **Os dois últimos números não fecham com o primeiro, e isso é o achado.**
+Dez telas continuam chamando `supabase.functions.invoke` de functions que já
+saíram da pasta — o backend foi portado e o front não foi religado. Corrigidas
+em 07/08: agent-task (3 telas) e trigger-automation. **Ainda penduradas:**
+
+| Function | Tela | Endpoint que já existe |
+|---|---|---|
+| `configure-llm-provider` | `LlmProvidersSection`, `ConnectorsTab` | `POST /llm/provedores` |
+| `create-agent` | `ImportAgentDialog` | `POST /agents` |
+| `export-agent` | `ExportAgentButton` | `GET /agents/{id}/exportar` |
+| `resend-agent-briefing` | `LiaOnboardingLog` | `POST /agents/{id}/briefing` |
+| `update-agent-access` | `AgentAccessDialog` | ver `agents.py` |
+| `automations-api` | — (só em `_legado/`) | `/automacoes` |
+| `configure-instance-vault`, `save-install-block` | só em `_legado/setup/` | — |
+
+Religar essas é o próximo trabalho, antes de portar mais: é o que separa
+"tem substituto" de "a tela usa".
 
 O `ls backend/supabase/functions | grep -v _shared | wc -l` agora é a medida
 honesta: tudo que tem substituto saiu da pasta.
