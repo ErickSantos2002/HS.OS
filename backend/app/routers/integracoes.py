@@ -1178,3 +1178,136 @@ async def gravar_perfil_da_empresa(
             )
     logger.info("Perfil da empresa gravado.")
     return json.loads(json.dumps(dict(linha), default=str))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CRUD de conectores — a tela de Integrações
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ⚠️ **As credenciais nunca saem daqui.** A listagem devolve `key_preview` (os
+# últimos caracteres) e o booleano `is_configured`; o `credentials` inteiro fica
+# no servidor. A tela nunca precisou dele — só de saber se está configurado e de
+# mostrar a ponta da chave para a pessoa reconhecer qual é.
+
+_COLUNAS_CONECTOR = """
+    id::text AS id, name, category, key_name, key_preview, is_configured,
+    description, icon, integration_type, type, template_id::text AS template_id,
+    agents_using, added_by_agent, last_validation_ok, last_validation_error,
+    to_char(updated_at         AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS updated_at,
+    to_char(last_validated_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS last_validated_at
+"""
+
+
+@router.get("/conectores")
+async def listar_conectores(usuario: Usuario = Depends(usuario_atual)):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            f"SELECT {_COLUNAS_CONECTOR} FROM public.integrations ORDER BY name"
+        )
+    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+
+
+class ConectorIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    category: str = Field(min_length=1)
+    key_name: str = Field(min_length=1)
+    integration_type: str = "api_key"
+    description: str | None = None
+    icon: str | None = None
+    type: str | None = None
+    # ⚠️ `template_id` é **text** nesta tabela, apesar do nome. Um `::uuid` aqui
+    # dá "COALESCE types uuid and text cannot be matched" no UPDATE.
+    template_id: str | None = None
+    credentials: list | dict | None = None
+
+
+def _previa(credenciais) -> tuple[str | None, bool]:
+    """A ponta da chave, para a pessoa reconhecer qual é sem ver o resto."""
+    valor = _token_da_integracao(credenciais, None)
+    if not valor:
+        return None, False
+    return (f"…{valor[-4:]}" if len(valor) > 4 else "…"), True
+
+
+@router.post("/conectores", status_code=status.HTTP_201_CREATED)
+async def criar_conector(
+    dados: ConectorIn, _: Usuario = Depends(exige_papel("super_admin"))
+):
+    previa, configurado = _previa(dados.credentials)
+    async with sessao(role="service_role") as conn:
+        ident = await conn.fetchval(
+            """
+            INSERT INTO public.integrations
+                (name, category, key_name, integration_type, description, icon,
+                 type, template_id, credentials, key_preview, is_configured)
+            VALUES ($1,$2,$3,$4,$5,$6,$7, NULLIF($8,''),
+                    $9::text::jsonb, $10, $11)
+            RETURNING id::text
+            """,
+            dados.name, dados.category, dados.key_name, dados.integration_type,
+            dados.description, dados.icon, dados.type, dados.template_id or "",
+            json.dumps(dados.credentials) if dados.credentials is not None else None,
+            previa, configurado,
+        )
+    logger.info("Conector %s criado.", dados.name)
+    return {"id": ident}
+
+
+@router.patch("/conectores/{conector_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def editar_conector(
+    conector_id: str,
+    dados: ConectorIn,
+    _: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Edita o conector. **Credencial ausente mantém a que está lá.**
+
+    Não é descuido: a tela não recebe a credencial de volta na listagem, então
+    ela não tem como reenviá-la ao editar só o nome. Tratar ausente como "apagar"
+    faria renomear um conector desconectá-lo.
+    """
+    previa, configurado = _previa(dados.credentials)
+    async with sessao(role="service_role") as conn:
+        achado = await conn.fetchval(
+            """
+            UPDATE public.integrations SET
+                name = $2, category = $3, key_name = $4, integration_type = $5,
+                description = $6, icon = $7, type = $8,
+                template_id = COALESCE(NULLIF($9,''), template_id),
+                credentials   = COALESCE($10::text::jsonb, credentials),
+                key_preview   = COALESCE($11, key_preview),
+                is_configured = CASE WHEN $10 IS NULL THEN is_configured ELSE $12 END,
+                updated_at = now()
+             WHERE id = $1::uuid
+            RETURNING id
+            """,
+            conector_id, dados.name, dados.category, dados.key_name,
+            dados.integration_type, dados.description, dados.icon, dados.type,
+            dados.template_id or "",
+            json.dumps(dados.credentials) if dados.credentials is not None else None,
+            previa, configurado,
+        )
+    if achado is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conector não encontrado.")
+
+
+@router.delete("/conectores/{conector_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def excluir_conector(
+    conector_id: str, _: Usuario = Depends(exige_papel("super_admin"))
+):
+    async with sessao(role="service_role") as conn:
+        marca = await conn.execute(
+            "DELETE FROM public.integrations WHERE id = $1::uuid", conector_id
+        )
+    if marca.rsplit(" ", 1)[-1] == "0":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conector não encontrado.")
+
+
+@router.get("/modelos-de-conector")
+async def modelos_de_conector(usuario: Usuario = Depends(usuario_atual)):
+    """Os `integration_templates`, com os playbooks que os artefatos consultam."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            "SELECT id::text AS id, integration_type, label, playbook "
+            "  FROM public.integration_templates ORDER BY label"
+        )
+    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]

@@ -141,8 +141,16 @@ chat.
 
 ### 3. O banco, tabela a tabela
 
-Portar por **tabela**, não por tela: `live_artifacts` (21), `agent_profiles` (17)
-e `profiles` (15) somam 53 das 185 chamadas, e boa parte dos endpoints já existe.
+Portar por **tabela**, não por tela — foi o que funcionou em 07/08.
+
+**Próximo passo imediato:** o CRUD de conectores já está pronto no backend
+(`GET/POST/PATCH/DELETE /integracoes/conectores` e
+`GET /integracoes/modelos-de-conector`), **mas o front ainda não foi religado**.
+São 9 chamadas em 5 arquivos, sendo `ConnectorsTab` a maior. É trabalho
+mecânico e já testado do lado do servidor.
+
+Depois: `channel_members` (9), `channel_messages` (9), `agent_profiles` (10 —
+metade já saiu).
 
 ---
 
