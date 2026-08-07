@@ -8,7 +8,6 @@
  * VAPID public key is fetched from the send-push edge function on demand.
  */
 import { api } from "@/lib/api";
-import { supabase } from "@/integrations/supabase/client";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const PUBLIC_KEY_ENDPOINT = `${SUPABASE_URL}/functions/v1/send-push/public-key`;
@@ -120,17 +119,15 @@ export async function subscribeToPushNotifications(
     }
 
     // Upsert by endpoint (unique per device); avoid duplicate inserts.
-    const { error } = await supabase.from("push_subscriptions").upsert(
-      {
-        user_id: userId,
-        endpoint,
-        p256dh,
-        auth,
-        user_agent: navigator.userAgent,
-        last_used_at: new Date().toISOString(),
-      },
-      { onConflict: "endpoint" }
-    );
+    let error: Error | null = null;
+    try {
+      await api("/push/inscricao", {
+        method: "PUT",
+        body: { endpoint, p256dh, auth, user_agent: navigator.userAgent },
+      });
+    } catch (e) {
+      error = e as Error;
+    }
 
     if (error) {
       console.warn("[push] failed to persist subscription:", error.message);

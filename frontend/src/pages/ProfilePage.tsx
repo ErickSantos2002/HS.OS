@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, User, Lock, AlertTriangle } from "lucide-react";
@@ -16,6 +16,7 @@ export default function ProfilePage() {
   const { user, role, profile } = useAuthContext();
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
   const [saving, setSaving] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -24,10 +25,7 @@ export default function ProfilePage() {
   const handleSaveName = async () => {
     if (!user) return;
     setSaving(true);
-    await supabase
-      .from("profiles")
-      .update({ full_name: fullName, updated_at: new Date().toISOString() })
-      .eq("id", user.id);
+    await api("/profiles/me", { method: "PATCH", body: { full_name: fullName } });
     toast({ title: "Nome atualizado" });
     setSaving(false);
   };
@@ -36,8 +34,8 @@ export default function ProfilePage() {
     e.preventDefault();
     setPasswordError("");
 
-    if (newPassword.length < 6) {
-      setPasswordError("Mínimo de 6 caracteres.");
+    if (newPassword.length < 8) {
+      setPasswordError("Mínimo de 8 caracteres.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -46,11 +44,22 @@ export default function ProfilePage() {
     }
 
     setPasswordSaving(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    // A senha atual é exigida pelo backend: sem ela, quem sentasse numa
+    // máquina destravada trocaria a senha e tomaria a conta.
+    let error: Error | null = null;
+    try {
+      await api("/auth/trocar-senha", {
+        method: "POST",
+        body: { senha_atual: currentPassword, senha_nova: newPassword },
+      });
+    } catch (e) {
+      error = e as Error;
+    }
     if (error) {
       setPasswordError(error.message);
     } else {
       toast({ title: "Senha atualizada" });
+      setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     }
@@ -130,6 +139,20 @@ export default function ProfilePage() {
 
           <form onSubmit={handleChangePassword} className="space-y-3">
             <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Senha atual</label>
+              <div className="glass-input px-3 py-0">
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  autoComplete="current-password"
+                  className="w-full bg-transparent py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Nova senha</label>
               <div className="glass-input px-3 py-0">
                 <input
@@ -138,7 +161,7 @@ export default function ProfilePage() {
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  minLength={6}
+                  minLength={8}
                   className="w-full bg-transparent py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none"
                 />
               </div>

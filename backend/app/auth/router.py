@@ -18,6 +18,8 @@ from app.auth.schemas import (
     TokenOut,
     UsuarioOut,
 )
+from pydantic import BaseModel, Field
+
 from app.auth.security import conferir_senha, emitir_token, gerar_hash
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
@@ -120,3 +122,35 @@ async def eu(usuario: Usuario = Depends(usuario_atual)):
         papel=usuario.papel,
         avatar_url=avatar,
     )
+
+
+class TrocaSenhaIn(BaseModel):
+    senha_atual: str = Field(min_length=1)
+    senha_nova: str = Field(min_length=8, max_length=200)
+
+
+@router.post("/trocar-senha", status_code=status.HTTP_204_NO_CONTENT)
+async def trocar_senha(dados: TrocaSenhaIn, usuario: Usuario = Depends(usuario_atual)):
+    """Troca a própria senha, conferindo a atual antes.
+
+    **Exigir a senha atual não é burocracia:** o token fica no navegador, e sem
+    esta conferência quem sentasse numa máquina destravada trocaria a senha e
+    tomaria a conta. O Supabase Auth não pedia — e essa era uma fragilidade
+    herdada, não uma decisão.
+
+    Mínimo de 8 caracteres. Não há regra de maiúscula ou símbolo de propósito:
+    comprimento é o que mede força, e regra de composição só empurra a pessoa
+    para "Senha@123".
+    """
+    async with sessao(role="service_role") as conn:
+        atual = await conn.fetchval(
+            "SELECT password_hash FROM auth.users WHERE id = $1::uuid", usuario.id
+        )
+        if not conferir_senha(dados.senha_atual, atual):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "A senha atual está incorreta.")
+        await conn.execute(
+            "UPDATE auth.users SET password_hash = $2, updated_at = now() "
+            " WHERE id = $1::uuid",
+            usuario.id, gerar_hash(dados.senha_nova),
+        )
+    logger.info("Senha trocada por %s", usuario.id)
