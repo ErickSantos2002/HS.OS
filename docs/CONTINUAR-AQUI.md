@@ -154,10 +154,21 @@ existe mais e o destino dela está em *Decisões pendentes*.
   ```bash
   grep -oP '<Route[^>]*element=\{<\K[A-Za-z]+' frontend/src/App.tsx | sort -u
   ```
-- **Portar o backend não religa a tela.** Já aconteceu dez vezes: a edge sai da
+- **Portar o backend não religa a tela.** Já aconteceu doze vezes: a edge sai da
   pasta, o endpoint entra, e a tela continua chamando `supabase.functions.invoke`
-  de algo que não existe mais. A régua é
-  `grep -r "functions.invoke" frontend/src | grep -v _legado`.
+  de algo que não existe mais.
+
+  ⚠️ **E a régua ingênua não pega tudo.** Um `grep 'invoke("nome")'` perde as
+  chamadas quebradas em várias linhas — foi assim que
+  `notify-orchestrator-onboarding` passou por dois audits antes de aparecer em
+  07/08. A conferência que funciona:
+
+  ```bash
+  grep -rzoP 'functions\.invoke\(\s*\n?\s*"[a-z0-9-]+"' frontend/src \
+    | tr '\0' '\n' | grep -oP '"\K[a-z0-9-]+' | sort -u
+  ```
+
+  Depois cruze cada nome com `ls backend/supabase/functions/`.
 - **`$N::jsonb` com uma string do Python guarda um jsonb *string*, não objeto.**
   O asyncpg deduz o tipo do cast. Use `$N::text::jsonb`. Vale igual para
   `$N::timestamptz` → `$N::text::timestamptz`.

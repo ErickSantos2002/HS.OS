@@ -210,11 +210,9 @@ export default function EmpresaTab() {
       });
 
       if (companyName && founderName) {
-        const { data: notif, error: notifErr } = await supabase.functions.invoke(
-          "notify-orchestrator-onboarding",
-          { body: {} },
-        );
-        if (notifErr) throw notifErr;
+        const notif = await api<any>("/integracoes/onboarding-empresa", {
+          method: "POST",
+        });
         if (notif?.dispatched) {
           toast.success("Perfil salvo e orquestrador notificado.");
         } else {
@@ -241,11 +239,7 @@ export default function EmpresaTab() {
     }
     setSaving(true);
     try {
-      const { data, error } = await supabase.functions.invoke(
-        "notify-orchestrator-onboarding",
-        { body: {} },
-      );
-      if (error) throw error;
+      const data = await api<any>("/integracoes/onboarding-empresa", { method: "POST" });
       if (data?.dispatched) {
         toast.success("Contexto re-enviado ao orquestrador.");
         const fresh = await api<any>("/integracoes/empresa/perfil").catch(() => null);
