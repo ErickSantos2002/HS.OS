@@ -1,3 +1,4 @@
+import { assinarTabela } from "@/lib/realtime";
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -123,18 +124,12 @@ export function useManagedSkills() {
   useEffect(() => {
     const onChanged = () => { void refetch(); };
     window.addEventListener(SKILLS_CHANGED_EVENT, onChanged);
-    const channel = supabase
-      .channel("managed_skills_changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "skills" }, () => {
-        void refetch();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "agent_skills" }, () => {
-        void refetch();
-      })
-      .subscribe();
+    const cancelarSkills = assinarTabela("skills", () => { void refetch(); });
+    const cancelarVinculos = assinarTabela("agent_skills", () => { void refetch(); });
     return () => {
       window.removeEventListener(SKILLS_CHANGED_EVENT, onChanged);
-      supabase.removeChannel(channel);
+      cancelarSkills();
+      cancelarVinculos();
     };
   }, [refetch]);
 

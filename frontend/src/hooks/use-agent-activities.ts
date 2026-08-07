@@ -1,3 +1,4 @@
+import { assinarTabela } from "@/lib/realtime";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
@@ -87,33 +88,17 @@ export function useAgentActivitiesFeed(
     const matchesUser = (row: AgentActivity) =>
       !userId || !row.user_id || row.user_id === userId;
 
-    const channel = supabase
-      .channel(`agent-activity-feed-${agentId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "agent_activity", filter },
-        (payload) => {
-          if (!mounted) return;
-          const row = payload.new as AgentActivity;
-          if (!matchesUser(row)) return;
-          upsert(row);
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "agent_activity", filter },
-        (payload) => {
-          if (!mounted) return;
-          const row = payload.new as AgentActivity;
-          if (!matchesUser(row)) return;
-          upsert(row);
-        }
-      )
-      .subscribe();
+    // O evento não carrega a linha (ver `docs/PLANO-REALTIME.md`), então em vez
+    // de `upsert(row)` a lista é recarregada. Feed de atividade é de baixo
+    // volume; trocar precisão de payload por uma busca a mais compensa.
+    const cancelar = assinarTabela("agent_activity", (m) => {
+      if (m.agent_id && m.agent_id !== agentId) return;
+      void fetchInitial();
+    });
 
     return () => {
       mounted = false;
-      supabase.removeChannel(channel);
+      cancelar();
     };
   }, [agentId, userId, upsert]);
 

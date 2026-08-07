@@ -1,3 +1,5 @@
+import { api } from "@/lib/api";
+import { assinar } from "@/lib/realtime";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -38,35 +40,24 @@ export function useDmReads(channelId: string | null, peerUserId: string | null, 
     let cancelled = false;
 
     const load = async () => {
-      const { data } = await supabase
-        .from("dm_reads")
-        .select("last_read_at")
-        .eq("channel_id", channelId)
-        .eq("user_id", peerUserId)
-        .maybeSingle();
+      const { last_read_at } = await api<{ last_read_at: string | null }>(
+        `/dm-reads/${channelId}?user_id=${encodeURIComponent(peerUserId)}`,
+      ).catch(() => ({ last_read_at: null }));
       if (cancelled) return;
-      safeSet((data as DmReadRow | null)?.last_read_at ?? null);
+      safeSet(last_read_at ?? null);
     };
     load();
 
-    const sub = supabase
-      .channel(`dm-reads-${channelId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "dm_reads", filter: `channel_id=eq.${channelId}` },
-        (payload) => {
-          const row = (payload.new ?? payload.old) as DmReadRow | undefined;
-          if (!row || row.user_id !== peerUserId) return;
-          const newRow = payload.new as DmReadRow | undefined;
-          if (newRow?.last_read_at) safeSet(newRow.last_read_at);
-        },
-      )
-      .subscribe();
-
+    // O evento diz que `dm_reads` mudou neste canal, não o que virou — quem
+    // devolve o horário é o endpoint, com o RLS valendo. Vai pelo tópico do
+    // canal porque o backend roteia por `channel_id`.
+    const cancelar = assinar(`canal:${channelId}`, (_tipo, dados) => {
+      if ((dados as { tabela?: string })?.tabela === "dm_reads") void load();
+    });
 
     return () => {
       cancelled = true;
-      supabase.removeChannel(sub);
+      cancelar();
     };
   }, [channelId, peerUserId]);
 

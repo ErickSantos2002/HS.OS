@@ -170,18 +170,11 @@ function useAgentStats(shortId: string) {
 
     load();
 
-    const channel = supabase
-      .channel(`usage_events:${shortId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "usage_events", filter: `agent_id=eq.${shortId}` },
-        () => { load(); }
-      )
-      .subscribe();
-
+    // ⚠️ Sem tempo real aqui, de propósito. `usage_events` não tem trigger de
+    // notificação: recebe escrita em lote pela varredura de uso, e um evento por
+    // linha faria tempestade. O consumo atualiza ao abrir o painel.
     return () => {
       cancelled = true;
-      supabase.removeChannel(channel);
     };
   }, [shortId]);
 
@@ -1478,15 +1471,9 @@ function UsageCostCard({ agentId }: { agentId: string }) {
       setLoading(false);
     };
     load();
-    const channel = supabase
-      .channel(`usage_cost:${agentId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "usage_events", filter: `agent_id=eq.${agentId}` },
-        () => load()
-      )
-      .subscribe();
-    return () => { cancelled = true; supabase.removeChannel(channel); };
+    // Sem tempo real: `usage_events` não tem trigger de notificação — escreve
+    // em lote e um evento por linha faria tempestade. Atualiza ao abrir.
+    return () => { cancelled = true; };
   }, [agentId, period]);
 
   return (

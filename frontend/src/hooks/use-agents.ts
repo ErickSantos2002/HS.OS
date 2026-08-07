@@ -1,3 +1,4 @@
+import { assinarTabela } from "@/lib/realtime";
 import { useState, useEffect, useCallback } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -335,34 +336,19 @@ export function useAgents() {
 
   // Realtime subscription on team_agents — refetch when rows change
   useEffect(() => {
-    const channel = supabase
-      .channel("team_agents_changes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "team_agents" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["gateway-agents"] });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "usage_events" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["gateway-agents"] });
-          queryClient.invalidateQueries({ queryKey: ["agent-token-stats"] });
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "agent_profiles" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["gateway-agents"] });
-        }
-      )
-      .subscribe();
+    const recarregar = () => {
+      queryClient.invalidateQueries({ queryKey: ["gateway-agents"] });
+    };
+    // ⚠️ `usage_events` ficou de fora: ela recebe escrita em lote pela varredura
+    // de uso, e um evento por linha faria tempestade de recarregamento. O
+    // consumo por agente passa a atualizar no próximo carregamento da tela, não
+    // em tempo real. Ver `docs/PLANO-REALTIME.md`.
+    const cancelarTimes = assinarTabela("team_agents", recarregar);
+    const cancelarPerfis = assinarTabela("agent_profiles", recarregar);
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelarTimes();
+      cancelarPerfis();
     };
   }, [queryClient]);
 

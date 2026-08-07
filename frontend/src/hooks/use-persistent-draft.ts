@@ -1,3 +1,5 @@
+import { api } from "@/lib/api";
+import { assinar } from "@/lib/realtime";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuthContext } from "@/contexts/auth-context";
@@ -198,38 +200,124 @@ export function usePersistentDraft(draftKey: string | null) {
   useEffect(() => {
     if (!userId || !draftKey || !cacheKey) return;
 
-    const channel = supabase
-      .channel(`draft-${userId}-${draftKey}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "drafts",
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          const row = (payload.new ?? payload.old) as { draft_key?: string; content?: string } | null;
-          if (!row || row.draft_key !== draftKey) return;
+    // O evento diz que `drafts` mudou, não qual virou o quê — então o conteúdo
+    // vem do endpoint. Vai pelo tópico da pessoa: o backend roteia por
+    // `user_id`, então só as sessões DELA recebem, que é justamente o ponto
+    // deste hook (sincronizar rascunho entre dispositivos do mesmo usuário).
+    const cancelar = assinar(`usuario:${userId}`, async (_tipo, dados) => {
+      if ((dados as { tabela?: string })?.tabela !== "drafts") return;
 
-          const incoming = payload.eventType === "DELETE" ? "" : (row.content ?? "");
+      const { content } = await api<{ content: string }>(
+        `/drafts/${encodeURIComponent(draftKey)}`,
+      ).catch(() => ({ content: "" }));
+      const incoming = content ?? "";
 
-          // Ignore echoes of our own writes.
-          if (incoming === valueRef.current) return;
-          if (incoming === lastSyncedRef.current) return;
+      // Eco da nossa própria escrita — ignorar, senão o cursor pula enquanto
+      // a pessoa digita.
+      if (incoming === valueRef.current) return;
+      if (incoming === lastSyncedRef.current) return;
 
-          setValueState(incoming);
-          valueRef.current = incoming;
-          lastSyncedRef.current = incoming;
-          if (incoming) draftCache.set(cacheKey, incoming);
-          else draftCache.delete(cacheKey);
-          writeLocalDraft(userId, draftKey, incoming);
-        },
-      )
-      .subscribe();
+      setValueState(incoming);
+      valueRef.current = incoming;
+      lastSyncedRef.current = incoming;
+      if (incoming) draftCache.set(cacheKey, incoming);
+      else draftCache.delete(cacheKey);
+      writeLocalDraft(userId, draftKey, incoming);
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelar();
+    };
+  }, [cacheKey, draftKey, userId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!userId || !draftKey || !cacheKey) {
+      setValueState("");
+      valueRef.current = "";
+      lastSyncedRef.current = "";
+      dirtyDuringLoadRef.current = false;
+      setLoading(false);
+      return;
+    }
+
+    // Prefer localStorage first for instant restoration after refresh, then fall back to in-memory cache.
+    const localValue = readLocalDraft(userId, draftKey);
+    const cachedValue = localValue || draftCache.get(cacheKey) || "";
+    setValueState(cachedValue);
+    valueRef.current = cachedValue;
+    lastSyncedRef.current = cachedValue;
+    dirtyDuringLoadRef.current = false;
+    setLoading(true);
+
+    void supabase
+      .from("drafts")
+      .select("content")
+      .eq("user_id", userId)
+      .eq("draft_key", draftKey)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+
+        if (error) {
+          console.error("Failed to load draft", error);
+          setLoading(false);
+          return;
+        }
+
+        const remoteValue = data?.content ?? "";
+
+        // Choose the more recent value: if the user already typed locally (dirty), keep local.
+        // Otherwise, server wins (covers cross-device case where another session typed something).
+        if (dirtyDuringLoadRef.current) {
+          if (remoteValue) draftCache.set(cacheKey, remoteValue);
+          else draftCache.delete(cacheKey);
+          lastSyncedRef.current = remoteValue;
+          setLoading(false);
+          return;
+        }
+
+        if (remoteValue !== valueRef.current) {
+          setValueState(remoteValue);
+          valueRef.current = remoteValue;
+          writeLocalDraft(userId, draftKey, remoteValue);
+        }
+        if (remoteValue) draftCache.set(cacheKey, remoteValue);
+        else draftCache.delete(cacheKey);
+        lastSyncedRef.current = remoteValue;
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheKey, draftKey, userId]);
+
+  // Cross-device realtime sync: listen for updates from other sessions of the same user.
+  useEffect(() => {
+    if (!userId || !draftKey || !cacheKey) return;
+
+    const cancelar = assinar(`usuario:${userId}`, async (_tipo, dados) => {
+      if ((dados as { tabela?: string })?.tabela !== "drafts") return;
+
+      const { content } = await api<{ content: string }>(
+        `/drafts/${encodeURIComponent(draftKey)}`,
+      ).catch(() => ({ content: "" }));
+      const incoming = content ?? "";
+      if (incoming === valueRef.current) return;
+      if (incoming === lastSyncedRef.current) return;
+
+      setValueState(incoming);
+      valueRef.current = incoming;
+      lastSyncedRef.current = incoming;
+      if (incoming) draftCache.set(cacheKey, incoming);
+      else draftCache.delete(cacheKey);
+      writeLocalDraft(userId, draftKey, incoming);
+    });
+
+    return () => {
+      cancelar();
     };
   }, [cacheKey, draftKey, userId]);
 

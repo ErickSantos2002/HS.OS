@@ -87,7 +87,7 @@ DECLARE
     tabelas text[] := ARRAY[
         'channel_messages', 'conversations', 'notifications',
         'agent_tasks', 'agent_results', 'agent_profiles',
-        'agent_activity_log', 'agent_skills', 'agent_crons',
+        'agent_activity', 'agent_activity_log', 'agent_skills', 'agent_crons',
         'team_agents', 'skills', 'message_reactions',
         'drafts', 'dm_reads', 'channel_agent_activity', 'automations'
     ];
