@@ -198,6 +198,42 @@ async def criar(dados: CanalIn, usuario: Usuario = Depends(usuario_atual)):
     return CanalOut(**dict(linha))
 
 
+class CanalEdicaoIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+    type: str
+
+
+@router.patch("/{channel_id}", response_model=CanalOut)
+async def editar(
+    channel_id: str,
+    dados: CanalEdicaoIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Renomeia o canal e troca entre público e privado."""
+    if dados.type not in _TIPOS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"type inválido. Use um de: {', '.join(sorted(_TIPOS))}.",
+        )
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            """
+            UPDATE public.channels
+               SET name = $2, description = $3, type = $4::public.channel_type
+             WHERE id = $1::uuid
+            RETURNING id::text AS id, name, description, type::text AS type,
+                      created_by::text AS created_by,
+                      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at
+            """,
+            channel_id, dados.name.strip(), (dados.description or "").strip() or None,
+            dados.type,
+        )
+    if linha is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Canal não encontrado.")
+    return CanalOut(**dict(linha))
+
+
 @router.delete("/{channel_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def excluir(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
     """Apaga o canal. Quem pode é decidido pelo RLS, não por regra daqui."""

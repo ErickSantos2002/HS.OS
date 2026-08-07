@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
 import { Channel } from "@/hooks/use-channels";
 import { Input } from "@/components/ui/input";
@@ -32,14 +32,19 @@ export default function EditChannelDialog({ channel, open, onClose, onUpdated, o
   const handleSave = async () => {
     if (!name.trim()) return;
     setSaving(true);
-    const { error } = await supabase
-      .from("channels")
-      .update({
-        name: name.trim(),
-        description: description.trim() || null,
-        type: isPrivate ? "private" : "public",
-      } as any)
-      .eq("id", channel.id);
+    let error: unknown = null;
+    try {
+      await api(`/channels/${channel.id}`, {
+        method: "PATCH",
+        body: {
+          name: name.trim(),
+          description: description.trim() || null,
+          type: isPrivate ? "private" : "public",
+        },
+      });
+    } catch (e) {
+      error = e;
+    }
     setSaving(false);
     if (error) {
       toast.error("Erro ao salvar canal");
@@ -52,7 +57,12 @@ export default function EditChannelDialog({ channel, open, onClose, onUpdated, o
   };
 
   const handleDelete = async () => {
-    const { error } = await supabase.from("channels").delete().eq("id", channel.id);
+    let error: unknown = null;
+    try {
+      await api(`/channels/${channel.id}`, { method: "DELETE" });
+    } catch (e) {
+      error = e;
+    }
     if (error) {
       toast.error("Erro ao excluir canal");
       console.error(error);

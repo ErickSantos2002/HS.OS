@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Uso MEDIDO dos agentes (task #19).
@@ -154,14 +154,17 @@ export function useUsage(desde: string, ate: string) {
       const iniAnterior = new Date(ini);
       iniAnterior.setDate(iniAnterior.getDate() - dias);
 
-      const COLS = "ts, agent_id, model, kind, label, total_tokens, input_tokens, output_tokens, cached_tokens, cost_usd";
+      const janela = (de: Date, ate: Date) =>
+        `/uso/eventos?desde=${de.toISOString()}&ate=${ate.toISOString()}`;
       const [atual, anterior] = await Promise.all([
-        supabase.from("usage_events").select(COLS)
-          .gte("ts", ini.toISOString()).lte("ts", fim.toISOString())
-          .order("ts", { ascending: true }).limit(20000),
-        supabase.from("usage_events").select("ts, total_tokens, cost_usd")
-          .gte("ts", iniAnterior.toISOString()).lt("ts", ini.toISOString())
-          .limit(20000),
+        api<UsageRow[]>(janela(ini, fim)).then(
+          (data) => ({ data, error: null as Error | null }),
+          (error: Error) => ({ data: null, error }),
+        ),
+        api<UsageRow[]>(janela(iniAnterior, ini)).then(
+          (data) => ({ data, error: null as Error | null }),
+          (error: Error) => ({ data: null, error }),
+        ),
       ]);
 
       if (cancelled) return;

@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useState, useCallback, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -6,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Globe, Lock, Link2, Loader2, CheckCircle2, Copy, Check } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
 import { toast } from "sonner";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -35,14 +35,10 @@ export default function PublishArtifactDialog({ open, onOpenChange, htmlContent 
     const checkExisting = async () => {
       setChecking(true);
       try {
-        const { data } = await supabase
-          .from("artifacts_published" as any)
-          .select("id, title")
-          .eq("created_by", user.id)
-          .eq("html_content", htmlContent)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+        const data = await api<{ id: string; title?: string } | null>(
+          "/artefatos/publicados/procurar",
+          { method: "POST", body: { html_content: htmlContent } },
+        ).catch(() => null);
 
         if (!cancelled && data) {
           const rec = data as any;
@@ -88,21 +84,14 @@ export default function PublishArtifactDialog({ open, onOpenChange, htmlContent 
         ? null
         : new Date(Date.now() + parseInt(expiration) * 24 * 60 * 60 * 1000).toISOString();
 
-      const { data, error } = await supabase
-        .from("artifacts_published" as any)
-        .insert({
-          title,
-          html_content: htmlContent,
-          created_by: user.id,
-          is_public: isPublic,
-          expires_at: expiresAt,
-        } as any)
-        .select("id")
-        .single();
+      // O dono sai do token. Republicar o mesmo HTML devolve o link que já
+      // existia em vez de criar outro — o backend cuida disso.
+      const data = await api<{ id: string }>("/artefatos/publicados", {
+        method: "POST",
+        body: { title, html_content: htmlContent, is_public: isPublic, expires_at: expiresAt },
+      });
 
-      if (error) throw error;
-
-      const artifactId = (data as any).id;
+      const artifactId = data.id;
       const url = `${window.location.origin}/artifact/${artifactId}`;
       await copyToClipboard(url);
       setPublishedUrl(url);

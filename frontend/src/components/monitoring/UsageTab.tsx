@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -11,7 +12,6 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { BarChart2, AlertTriangle, TrendingUp, Coins, Crown, CalendarDays } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import {
   getPricingFor, getModelLabel, formatTokensShort,
 } from "@/lib/model-pricing";
@@ -68,13 +68,9 @@ export function UsageTab(_props: UsageTabProps) {
       // esta aba e o Analytics mostravam números em que não dava pra confiar.
       // Aqui cada linha é um evento medido; o "acumulado por dia" some, o que
       // simplifica: basta somar.
-      const { data: evts, error: err } = await supabase
-        .from("usage_events")
-        .select("agent_id, model, total_tokens, input_tokens, output_tokens, cost_usd, ts")
-        .gte("ts", since.toISOString())
-        .order("ts", { ascending: true })
-        .limit(20000);
-      if (err) throw err;
+      const evts = await api<Record<string, unknown>[]>(
+        `/uso/eventos?desde=${since.toISOString()}`,
+      );
       // Adapta ao formato que o resto desta aba já espera (agente+dia),
       // somando em vez de tirar diferença entre acumulados.
       const data = (evts ?? []).map((e: Record<string, unknown>) => ({

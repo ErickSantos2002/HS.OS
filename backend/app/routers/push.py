@@ -12,7 +12,7 @@ configuradas, então o push não funciona — nem antes da portagem funcionava.
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from pywebpush import WebPushException, webpush
 
@@ -139,3 +139,18 @@ async def enviar(dados: EnvioIn, usuario: Usuario = Depends(usuario_atual)):
         logger.info("%d inscrição(ões) morta(s) removida(s)", len(removidos))
 
     return {"enviados": enviados, "inscricoes": len(inscricoes), "removidas": len(removidos)}
+
+
+@router.delete("/inscricao", status_code=status.HTTP_204_NO_CONTENT)
+async def cancelar_inscricao(endpoint: str = Query(description="O endpoint devolvido pelo navegador.")):
+    """Remove a inscrição de push deste navegador.
+
+    Sem autenticação de propósito: quem cancela é o navegador que está sendo
+    desinstalado ou cujo push foi revogado, e nesse momento pode não haver
+    sessão válida. O `endpoint` é gerado pelo serviço de push e funciona como
+    o próprio segredo — quem o tem é o dono da inscrição.
+    """
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            "DELETE FROM public.push_subscriptions WHERE endpoint = $1", endpoint
+        )

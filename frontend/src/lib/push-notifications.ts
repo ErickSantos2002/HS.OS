@@ -7,6 +7,7 @@
  *
  * VAPID public key is fetched from the send-push edge function on demand.
  */
+import { api } from "@/lib/api";
 import { supabase } from "@/integrations/supabase/client";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -153,7 +154,9 @@ export async function unsubscribeFromPushNotifications(): Promise<void> {
     if (subscription) {
       const endpoint = subscription.endpoint;
       await subscription.unsubscribe();
-      await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
+      await api(`/push/inscricao?endpoint=${encodeURIComponent(endpoint)}`, {
+        method: "DELETE",
+      });
     }
   } catch (err) {
     console.warn("[push] unsubscribe failed:", err);

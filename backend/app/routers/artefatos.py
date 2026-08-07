@@ -172,3 +172,103 @@ async def ajustar_intervalo(
         )
     if achado is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Artefato não encontrado.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Artefatos publicados — a página `/p/{slug}`
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class PublicacaoIn(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    html_content: str
+    is_public: bool = False
+    expires_at: str | None = None
+
+
+@router.post("/publicados", status_code=status.HTTP_201_CREATED)
+async def publicar(dados: PublicacaoIn, usuario: Usuario = Depends(usuario_atual)):
+    """Publica o artefato, **reaproveitando** a publicação anterior idêntica.
+
+    Republicar o mesmo HTML devolve o link que já existia em vez de criar
+    outro. Sem isso, clicar "publicar" duas vezes gerava dois links vivos para
+    a mesma coisa e o primeiro, que já podia estar compartilhado, virava órfão
+    silencioso — o dono achava que tinha um link e tinha dois.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        anterior = await conn.fetchrow(
+            "SELECT id::text AS id, title FROM public.artifacts_published "
+            " WHERE created_by = $1::uuid AND html_content = $2 "
+            " ORDER BY created_at DESC LIMIT 1",
+            usuario.id, dados.html_content,
+        )
+        if anterior:
+            return {"id": anterior["id"], "title": anterior["title"], "reaproveitado": True}
+
+        linha = await conn.fetchrow(
+            """
+            INSERT INTO public.artifacts_published
+                (title, html_content, created_by, is_public, expires_at)
+            VALUES ($1, $2, $3::uuid, $4, NULLIF($5,'')::text::timestamptz)
+            RETURNING id::text AS id, title
+            """,
+            dados.title, dados.html_content, usuario.id, dados.is_public,
+            dados.expires_at or "",
+        )
+    logger.info("Artefato publicado %s por %s", linha["id"], usuario.id)
+    return {"id": linha["id"], "title": linha["title"], "reaproveitado": False}
+
+
+class BuscaPublicacaoIn(BaseModel):
+    html_content: str
+
+
+@router.post("/publicados/procurar")
+async def procurar_publicacao(
+    dados: BuscaPublicacaoIn, usuario: Usuario = Depends(usuario_atual)
+):
+    """Diz se esta pessoa já publicou exatamente este HTML, sem publicar nada.
+
+    É o que o diálogo consulta ao abrir, para já mostrar o link existente em vez
+    de oferecer "publicar" para algo que já está publicado. Precisa ser POST
+    apesar de só ler: o HTML é o critério de busca e não cabe numa query string.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            "SELECT id::text AS id, title FROM public.artifacts_published "
+            " WHERE created_by = $1::uuid AND html_content = $2 "
+            " ORDER BY created_at DESC LIMIT 1",
+            usuario.id, dados.html_content,
+        )
+    return dict(linha) if linha else None
+
+
+@router.get("/publicados/{artefato_id}")
+async def artefato_publicado(artefato_id: str):
+    """Lê um artefato publicado. **Sem autenticação** — é a página pública.
+
+    A validade é conferida aqui e não pelo RLS: um artefato expirado precisa
+    responder "link expirado" e não "não encontrado", e o RLS só sabe esconder.
+
+    Conta a visualização na mesma chamada. Era um `update` separado do
+    navegador, que qualquer um podia repetir à vontade — e não contava nada
+    quando a pessoa abria com JavaScript desligado.
+    """
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            """
+            UPDATE public.artifacts_published
+               SET views = COALESCE(views, 0) + 1
+             WHERE id = $1::uuid AND is_public = true
+               AND (expires_at IS NULL OR expires_at > now())
+            RETURNING id::text AS id, title, html_content, views, is_public,
+                      to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS expires_at,
+                      to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS created_at
+            """,
+            artefato_id,
+        )
+    if linha is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Artefato não encontrado ou link expirado."
+        )
+    return dict(linha)

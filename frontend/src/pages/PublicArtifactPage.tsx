@@ -1,6 +1,6 @@
+import { api } from "@/lib/api";
 import { useEffect, useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Loader2, ExternalLink, Eye } from "lucide-react";
 import { useBranding, useThemedLogo } from "@/hooks/use-branding";
 
@@ -17,13 +17,15 @@ export default function PublicArtifactPage() {
     if (!id) return;
     (async () => {
       setLoading(true);
-      const { data, error: fetchErr } = await supabase
-        .from("artifacts_published" as any)
-        .select("*")
-        .eq("id", id)
-        .single();
+      // A validade e a contagem de acesso ficam no servidor: expirado precisa
+      // dizer "link expirado", não "não encontrado", e o contador não pode
+      // depender do navegador executar um segundo update.
+      const data = await api<any>(
+        `/artefatos/publicados/${encodeURIComponent(id)}`,
+        { autenticar: false },
+      ).catch(() => null);
 
-      if (fetchErr || !data) {
+      if (!data) {
         setError("Artefato não encontrado ou link expirado.");
         setLoading(false);
         return;
@@ -42,10 +44,6 @@ export default function PublicArtifactPage() {
       setLoading(false);
 
       // Increment views
-      await supabase
-        .from("artifacts_published" as any)
-        .update({ views: (a.views || 0) + 1 } as any)
-        .eq("id", id);
     })();
   }, [id]);
 

@@ -241,25 +241,34 @@ async def varrer_contexto(_: Usuario = Depends(exige_papel("super_admin"))):
 @router.get("/eventos")
 async def eventos(
     usuario: Usuario = Depends(usuario_atual),
+    desde: str | None = Query(default=None, description="ISO-8601. Sem isto, vale `dias`."),
+    ate: str | None = Query(default=None, description="ISO-8601. Sem isto, agora."),
     dias: int = Query(default=30, ge=1, le=365),
     limite: int = Query(default=20_000, ge=1, le=50_000),
 ):
-    """Os eventos brutos de consumo, para a aba de Uso somar por agente e dia.
+    """Os eventos brutos de consumo, para as abas de Uso somarem.
 
-    Vêm crus e em ordem cronológica porque é assim que a tela soma. Agregar
-    aqui exigiria decidir o recorte (agente? modelo? dia?) e a aba mostra os
-    três — a agregação é dela.
+    Aceita janela explícita (`desde`/`ate`) **e** atalho por `dias`, porque as
+    duas telas pedem coisas diferentes: a de Uso compara um período com o
+    anterior e precisa das duas pontas; a de Monitoramento só quer "os últimos
+    30 dias".
+
+    Vêm crus e em ordem cronológica. Agregar aqui exigiria escolher o recorte
+    (agente? modelo? tarefa?) e as telas mostram os três — a soma é delas.
     """
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """
-            SELECT agent_id, model, total_tokens, input_tokens, output_tokens, cost_usd,
+            SELECT agent_id, model, kind, label, total_tokens, input_tokens,
+                   output_tokens, cached_tokens, cost_usd,
                    to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS ts
               FROM public.usage_events
-             WHERE ts >= now() - make_interval(days => $1)
+             WHERE ts >= COALESCE(NULLIF($1,'')::text::timestamptz,
+                                  now() - make_interval(days => $3))
+               AND ts <  COALESCE(NULLIF($2,'')::text::timestamptz, now())
              ORDER BY ts
-             LIMIT $2
+             LIMIT $4
             """,
-            dias, limite,
+            desde or "", ate or "", dias, limite,
         )
     return json.loads(json.dumps([dict(l) for l in linhas], default=str))
