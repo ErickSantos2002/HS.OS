@@ -27,13 +27,13 @@ escondeu telas quebradas em produção. O placar tem que separar as duas:
 |---|---|---|---|
 | Auth | ✅ | 🟡 12 chamadas soltas | JWT próprio (PyJWT + bcrypt) |
 | Storage | ✅ | ✅ **completo** | `UPLOADS_DIR` em disco, `app/routers/storage.py` |
-| Realtime (`postgres_changes`) | ✅ | 🟡 **9 de 22 arquivos** | WebSocket + LISTEN/NOTIFY, `app/escuta_banco.py` |
+| Realtime (`postgres_changes`) | ✅ | ✅ **completo** | WebSocket + LISTEN/NOTIFY, `app/escuta_banco.py` |
 | Edge Functions | 🟡 60 de 73 | ✅ sem pendências | routers FastAPI |
 | Banco (via RLS, direto do browser) | 🟡 120 rotas | 🔴 **50 de 113 arquivos** | endpoints FastAPI |
 
 O **banco** é o subsistema que sobrou quase inteiro — 185 chamadas `.from("…")`.
-O **Realtime** já anda: a captura é por trigger + `pg_notify`, o backend roteia
-por `channel_id`/`user_id`/`agent_id`, e 13 arquivos ainda abrem
+O **Realtime saiu inteiro**: a captura é por trigger + `pg_notify`, o backend
+roteia por `channel_id`/`user_id`/`agent_id`, e nenhum arquivo abre mais
 `supabase.channel(...)`. Ver `docs/PLANO-REALTIME.md`.
 
 O placar atualizado e a forma de medi-lo estão em `docs/ROADMAP.md`.

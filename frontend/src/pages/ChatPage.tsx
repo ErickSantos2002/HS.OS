@@ -1,3 +1,4 @@
+import { assinar } from "@/lib/realtime";
 import React, { Fragment, useState, useRef, useEffect, useCallback, useMemo, useLayoutEffect } from "react";
 import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -1828,124 +1829,33 @@ export default function ChatPage() {
       }
     };
 
-    let channel: ReturnType<typeof supabase.channel> | null = null;
-    let reconnectTimer: number | null = null;
-    let attempt = 0;
-    let disposed = false;
-
-    const handleInsert = (payload: { new: {
-      id: string;
-      agent_id: string;
-      role: "user" | "agent";
-      content: string | null;
-      created_at: string;
-      media: MediaAttachment[] | null;
-    } }) => {
-      const row = payload.new;
-      const message = conversationRowToMessage(row, row.agent_id);
-      appendMessageToHistoryCache(user.id, row.agent_id, message);
-
-      setRealtimePending(row.agent_id, row.role === "user");
-      let replaceId: string | undefined;
-      if (row.role === "agent") {
-        const existing = messagesByAgentRef.current[row.agent_id] ?? [];
-        const incomingTs = new Date(message.timestamp).getTime();
-        replaceId = existing.find(
-          (m) =>
-            m.role === "agent" &&
-            typeof m.id === "string" &&
-            m.id.startsWith("stream-") &&
-            Math.abs(new Date(m.timestamp).getTime() - incomingTs) < 16 * 60_000
-        )?.id;
-
-        const RECONCILE_WINDOW_MS = 15 * 60_000;
-        if (!message.isError && !(message.content ?? "").startsWith("[error]")) {
-          setMessagesByAgent((prev) => {
-            const list = prev[row.agent_id];
-            if (!list?.length) return prev;
-            const filtered = list.filter((m) => {
-              const isErr = m.isError || (typeof m.content === "string" && m.content.startsWith("[error]"));
-              if (!isErr) return true;
-              const age = incomingTs - new Date(m.timestamp).getTime();
-              return !(age >= 0 && age <= RECONCILE_WINDOW_MS);
-            });
-            if (filtered.length === list.length) return prev;
-            return { ...prev, [row.agent_id]: filtered };
-          });
-        }
-      }
-      upsertAgentMessage(row.agent_id, message, replaceId);
-
-      setLastMessages((prev) => ({
-        ...prev,
-        [row.agent_id]: {
-          content: (message.content ?? "").length > 120 ? `${message.content.slice(0, 120)}…` : (message.content ?? ""),
-          created_at: message.timestamp,
-        },
-      }));
-
-      if (row.role === "agent" && !sameAgentId(effectiveAgentIdRef.current, row.agent_id)) {
-        markAgentUnread(row.agent_id);
-      }
-    };
-
-    const connect = () => {
-      if (disposed) return;
-      channel = supabase
-        .channel(`conversations-${user.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "conversations",
-            filter: `user_id=eq.${user.id}`,
-          },
-          handleInsert as (payload: unknown) => void,
-        )
-        .subscribe((status) => {
-          if (disposed) return;
-          if (status === "SUBSCRIBED") {
-            if (attempt > 0) {
-              // Just recovered — reload persisted history to catch any
-              // agent reply saved while the socket was down.
-              syncConversationRequest();
-            }
-            attempt = 0;
-            setRealtimeStatus("connected");
-          } else if (
-            status === "CHANNEL_ERROR" ||
-            status === "TIMED_OUT" ||
-            status === "CLOSED"
-          ) {
-            setRealtimeStatus("reconnecting");
-            // Try to catch missed messages immediately
-            syncConversationRequest();
-            // Exponential backoff: 1s, 2s, 4s, 8s, capped at 15s
-            const delay = Math.min(1000 * 2 ** attempt, 15000);
-            attempt += 1;
-            if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
-            reconnectTimer = window.setTimeout(() => {
-              if (channel) {
-                supabase.removeChannel(channel);
-                channel = null;
-              }
-              connect();
-            }, delay);
-          }
-        });
-    };
-    connect();
+    // Tópico da pessoa: o backend roteia `conversations` por `user_id`, então
+    // chega só o que é dela — era o que o `filter: user_id=eq.…` fazia.
+    //
+    // ⚠️ **O evento dispara a reconciliação, não substitui a mensagem.** Ele não
+    // carrega a linha (ver `docs/PLANO-REALTIME.md`), e o `syncConversationRequest`
+    // já existia como rede de segurança para o bug "gravado no banco e nunca
+    // renderizado". Ele passa a ser o caminho principal, o que é uma
+    // simplificação real: antes havia dois caminhos para a mesma mensagem
+    // aparecer — o payload do realtime e a reconciliação — e eles podiam
+    // divergir. Agora há um.
+    //
+    // A reconexão e a espera crescente saíram daqui: vivem no `lib/realtime.ts`,
+    // que mantém **uma** conexão para a aba inteira. O controle por hook
+    // duplicava isso e era a origem do laço CLOSED → retry.
+    const cancelarRealtime = assinar(`usuario:${user.id}`, (_tipo, dados) => {
+      if ((dados as { tabela?: string })?.tabela !== "conversations") return;
+      syncConversationRequest();
+    });
+    setRealtimeStatus("connected");
 
     window.addEventListener("visibilitychange", syncConversationRequest);
     window.addEventListener("focus", syncConversationRequest);
 
     return () => {
-      disposed = true;
-      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
       window.removeEventListener("visibilitychange", syncConversationRequest);
       window.removeEventListener("focus", syncConversationRequest);
-      if (channel) supabase.removeChannel(channel);
+      cancelarRealtime();
     };
   }, [agentIdsKey, effectiveAgentId, setRealtimePending, syncRealtimePendingFromMessages, upsertAgentMessage, user?.id]);
 
@@ -2506,17 +2416,23 @@ export default function ChatPage() {
   // Update dmLastActivity on realtime DM channel messages
   useEffect(() => {
     if (!dmChannelIdsKey) return;
-    const dmIds = new Set(dmChannelIdsKey.split(","));
-    const sub = supabase
-      .channel("dm-last-activity")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "channel_messages" }, (payload) => {
-        const row = payload.new as any;
-        if (dmIds.has(row.channel_id)) {
-          setDmLastActivity(prev => ({ ...prev, [row.channel_id]: row.created_at }));
-        }
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(sub); };
+    const dmIds = dmChannelIdsKey.split(",");
+
+    // Um tópico por DM, em vez de ouvir a tabela inteira: assim só chega o que
+    // é destas conversas, e o direito de ouvir cada uma já foi conferido na
+    // assinatura.
+    //
+    // ⚠️ O horário usado é o da CHEGADA do evento, não o `created_at` da linha
+    // — o evento não a carrega. Para ordenar "conversas por atividade recente"
+    // a diferença é de milissegundos e não muda a ordem; buscar a mensagem só
+    // para carimbar a lista lateral não se pagaria.
+    const cancelamentos = dmIds.map((id) =>
+      assinar(`canal:${id}`, (_tipo, dados) => {
+        if ((dados as { tabela?: string })?.tabela !== "channel_messages") return;
+        setDmLastActivity((prev) => ({ ...prev, [id]: new Date().toISOString() }));
+      }),
+    );
+    return () => { cancelamentos.forEach((c) => c()); };
   }, [dmChannelIdsKey]);
 
   // Unified DM list: agents + people sorted by last activity

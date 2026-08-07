@@ -18,7 +18,7 @@ ainda na pasta.
 | Arquivos do front **sem Supabase** | 50 | 113 | `grep -rl "integrations/supabase/client" frontend/src \| wc -l` (63 hoje; 113 menos isso) |
 | Rotas na API própria | 120 | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
 | Chamadas `.from("…")` restantes | 185 | — | `grep -rho '\.from(\s*"' frontend/src \| wc -l` |
-| Arquivos ainda em `postgres_changes` | 13 | — | `grep -rl "postgres_changes" frontend/src \| grep -v _legado` |
+| Arquivos ainda em `postgres_changes` | **0** | — | `grep -rl "postgres_changes" frontend/src \| grep -v _legado` |
 
 **Um lote só fecha quando duas linhas andam:** ter o endpoint no backend não é o
 mesmo que a tela usar o endpoint. Já aconteceu dez vezes de a edge sair da pasta,
@@ -307,17 +307,27 @@ Estratégia que funcionou nos primeiros lotes: **portar por tabela, não por tel
 Uma tabela some do front de uma vez, e o endpoint nasce coerente em vez de
 recortado pela necessidade de uma tela só.
 
-## 🔴 Lote 8 — Realtime
+## ✅ Lote 8 — Realtime (concluído em 07/08/2026)
 
-**21 arquivos ainda em `supabase.channel(...).on("postgres_changes", …)`.**
+Os 21 arquivos que abriam `supabase.channel(...).on("postgres_changes", …)`
+foram religados no mesmo dia. O desenho e o porquê estão em
+`docs/PLANO-REALTIME.md`; o resumo do que ficou:
 
-O hub em `app/realtime.py` existe, funciona e publica por tópico — mas hoje só
-sabe de canais e usuários, e só o `use-channels.ts` o consome. Para religar os
-21, ele precisa emitir eventos de tabela, e cada endpoint de escrita precisa
-publicar **depois de commitar** (publicar antes faz a tela buscar linha que outra
-conexão ainda não enxerga).
+- **captura no banco**, por trigger + `pg_notify` em 17 tabelas — não nos
+  endpoints, senão a tela ficaria cega para o que os agentes, o coletor da VPS
+  e a ponte de arquivos escrevem
+- **o evento nunca leva conteúdo**, só `{tabela, op, id}` mais as colunas que
+  roteiam. Quem quer conteúdo busca pelo endpoint, onde o RLS decide
+- **autorização na assinatura, não por evento** — e aí se descobriu que o `/ws`
+  aceitava qualquer id de canal sem conferir se a pessoa era membro
+- **uma conexão por aba**, com reconexão em `lib/realtime.ts`. Três hooks
+  tinham controle de status e espera crescente próprios, duplicando isso e
+  produzindo o laço CLOSED → retry que os comentários deles documentavam
 
-É o maior bloco isolado que resta e destrava telas inteiras de uma vez.
+⚠️ **`usage_events` ficou de fora dos gatilhos** e não tem tempo real. Recebe
+escrita em lote pela varredura de uso, e um evento por linha faria tempestade.
+`use-agents` e `AgentDetailPanel` a observavam; as duas passaram a atualizar o
+consumo ao abrir.
 
 ## Lote 9 — Limpeza final
 

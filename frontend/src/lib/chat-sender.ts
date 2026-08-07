@@ -9,6 +9,7 @@
  * Now supports SSE streaming via /api/stream with fallback to /v1/responses.
  */
 
+import { assinar } from "@/lib/realtime";
 import { getAgentReadableImageContext } from "@/lib/chat-image-vision";
 import { getModelForAgent } from "@/lib/active-agents";
 import { appendToConversations, conversationRowToMessage } from "@/lib/chat-persistence";
@@ -670,24 +671,20 @@ async function pollForBackgroundReply(
   // Realtime co-signal: any INSERT in conversations for this (agent,user) wakes
   // the polling loop immediately instead of waiting up to intervalMs.
   let realtimeTick = 0;
-  const realtimeChannel = supabase
-    .channel(`bg-reply-${agentId}-${userId}-${start}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "conversations",
-        filter: `agent_id=eq.${agentId}`,
-      },
-      (payload) => {
-        const row = payload.new as { user_id?: string; role?: string };
-        if (row?.user_id === userId && row?.role === "agent") {
-          realtimeTick++;
-        }
-      },
-    )
-    .subscribe();
+  // Tópico da pessoa: o backend roteia `conversations` por `user_id`, então só
+  // as sessões dela recebem — o que o `filter` fazia, agora do lado do servidor.
+  //
+  // ⚠️ O sinal aqui é **só um cutucão**, não a resposta. O evento não diz se a
+  // linha é do agente ou da pessoa (não carrega conteúdo), então acordar o laço
+  // por uma mensagem que o próprio usuário acabou de mandar é aceitável: o
+  // `pollOnce` logo abaixo confere. Filtrar por `role` custaria uma busca a mais
+  // para economizar uma iteração que já ia acontecer em `intervalMs`.
+  const cancelarRealtime = assinar(`usuario:${userId}`, (_tipo, dados) => {
+    const m = dados as { tabela?: string; agent_id?: string | null };
+    if (m?.tabela !== "conversations") return;
+    if (m.agent_id && m.agent_id !== agentId) return;
+    realtimeTick++;
+  });
 
   const waitTick = async () => {
     const startTick = realtimeTick;
@@ -760,7 +757,7 @@ async function pollForBackgroundReply(
     return null;
   } finally {
     try {
-      supabase.removeChannel(realtimeChannel);
+      cancelarRealtime();
     } catch {
       /* ignore */
     }

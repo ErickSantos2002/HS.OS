@@ -32,7 +32,7 @@ diferentes, e o resumo antigo ("Realtime ✅ portado") escondia isso:
 |---|---|---|---|
 | **Auth** | ✅ JWT próprio (PyJWT + bcrypt) | 🟡 quase | 12 chamadas soltas; o fluxo de *reset por e-mail* não existe mais |
 | **Storage** | ✅ `UPLOADS_DIR` em disco | ✅ **completo** | nada |
-| **Realtime** | ✅ WebSocket + LISTEN/NOTIFY (`app/escuta_banco.py`) | 🟡 **9 de 22** | 13 arquivos ainda em `postgres_changes` |
+| **Realtime** | ✅ WebSocket + LISTEN/NOTIFY (`app/escuta_banco.py`) | ✅ **completo** | nada — `postgres_changes` zerado |
 | **Edge Functions** | 🟡 60 de 73 | ✅ sem pendências | 4 de trabalho real, 9 bloqueadas |
 | **Banco** (RLS direto do browser) | 🟡 120 rotas | 🔴 **50 de 113** | 185 chamadas `.from("…")`, em 56 arquivos vivos |
 
