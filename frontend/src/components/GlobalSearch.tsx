@@ -1,10 +1,10 @@
+import { api } from "@/lib/api";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Search, Bot, Hash, MessageSquare, X } from "lucide-react";
 import { useAgents, type GatewayAgent } from "@/hooks/use-agents";
 import { useChannels } from "@/hooks/use-channels";
 import { useAuthContext } from "@/contexts/auth-context";
-import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 
 type SearchResult = {
@@ -74,21 +74,18 @@ export function GlobalSearch({ compact = false }: { compact?: boolean }) {
     const run = async () => {
       setLoading(true);
 
-      const [conversationResponse, channelResponse] = await Promise.all([
-        supabase
-          .from("conversations")
-          .select("id, agent_id, content, created_at")
-          .eq("user_id", user.id)
-          .ilike("content", `%${search}%`)
-          .order("created_at", { ascending: false })
-          .limit(8),
-        supabase
-          .from("channel_messages")
-          .select("id, channel_id, author_name, content, created_at")
-          .ilike("content", `%${search}%`)
-          .order("created_at", { ascending: false })
-          .limit(12),
-      ]);
+      // Uma consulta só: o backend procura nas duas fontes e o RLS decide o
+      // que aparece de canal.
+      const achados = await api<Array<{
+        tipo: string;
+        id: string;
+        origem: string;
+        autor: string | null;
+        content: string;
+        created_at: string;
+      }>>(`/busca?q=${encodeURIComponent(search)}`).catch(() => []);
+      const conversationResponse = { data: achados.filter((a) => a.tipo === "conversa") };
+      const channelResponse = { data: achados.filter((a) => a.tipo === "canal") };
 
       if (cancelled) return;
 
@@ -97,10 +94,10 @@ export function GlobalSearch({ compact = false }: { compact?: boolean }) {
         .map((item) => ({
           id: `conversation-${item.id}`,
           type: "agent-message",
-          title: agentNameById.get(item.agent_id) ?? item.agent_id,
+          title: agentNameById.get(item.origem) ?? item.origem,
           subtitle: "Conversa privada",
           preview: normalizePreview(item.content ?? ""),
-          target: `/chat?agent=${encodeURIComponent(item.agent_id)}&message=${encodeURIComponent(item.id)}`,
+          target: `/chat?agent=${encodeURIComponent(item.origem)}&message=${encodeURIComponent(item.id)}`,
           icon: "bot",
           createdAt: item.created_at,
         }));
@@ -110,10 +107,10 @@ export function GlobalSearch({ compact = false }: { compact?: boolean }) {
         .map((item) => ({
           id: `channel-${item.id}`,
           type: "channel-message",
-          title: channelNameById.get(item.channel_id) ?? "Canal",
-          subtitle: item.author_name,
+          title: channelNameById.get(item.origem) ?? "Canal",
+          subtitle: item.autor ?? "",
           preview: normalizePreview(item.content ?? ""),
-          target: `/chat?channel=${encodeURIComponent(item.channel_id)}&message=${encodeURIComponent(item.id)}`,
+          target: `/chat?channel=${encodeURIComponent(item.origem)}&message=${encodeURIComponent(item.id)}`,
           icon: "channel",
           createdAt: item.created_at,
         }));

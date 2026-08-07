@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 
 const EVERYONE_MENTION_REGEX = /(^|\s)@todos\b/iu;
 const PERSON_MENTION_REGEX = /@(\w+(?:\s\w+)*)/g;
@@ -40,31 +40,16 @@ export async function notifyChannelRecipients({
   forceNotifyAll = false,
   threadRootId = null,
 }: NotifyChannelRecipientsParams) {
-  const { data: membersData, error: membersError } = await supabase
-    .from("channel_members")
-    .select("user_id, member_type")
-    .eq("channel_id", channelId);
-
-  if (membersError || !membersData) return;
-
-  const humanMemberIds = (membersData as Array<{ user_id: string; member_type: string }>)
-    .filter((member) => member.member_type === "human" && member.user_id !== senderUserId)
-    .map((member) => member.user_id);
-
-  if (humanMemberIds.length === 0) return;
-
-  const recipientIds = humanMemberIds;
-
-  const uniqueRecipientIds = [...new Set(recipientIds)];
-  if (uniqueRecipientIds.length === 0) return;
-
-  await supabase.from("notifications").insert(
-    uniqueRecipientIds.map((userId) => ({
-      user_id: userId,
-      channel_id: channelId,
-      message_id: threadRootId,
+  // O filtro (só humanos, menos quem enviou) acompanha o INSERT no servidor —
+  // a lista de destinatários não faz mais a volta pela rede antes de virar
+  // linha na tabela.
+  await api(`/channels/${channelId}/notificar`, {
+    method: "POST",
+    body: {
       author_name: authorName,
       content_preview: contentPreview,
-    })) as any,
-  );
+      message_id: threadRootId ?? null,
+    },
+  });
+
 }

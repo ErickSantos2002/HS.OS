@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useState, useEffect, useMemo } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import type { Channel } from "@/hooks/use-channels";
 
 export interface DmPeerInfo {
@@ -29,45 +29,29 @@ export function useDmPeers(channels: Channel[], currentUserId: string | undefine
     let cancelled = false;
     (async () => {
       const dmIds = dmChannels.map((c) => c.id);
-      const { data: members } = await supabase
-        .from("channel_members")
-        .select("channel_id, user_id")
-        .in("channel_id", dmIds)
-        .eq("member_type", "human");
+      // O join é do banco: buscar membros, peneirar quem não sou eu e então
+      // buscar os perfis dava duas viagens e um Map no navegador.
+      const linhas = await api<Array<{
+        channel_id: string;
+        user_id: string;
+        full_name: string | null;
+        email: string | null;
+        avatar_url: string | null;
+        status: string | null;
+      }>>("/channels/dms/interlocutores").catch(() => null);
 
-      if (cancelled || !members) return;
+      if (cancelled || !linhas) return;
 
-      const otherUserIds = new Set<string>();
-      const channelToOther: Record<string, string> = {};
-      for (const m of members) {
-        if (m.user_id !== currentUserId) {
-          channelToOther[m.channel_id] = m.user_id;
-          otherUserIds.add(m.user_id);
-        }
-      }
-
-      if (otherUserIds.size === 0) {
-        setPeers({});
-        return;
-      }
-
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, avatar_url, status")
-        .in("id", Array.from(otherUserIds));
-
-      if (cancelled || !profiles) return;
-
-      const profileMap = new Map(profiles.map((p) => [p.id, p]));
+      const dmSet = new Set(dmIds);
       const result: Record<string, DmPeerInfo> = {};
-      for (const [channelId, userId] of Object.entries(channelToOther)) {
-        const profile = profileMap.get(userId);
-        result[channelId] = {
-          channelId,
-          peerId: userId,
-          peerName: profile?.full_name || profile?.email || "Usuário",
-          peerAvatar: profile?.avatar_url || null,
-          peerStatus: profile?.status || "offline",
+      for (const l of linhas) {
+        if (!dmSet.has(l.channel_id)) continue;
+        result[l.channel_id] = {
+          channelId: l.channel_id,
+          peerId: l.user_id,
+          peerName: l.full_name || l.email || "Usuário",
+          peerAvatar: l.avatar_url || null,
+          peerStatus: l.status || "offline",
         };
       }
       cachedPeers = result;

@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { format, subDays, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -91,30 +91,30 @@ export default function AnalyticsPage() {
       setActivityLoading(true);
       setActivityError(null);
       const since = new Date(`${desde}T00:00:00`).toISOString();
-      const { data, error } = await supabase.rpc("get_user_agent_activity", { _since: since });
+      // Nome e e-mail vêm no mesmo join da agregação — eram uma segunda
+      // consulta com a lista de ids que a tela acabava de montar.
+      let data: (UserActivityRow & ProfileLite)[] | null = null;
+      let error: Error | null = null;
+      try {
+        data = await api<(UserActivityRow & ProfileLite)[]>(
+          `/analytics/atividade?desde=${encodeURIComponent(since)}`,
+        );
+      } catch (e) {
+        error = e as Error;
+      }
       if (cancelled) return;
-      if (error) {
+      if (error || !data) {
         console.error("Failed to load user activity:", error);
-        setActivityError(error.message);
+        setActivityError(error?.message ?? "Falha ao carregar a atividade.");
         setUserActivity([]);
         setProfilesMap(new Map());
         setActivityLoading(false);
         return;
       }
-      const activity = (data || []) as UserActivityRow[];
-      setUserActivity(activity);
-
-      const userIds = [...new Set(activity.map((r) => r.user_id).filter(Boolean))];
-      if (userIds.length > 0) {
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("id, full_name, email")
-          .in("id", userIds);
-        if (cancelled) return;
-        setProfilesMap(new Map((profs || []).map((p: any) => [p.id, p as ProfileLite])));
-      } else {
-        setProfilesMap(new Map());
-      }
+      setUserActivity(data as UserActivityRow[]);
+      setProfilesMap(
+        new Map(data.filter((r) => r.user_id).map((r) => [r.user_id, r as ProfileLite])),
+      );
       setActivityLoading(false);
     }
     loadActivity();

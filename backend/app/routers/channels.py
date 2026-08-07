@@ -234,6 +234,46 @@ async def editar(
     return CanalOut(**dict(linha))
 
 
+class InterlocutorOut(BaseModel):
+    channel_id: str
+    user_id: str
+    full_name: str | None = None
+    email: str | None = None
+    avatar_url: str | None = None
+    status: str | None = None
+
+
+@router.get("/dms/interlocutores", response_model=list[InterlocutorOut])
+async def interlocutores(usuario: Usuario = Depends(usuario_atual)):
+    """Com quem eu falo em cada DM minha, já com o perfil da pessoa junto.
+
+    ⚠️ **Antes de `GET /{channel_id}`**, senão "dms" vira id de canal.
+
+    A tela fazia isto em duas consultas e um `Map` no navegador: buscar os
+    membros de todas as DMs, descobrir quem não sou eu, e então buscar os
+    perfis. O join é do banco — é literalmente para o que ele serve, e assim a
+    lista de ids não faz a volta pela rede no meio do caminho.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """
+            SELECT m.channel_id::text AS channel_id, m.user_id,
+                   p.full_name, p.email, p.avatar_url, p.status
+              FROM public.channel_members m
+              JOIN public.channels c ON c.id = m.channel_id AND c.type = 'dm'
+              LEFT JOIN public.profiles p ON p.id::text = m.user_id
+             WHERE m.member_type = 'human'
+               AND m.user_id <> $1
+               AND EXISTS (
+                     SELECT 1 FROM public.channel_members meu
+                      WHERE meu.channel_id = m.channel_id AND meu.user_id = $1
+                   )
+            """,
+            usuario.id,
+        )
+    return [InterlocutorOut(**dict(l)) for l in linhas]
+
+
 @router.delete("/{channel_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def excluir(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
     """Apaga o canal. Quem pode é decidido pelo RLS, não por regra daqui."""
@@ -638,3 +678,38 @@ async def arquivos(
             channel_id, limite,
         )
     return [_msg_saida(l) for l in linhas]
+
+
+class NotificacaoIn(BaseModel):
+    author_name: str
+    content_preview: str = ""
+    message_id: str | None = None
+
+
+@router.post("/{channel_id}/notificar", status_code=status.HTTP_204_NO_CONTENT)
+async def notificar(
+    channel_id: str,
+    dados: NotificacaoIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Avisa os outros humanos do canal que há mensagem nova.
+
+    Quem envia **não** se notifica, e agente nenhum recebe notificação — ele não
+    tem tela para olhar e as linhas só encheriam a tabela. Era o mesmo filtro
+    que a tela aplicava; aqui ele acompanha o INSERT, sem a lista de
+    destinatários voltar pela rede antes.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        await conn.execute(
+            """
+            INSERT INTO public.notifications
+                (user_id, channel_id, message_id, author_name, content_preview)
+            SELECT m.user_id::uuid, $1::uuid, NULLIF($2,'')::uuid, $3, $4
+              FROM public.channel_members m
+             WHERE m.channel_id = $1::uuid
+               AND m.member_type = 'human'
+               AND m.user_id <> $5
+            """,
+            channel_id, dados.message_id or "", dados.author_name,
+            dados.content_preview[:100], usuario.id,
+        )

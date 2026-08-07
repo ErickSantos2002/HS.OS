@@ -12,6 +12,7 @@ o que sai daqui é a leitura e a escrita. Na prática já é ganho: o dado está
 nosso Postgres, então a assinatura antiga nunca dispararia de qualquer forma.
 """
 
+import json
 import logging
 
 from fastapi import APIRouter, Depends, Query, status
@@ -200,3 +201,98 @@ async def gravar_rascunho(
             """,
             usuario.id, draft_key, dados.content,
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Busca global
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class ResultadoBusca(BaseModel):
+    tipo: str  # conversa | canal
+    id: str
+    origem: str  # agent_id na conversa, channel_id no canal
+    autor: str | None = None
+    content: str
+    created_at: str
+
+
+@router.get("/busca", response_model=list[ResultadoBusca])
+async def busca(
+    q: str = Query(min_length=2, description="Pelo menos 2 letras."),
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Procura o texto nas conversas da pessoa e nas mensagens de canal.
+
+    Duas fontes numa resposta só: a tela mostra as duas listas juntas e fazia
+    duas consultas em paralelo do navegador.
+
+    O `ilike` com `%` dos dois lados **não usa índice** — é varredura. Aceitável
+    porque o limite é baixo e a busca é interativa, mas é o primeiro lugar a
+    olhar quando a instalação crescer; a saída é `pg_trgm`, que já está entre as
+    extensões do `000_compat_supabase.sql`.
+
+    O RLS decide o que aparece de canal: a busca não é caminho para ver mensagem
+    de canal do qual não se participa.
+    """
+    padrao = f"%{q}%"
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        conversas = await conn.fetch(
+            """
+            SELECT id::text AS id, agent_id, content,
+                   to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS created_at
+              FROM public.conversations
+             WHERE user_id = $1::uuid AND content ILIKE $2
+             ORDER BY created_at DESC LIMIT 8
+            """,
+            usuario.id, padrao,
+        )
+        canais = await conn.fetch(
+            """
+            SELECT id::text AS id, channel_id::text AS channel_id, author_name, content,
+                   to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS created_at
+              FROM public.channel_messages
+             WHERE content ILIKE $1 AND deleted_at IS NULL
+             ORDER BY created_at DESC LIMIT 12
+            """,
+            padrao,
+        )
+    return (
+        [ResultadoBusca(tipo="conversa", id=c["id"], origem=c["agent_id"],
+                        content=c["content"] or "", created_at=c["created_at"])
+         for c in conversas]
+        + [ResultadoBusca(tipo="canal", id=c["id"], origem=c["channel_id"],
+                          autor=c["author_name"], content=c["content"] or "",
+                          created_at=c["created_at"])
+           for c in canais]
+    )
+
+
+@router.get("/analytics/atividade")
+async def atividade(
+    usuario: Usuario = Depends(usuario_atual),
+    desde: str | None = Query(default=None, description="ISO-8601. Sem isto, vale `dias`."),
+    dias: int = Query(default=30, ge=1, le=365),
+):
+    """Quem falou com qual agente nos últimos N dias, já com nome e e-mail.
+
+    A agregação é a função `get_user_agent_activity` do banco, e o nome da
+    pessoa vem no mesmo join — a tela buscava os perfis depois, numa segunda
+    consulta com a lista de ids que ela acabava de montar.
+
+    Aceita `desde` explícito porque a tela tem seletor de período; `dias` é o
+    atalho para quem só quer a janela padrão.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """
+            SELECT a.*, p.full_name, p.email
+              FROM public.get_user_agent_activity(
+                     COALESCE(NULLIF($1,'')::text::timestamptz,
+                              now() - make_interval(days => $2))
+                   ) a
+              LEFT JOIN public.profiles p ON p.id = a.user_id
+            """,
+            desde or "", dias,
+        )
+    return json.loads(json.dumps([dict(l) for l in linhas], default=str))
