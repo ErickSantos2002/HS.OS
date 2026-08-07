@@ -87,13 +87,14 @@ export default function EditArenaDialog({ arena, agents, open, onOpenChange, onS
 
       // 2) Update per-agent roles
       for (const role of agentRoles) {
-        const { error } = await supabase
-          .from("arena_agents")
-          .update({
+        const error = await api(`/arenas/${arena.id}/agentes/${role.id}`, {
+          method: "PATCH",
+          body: {
+            agent_id: role.agent_id,
             role_name: role.role_name,
             role_description: role.role_description,
-          })
-          .eq("id", role.id);
+          },
+        }).then(() => null, (e: Error) => e);
         if (error) {
           console.error("[EditArenaDialog] update role:", error.message);
           toast.error(`Erro ao salvar papel do agente ${role.agent_id}.`);

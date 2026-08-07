@@ -50,6 +50,28 @@ async def modelos(usuario: Usuario = Depends(usuario_atual)):
     return [_cru(l) for l in linhas]
 
 
+@router.get("/por-agente/{agent_id}")
+async def arenas_do_agente(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """Em quais arenas este agente participa, com o id de voz de cada uma.
+
+    ⚠️ **Antes de `GET /{arena_id}`**, senão "por-agente" vira um id.
+
+    Era um join embutido do PostgREST (`arenas:arena_id(...)`) — sintaxe que só
+    existe lá. Aqui é o join de sempre.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """
+            SELECT a.id::text AS arena_id, a.name AS arena_name, a.convai_agent_id
+              FROM public.arena_agents ag
+              JOIN public.arenas a ON a.id = ag.arena_id
+             WHERE ag.agent_id = $1
+            """,
+            agent_id,
+        )
+    return [_cru(l) for l in linhas]
+
+
 @router.get("/{arena_id}")
 async def obter(arena_id: str, usuario: Usuario = Depends(usuario_atual)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
@@ -135,3 +157,186 @@ async def excluir(arena_id: str, usuario: Usuario = Depends(usuario_atual)):
         )
     if marca.rsplit(" ", 1)[-1] == "0":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Arena não encontrada.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Elenco, sessões e mensagens
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class PapelDeAgenteIn(BaseModel):
+    agent_id: str
+    role_name: str | None = None
+    role_description: str | None = None
+
+
+@router.put("/{arena_id}/agentes", status_code=status.HTTP_204_NO_CONTENT)
+async def definir_elenco(
+    arena_id: str,
+    papeis: list[PapelDeAgenteIn],
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Substitui o elenco inteiro da arena.
+
+    ⚠️ **Apagar e reinserir numa transação só.** A tela fazia os dois passos
+    separados: se o INSERT falhasse depois do DELETE, a arena ficava sem elenco
+    nenhum e o erro aparecia como "erro ao salvar" — sem dizer que o que existia
+    já tinha ido embora.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "DELETE FROM public.arena_agents WHERE arena_id = $1::uuid", arena_id
+            )
+            for p in papeis:
+                await conn.execute(
+                    "INSERT INTO public.arena_agents (arena_id, agent_id, role_name, role_description) "
+                    "VALUES ($1::uuid, $2, $3, $4)",
+                    arena_id, p.agent_id, p.role_name, p.role_description,
+                )
+
+
+@router.patch("/{arena_id}/agentes/{papel_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def editar_papel(
+    arena_id: str,
+    papel_id: str,
+    dados: PapelDeAgenteIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Muda o papel de um agente sem mexer no resto do elenco."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        achado = await conn.fetchval(
+            "UPDATE public.arena_agents SET role_name = $3, role_description = $4 "
+            " WHERE id = $2::uuid AND arena_id = $1::uuid RETURNING id",
+            arena_id, papel_id, dados.role_name, dados.role_description,
+        )
+    if achado is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Papel não encontrado nesta arena.")
+
+
+@router.get("/{arena_id}/sessoes")
+async def sessoes(arena_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """As sessões da arena, **com a contagem de mensagens de cada uma**.
+
+    A contagem vem no mesmo SELECT. A tela fazia uma consulta por sessão só para
+    isso — vinte sessões, vinte e uma idas ao banco.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """
+            SELECT s.*, (
+                     SELECT count(*) FROM public.arena_messages m
+                      WHERE m.session_id = s.id
+                   ) AS message_count
+              FROM public.arena_sessions s
+             WHERE s.arena_id = $1::uuid
+             ORDER BY s.created_at DESC
+            """,
+            arena_id,
+        )
+    return [_cru(l) for l in linhas]
+
+
+class SessaoIn(BaseModel):
+    title: str | None = None
+    # A sessão pode continuar outra: o resumo do contexto anterior viaja junto
+    # para o debate não recomeçar do zero.
+    parent_session_id: str | None = None
+    context_summary: str | None = None
+
+
+@router.post("/{arena_id}/sessoes", status_code=status.HTTP_201_CREATED)
+async def criar_sessao(
+    arena_id: str, dados: SessaoIn, usuario: Usuario = Depends(usuario_atual)
+):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            # `arena_sessions` não guarda quem criou — a arena já tem dono e a
+            # sessão é dela, não de uma pessoa.
+            "INSERT INTO public.arena_sessions "
+            "    (arena_id, title, parent_session_id, context_summary) "
+            "VALUES ($1::uuid, $2, NULLIF($3,'')::text::uuid, $4) RETURNING *",
+            arena_id, dados.title or "Nova sessão",
+            dados.parent_session_id or "", dados.context_summary,
+        )
+    return _cru(linha)
+
+
+@router.patch("/{arena_id}/sessoes/{sessao_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def renomear_sessao(
+    arena_id: str,
+    sessao_id: str,
+    dados: SessaoIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        achado = await conn.fetchval(
+            "UPDATE public.arena_sessions SET title = $3, updated_at = now() "
+            " WHERE id = $2::uuid AND arena_id = $1::uuid RETURNING id",
+            arena_id, sessao_id, dados.title,
+        )
+    if achado is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sessão não encontrada.")
+
+
+@router.get("/{arena_id}/sessoes/{sessao_id}/mensagens")
+async def mensagens_da_sessao(
+    arena_id: str, sessao_id: str, usuario: Usuario = Depends(usuario_atual)
+):
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            "SELECT * FROM public.arena_messages WHERE session_id = $1::uuid "
+            " ORDER BY created_at",
+            sessao_id,
+        )
+    return [_cru(l) for l in linhas]
+
+
+@router.delete("/{arena_id}/sessoes/{sessao_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def excluir_sessao(
+    arena_id: str, sessao_id: str, usuario: Usuario = Depends(usuario_atual)
+):
+    """Apaga a sessão e as mensagens dela, numa transação.
+
+    A tela apagava as mensagens primeiro "caso a FK não tenha CASCADE" — e o
+    comentário dizia isso. Aqui os dois passos são um só: se o segundo falhar, o
+    primeiro volta, em vez de deixar mensagens órfãs de uma sessão que ficou.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        async with conn.transaction():
+            await conn.execute(
+                "DELETE FROM public.arena_messages WHERE session_id = $1::uuid", sessao_id
+            )
+            marca = await conn.execute(
+                "DELETE FROM public.arena_sessions WHERE id = $1::uuid AND arena_id = $2::uuid",
+                sessao_id, arena_id,
+            )
+    if marca.rsplit(" ", 1)[-1] == "0":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sessão não encontrada.")
+
+
+class MensagemDeArenaIn(BaseModel):
+    session_id: str
+    agent_id: str | None = None
+    role: str | None = None
+    agent_role: str | None = None
+    content: str = ""
+    artifact_html: str | None = None
+
+
+@router.post("/{arena_id}/mensagens", status_code=status.HTTP_201_CREATED)
+async def registrar_mensagem(
+    arena_id: str,
+    dados: MensagemDeArenaIn,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Grava uma fala do debate."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linha = await conn.fetchrow(
+            "INSERT INTO public.arena_messages "
+            "    (session_id, agent_id, role, agent_role, content, artifact_html) "
+            "VALUES ($1::uuid, $2, $3, $4, $5, $6) RETURNING *",
+            dados.session_id, dados.agent_id, dados.role, dados.agent_role,
+            dados.content, dados.artifact_html,
+        )
+    return _cru(linha)

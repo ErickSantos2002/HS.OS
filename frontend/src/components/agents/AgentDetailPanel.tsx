@@ -1208,18 +1208,15 @@ function useAgentArenas(agentId: string) {
     setLoading(true);
     (async () => {
       try {
-        const { data, error } = await (supabase as any)
-          .from("arena_agents")
-          .select("arena_id, arenas:arena_id(id, name, convai_agent_id)")
-          .eq("agent_id", agentId);
+        // Era um join embutido do PostgREST (`arenas:arena_id(...)`), sintaxe
+        // que só existe lá. O endpoint já devolve o formato final.
+        const data = await api<ArenaVoiceRow[]>(
+          `/arenas/por-agente/${encodeURIComponent(agentId)}`,
+        ).catch(() => null);
         if (cancelled) return;
-        if (error || !data) { setRows([]); return; }
-        const list: ArenaVoiceRow[] = (data as any[])
-          .map((r) => {
-            const a = r.arenas;
-            if (!a) return null;
-            return { arena_id: a.id, arena_name: a.name, convai_agent_id: a.convai_agent_id ?? null };
-          })
+        if (!data) { setRows([]); return; }
+        const list: ArenaVoiceRow[] = data
+          .map((r) => r)
           .filter(Boolean) as ArenaVoiceRow[];
         setRows(list);
       } catch {

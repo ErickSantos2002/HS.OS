@@ -1,5 +1,5 @@
+import { api } from "@/lib/api";
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 export interface ArenaSession {
   id: string;
@@ -31,22 +31,11 @@ export function useArenaSessions(arenaId: string | undefined) {
 
   const loadSessions = useCallback(async () => {
     if (!arenaId) return;
-    const { data } = await supabase
-      .from("arena_sessions")
-      .select("*")
-      .eq("arena_id", arenaId)
-      .order("created_at", { ascending: false });
+    // A contagem de mensagens vem no mesmo SELECT — era uma consulta por
+    // sessão, então vinte sessões davam vinte e uma idas ao banco.
+    const data = await api<ArenaSession[]>(`/arenas/${arenaId}/sessoes`).catch(() => null);
 
     const sessionsData = (data ?? []) as ArenaSession[];
-
-    // Get message counts
-    for (const s of sessionsData) {
-      const { count } = await supabase
-        .from("arena_messages")
-        .select("*", { count: "exact", head: true })
-        .eq("session_id", s.id);
-      s.message_count = count ?? 0;
-    }
 
     setSessions(sessionsData);
 
@@ -58,11 +47,9 @@ export function useArenaSessions(arenaId: string | undefined) {
 
   const loadMessages = useCallback(async () => {
     if (!activeSessionId) { setMessages([]); return; }
-    const { data } = await supabase
-      .from("arena_messages")
-      .select("*")
-      .eq("session_id", activeSessionId)
-      .order("created_at", { ascending: true });
+    const data = await api<any[]>(
+      `/arenas/${arenaId}/sessoes/${activeSessionId}/mensagens`,
+    ).catch(() => null);
     setMessages((data ?? []) as ArenaMessage[]);
   }, [activeSessionId]);
 
@@ -81,16 +68,14 @@ export function useArenaSessions(arenaId: string | undefined) {
       contextSummary = lastSession.context_summary || null;
     }
 
-    const { data } = await supabase
-      .from("arena_sessions")
-      .insert({
-        arena_id: arenaId,
+    const data = await api<ArenaSession>(`/arenas/${arenaId}/sessoes`, {
+      method: "POST",
+      body: {
         title: title || "Nova sessão",
         parent_session_id: parentId,
         context_summary: contextSummary,
-      })
-      .select()
-      .single();
+      },
+    }).catch(() => null);
 
     if (data) {
       const newSession = data as ArenaSession;
@@ -103,14 +88,18 @@ export function useArenaSessions(arenaId: string | undefined) {
   }, [arenaId, sessions]);
 
   const updateSessionTitle = useCallback(async (sessionId: string, title: string) => {
-    await supabase.from("arena_sessions").update({ title, updated_at: new Date().toISOString() }).eq("id", sessionId);
+    await api(`/arenas/${arenaId}/sessoes/${sessionId}`, {
+      method: "PATCH",
+      body: { title },
+    }).catch(() => { /* o nome já mudou na tela */ });
     setSessions((prev) => prev.map((s) => s.id === sessionId ? { ...s, title } : s));
   }, []);
 
   const deleteSession = useCallback(async (sessionId: string) => {
-    // Delete messages first (in case FK CASCADE isn't set)
-    await supabase.from("arena_messages").delete().eq("session_id", sessionId);
-    const { error } = await supabase.from("arena_sessions").delete().eq("id", sessionId);
+    // Mensagens e sessão saem na mesma transação do servidor — eram dois
+    // passos, e falhar no segundo deixava mensagens órfãs de uma sessão que ficou.
+    const error = await api(`/arenas/${arenaId}/sessoes/${sessionId}`, { method: "DELETE" })
+      .then(() => null, (e: Error) => e);
     if (error) return false;
     setSessions((prev) => {
       const next = prev.filter((s) => s.id !== sessionId);
@@ -124,11 +113,10 @@ export function useArenaSessions(arenaId: string | undefined) {
   }, [activeSessionId]);
 
   const addMessage = useCallback(async (msg: Omit<ArenaMessage, "id" | "created_at">) => {
-    const { data } = await supabase
-      .from("arena_messages")
-      .insert(msg)
-      .select()
-      .single();
+    const data = await api<ArenaMessage>(`/arenas/${arenaId}/mensagens`, {
+      method: "POST",
+      body: msg,
+    }).catch(() => null);
     if (data) {
       const newMsg = data as ArenaMessage;
       setMessages((prev) => [...prev, newMsg]);

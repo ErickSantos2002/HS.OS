@@ -1,3 +1,4 @@
+import { api } from "@/lib/api";
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -16,10 +17,9 @@ export function useArenaAgents(arenaId: string | undefined) {
 
   const load = useCallback(async () => {
     if (!arenaId) { setLoading(false); return; }
-    const { data, error } = await supabase
-      .from("arena_agents")
-      .select("*")
-      .eq("arena_id", arenaId);
+    const { data, error } = await api<ArenaAgentRole[]>(`/arenas/${arenaId}/agentes`)
+      .then((d) => ({ data: d, error: null as Error | null }),
+            (e: Error) => ({ data: null, error: e }));
     if (error) {
       console.error("[use-arena-agents] load:", error.message);
       setAgents([]);
@@ -38,26 +38,22 @@ export function useArenaAgents(arenaId: string | undefined) {
       agentRoles: Omit<ArenaAgentRole, "id">[],
     ): Promise<{ error: Error | null }> => {
       // Delete existing
-      const { error: delError } = await supabase
-        .from("arena_agents")
-        .delete()
-        .eq("arena_id", arenaIdParam);
-      if (delError) {
-        console.error("[use-arena-agents] delete:", delError.message);
-        return { error: new Error(delError.message) };
+      // Apagar e reinserir numa transação só, do lado do servidor. Eram dois
+      // passos separados: falhar no segundo deixava a arena sem elenco nenhum,
+      // e o erro dizia "erro ao salvar" sem contar que o que existia já tinha
+      // ido embora.
+      try {
+        await api(`/arenas/${arenaIdParam}/agentes`, { method: "PUT", body: agentRoles });
+      } catch (e) {
+        console.error("[use-arena-agents] elenco:", (e as Error).message);
+        return { error: e as Error };
       }
 
-      // Insert new
       if (agentRoles.length > 0) {
-        const { data, error: insError } = await supabase
-          .from("arena_agents")
-          .insert(agentRoles)
-          .select();
-        if (insError) {
-          console.error("[use-arena-agents] insert:", insError.message);
-          return { error: new Error(insError.message) };
-        }
-        setAgents((data ?? []) as ArenaAgentRole[]);
+        const data = await api<ArenaAgentRole[]>(
+          `/arenas/${arenaIdParam}/agentes`,
+        ).catch(() => []);
+        setAgents(data ?? []);
       } else {
         setAgents([]);
       }
