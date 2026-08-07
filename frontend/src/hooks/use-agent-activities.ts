@@ -1,6 +1,6 @@
+import { api } from "@/lib/api";
 import { assinarTabela } from "@/lib/realtime";
 import { useEffect, useRef, useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 
 export type AgentActivityStep = {
@@ -67,19 +67,12 @@ export function useAgentActivitiesFeed(
       // um mesmo agente atende várias pessoas, então as tool calls de outra
       // conversa apareciam misturadas na sua. O realtime já filtrava; era só a
       // busca inicial que estava inconsistente.
-      let query = supabase
-        .from("agent_activity")
-        .select("*")
-        .eq("agent_id", agentId);
-      if (userId) {
-        // user_id nulo = atividade de sistema/legado, mantida (igual ao matchesUser)
-        query = query.or(`user_id.is.null,user_id.eq.${userId}`);
-      }
-      const { data, error } = await query
-        .order("created_at", { ascending: false })
-        .limit(capRef.current);
-      if (!mounted || error || !data) return;
-      const rows = (data as AgentActivity[]).slice().reverse();
+      // O filtro "atividade de sistema (user_id nulo) OU minha" é do servidor.
+      const data = await api<AgentActivity[]>(
+        `/agents/${encodeURIComponent(agentId)}/atividades?limite=${capRef.current}`,
+      ).catch(() => null);
+      if (!mounted || !data) return;
+      const rows = data.slice().reverse();
       setActivities(rows);
     };
     void fetchInitial();

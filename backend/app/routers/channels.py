@@ -942,3 +942,19 @@ async def adicionar_membros(
                 "VALUES ($1::uuid, $2, $3) ON CONFLICT DO NOTHING",
                 channel_id, membro_id, tipo,
             )
+
+
+@router.get("/{channel_id}/agentes-trabalhando")
+async def agentes_trabalhando(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """Quais agentes estão trabalhando neste canal agora, e em que passo.
+
+    "Agora" é `finished_at IS NULL`. O `POST /channels/{id}/agentes/{id}/responder`
+    marca a linha ao começar e a fecha no fim, inclusive quando falha.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            "SELECT agent_id, passo FROM public.channel_agent_activity "
+            " WHERE channel_id = $1::uuid AND finished_at IS NULL",
+            channel_id,
+        )
+    return [dict(l) for l in linhas]

@@ -1,7 +1,6 @@
 import { api } from "@/lib/api";
 import { assinar } from "@/lib/realtime";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 interface DmReadRow {
   channel_id: string;
@@ -67,12 +66,11 @@ export function useDmReads(channelId: string | null, peerUserId: string | null, 
     const now = Date.now();
     if (now - lastMarkRef.current < 2000) return;
     lastMarkRef.current = now;
-    await supabase
-      .from("dm_reads")
-      .upsert(
-        { channel_id: channelId, user_id: currentUserId, last_read_at: new Date().toISOString() } as any,
-        { onConflict: "channel_id,user_id" },
-      );
+    // O horário é do servidor: recibo de leitura com relógio de navegador
+    // errado mostra "lido" na hora errada para o outro lado.
+    await api(`/dm-reads/${channelId}`, { method: "PUT" }).catch(() => {
+      /* recibo de leitura é enfeite */
+    });
   }, [channelId, currentUserId]);
 
   return { peerLastReadAt, markRead };

@@ -1,6 +1,6 @@
+import { api } from "@/lib/api";
 import { assinar } from "@/lib/realtime";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Quais agentes estão trabalhando neste canal, segundo o SERVIDOR.
@@ -26,11 +26,9 @@ export function useChannelAgentActivity(channelId: string | null | undefined) {
     let vivo = true;
 
     const puxar = async () => {
-      const { data } = await supabase
-        .from("channel_agent_activity")
-        .select("agent_id, passo, finished_at")
-        .eq("channel_id", channelId)
-        .is("finished_at", null);
+      const data = await api<{ agent_id: string; passo: string | null }[]>(
+        `/channels/${channelId}/agentes-trabalhando`,
+      ).catch(() => null);
       if (!vivo) return;
       setTrabalhando(Object.fromEntries((data ?? []).map((r) => [r.agent_id, r.passo ?? null])));
     };

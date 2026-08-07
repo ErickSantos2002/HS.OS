@@ -526,3 +526,19 @@ async def execucoes(
             automacao_id, limite,
         )
     return [dict(l) for l in linhas]
+
+
+@router.get("/{automacao_id}/historico")
+async def historico_de_execucoes(
+    automacao_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+    limite: int = Query(default=50, ge=1, le=200),
+):
+    """As execuções desta automação, da mais recente para a mais antiga."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            "SELECT * FROM public.automation_runs WHERE automation_id = $1::uuid "
+            " ORDER BY started_at DESC LIMIT $2",
+            automacao_id, limite,
+        )
+    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]

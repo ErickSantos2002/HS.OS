@@ -351,6 +351,23 @@ async def atividade_recente(
     return [dict(l) for l in linhas]
 
 
+@router.get("/atividades/registro")
+async def registro_de_atividades(
+    usuario: Usuario = Depends(usuario_atual),
+    limite: int = Query(default=20, ge=1, le=200),
+):
+    """O feed geral de atividade dos agentes, do mais recente para o mais antigo.
+
+    ⚠️ Dois segmentos porque `/agents/{agent_id}` engoliria "atividades".
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            "SELECT * FROM public.agent_activity_log ORDER BY timestamp DESC LIMIT $1",
+            limite,
+        )
+    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+
+
 @router.get("/{agent_id}", response_model=PerfilCompletoOut)
 async def obter(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
@@ -1828,3 +1845,30 @@ async def excluir_cron(
         )
     if marca.rsplit(" ", 1)[-1] == "0":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agendamento não encontrado.")
+
+
+@router.get("/{agent_id}/atividades")
+async def atividades_do_agente(
+    agent_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+    limite: int = Query(default=50, ge=1, le=200),
+):
+    """As atividades deste agente que dizem respeito a mim.
+
+    ⚠️ **`user_id` nulo é atividade de sistema e entra na lista.** É herança: as
+    linhas antigas não guardavam de quem era, e filtrá-las faria o histórico
+    encolher sem explicação. As novas trazem o dono, e aí só as minhas aparecem —
+    um mesmo agente atende várias pessoas, e sem isso as chamadas de ferramenta
+    de outra conversa apareciam misturadas na sua.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            """
+            SELECT * FROM public.agent_activity
+             WHERE agent_id = $1 AND (user_id IS NULL OR user_id = $2::uuid)
+             ORDER BY created_at DESC
+             LIMIT $3
+            """,
+            agent_id, usuario.id, limite,
+        )
+    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]

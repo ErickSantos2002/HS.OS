@@ -672,12 +672,9 @@ function AutomationHistory({
   useEffect(() => {
     if (!automation) return;
     setLoading(true);
-    supabase
-      .from("automation_runs")
-      .select("*")
-      .eq("automation_id", automation.id)
-      .order("started_at", { ascending: false })
-      .limit(50)
+    api<any[]>(`/automacoes/${automation.id}/historico`)
+      .then((d) => ({ data: d, error: null as Error | null }),
+            (e: Error) => ({ data: null, error: e }))
       .then(({ data, error }) => {
         if (error) toast.error(error.message);
         else setRuns((data || []) as unknown as AutomationRun[]);

@@ -1,6 +1,6 @@
+import { api } from "@/lib/api";
 import { assinarTabela } from "@/lib/realtime";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { useAgentCatalog } from "@/hooks/use-agent-catalog";
 import { getAgentEmoji, getOfficialAgentEntries } from "@/lib/active-agents";
@@ -97,12 +97,8 @@ export function AgentActivityFeed({ className, maxItems = 100 }: AgentActivityFe
   capRef.current = maxItems;
 
   const refetch = async () => {
-    const { data, error } = await supabase
-      .from("agent_activity_log")
-      .select("*")
-      .order("timestamp", { ascending: false })
-      .limit(20);
-    if (!error && data) {
+    const data = await api<Activity[]>("/agents/atividades/registro").catch(() => null);
+    if (data) {
       setItems((prev) => {
         const map = new Map<string, Activity>();
         for (const row of data as Activity[]) map.set(row.id, row);
