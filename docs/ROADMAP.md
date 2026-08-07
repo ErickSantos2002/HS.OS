@@ -18,7 +18,7 @@ ainda na pasta.
 | Arquivos do front **sem Supabase** | 50 | 113 | `grep -rl "integrations/supabase/client" frontend/src \| wc -l` (63 hoje; 113 menos isso) |
 | Rotas na API própria | 120 | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
 | Chamadas `.from("…")` restantes | 185 | — | `grep -rho '\.from(\s*"' frontend/src \| wc -l` |
-| Arquivos ainda em `postgres_changes` | 21 | — | `grep -rl "\.channel(" frontend/src \| grep -v _legado` |
+| Arquivos ainda em `postgres_changes` | 13 | — | `grep -rl "postgres_changes" frontend/src \| grep -v _legado` |
 
 **Um lote só fecha quando duas linhas andam:** ter o endpoint no backend não é o
 mesmo que a tela usar o endpoint. Já aconteceu dez vezes de a edge sair da pasta,

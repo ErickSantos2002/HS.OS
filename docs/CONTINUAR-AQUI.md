@@ -32,7 +32,7 @@ diferentes, e o resumo antigo ("Realtime ✅ portado") escondia isso:
 |---|---|---|---|
 | **Auth** | ✅ JWT próprio (PyJWT + bcrypt) | 🟡 quase | 12 chamadas soltas; o fluxo de *reset por e-mail* não existe mais |
 | **Storage** | ✅ `UPLOADS_DIR` em disco | ✅ **completo** | nada |
-| **Realtime** | ✅ WebSocket em `/ws` + `app/realtime.py` | 🔴 **1 de 22** | 21 arquivos ainda em `postgres_changes` |
+| **Realtime** | ✅ WebSocket + LISTEN/NOTIFY (`app/escuta_banco.py`) | 🟡 **9 de 22** | 13 arquivos ainda em `postgres_changes` |
 | **Edge Functions** | 🟡 60 de 73 | ✅ sem pendências | 4 de trabalho real, 9 bloqueadas |
 | **Banco** (RLS direto do browser) | 🟡 120 rotas | 🔴 **50 de 113** | 185 chamadas `.from("…")`, em 56 arquivos vivos |
 
@@ -102,10 +102,23 @@ parametrizada. Assim a decisão vira configuração, não código.
 
 ## Próximo passo, em ordem de valor
 
-### 1. Realtime — o gargalo estrutural
+### 1. Realtime — em andamento, 13 arquivos restantes
 
-21 arquivos usam `supabase.channel(...).on("postgres_changes", …)`. É o maior
-bloco isolado que resta e destrava telas inteiras de uma vez.
+A infraestrutura está **pronta e verificada ao vivo**: trigger → `pg_notify` →
+listener → hub → WebSocket. Oito telas já foram religadas.
+
+Os 13 que faltam se dividem em dois grupos:
+
+- **6 mecânicos** (`use-managed-skills`, `use-channels`, `use-notifications`,
+  `use-agents`, `AgentDetailPanel`, `lib/realtime.ts`) — só refazem a busca
+- **7 que leem `payload.new`/`payload.old`** (`use-agent-activities`,
+  `use-dm-reads`, `use-persistent-draft`, `use-channel-threads`,
+  `AgentActivityFeed`, `chat-sender.ts`, `ChatPage`) — estes precisam **buscar
+  por id**, porque o evento não carrega conteúdo (ver o plano)
+
+⚠️ **`usage_events` ficou de fora dos triggers** — recebe escrita em lote e um
+evento por linha faria tempestade. `use-agents` e `AgentDetailPanel` a observam;
+essas duas perdem o tempo real de consumo e recarregam por outro caminho.
 
 **O plano está em [`docs/PLANO-REALTIME.md`](PLANO-REALTIME.md)** — levantado em
 07/08. Resumo: LISTEN/NOTIFY do Postgres, não publicação nos endpoints, porque
