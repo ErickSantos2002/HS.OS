@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -5,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.router import router as auth_router
 from app.config import settings
+from app.escuta_banco import escutar
 from app.database import close_db, init_db
 from app.gateway.client import encerrar_cliente
 from app.routers.agent_export import router as agent_export_router
@@ -36,7 +38,17 @@ from app.routers.ws import router as ws_router, sinalizar_desligamento
 async def lifespan(app: FastAPI):
     await init_db()
     preparar_diretorios()
+
+    # A escuta do banco é o que substitui o `postgres_changes`. Roda numa
+    # conexão dedicada, fora do pool, e reconecta sozinha — ver
+    # `app/escuta_banco.py`.
+    parar_escuta = asyncio.Event()
+    escuta = asyncio.create_task(escutar(parar_escuta))
+
     yield
+
+    parar_escuta.set()
+    escuta.cancel()
     # A conexão com o gateway é persistente; fechar no shutdown evita deixar
     # socket pendurado no OpenClaw a cada reinício.
     # Antes de tudo: solta os WebSockets abertos, senão o shutdown

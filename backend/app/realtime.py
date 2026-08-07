@@ -88,5 +88,9 @@ def topico_usuario(user_id: str) -> str:
     return f"usuario:{user_id}"
 
 
+def topico_tabela(nome: str) -> str:
+    return f"tabela:{nome}"
+
+
 def serializar(evento: dict) -> str:
     return json.dumps(evento, ensure_ascii=False, default=str)

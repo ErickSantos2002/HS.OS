@@ -16,7 +16,8 @@ import logging
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from app.auth.security import ler_token
-from app.realtime import hub, serializar, topico_canal, topico_usuario
+from app.database import sessao
+from app.realtime import hub, serializar, topico_canal, topico_tabela, topico_usuario
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +37,36 @@ router = APIRouter(tags=["realtime"])
 _INTERVALO_PING = 25
 
 
+async def _canais_do_usuario(user_id: str, pedidos: list[str]) -> list[str]:
+    """Dos canais pedidos, quais esta pessoa é membro.
+
+    ⚠️ **Sem esta conferência qualquer usuário autenticado escutava qualquer
+    canal**, inclusive privado, bastando saber o id — a assinatura era aceita
+    como veio. Era furo real, e passar a publicar conteúdo de linha pelos
+    tópicos o transformaria de "escuta o que não devia" em "recebe o que não
+    devia".
+
+    A autorização acontece **uma vez, na assinatura**, e não a cada evento. É o
+    que torna o tempo real barato: filtrar por evento significaria uma consulta
+    por mensagem publicada.
+    """
+    if not pedidos:
+        return []
+    async with sessao(role="authenticated", user_id=user_id) as conn:
+        linhas = await conn.fetch(
+            "SELECT channel_id::text AS id FROM public.channel_members "
+            " WHERE user_id = $1 AND channel_id = ANY($2::uuid[])",
+            user_id, pedidos,
+        )
+    return [l["id"] for l in linhas]
+
+
 @router.websocket("/ws")
 async def eventos(
     websocket: WebSocket,
     token: str = Query(description="JWT do usuário. Vai na query porque a API do navegador não permite cabeçalho."),
     canais: str = Query(default="", description="Ids de canal separados por vírgula."),
+    tabelas: str = Query(default="", description="Nomes de tabela a observar, separados por vírgula."),
 ):
     try:
         dados = ler_token(token)
@@ -55,8 +81,18 @@ async def eventos(
         await websocket.close(code=1008, reason="Token inválido.")
         return
 
+    pedidos = [c.strip() for c in canais.split(",") if c.strip()]
+    permitidos = await _canais_do_usuario(user_id, pedidos)
+    if len(permitidos) < len(pedidos):
+        # Não é erro do cliente: a lista de canais dele pode estar velha depois
+        # de perder acesso. Assina o que pode e segue.
+        logger.info(
+            "WS de %s pediu %d canais e pode em %d", user_id, len(pedidos), len(permitidos)
+        )
+
     topicos = [topico_usuario(user_id)]
-    topicos += [topico_canal(c.strip()) for c in canais.split(",") if c.strip()]
+    topicos += [topico_canal(c) for c in permitidos]
+    topicos += [topico_tabela(t.strip()) for t in tabelas.split(",") if t.strip()]
 
     await websocket.accept()
     fila = hub.assinar(topicos)

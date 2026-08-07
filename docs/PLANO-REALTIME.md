@@ -63,18 +63,20 @@ UPDATE na tabela
                                                 └─► WebSocket → navegador
 ```
 
-**O `pg_notify` carrega só `{tabela, op, id}`, nunca a linha.** O limite é de
-8000 bytes por notificação, e `channel_messages.content` e
-`conversations.content` estouram isso sem esforço. Quem monta o payload completo
-é o backend, do outro lado — e o WebSocket não tem esse limite.
+**O evento carrega `{tabela, op, id}` e nada mais** — nem no NOTIFY, nem no
+WebSocket. Dois motivos, e o segundo é o que manda:
 
-O efeito colateral é bom: os 7 arquivos que leem `payload.new` recebem a linha
-inteira, como recebiam do Supabase, **sem precisar mudar a lógica deles** — só a
-origem do evento.
+1. O `pg_notify` limita a 8000 bytes, e o `content` de `channel_messages` passa
+   disso sem esforço. A notificação seria descartada em silêncio.
+2. **Segurança.** Um tópico de tabela é assinado por todo mundo que observa
+   aquela tabela. Mandar a linha junto entregaria conteúdo a quem o RLS negaria.
+   Mandando só o id, quem quer o conteúdo busca pelo endpoint normal — e lá o
+   RLS decide.
 
-Custo: uma consulta por evento de mudança. Aceitável para o volume desta
-instalação, e o caminho de otimização (não buscar quando ninguém está assinando
-aquele tópico) é local ao listener.
+⚠️ **Isto corrige o desenho de 07/08 pela manhã**, que dizia "o backend busca a
+linha e publica o payload completo". Estava errado: teria criado uma segunda
+cópia da autorização, fora do RLS, para manter em dia. O custo da correção é uma
+ida a mais para as poucas telas que usavam `payload.new`.
 
 ## Ordem de execução
 
