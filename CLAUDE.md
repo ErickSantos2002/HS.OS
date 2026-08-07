@@ -20,13 +20,20 @@ acrescente dependência do Supabase que depois vai ter que ser desfeita.
 
 Sair do Supabase é substituir **cinco** subsistemas, não só o banco:
 
-| Subsistema | Situação | Destino |
-|---|---|---|
-| Auth | ✅ portado | JWT próprio (PyJWT + bcrypt) |
-| Storage | ✅ portado | `UPLOADS_DIR` em disco, `app/routers/storage.py` |
-| Realtime (`postgres_changes`) | ✅ portado | WebSocket em `/ws`, `app/realtime.py` |
-| Banco (via RLS, direto do browser) | 🟡 em andamento | endpoints FastAPI |
-| Edge Functions | 🟡 24 de 73 | routers FastAPI |
+⚠️ **"Substituto pronto" e "a tela usa" são colunas diferentes**, e juntá-las já
+escondeu telas quebradas em produção. O placar tem que separar as duas:
+
+| Subsistema | Substituto | Front religado | Destino |
+|---|---|---|---|
+| Auth | ✅ | 🟡 12 chamadas soltas | JWT próprio (PyJWT + bcrypt) |
+| Storage | ✅ | ✅ **completo** | `UPLOADS_DIR` em disco, `app/routers/storage.py` |
+| Realtime (`postgres_changes`) | ✅ | 🔴 **1 de 22 arquivos** | WebSocket em `/ws`, `app/realtime.py` |
+| Edge Functions | 🟡 60 de 73 | ✅ sem pendências | routers FastAPI |
+| Banco (via RLS, direto do browser) | 🟡 120 rotas | 🔴 **50 de 113 arquivos** | endpoints FastAPI |
+
+O **banco** é o subsistema que sobrou quase inteiro — 185 chamadas `.from("…")`.
+O **Realtime** é o segundo: o hub existe e funciona, mas só o `use-channels.ts`
+o usa; os outros 21 arquivos ainda abrem `supabase.channel(...)`.
 
 O placar atualizado e a forma de medi-lo estão em `docs/ROADMAP.md`.
 
@@ -144,9 +151,11 @@ React SPA (Vite) ───┤        └─► OpenClaw Gateway (WebSocket, via 
                     └─► Supabase      (o que ainda não foi portado)  ← em remoção
 ```
 
-O que **já é nosso**: autenticação, marca, perfis, gateway, agentes (leitura, sync, edição completa
-de perfil, verificação de modelo e liderança em lote), **conversa com agente**, **canais**,
-**arquivos** e **tempo real**. O resto ainda chama o Supabase.
+O que **já é nosso**: autenticação (com troca de senha), marca, perfis, gateway, agentes (ciclo
+completo — criar, editar, sincronizar, verificar modelo, liderança, acesso, excluir, exportar,
+arquivos do workspace), **conversa com agente**, **canais** (com resposta de agente), **automações**,
+**tarefas**, **arquivos** (incluindo gerar PDF e DOCX), **arenas**, **integrações** e a infra de
+**tempo real**. O resto ainda chama o Supabase.
 
 **Regra ao portar escrita que toca as duas pontas: gateway primeiro, banco depois.** `PATCH
 /agents/{id}` escreve nome e modelo no gateway **antes** de tocar no banco e aborta com 502 se ele
@@ -334,9 +343,19 @@ Todas as rotas ficam em `frontend/src/App.tsx`, em `<Routes>` aninhados. Quatro 
 3. **Autenticadas com `AppLayout` + `OnboardingGate`** — todo o resto
 4. **Redirects legados** — `/dnos`, `/mission-control`, `/users`, `/documentation` caem em abas de `/settings`
 
-`/` redireciona para `/chat`. Existem páginas em `frontend/src/pages/` que **não estão mais roteadas**
-(`ChannelsPage`, `ProfilePage`, `UsersPage`, `DocumentationPage`, `Index`, `MissionControlDossierPage`) —
-foram absorvidas por outras telas. Não presuma que um arquivo em `pages/` está em uso; confira `App.tsx`.
+`/` redireciona para `/chat`.
+
+⚠️ **A maioria dos arquivos em `frontend/src/pages/` NÃO é tela em uso.** Só onze estão roteadas; o
+resto foi absorvido por outras telas e sobrou como arquivo. `ProfilePage` é o caso exemplar: virou
+aba da `SettingsPage`, que serve `/settings` **e** `/profile`, e o nome só aparece num comentário do
+`App.tsx`. Em 07/08/2026 isso custou um commit inteiro — religuei a `ProfilePage` morta e deixei a
+`SettingsPage` viva chamando `supabase.auth.updateUser`, ou seja, com "trocar senha" quebrado.
+
+Grep pelo nome do componente **não serve** (casa com import e comentário). A conferência que funciona:
+
+```bash
+grep -oP '<Route[^>]*element=\{<\K[A-Za-z]+' frontend/src/App.tsx | sort -u
+```
 
 ### Arquivos gerados — não editar à mão
 

@@ -8,52 +8,70 @@ Atualizar este arquivo conforme os lotes forem fechando.
 
 ## Placar
 
-Duas medidas diferentes, e a distância entre elas importa: ter o endpoint no
-backend não é o mesmo que a tela usar o endpoint.
+Atualizado em **07/08/2026**. Todo número aqui é **medido**, não mantido à mão —
+o contador já derivou uma vez, chegando a dizer "72 de 73" com 13 functions
+ainda na pasta.
 
-| | Feito | Total |
-|---|---|---|
-| Edge functions **fora da pasta** | 60 | 73 |
-| Arquivos do front sem Supabase | 50 | 113 |
-| Functions distintas ainda invocadas pelo front | 13 | — |
+| | Feito | Total | Comando |
+|---|---|---|---|
+| Edge functions **fora da pasta** | 60 | 73 | `ls backend/supabase/functions \| grep -v _shared \| wc -l` |
+| Arquivos do front **sem Supabase** | 50 | 113 | `grep -rl "integrations/supabase/client" frontend/src \| wc -l` (63 hoje; 113 menos isso) |
+| Rotas na API própria | 120 | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
+| Chamadas `.from("…")` restantes | 185 | — | `grep -rho '\.from(\s*"' frontend/src \| wc -l` |
+| Arquivos ainda em `postgres_changes` | 21 | — | `grep -rl "\.channel(" frontend/src \| grep -v _legado` |
 
-> Os números acima são **medidos**, não mantidos à mão — venho incrementando o
-> contador a cada port e ele derivou (chegou a dizer 72 de 73 com 13 functions
-> ainda na pasta). Comandos que os produzem:
->
-> ```bash
-> ls backend/supabase/functions | grep -v _shared | wc -l          # 73 - este = fora da pasta
-> grep -rl "integrations/supabase/client" frontend/src | wc -l     # 113 - este
-> grep -rhoP 'functions\.invoke\(\s*"\K[a-z0-9-]+' frontend/src | sort -u | wc -l
-> ```
-
-Um lote só fecha quando as duas linhas andam.
-
-Medir com:
+**Um lote só fecha quando duas linhas andam:** ter o endpoint no backend não é o
+mesmo que a tela usar o endpoint. Já aconteceu dez vezes de a edge sair da pasta,
+o endpoint entrar, e a tela continuar chamando `supabase.functions.invoke` de
+algo que não existe mais — telas quebradas em produção sem ninguém notar. A régua:
 
 ```bash
-ls backend/supabase/functions | grep -v _shared | wc -l
-grep -rl 'integrations/supabase/client' frontend/src --include=*.ts --include=*.tsx | grep -v _legado | wc -l
+grep -r "functions.invoke" frontend/src --include=*.ts --include=*.tsx | grep -v _legado
 ```
 
-⚠️ **Duas armadilhas na medição**, descobertas em 06/08/2026:
+⚠️ **Armadilhas na medição**, aprendidas na prática:
 
-1. ~~O `ls` subestimava o progresso porque as functions dos lotes 0 e 1 ganharam
-   substituto e ficaram na pasta.~~ **Acertado em 06/08/2026:** as seis
-   pendentes (`bootstrap-first-admin`, `test-gateway-connection`,
-   `get-gateway-status`, `gateway-models`, `configure-instance-vault`,
-   `save-install-block`) saíram. Agora o `ls` é a medida honesta.
-2. O grep de `functions.invoke(` **não vê chamadas indiretas**. O
-   `AgentEditDrawer` passava o nome por variável (`callEdge(fn, …)`), então três
+1. O grep de `functions.invoke(` **não vê chamadas indiretas**. O
+   `AgentEditDrawer` passava o nome por variável (`callEdge(fn, …)`), e três
    functions apareciam como "não invocadas" enquanto eram chamadas oito vezes.
-   O número real de functions ainda referenciadas era **34**, não 26. Medir
-   cruzando com os nomes de pasta:
+2. **`_legado/` conta e não deveria.** Sete arquivos lá dentro ainda importam o
+   client, mas nada em `_legado/` está roteado. Sempre filtrar.
+3. Arquivo em `pages/` **não é tela em uso** — só onze estão roteadas. Ver a
+   seção de roteamento no `CLAUDE.md`.
 
-   ```bash
-   for d in $(ls backend/supabase/functions | grep -v _shared); do
-     grep -rq "\"$d\"" frontend/src --include=*.ts --include=*.tsx --exclude-dir=_legado && echo "$d"
-   done | wc -l
-   ```
+### Onde estão as 185 chamadas ao banco
+
+```
+21 live_artifacts    9 integrations       6 agent_results
+17 agent_profiles    9 channel_messages   5 wiki_documents
+15 profiles          9 channel_members    5 conversations
+                     8 notifications      5 automations
+                     8 company_profile    5 arena_agents
+```
+
+Portar por **tabela**, não por tela: as três primeiras somam 53 das 185.
+
+### As 13 functions que restam
+
+| Function | Linhas | Situação |
+|---|---|---|
+| `turn-reconciler` | 864 | precisa do serviço `worker` — não há `pg_cron` na VPS |
+| `skill-manage` | 647 | tela viva, portável |
+| `warroom-feed` | 582 | tela viva, portável |
+| `collect-agent-stats` | 552 | webhook do coletor; duas formas de payload, e a real não está documentada |
+| `arena-generate` | 152 | 🔴 ElevenLabs |
+| `transcribe-audio` | 154 | 🔴 Lovable AI Gateway |
+| `chat-image-vision` | 130 | 🔴 Lovable AI Gateway |
+| `arena-convai-create` | 110 | 🔴 ElevenLabs |
+| `parse-company-context` | 102 | 🔴 Lovable AI Gateway |
+| `arena-convai-update` | 97 | 🔴 ElevenLabs |
+| `arena-convai-signed-url` | 69 | 🔴 ElevenLabs |
+| `elevenlabs-tts` | 60 | 🔴 ElevenLabs |
+| `list-elevenlabs-voices` | 51 | 🔴 ElevenLabs |
+
+**Nove das treze estão bloqueadas por decisão de produto**, não por dificuldade
+técnica: dependem de chave de um provedor externo. A estratégia acordada é
+portar tudo menos a chamada ao provedor, deixando-a parametrizada.
 
 ## Princípios
 
@@ -215,103 +233,102 @@ parecer que "não há nada". Cada um volta a funcionar no seu lote.
 `configure-instance-vault` e `save-install-block` morreram com o wizard — só
 existem em `_legado`.
 
-## Lote 2 — Agentes
+## ✅ Lote 2 — Agentes (concluído em 06–07/08/2026)
 
-**18 functions · ~4.973 linhas** — o maior lote. Inclui `agent-task` (706) e
-`turn-reconciler` (864), que são a Loop Architecture de tarefas longas.
+Era o maior: 18 functions, ~4.973 linhas. Ficou de pé o ciclo completo — criar,
+editar todas as abas, sincronizar, verificar modelo, liderança, acesso, excluir,
+exportar e ler os arquivos do workspace.
 
-Tabelas: `agent_profiles` (25 usos no front), `agent_avatars`, `agent_skills`,
-`agent_tasks`, `agent_results`, `agent_stats`, `agent_templates`, `team_agents`.
+Aprendizados que valem além do lote:
 
-Atenção: `fetchAgents` combina **duas fontes** — `agent_profiles` do banco e
-`/v1/models` do gateway. O endpoint novo precisa fazer essa junção no servidor.
+- **`GET /agents` junta duas fontes** — `agent_profiles` do banco e `agents.list`
+  do gateway — e a junção é no servidor. Agente no banco e ausente do gateway
+  aparece inativo em vez de sumir.
+- **`POST /agents/sync` preserva o que foi editado à mão.** O gateway é fonte de
+  *existência*, não de curadoria.
+- **`agent_profiles_single_leader_idx` é índice único parcial**: só um líder por
+  instalação, e a troca limpa o anterior na mesma transação.
+- **Gateway primeiro, banco depois** em escrita que toca as duas pontas — ver
+  `CLAUDE.md`.
 
-Sugestão de subdivisão, porque 18 de uma vez é grande demais:
-- **2a** — ✅ leitura: `GET /agents` junta `agent_profiles` com `agents.list` do
-  gateway no servidor, aplica o controle de acesso por `access_type`, e devolve
-  no formato que `use-agents.ts` consome. Agente no banco e ausente do gateway
-  aparece inativo em vez de sumir. Verificado: a tela de agentes mostra os 5
-  agentes reais, sem erro de dado. Falta: avatar e perfil individual.
-- **2b** — ✅ escrita: `POST /agents/sync` (portado de `sync-agents`) cria os
-  perfis a partir do gateway **preservando o que foi editado à mão** — o gateway
-  é fonte de existência, não de curadoria. `PATCH /agents/{id}` edita nome,
-  emoji, departamento, especialidade, cor, modelo, avatar, acesso, liderança,
-  persona, skills, crons e status. `POST /agents/test-model` verifica um modelo e
-  `POST /agents/leadership/sync` regrava a liderança em lote.
-  Atenção: `agent_profiles_single_leader_idx` é índice único parcial e só admite
-  **um líder** por instalação; a troca limpa o anterior na mesma transação.
-  Saíram: `update-agent-profile`, `test-llm-model`, `sync-agent-leadership`.
-  Falta: criar e excluir agente (mexem no gateway, não só no banco), e as três
-  edges que o drawer ainda chama — `update-agent-access`,
-  `update-agent-leadership`, `delete-agent`.
-- **2c** — Loop Architecture: `agent-task`, `turn-reconciler`, `collect-agent-stats`
+Sobra do lote: `turn-reconciler` (precisa do `worker`) e `collect-agent-stats`.
 
-**Entregável (2a):** a tela de agentes deixa de ser vazia.
+## ✅ Lote 3 — Chat (concluído em 06–07/08/2026)
 
-## Lote 3 — Chat
+O `/v1/chat/completions` do gateway virou 404 e derrubou o desenho inteiro. O
+substituto é `chat.send` + `agent.wait` por long-poll, levantado ao vivo — o
+contrato está documentado no `CLAUDE.md`.
 
-**8 functions · ~2.305 linhas** — `gateway-chat`, `dm-agent-reply`,
-`agent-reply-webhook`, `channel-agent-reply`, `channel-broadcast`,
-`chat-image-vision`, `transcribe-audio`, `extract-file-text`.
+`chat-sender.ts` encolheu de ~2.100 para ~1.000 linhas: 699 linhas de
+`sendMessageInBackground` viraram 103, e mais ~300 de código morto saíram junto
+quando o `gateway-chat` fechou.
 
-Tabelas: `channels`, `channel_members` (17), `channel_messages` (16),
-`conversations` (14), `dm_reads`, `message_reactions`, `drafts`.
+A fila em nível de módulo foi mantida — envios sobrevivem à navegação entre
+páginas, e era isso que o arquivo comprava com a complexidade.
 
-⚠️ **É o caminho crítico.** Ler `docs/AUDITORIA-ESTABILIDADE-2026-07-16.md` antes de
-tocar: A1–A19 e B1–B10 documentam execução duplicada, falso-positivo de context
-overflow, heartbeat descartando resposta final. As quatro correções estão atrás de
-flags `dnos_flag_*` **desligadas por padrão** — decidir se viram comportamento
-padrão na portagem.
+⚠️ As quatro correções de estabilidade continuam atrás de flags `dnos_flag_*`
+**desligadas por padrão**. Decidir se viram padrão.
 
-`frontend/src/lib/chat-sender.ts` (~2.100 linhas) é o arquivo mais delicado do
-projeto. Vale portar em etapas e verificar cada uma.
+## ✅ Lote 4 — Usuários (concluído em 06/08/2026)
 
-**Entregável:** conversar com um agente de verdade. É onde vira produto.
+Contas, papéis, ativar/desativar, excluir, push e acesso a agente.
 
-## Lote 4 — Usuários e e-mail
+**O convite por e-mail saiu do produto** por decisão do Erick: a conta do
+colaborador é criada direto no sistema interno. Com isso, `invite-user`,
+`auth-email-hook` e `process-email-queue` foram removidas em vez de portadas —
+ninguém mais escreve na `email_queue`, e o hook do Supabase Auth não tem gatilho.
 
-**6 functions · ~1.279 linhas** — `invite-user`, `delete-user`, `auth-email-hook`,
-`process-email-queue`, `send-push`, `update-agent-access`.
+Fica aberto: o fluxo de "esqueci minha senha" sumiu junto com o Supabase Auth.
+A `ResetPasswordPage` ainda existe e não funciona.
 
-Destrava o TI criar contas para a equipe. Exige escolher o serviço de envio de
-e-mail. A tela `/reset-password` (definir senha em convite) já existe e é reaproveitável.
+## ✅ Lote 5 — Automações (concluído em 06/08/2026)
 
-**Entregável:** a equipe consegue entrar.
+CRUD, gatilho, disparo, importar crons, sincronizar status, resultado por webhook.
 
-## Lote 5 — Automações
-
-**8 functions · ~1.188 linhas** — `automations-api`, `automation-scheduler`,
-`automation-result`, `trigger-automation`, `sync-automation-status`,
-`import-cron-jobs`, `cleanup-expired-files`, `usage-sweep`.
-
-⚠️ **`pg_cron` não existe no Postgres da VPS** (só `pgcrypto`, `moddatetime`,
-`plpgsql`). Os 5 jobs operacionais viram um serviço `worker` no docker-compose
-rodando APScheduler — container separado do web, senão os 4 workers do uvicorn
-disparam o mesmo job 4 vezes.
+⚠️ **`pg_cron` não existe no Postgres da VPS.** Os jobs operacionais precisam de
+um serviço `worker` no docker-compose rodando APScheduler — container separado do
+web, senão os 4 workers do uvicorn disparam o mesmo job 4 vezes. **Ainda não
+existe**, e é o que bloqueia o `turn-reconciler`.
 
 Lembrar do achado de segurança: `trigger-automation` estava aberto na internet.
 
-## Lote 6 — O resto
+## Lote 6 — O que resta das edge functions
 
-**~26 functions** — wiki, artefatos (`live_artifacts`, 23 usos), arenas e voz
-(ElevenLabs, 6 functions), integrações/conectores, skills, analytics, monitoring,
-war room, documentos gerados, `configure-llm-provider` (717 linhas).
+Quatro de trabalho real e nove bloqueadas por chave externa — a tabela está no
+Placar, acima.
 
-Ordenar por uso real depois que os lotes 1–4 estiverem de pé.
+## 🔴 Lote 7 — O banco (o maior que sobrou)
 
-## Lote 7 — Infraestrutura final
+**185 chamadas `.from("…")` em 56 arquivos vivos** (63 importam o client, 7 deles dentro de `_legado/`). É o subsistema que mal começou, e
+o que separa "o front fala com a nossa API" de "o front ainda é um cliente
+Supabase com endpoints por cima".
 
-- **Storage** — 6 buckets a recriar: `agent-files`, `audio-messages`, `wiki-uploads`
-  (públicos), `company-docs`, `generated-documents` (privados). Decidir entre volume
-  na VPS (`UPLOADS_DIR`) e S3.
-- **Realtime** — 39 usos de `postgres_changes` no front. Substituir por WebSocket ou
-  polling. Hoje removido em `use-people` sem prejuízo funcional.
-- **Deploy** — subir na VPS via EasyPanel, com `docker-compose` (backend 8002,
-  frontend 80, worker).
-- **Limpeza** — apagar `frontend/src/integrations/supabase/`, os assets órfãos
-  (`public/dnia-*.png`, `src/assets/dnos-*.png`), decidir o destino de `_legado/`,
-  e escolher o gerenciador de pacotes do front (hoje convivem `bun.lock`,
-  `bun.lockb` e `package-lock.json`).
+Estratégia que funcionou nos primeiros lotes: **portar por tabela, não por tela.**
+Uma tabela some do front de uma vez, e o endpoint nasce coerente em vez de
+recortado pela necessidade de uma tela só.
+
+## 🔴 Lote 8 — Realtime
+
+**21 arquivos ainda em `supabase.channel(...).on("postgres_changes", …)`.**
+
+O hub em `app/realtime.py` existe, funciona e publica por tópico — mas hoje só
+sabe de canais e usuários, e só o `use-channels.ts` o consome. Para religar os
+21, ele precisa emitir eventos de tabela, e cada endpoint de escrita precisa
+publicar **depois de commitar** (publicar antes faz a tela buscar linha que outra
+conexão ainda não enxerga).
+
+É o maior bloco isolado que resta e destrava telas inteiras de uma vez.
+
+## Lote 9 — Limpeza final
+
+- Apagar `frontend/src/integrations/supabase/` — inclusive o `types.ts` de ~2.950
+  linhas, que é o maior arquivo do projeto
+- Assets órfãos: `public/dnia-*.png`, `src/assets/dnos-*.png`
+- Decidir o destino de `_legado/`
+- Escolher o gerenciador de pacotes (convivem `bun.lock`, `bun.lockb` e
+  `package-lock.json`)
+- Renomear o prefixo `dnos_` das feature flags — lembrando que isso **desliga
+  silenciosamente** as flags de quem já estava com elas ativas
 
 ---
 
@@ -321,13 +338,16 @@ Ordenar por uso real depois que os lotes 1–4 estiverem de pé.
 |---|---|
 | Manter as 191 policies de RLS? | Funcionam e são defesa em profundidade, mas duplicam a autorização do FastAPI. Se aposentar, vira a `003`. |
 | As flags `dnos_flag_*` viram padrão? | São 4 correções de estabilidade desligadas por padrão. Ver `RESUMO-CONSOLIDACAO`. |
-| Trocar a senha do admin | `admin123` num `super_admin` que vai guardar o token do gateway. Precisa de `POST /auth/change-password`. |
+| Trocar a senha do admin | `admin123` num `super_admin` que guarda o token do gateway. **O endpoint já existe** (`POST /auth/trocar-senha`, exigindo a senha atual) e a tela está pronta. Falta só fazer, antes de liberar para a equipe. |
+| Lovable AI Gateway e ElevenLabs | Travam 9 das 13 functions restantes. Escolher provedor e pagar, ou tirar do produto: transcrição de áudio, visão de imagem, leitura do contexto da empresa e a voz da Arena. |
 | Variante do wordmark para tema escuro | O "OS" cinza tem contraste baixo no escuro. |
 | Gerenciador de pacotes do front | Três lockfiles convivendo. |
 
 ## O que não vai ser feito
 
 - **Recuperação de senha por e-mail** — sistema interno, senhas definidas pelo TI.
+  Consequência: a `ResetPasswordPage` continua roteada em `/reset-password` e não
+  funciona mais. Decidir se sai ou se vira "peça a senha ao TI".
 - **O wizard de `/setup`** — aposentado. O que sobrou de útil está catalogado em
   `frontend/src/_legado/README.md`.
 - **Multi-tenant / remix** — o HS.OS é instalação única da Health & Safety.
