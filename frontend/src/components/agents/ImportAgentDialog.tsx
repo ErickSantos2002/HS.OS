@@ -171,10 +171,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
       // importando — sem isso o agente nascia com o SOUL.md/IDENTITY.md cheio
       // de placeholder cru (a exportação só faz o caminho contrário, nunca
       // existiu o inverso na importação).
-      const { data: companyProfile } = await supabase
-        .from("company_profile")
-        .select("company_name, founder_name, segment, description, target_audience, products_services, tone")
-        .maybeSingle();
+      const companyProfile = await api<any>("/integracoes/empresa/perfil").catch(() => null);
       const filesPayload = Object.entries(dnos.files)
         .filter(([, content]) => typeof content === "string" && content)
         .map(([file_name, content]) => ({

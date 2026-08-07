@@ -1117,3 +1117,64 @@ async def perfil_da_empresa(usuario: Usuario = Depends(usuario_atual)):
             "SELECT * FROM public.company_profile LIMIT 1"
         )
     return json.loads(json.dumps(dict(linha), default=str)) if linha else None
+
+
+# O banco tem um CHECK nesta coluna. Repetir a lista aqui é o que transforma
+# "500 sem explicação" em "tom inválido, use um destes" — o CHECK continua sendo
+# a garantia, isto é só a mensagem.
+_TONS = {"formal", "informal", "técnico", "descontraído"}
+
+
+class PerfilEmpresaIn(BaseModel):
+    company_name: str | None = None
+    founder_name: str | None = None
+    segment: str | None = None
+    description: str | None = None
+    target_audience: str | None = None
+    products_services: str | None = None
+    tone: str | None = None
+    revenue: str | None = None
+    employees_count: str | None = None
+    extra_context: str | None = None
+
+
+@router.put("/empresa/perfil")
+async def gravar_perfil_da_empresa(
+    dados: PerfilEmpresaIn,
+    _: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Grava o perfil da empresa. Cria a linha se ainda não existir.
+
+    Há **uma** linha por instalação, e a tela não deveria precisar saber se ela
+    já existe — mandava um UPDATE por id, o que falhava em silêncio na primeira
+    vez, antes de alguém ter salvo qualquer coisa.
+
+    Devolve o perfil relido, com o `onboarding_notified_at`: a tela precisava
+    dele de volta e fazia uma segunda consulta só para isso.
+    """
+    if dados.tone and dados.tone not in _TONS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Tom inválido. Use um de: {', '.join(sorted(_TONS))}.",
+        )
+
+    campos = dados.model_dump()
+    async with sessao(role="service_role") as conn:
+        existente = await conn.fetchval("SELECT id FROM public.company_profile LIMIT 1")
+        colunas = ", ".join(campos)
+        marcadores = ", ".join(f"${i}" for i in range(1, len(campos) + 1))
+        if existente:
+            atribuicoes = ", ".join(f"{c} = ${i}" for i, c in enumerate(campos, start=1))
+            linha = await conn.fetchrow(
+                f"UPDATE public.company_profile SET {atribuicoes}, updated_at = now() "
+                f" WHERE id = ${len(campos) + 1} RETURNING *",
+                *campos.values(), existente,
+            )
+        else:
+            linha = await conn.fetchrow(
+                f"INSERT INTO public.company_profile ({colunas}) "
+                f"VALUES ({marcadores}) RETURNING *",
+                *campos.values(),
+            )
+    logger.info("Perfil da empresa gravado.")
+    return json.loads(json.dumps(dict(linha), default=str))

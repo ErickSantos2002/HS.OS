@@ -63,11 +63,9 @@ export default function EmpresaTab() {
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase
-        .from("company_profile")
-        .select("*")
-        .limit(1)
-        .maybeSingle();
+      const { data, error } = await api<any>("/integracoes/empresa/perfil")
+        .then((d) => ({ data: d, error: null as Error | null }),
+              (e: Error) => ({ data: null, error: e }));
       if (error) {
         toast.error("Erro ao carregar perfil da empresa");
       } else if (data) {
@@ -193,9 +191,11 @@ export default function EmpresaTab() {
     if (!profile) return;
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("company_profile")
-        .update({
+      // PUT cria a linha se ela não existir: há uma por instalação, e a tela
+      // não deveria precisar saber se alguém já salvou alguma coisa antes.
+      await api("/integracoes/empresa/perfil", {
+        method: "PUT",
+        body: {
           company_name: companyName || null,
           founder_name: founderName || null,
           segment: segment || null,
@@ -206,9 +206,8 @@ export default function EmpresaTab() {
           revenue: revenue || null,
           employees_count: employeesCount || null,
           extra_context: extraContext || null,
-        })
-        .eq("id", profile.id);
-      if (error) throw error;
+        },
+      });
 
       if (companyName && founderName) {
         const { data: notif, error: notifErr } = await supabase.functions.invoke(
@@ -226,11 +225,7 @@ export default function EmpresaTab() {
       }
 
       // Recarrega para pegar onboarding_notified_at atualizado
-      const { data } = await supabase
-        .from("company_profile")
-        .select("*")
-        .limit(1)
-        .maybeSingle();
+      const data = await api<any>("/integracoes/empresa/perfil").catch(() => null);
       if (data) applyProfile(data as Profile);
     } catch (e: any) {
       toast.error(`Erro ao salvar: ${e.message ?? e}`);
@@ -253,11 +248,7 @@ export default function EmpresaTab() {
       if (error) throw error;
       if (data?.dispatched) {
         toast.success("Contexto re-enviado ao orquestrador.");
-        const { data: fresh } = await supabase
-          .from("company_profile")
-          .select("*")
-          .limit(1)
-          .maybeSingle();
+        const fresh = await api<any>("/integracoes/empresa/perfil").catch(() => null);
         if (fresh) applyProfile(fresh as Profile);
       } else {
         toast.error(data?.reason ?? "Falha ao re-enviar.");
