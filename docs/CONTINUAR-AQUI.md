@@ -104,12 +104,16 @@ parametrizada. Assim a decisão vira configuração, não código.
 
 ### 1. Realtime — o gargalo estrutural
 
-21 arquivos usam `supabase.channel(...).on("postgres_changes", …)`. O hub em
-`app/realtime.py` publica por tópico, mas hoje só sabe de canais e usuários.
-Para religar os 21, ele precisa emitir eventos de tabela — e cada endpoint de
-escrita precisa publicar depois de commitar.
+21 arquivos usam `supabase.channel(...).on("postgres_changes", …)`. É o maior
+bloco isolado que resta e destrava telas inteiras de uma vez.
 
-É o maior bloco isolado que resta e destrava telas inteiras de uma vez.
+**O plano está em [`docs/PLANO-REALTIME.md`](PLANO-REALTIME.md)** — levantado em
+07/08. Resumo: LISTEN/NOTIFY do Postgres, não publicação nos endpoints, porque
+`postgres_changes` captura mudança no **banco** e hoje escrevem nele também os
+agentes, o coletor da VPS e a ponte de arquivos. E o `pg_notify` carrega só o
+id: quem monta o payload completo é o backend, porque 7 dos 21 arquivos leem
+`payload.new` e o limite de 8000 bytes do NOTIFY não comporta uma mensagem de
+chat.
 
 ### 2. As 4 edge functions de trabalho real
 
