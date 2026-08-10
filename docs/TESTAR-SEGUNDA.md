@@ -164,6 +164,23 @@ Nada disso substitui abrir a tela. É o que dá para garantir sem navegador.
 
 ---
 
+## O console agora é legível
+
+Vale saber, porque muda como você reporta: até 10/08 **toda tela abria com 72
+erros 404 no console**, e a de login com 4. Eram falsos — o carregador de
+avatares descobria a foto de cada agente tentando `.png`, `.jpg`, `.jpeg` e
+`.webp` até uma funcionar, para treze ids, oito deles da dn.ia e inexistentes
+aqui.
+
+Hoje `/chat`, `/skills`, `/automacoes` e `/arenas` abrem com **zero erros**
+(verificado no navegador). Sobra um aviso de `key` do React no seletor de
+modelo — é do Radix, só aparece em desenvolvimento e não afeta nada.
+
+Ou seja: **erro no console agora é sinal, não ruído.** Se aparecer um, é de
+verdade e vale colar.
+
+---
+
 ## Como relatar
 
 O que mais ajuda, em ordem:

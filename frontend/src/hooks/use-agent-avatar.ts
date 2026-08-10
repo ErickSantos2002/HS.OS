@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { toCanonicalAgentId } from "@/lib/agent-id";
-import { api } from "@/lib/api";
+import { api, lerToken } from "@/lib/api";
 import { enviarArquivo, removerArquivos, urlPublica } from "@/lib/storage";
 
 /** O que `/agents` devolve e este hook usa. */
@@ -275,13 +275,20 @@ export function useResolvedAgentAvatar(agentId?: string | null) {
 }
 
 function loadAllAvatarsSingleton(): Promise<Record<string, string>> {
+  // Sem sessão não há o que carregar: `/agents` responde 401. A checagem
+  // existe porque este módulo é importado pela tela de login, e sem ela a
+  // primeira coisa que a pessoa vê no console — antes de digitar a senha — são
+  // três 401 e um erro de "usuário não existe". Parece falha e não é.
+  if (!lerToken()) return Promise.resolve({});
   if (!allAvatarsPromise) {
     allAvatarsPromise = loadAllAvatars().finally(() => { allAvatarsPromise = null; });
   }
   return allAvatarsPromise;
 }
 
-// Eagerly preload avatar URLs at module import time (lightweight — only URLs)
+// Adianta as URLs assim que o módulo carrega — é leve, só URLs, e evita que a
+// primeira tela abra com avatares em branco. Quando não há sessão, a linha
+// acima transforma isto num no-op e quem entrar dispara o carregamento.
 loadAllAvatarsSingleton();
 
 /** Upload base64 data URL to Storage and return the public URL */
