@@ -37,6 +37,7 @@ prático e continua sendo um arquivo de verdade, com histórico no git.
 | Funcionalidade | Desde | Onde está o código |
 |---|---|---|
 | **Arena** | 10/08/2026 | `frontend/src/_legado/arena/`, `functions/_pausado/arena-*` |
+| **War room** | 10/08/2026 | `frontend/src/_legado/warroom/`, `functions/_pausado/warroom-feed` |
 
 ### Arena
 
@@ -82,6 +83,37 @@ páginas originais e restaurar os imports. E em
 (está no histórico do git) para o card de voz voltar a oferecer "aplicar em
 todas as arenas".
 
+### War room
+
+**O que era.** Uma tela cheia para espelhar numa TV do escritório, mostrando os
+agentes trabalhando ao vivo: entregas concluídas, ações autônomas e conversas
+conforme aconteciam. Rodava fora do `AppLayout`, sem menu — feita para ficar
+ligada num monitor, não para navegar.
+
+**Por que veio.** Mesma origem da Arena: é vitrine. Um painel de parede com
+agentes trabalhando é o que se mostra a visita, e faz sentido num produto vendido
+como "seu time de IA".
+
+**Por que saiu.** A `warroom-feed` (582 linhas) nunca foi portada, e portá-la
+seria trabalho considerável para uma tela que depende de haver gente olhando uma
+TV. Não é um processo da Health & Safety hoje.
+
+**O que ficou de pé.** Nada específico no backend — a tela lia tudo pela
+`warroom-feed`, que está em `_pausado/`. As tabelas que ela consultava
+(`agent_activity_log`, `agent_results`, `conversations`) continuam vivas e
+servindo outras telas.
+
+**Como voltar:**
+
+```bash
+git mv frontend/src/_legado/warroom/WarRoomPage.tsx frontend/src/pages/
+git mv backend/supabase/functions/_pausado/warroom-feed backend/supabase/functions/
+```
+
+Depois, em `frontend/src/App.tsx`, trocar `<WarRoomPausada />` por
+`<WarRoomPage />` e restaurar o import. E a `warroom-feed` volta para a fila de
+portagem — ela ainda chama o Supabase.
+
 ---
 
 ## Previstos
@@ -91,8 +123,14 @@ decisão sair.
 
 | Funcionalidade | Situação |
 |---|---|
-| **Parede de TV** (`/warroom`) | provável corte — `warroom-feed` nunca foi portada |
 | **Integração de voz** (ElevenLabs) | tratada como coisa futura |
+| **Lovable AI Gateway** | decisão adiada — ver abaixo |
+
+O **Lovable AI Gateway** sustenta `transcribe-audio`, `chat-image-vision` e
+`parse-company-context` — transcrição de áudio, leitura de imagem no chat e
+leitura automática do contexto da empresa no onboarding. Diferente da voz, estas
+são funcionalidades que a equipe usaria de verdade; a decisão é sobre qual
+provedor de LLM pagar, não sobre cortar.
 
 ⚠️ **A voz é maior que a Arena.** Cortar a Arena não elimina a ElevenLabs: ela
 também alimenta o botão "ouvir" das respostas no chat (`pages/ChatPage.tsx`) e a

@@ -27,7 +27,19 @@ import ClawHubPage from "./pages/ClawHubPage";
 // mover os arquivos de volta e trocar os `<ArenaPausada />` pelas páginas
 // originais. Ver `docs/EM-CONSTRUCAO.md`.
 import EmConstrucao from "./components/EmConstrucao";
-import { Swords } from "lucide-react";
+import { Swords, MonitorPlay } from "lucide-react";
+
+// ⚠️ Parede de TV pausada em 10/08/2026. A tela está em
+// `src/_legado/warroom/WarRoomPage.tsx` e a `warroom-feed` em
+// `functions/_pausado/`. Ver `docs/EM-CONSTRUCAO.md`.
+const WarRoomPausada = () => (
+  <EmConstrucao
+    icone={MonitorPlay}
+    titulo="War room"
+    resumo="O painel de parede está pausado enquanto o resto da plataforma vai ao ar. A ideia continua de pé e o trabalho já feito está guardado."
+    oQueEra="Uma tela cheia para espelhar numa TV, mostrando os agentes trabalhando ao vivo: entregas, ações autônomas e conversas conforme aconteciam."
+  />
+);
 
 const ArenaPausada = () => (
   <EmConstrucao
@@ -48,7 +60,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import WikiHtmlPreviewPage from "./pages/WikiHtmlPreviewPage";
 import MonitoringPage from "./pages/MonitoringPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
-import WarRoomPage from "./pages/WarRoomPage";
 import PublicArtifactPage from "./pages/PublicArtifactPage";
 import ArtifactsPage from "./pages/ArtifactsPage";
 import PublicLiveArtifactPage from "./pages/PublicLiveArtifactPage";
@@ -91,7 +102,7 @@ const App = () => {
                   path="/warroom"
                   element={
                     <ProtectedRoute>
-                      <WarRoomPage />
+                      <WarRoomPausada />
                     </ProtectedRoute>
                   }
                 />

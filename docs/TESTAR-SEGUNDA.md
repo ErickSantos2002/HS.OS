@@ -34,9 +34,9 @@ Não perca tempo com estes — são conhecidos e estão documentados:
 | O quê | Por quê |
 |---|---|
 | Transcrição de áudio, visão de imagem, leitura do contexto da empresa | dependem do Lovable AI Gateway — decisão de produto pendente |
-| Voz da Arena (ouvir, gerar, agente conversacional) | dependem da ElevenLabs — idem |
+| Voz do agente (botão "ouvir" no chat) | depende da ElevenLabs — decisão futura |
 | Tela de Skills | `skill-manage` ainda não foi portada |
-| Parede de TV (`/warroom`) | `warroom-feed` ainda não foi portada |
+| Arena e War room | **pausadas em 10/08** — mostram "em construção" de propósito. Ver `EM-CONSTRUCAO.md` |
 | "Esqueci minha senha" (`/reset-password`) | o fluxo sumiu com o Supabase Auth |
 | Consumo em tempo real no painel do agente | `usage_events` ficou fora dos gatilhos de propósito — atualiza ao abrir |
 | Artefatos publicados no painel do agente | a tabela não tem vínculo com agente; a lista é vazia por construção |
