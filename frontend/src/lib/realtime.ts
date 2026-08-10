@@ -134,6 +134,27 @@ export function assinar(topico: string, ouvinte: Ouvinte): () => void {
   };
 }
 
+/**
+ * Manda um aviso efêmero pela conexão já aberta.
+ *
+ * O caminho normal do tempo real é de mão única — banco → navegador, por
+ * trigger e `pg_notify`. Isto é a exceção: coisas que valem segundos e não
+ * devem tocar o banco. Hoje só o "está digitando".
+ *
+ * Falha calada de propósito: se o socket não está pronto, o aviso se perde e
+ * está tudo bem. Ele ia expirar em 4 segundos de qualquer forma, e enfileirar
+ * para reenviar depois entregaria "fulano está digitando" quando fulano já
+ * mandou a mensagem.
+ */
+export function enviar(mensagem: Record<string, unknown>): void {
+  if (socket?.readyState !== WebSocket.OPEN) return;
+  try {
+    socket.send(JSON.stringify(mensagem));
+  } catch {
+    /* conexão caiu entre a checagem e o envio */
+  }
+}
+
 /** Fecha tudo — usado no logout, para o token velho não seguir conectado. */
 export function encerrarRealtime() {
   ouvintes.clear();

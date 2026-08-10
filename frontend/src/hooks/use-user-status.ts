@@ -1,6 +1,5 @@
 import { api } from "@/lib/api";
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
 import { toast } from "sonner";
 import {
@@ -120,17 +119,18 @@ export function useUserStatus() {
         },
       });
 
-      // Browser/PWA push via existing send-push function
-      void supabase.functions
-        .invoke("send-push", {
-          body: {
-            user_id: user.id,
-            title: `Você ainda está em ${current.emoji} ${current.label}?`,
-            body: "Seu status já dura mais de 1h30. Toque para atualizar.",
-            url: "/settings?tab=profile",
-          },
-        })
-        .catch(() => undefined);
+      // Push do navegador/PWA. Era a edge `send-push`; hoje é `/push/enviar`.
+      // Silencioso de propósito: o toast acima já avisou dentro do app, e a
+      // instalação pode nem ter as chaves VAPID configuradas (503).
+      void api("/push/enviar", {
+        method: "POST",
+        body: {
+          user_id: user.id,
+          title: `Você ainda está em ${current.emoji} ${current.label}?`,
+          body: "Seu status já dura mais de 1h30. Toque para atualizar.",
+          url: "/settings?tab=profile",
+        },
+      }).catch(() => undefined);
     };
 
     check();

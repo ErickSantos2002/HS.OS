@@ -25,24 +25,26 @@ escondeu telas quebradas em produção. O placar tem que separar as duas:
 
 | Subsistema | Substituto | Front religado | Destino |
 |---|---|---|---|
-| Auth | ✅ | 🟡 3 arquivos | JWT próprio (PyJWT + bcrypt) |
+| Auth | ✅ | ✅ **completo** | JWT próprio (PyJWT + bcrypt) |
 | Storage | ✅ | ✅ **completo** | `UPLOADS_DIR` em disco, `app/routers/storage.py` |
 | Realtime (`postgres_changes`) | ✅ | ✅ **completo** | WebSocket + LISTEN/NOTIFY, `app/escuta_banco.py` |
 | Edge Functions | 🟡 71 de 73 | ✅ sem pendências | routers FastAPI |
 | Banco (via RLS, direto do browser) | ✅ ~145 rotas | ✅ **0 chamadas vivas** | endpoints FastAPI |
 
 O **banco saiu inteiro** em 10/08/2026: das 185 chamadas `.from("…")` originais,
-**zero** continuam vivas, e nenhum arquivo chama mais `functions.invoke`. O que
-resta do Supabase no front são **três** arquivos, todos de *auth* ou *presença*:
-`use-typing-indicator.ts` (ainda abre `supabase.channel` para o "está
-digitando"), `use-user-status.ts` e `AddAgentDialog.tsx`.
-O **Realtime de dados saiu inteiro**: a captura é por trigger + `pg_notify`, o
-backend roteia por `channel_id`/`user_id`/`agent_id`. Ver `docs/PLANO-REALTIME.md`.
+**zero** continuam vivas, nenhum arquivo chama `functions.invoke`, e o único
+lugar que ainda menciona o Supabase fora de comentário é o próprio
+`integrations/supabase/client.ts` — que existe só para lançar quando alguém o
+usar. O front está limpo.
+O **Realtime saiu inteiro**: a captura é por trigger + `pg_notify`, o backend
+roteia por `channel_id`/`user_id`/`agent_id`, e nenhum arquivo abre mais
+`supabase.channel(...)`. Ver `docs/PLANO-REALTIME.md`.
 
-⚠️ **Uma exceção sobrevive**: `use-typing-indicator.ts` ainda usa
-`supabase.channel` para o "fulano está digitando". É *broadcast* efêmero, não
-`postgres_changes` — nada disso passa pelo banco, e por isso escapou da
-portagem do realtime. Precisa de um canal equivalente no nosso WebSocket.
+O `/ws` também aceita tráfego **de volta**, para o que é efêmero e não deve
+tocar o banco: hoje só o "fulano está digitando". O navegador manda
+`{tipo: "digitando", topico: "canal:<id>"}` e o servidor republica no tópico —
+depois de conferir que a conexão já assina esse tópico, o que só acontece para
+membro do canal. O `userId` sai do token, nunca do payload.
 
 O placar atualizado e a forma de medi-lo estão em `docs/ROADMAP.md`.
 

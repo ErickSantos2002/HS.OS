@@ -11,6 +11,7 @@ produção: em `ws://` ele viajaria em claro. Ver `docs/DEPLOY.md`.
 """
 
 import asyncio
+import json
 import logging
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
@@ -105,14 +106,42 @@ async def eventos(
             await websocket.send_text(serializar(evento))
 
     async def escutar() -> None:
-        """Navegador → nada, por enquanto.
+        """Navegador → hub, para os avisos efêmeros.
 
         Precisa existir mesmo sem uso: sem alguém lendo, o `receive` do
         Starlette não processa o frame de fechamento e a desconexão só é
         percebida na próxima escrita — que pode demorar muito num canal parado.
+
+        Hoje trafega uma coisa só: **"fulano está digitando"**. É o último
+        pedaço que ainda usava o Supabase Realtime, e ele não cabia na
+        portagem por trigger + `pg_notify` como o resto — nada disso passa
+        pelo banco, e nem deve: é estado que vale 4 segundos e some.
+
+        ⚠️ **A autorização é só publicar no que já se assina.** A lista de
+        tópicos foi montada no `accept` a partir do que este usuário pode ver
+        (`_canais_do_usuario`); recusar o que está fora dela impede uma aba
+        de anunciar digitação num canal alheio, que seria um jeito discreto
+        de descobrir que o canal existe.
         """
         while True:
-            await websocket.receive_text()
+            bruto = await websocket.receive_text()
+            try:
+                msg = json.loads(bruto)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if not isinstance(msg, dict) or msg.get("tipo") != "digitando":
+                continue
+            topico = msg.get("topico")
+            if not isinstance(topico, str) or topico not in topicos:
+                continue
+            hub.publicar(topico, "digitando", {
+                "userId": user_id,
+                # O nome vem do cliente porque só ele sabe como a pessoa está
+                # identificada na tela (apelido, nome completo, e-mail). Não é
+                # dado de confiança: é rótulo de um aviso que expira sozinho, e
+                # o `userId` — esse sim do token — é a chave de deduplicação.
+                "name": str(msg.get("name") or "")[:80],
+            })
 
     async def pingar() -> None:
         while True:

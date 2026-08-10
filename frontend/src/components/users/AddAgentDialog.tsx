@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +38,7 @@ import { AvatarCropDialog } from "@/components/AvatarCropDialog";
 import { uploadAgentAvatar } from "@/lib/avatar-upload";
 import { Camera } from "lucide-react";
 import { useGatewayModels } from "@/hooks/use-gateway-models";
+import { useAuthContext } from "@/contexts/auth-context";
 
 export interface PendingAgent {
   agent_id: string;
@@ -162,6 +162,7 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
   const [allowedUserIds, setAllowedUserIds] = useState<string[]>([]);
   const [platformUsers, setPlatformUsers] = useState<PlatformUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
+  const { user: usuarioAtual } = useAuthContext();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // Submission
@@ -221,19 +222,15 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
     setErrorStep(null);
   }, [open]);
 
-  // Load current user + platform users for access step
+  // Quem está criando o agente entra na lista de acesso já marcado. O id vem
+  // do contexto de auth, que já o tem — era uma ida ao `supabase.auth.getUser()`
+  // para buscar o que estava em memória.
   useEffect(() => {
     if (!open) return;
-    let cancelled = false;
-    (async () => {
-      const { data: auth } = await supabase.auth.getUser();
-      if (cancelled) return;
-      const uid = auth?.user?.id ?? null;
-      setCurrentUserId(uid);
-      if (uid) setAllowedUserIds((prev) => (prev.includes(uid) ? prev : [uid, ...prev]));
-    })();
-    return () => { cancelled = true; };
-  }, [open]);
+    const uid = usuarioAtual?.id ?? null;
+    setCurrentUserId(uid);
+    if (uid) setAllowedUserIds((prev) => (prev.includes(uid) ? prev : [uid, ...prev]));
+  }, [open, usuarioAtual?.id]);
 
   useEffect(() => {
     if (!open || step !== 7 || platformUsers.length > 0) return;

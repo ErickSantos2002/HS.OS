@@ -1,16 +1,24 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { assinar, enviar } from "@/lib/realtime";
 
 /**
- * Lightweight "typing…" indicator using Supabase Realtime broadcast.
- * No DB writes, no schema changes. State is ephemeral and per-channel.
+ * Indicador de "fulano está digitando", pelo nosso WebSocket.
  *
- * - notifyTyping() throttles broadcasts to once every ~1.5s while the user types.
- * - typingUsers contains other users currently typing (self filtered out).
- * - Entries expire automatically 4s after the last broadcast.
+ * Sem escrita no banco e sem mudança de schema: o estado é efêmero, por canal,
+ * e expira sozinho em 4 segundos.
  *
- * IMPORTANT: broadcasts are only sent after the channel reaches SUBSCRIBED.
- * Calls before that are queued (single pending flag) and flushed on subscribe.
+ * ⚠️ **Foi o último pedaço de Supabase Realtime do sistema.** Ele não coube na
+ * portagem que substituiu o `postgres_changes` por trigger + `pg_notify`, e o
+ * motivo é bom: isto não passa pelo banco e nem deve. Gravar cada tecla numa
+ * tabela para um aviso que vale segundos seria caro e inútil.
+ *
+ * O caminho de agora é o `/ws`, que já estava aberto e escutando: o navegador
+ * manda `{tipo: "digitando", topico: "canal:<id>"}` e o servidor republica no
+ * tópico — depois de conferir que quem mandou já assina esse tópico, o que só
+ * acontece se ele for membro do canal.
+ *
+ * - `notifyTyping()` estrangula os avisos em um a cada ~1.5s enquanto digita.
+ * - `typingUsers` traz os outros; a própria pessoa é filtrada fora.
  */
 
 const HEARTBEAT_MS = 1500;
@@ -26,27 +34,17 @@ export interface TypingUser {
 type TypingPayload = Omit<TypingUser, "expiresAt">;
 type TopicListener = (users: TypingUser[]) => void;
 type TypingTopic = {
-  channel: ReturnType<typeof supabase.channel>;
+  cancelar: () => void;
   users: Map<string, TypingUser>;
   listeners: Set<TopicListener>;
-  subscribed: boolean;
-  pendingPayload: TypingPayload | null;
   cleanupTimer: ReturnType<typeof setInterval>;
   releaseTimer: ReturnType<typeof setTimeout> | null;
 };
 
 const typingTopics = new Map<string, TypingTopic>();
 
-function syncRealtimeAuth() {
-  try {
-    void supabase.auth.getSession().then(({ data }) => {
-      supabase.realtime.setAuth(data.session?.access_token ?? null);
-    });
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.debug("[typing] realtime auth skipped", error);
-  }
-}
+/** O tópico do nosso realtime para um canal. */
+const topicoDoCanal = (channelKey: string) => `canal:${channelKey}`;
 
 function normalizeTypingPayload(payload: unknown): TypingPayload | null {
   const { userId, name } = (payload ?? {}) as { userId?: string; name?: string };
@@ -74,16 +72,7 @@ function emitTyping(topic: TypingTopic) {
   topic.listeners.forEach((listener) => listener(users));
 }
 
-function sendPayload(topicKey: string, topic: TypingTopic, payload: TypingPayload) {
-  topic.pendingPayload = null;
-  // eslint-disable-next-line no-console
-  console.debug("[typing] sending", topicKey, payload.userId);
-  void topic.channel.send({
-    type: "broadcast",
-    event: "typing",
-    payload,
-  });
-}
+
 
 function ensureTypingTopic(topicKey: string): TypingTopic {
   const existing = typingTopics.get(topicKey);
@@ -96,11 +85,11 @@ function ensureTypingTopic(topicKey: string): TypingTopic {
   }
 
   const topic: TypingTopic = {
-    channel: supabase.channel(`typing:${topicKey}`, { config: { broadcast: { ack: false, self: false } } }),
+    cancelar: () => {},
     users: new Map(),
     listeners: new Set(),
-    subscribed: false,
-    pendingPayload: null,
+    // Varredura de 1s porque ninguém "para de digitar" explicitamente: a
+    // ausência de aviso novo é o que apaga o rótulo.
     cleanupTimer: setInterval(() => {
       const current = typingTopics.get(topicKey);
       if (!current) return;
@@ -110,28 +99,15 @@ function ensureTypingTopic(topicKey: string): TypingTopic {
     releaseTimer: null,
   };
 
-  topic.channel.on("broadcast", { event: "typing" }, (payload) => {
-    const typingUser = normalizeTypingPayload(payload.payload);
+  topic.cancelar = assinar(topicoDoCanal(topicKey), (tipo, dados) => {
+    if (tipo !== "digitando") return;
+    const typingUser = normalizeTypingPayload(dados);
     if (!typingUser) return;
     topic.users.set(typingUser.userId, { ...typingUser, expiresAt: Date.now() + EXPIRY_MS });
-    // eslint-disable-next-line no-console
-    console.debug("[typing] received", { topicKey, userId: typingUser.userId, name: typingUser.name });
     emitTyping(topic);
   });
 
   typingTopics.set(topicKey, topic);
-  syncRealtimeAuth();
-  topic.channel.subscribe((status) => {
-    // eslint-disable-next-line no-console
-    console.debug("[typing] subscribe status", topicKey, status);
-    if (status === "SUBSCRIBED") {
-      topic.subscribed = true;
-      if (topic.pendingPayload) sendPayload(topicKey, topic, topic.pendingPayload);
-      return;
-    }
-    topic.subscribed = false;
-  });
-
   return topic;
 }
 
@@ -148,19 +124,19 @@ function subscribeTypingTopic(topicKey: string, listener: TopicListener) {
       const current = typingTopics.get(topicKey);
       if (!current || current.listeners.size > 0) return;
       clearInterval(current.cleanupTimer);
-      void supabase.removeChannel(current.channel);
+      current.cancelar();
       typingTopics.delete(topicKey);
     }, TOPIC_RELEASE_DELAY_MS);
   };
 }
 
 function publishTyping(topicKey: string, payload: TypingPayload) {
-  const topic = ensureTypingTopic(topicKey);
-  if (!topic.subscribed) {
-    topic.pendingPayload = payload;
-    return;
-  }
-  sendPayload(topicKey, topic, payload);
+  // Garante a assinatura antes de anunciar: quem digita também precisa ouvir,
+  // e é a assinatura que autoriza o envio do outro lado.
+  ensureTypingTopic(topicKey);
+  // O `userId` não vai no payload — o servidor o tira do token, que é a única
+  // fonte que não dá para forjar. Só o nome de exibição sobe daqui.
+  enviar({ tipo: "digitando", topico: topicoDoCanal(topicKey), name: payload.name });
 }
 
 export function useTypingIndicator(
