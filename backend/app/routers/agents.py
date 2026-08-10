@@ -1954,3 +1954,41 @@ async def agendamentos_do_gateway(agent_id: str, usuario: Usuario = Depends(usua
             agent_id,
         )
     return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+
+
+class ArquivoEspelhadoIn(BaseModel):
+    file_name: str = Field(min_length=1)
+    content: str = ""
+
+
+@router.put("/{agent_id}/arquivos-espelhados", status_code=status.HTTP_204_NO_CONTENT)
+async def gravar_arquivos_espelhados(
+    agent_id: str,
+    arquivos: list[ArquivoEspelhadoIn],
+    _: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Grava os arquivos do agente na tabela, para a ponte levá-los ao disco.
+
+    ⚠️ **`pending_write = true` é o que faz o arquivo sair do banco.** A ponte
+    (`dnos-files-bridge`, na VPS) varre por essa marca a cada 60s e escreve no
+    workspace de verdade. Sem ela, os arquivos param aqui e o agente nasce sem
+    alma no filesystem — foi o que a importação fazia antes de existir a marca.
+
+    Existe separado de `POST /integracoes/agent-files` porque aquele autentica
+    por segredo compartilhado (é a própria ponte confirmando o que escreveu) e
+    este é ação de pessoa, com JWT. Mesma tabela, dois chamadores diferentes.
+    """
+    if not arquivos:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nenhum arquivo informado.")
+    async with sessao(role="service_role") as conn:
+        for a in arquivos:
+            await conn.execute(
+                """
+                INSERT INTO public.agent_files (agent_id, file_name, content, pending_write, synced_at)
+                VALUES ($1, $2, $3, true, now())
+                ON CONFLICT (agent_id, file_name) DO UPDATE
+                    SET content = EXCLUDED.content, pending_write = true, synced_at = now()
+                """,
+                agent_id, a.file_name, a.content,
+            )
+    logger.info("%d arquivo(s) de %s gravados para a ponte levar.", len(arquivos), agent_id)

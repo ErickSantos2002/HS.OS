@@ -426,18 +426,21 @@ export default function LiveArtifactViewer({
 
       if (data.type === "dnos_query") {
         try {
-          const res = await fetch(`${supabaseUrl}/functions/v1/artifact-query`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
-              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
-            },
-            body: JSON.stringify({ table: data.table, ...(data.options || {}) }),
-          });
-          const body = await res.json().catch(() => ({}));
-          if (!res.ok || body?.error) {
-            const message = body?.error || `HTTP ${res.status}`;
+          // O substituto do `artifact-query` existe desde a portagem; esta
+          // chamada tinha ficado apontando para a edge, e a mensagem que
+          // aparecia ("No suitable key or wrong key type") vinha do Supabase
+          // recusando a chave, não do artefato.
+          let body: any = {};
+          try {
+            body = await api<any>("/artefatos/consultar", {
+              method: "POST",
+              body: { table: data.table, ...(data.options || {}) },
+            });
+          } catch (e) {
+            body = { error: (e as Error).message };
+          }
+          if (body?.error) {
+            const message = body.error;
             setDataError(message);
             post({ type: "dnos_query_result", id: data.id, error: message });
           } else {

@@ -181,27 +181,15 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
       const jwt = sessionRes?.session?.access_token;
       if (!jwt) throw new Error("Sessão expirada");
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       // pending_write: true — é a ponte (dnos-files-bridge, na VPS) quem leva
       // estes arquivos ao disco de verdade, em até ~60s, e confirma. Antes,
       // eles paravam na tabela e o agente nascia sem alma no filesystem.
-      const syncRes = await fetch(`${supabaseUrl}/functions/v1/sync-agent-files`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${jwt}`,
-        },
-        body: JSON.stringify({
-          agent_id: agentId,
-          files: filesPayload,
-          replace: false,
-          pending_write: true,
-          origin: "import",
-        }),
-      });
+      const syncRes = await api(`/agents/${encodeURIComponent(agentId)}/arquivos-espelhados`, {
+        method: "PUT",
+        body: filesPayload.map((f: any) => ({ file_name: f.file_name, content: f.content })),
+      }).then(() => ({ ok: true, erro: "" }), (e: Error) => ({ ok: false, erro: e.message }));
       if (!syncRes.ok) {
-        const errText = await syncRes.text();
-        throw new Error(`Falha ao gravar arquivos: ${errText}`);
+        throw new Error(`Falha ao gravar arquivos: ${syncRes.erro}`);
       }
 
       // Skills reais do .dnos (v1.1): recria cada uma via skill-manage e

@@ -4,7 +4,12 @@ import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 
-const ENDPOINT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upsert-agent-guardrails`;
+// A URL que a VPS deve chamar para gravar guardrails. É **texto mostrado**, não
+// uma chamada daqui — quem chama é o serviço lá. Aponta para a nossa API, não
+// mais para a edge function.
+const ENDPOINT_URL = `${
+  import.meta.env.VITE_API_URL || window.location.origin + "/api"
+}/integracoes/guardrails`;
 
 export default function GuardrailsTokenCard() {
   const [token, setToken] = useState<string | null>(null);

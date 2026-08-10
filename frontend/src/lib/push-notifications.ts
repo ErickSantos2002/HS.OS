@@ -5,27 +5,18 @@
  * Usage:
  *   await subscribeToPushNotifications(userId);
  *
- * VAPID public key is fetched from the send-push edge function on demand.
+ * A chave pública VAPID vem de `GET /push/chave-publica`, sob demanda.
  */
 import { api } from "@/lib/api";
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const PUBLIC_KEY_ENDPOINT = `${SUPABASE_URL}/functions/v1/send-push/public-key`;
 
 let cachedPublicKey: string | null = null;
 
 async function fetchVapidPublicKey(): Promise<string | null> {
   if (cachedPublicKey) return cachedPublicKey;
   try {
-    const res = await fetch(PUBLIC_KEY_ENDPOINT, {
-      headers: {
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
-      },
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
+    const json = await api<{ publicKey?: string }>("/push/chave-publica");
     if (json?.publicKey) {
-      cachedPublicKey = json.publicKey as string;
+      cachedPublicKey = json.publicKey;
       return cachedPublicKey;
     }
     return null;
