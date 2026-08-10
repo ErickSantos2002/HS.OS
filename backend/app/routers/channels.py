@@ -326,8 +326,12 @@ async def membros_dos_meus_canais(usuario: Usuario = Depends(usuario_atual)):
         linhas = await conn.fetch(
             """
             SELECT m.channel_id::text AS channel_id,
-                   array_remove(array_agg(m.user_id) FILTER (WHERE m.member_type = 'agent'), NULL) AS agents,
-                   array_remove(array_agg(m.user_id) FILTER (WHERE m.member_type = 'human'), NULL) AS humans
+                   -- ⚠️ `COALESCE(..., '{}')` por fora: quando o FILTER não casa
+                   -- com nada, o `array_agg` devolve **NULL**, não array vazio —
+                   -- e o `array_remove` de NULL continua NULL. Sem isto, canal
+                   -- só de gente responde 500 na validação do `list[str]`.
+                   COALESCE(array_remove(array_agg(m.user_id) FILTER (WHERE m.member_type = 'agent'), NULL), '{}') AS agents,
+                   COALESCE(array_remove(array_agg(m.user_id) FILTER (WHERE m.member_type = 'human'), NULL), '{}') AS humans
               FROM public.channel_members m
              WHERE EXISTS (
                      SELECT 1 FROM public.channel_members eu

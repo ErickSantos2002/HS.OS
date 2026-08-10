@@ -91,7 +91,10 @@ interface AutomationRun {
 }
 
 interface AgentOption {
-  agent_id: string;
+  // ⚠️ `GET /agents` devolve `id`, não `agent_id`. O nome antigo veio da leitura
+  // direta de `agent_profiles`; manter o campo aqui fazia o seletor renderizar
+  // os nomes e não selecionar nada, porque o `value` vinha undefined.
+  id: string;
   name: string;
   specialty: string | null;
 }
@@ -227,7 +230,7 @@ export default function AutomacoesPage() {
 
   const agentsById = useMemo(() => {
     const map = new Map<string, AgentOption>();
-    for (const a of agents) map.set(a.agent_id, a);
+    for (const a of agents) map.set(a.id, a);
     return map;
   }, [agents]);
 
@@ -332,7 +335,7 @@ export default function AutomacoesPage() {
                 <SelectContent>
                   <SelectItem value="all">Todos os agentes</SelectItem>
                   {agents.map((a) => (
-                    <SelectItem key={a.agent_id} value={a.agent_id}>
+                    <SelectItem key={a.id} value={a.id}>
                       {a.name}{a.specialty ? ` · ${a.specialty}` : ""}
                     </SelectItem>
                   ))}
@@ -560,7 +563,7 @@ function AutomationForm({ open, onOpenChange, editing, agents, currentUserId, on
               <SelectTrigger><SelectValue placeholder="Selecione um agente" /></SelectTrigger>
               <SelectContent>
                 {agents.map((a) => (
-                  <SelectItem key={a.agent_id} value={a.agent_id}>
+                  <SelectItem key={a.id} value={a.id}>
                     {a.name}{a.specialty ? ` · ${a.specialty}` : ""}
                   </SelectItem>
                 ))}
