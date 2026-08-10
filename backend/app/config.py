@@ -19,6 +19,15 @@ class Settings(BaseSettings):
     # Uploads — substitui supabase.storage. Em produção, volume persistente.
     UPLOADS_DIR: str = "/app/uploads"
 
+    # OpenAI — usada pela plataforma **fora** do caminho dos agentes: transcrever
+    # áudio, ler imagem colada no chat e extrair o perfil da empresa. Os agentes
+    # não passam por aqui; eles usam o provedor configurado no OpenClaw.
+    #
+    # ⚠️ Precisa estar declarada mesmo sendo lida pelo `ler_segredo`: o
+    # pydantic-settings recusa chave desconhecida no `.env` e derruba o boot
+    # inteiro. Foi o que aconteceu em 10/08/2026.
+    OPENAI_API_KEY: str = ""
+
     # Web Push. O par é gerado localmente e não custa nada; sem ele o envio
     # responde 503 e a tela não oferece notificação.
     VAPID_PUBLIC_KEY: str = ""
