@@ -4,8 +4,11 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json package-lock.json* bun.lockb* ./
-RUN npm install
+COPY package.json package-lock.json ./
+# `npm ci`, não `npm install`: instala exatamente o que está no lockfile e
+# falha se ele divergir do package.json. `install` resolveria versões novas em
+# silêncio, o que faz a imagem de produção não ser a que foi testada.
+RUN npm ci
 
 COPY . .
 

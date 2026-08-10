@@ -81,7 +81,7 @@ Frontend — rodar sempre a partir de `frontend/`:
 
 ```bash
 cd frontend
-npm install          # não há lockfile canônico definido — ver "Gerenciador de pacotes" abaixo
+npm install          # npm é o gerenciador oficial — ver "Convenções"
 npm run dev          # Vite dev server em http://localhost:8080 (host "::")
 npm run build        # build de produção
 npm run build:dev    # build com mode=development (source maps, tagger)
@@ -142,9 +142,6 @@ substitua por um config próprio antes de tentar rodar E2E.
 - **Se mantiver RLS, todo request autenticado precisa emitir `SET LOCAL app.current_user_id`** antes
   de qualquer query, senão `auth.uid()` devolve `NULL` e as policies negam. O setting **não** pode se
   chamar `app.current_role` — `current_role` é palavra reservada e o `SET LOCAL` dá erro de sintaxe.
-- **Gerenciador de pacotes indefinido:** convivem `bun.lock`, `bun.lockb` e `package-lock.json`, e não
-  há `packageManager` nem `engines` no `frontend/package.json`. Escolha um, apague os outros e registre a escolha
-  aqui — enquanto isso não for feito, installs podem divergir entre máquinas.
 - **`.env` não é mais versionado** (corrigido na reestruturação). Cada lado tem o seu:
   `frontend/.env` e `backend/.env`, ambos ignorados, com `.env.example` versionado ao lado.
 - Os docs citam a tag de restauração `v1.0-pre-consolidacao` (commit `34f4a7e8`). **Ela não existe
@@ -430,6 +427,11 @@ dinâmica (via `agent_templates.is_leader_template`) em vez de assumir "lia" —
 
 ## Convenções
 
+- **Gerenciador de pacotes: `npm`** (decidido em 10/08/2026). Fixado em `packageManager` e
+  `engines` no `frontend/package.json`; o lockfile canônico é `package-lock.json`. Os
+  `bun.lock` e `bun.lockb` eram resto do Lovable e foram apagados — nada os usava: o
+  `Dockerfile`, o `README` e os comandos daqui sempre chamaram `npm`. A imagem usa `npm ci`,
+  que falha quando o lockfile diverge, em vez de resolver versão nova em silêncio.
 - Alias `@/` → `frontend/src/` (configurado em `frontend/vite.config.ts` e `frontend/vitest.config.ts`; se adicionar outro config,
   replique)
 - UI: shadcn/ui em `frontend/src/components/ui/` (~50 componentes, gerados via `frontend/components.json`) — componentes de
