@@ -36,7 +36,11 @@ export default function SettingsPage() {
   const [hasSavedToken, setHasSavedToken] = useState(false);
 
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<"success" | "error" | null>(null);
+  // Guarda o resultado inteiro, não só o veredito. O motivo da falha é o que
+  // resolve o problema — ver `handleTest`.
+  const [testResult, setTestResult] = useState<
+    { success: boolean; version?: string | null; error?: string } | null
+  >(null);
   const [saved, setSaved] = useState(false);
   const { data: gatewayStatus, refetch: refetchGatewayStatus } = useGatewayStatus();
 
@@ -220,7 +224,14 @@ export default function SettingsPage() {
     // O backend testa com a configuração já gravada — abre o WebSocket com o
     // gateway e faz uma chamada real, não um ping.
     const result = await testConnection();
-    setTestResult(result.success ? "success" : "error");
+    // ⚠️ **O motivo vinha e era jogado fora.** O backend responde `erro` com o
+    // que de fato aconteceu — "Connection refused" (túnel fechado), "missing
+    // scope" (identidade do cliente errada), timeout de handshake — e a tela
+    // imprimia um texto fixo: "Verifique URL e token". Isso é um palpite, e
+    // quase sempre o palpite errado: das três causas comuns, só uma tem a ver
+    // com URL ou token. Em 10/08/2026 mandou o Erick conferir credencial num
+    // caso que era outra coisa.
+    setTestResult(result);
     setTesting(false);
   };
 
@@ -1255,15 +1266,33 @@ export default function SettingsPage() {
                     <Save className="h-4 w-4" /> {saved ? "Salvo!" : "Salvar"}
                   </button>
                 </div>
-                {testResult === "success" && (
+                {testResult?.success && (
                   <p className="text-xs flex items-center gap-1.5 text-success">
-                    <CheckCircle className="h-3.5 w-3.5" /> Gateway respondeu com sucesso
+                    <CheckCircle className="h-3.5 w-3.5" /> Gateway respondeu
+                    {testResult.version ? ` — versão ${testResult.version}` : ""}
                   </p>
                 )}
-                {testResult === "error" && (
-                  <p className="text-xs flex items-center gap-1.5 text-destructive">
-                    <XCircle className="h-3.5 w-3.5" /> Falha na conexão. Verifique URL e token.
-                  </p>
+                {testResult && !testResult.success && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs flex items-start gap-1.5 text-destructive">
+                      <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                      <span className="font-mono break-all">
+                        {testResult.error ?? "Falha na conexão, sem motivo informado."}
+                      </span>
+                    </p>
+                    {/* O texto de ajuda é escolhido pelo motivo, porque cada um
+                        leva a um lugar diferente — mandar "verifique o token"
+                        para quem está com o túnel fechado atrasa a correção. */}
+                    <p className="text-[11px] text-muted-foreground pl-5">
+                      {/refused|timed? ?out|timeout|unreachable|refus/i.test(testResult.error ?? "")
+                        ? "O backend não alcançou o endereço. Em produção o gateway só aceita conexão que chega pelo loopback dele, então isto costuma ser o túnel SSH fechado — veja scripts/tunel-openclaw.sh."
+                        : /scope/i.test(testResult.error ?? "")
+                          ? "Conectou, mas sem permissão. O gateway concede escopo só para client.id \"gateway-client\" em modo backend, e apenas os escopos que o cliente pede no handshake."
+                          : /não configurado|nao configurado/i.test(testResult.error ?? "")
+                            ? "Falta a URL ou o token. Preencha acima e salve, ou defina no .env do backend."
+                            : "Motivo acima, como o gateway o reportou."}
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
