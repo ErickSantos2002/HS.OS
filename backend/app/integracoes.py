@@ -78,6 +78,10 @@ def exige_segredo(nome: str):
         authorization: str | None = Header(default=None),
         x_bridge_token: str | None = Header(default=None),
         x_ingest_key: str | None = Header(default=None),
+        # O coletor de métricas da VPS usa um header próprio. Vale aceitar os
+        # três nomes: cada integração herdada escolheu o seu, e renomear
+        # header de quem já está rodando lá fora quebra sem aviso.
+        x_collector_token: str | None = Header(default=None),
     ) -> None:
         esperado = await ler_segredo(nome)
         if not esperado:
@@ -90,7 +94,7 @@ def exige_segredo(nome: str):
                 f"Integração não configurada: falta o segredo {nome}.",
             )
 
-        recebido = _extrair(authorization, x_bridge_token or x_ingest_key)
+        recebido = _extrair(authorization, x_bridge_token or x_ingest_key or x_collector_token)
         if not recebido or not hmac.compare_digest(recebido, esperado):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Não autorizado.")
 

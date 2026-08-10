@@ -28,7 +28,7 @@ escondeu telas quebradas em produção. O placar tem que separar as duas:
 | Auth | ✅ | ✅ **completo** | JWT próprio (PyJWT + bcrypt) |
 | Storage | ✅ | ✅ **completo** | `UPLOADS_DIR` em disco, `app/routers/storage.py` |
 | Realtime (`postgres_changes`) | ✅ | ✅ **completo** | WebSocket + LISTEN/NOTIFY, `app/escuta_banco.py` |
-| Edge Functions | 🟡 71 de 73 | ✅ sem pendências | routers FastAPI |
+| Edge Functions | 🟡 **72 de 73** | ✅ sem pendências | routers FastAPI |
 | Banco (via RLS, direto do browser) | ✅ ~145 rotas | ✅ **0 chamadas vivas** | endpoints FastAPI |
 
 O **banco saiu inteiro** em 10/08/2026: das 185 chamadas `.from("…")` originais,

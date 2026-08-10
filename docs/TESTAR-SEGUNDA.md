@@ -120,6 +120,14 @@ usar cada uma e o que falta instalar quando não pode.
 - [ ] Times: criar, pôr agente
 - [ ] Integrações: criar conector, editar sem perder a chave
 - [ ] Notificações: chegam e zeram ao abrir a conversa
+- [ ] Monitoramento e Analytics: as telas desenham (ver nota abaixo)
+
+⚠️ **Monitoramento vai aparecer vazio, e é esperado.** As quatro tabelas que
+alimentam `/monitoring` e `/analytics` são preenchidas por um coletor que roda
+na VPS e faz `POST` em `/coletor/estatisticas`. O endpoint existe desde 10/08 e
+foi testado nos três formatos, mas **o coletor da VPS ainda aponta para o
+Supabase** — apontá-lo para cá e cadastrar o `COLLECTOR_API_TOKEN` em
+Integrações é tarefa de infra, não de código.
 
 ---
 
