@@ -67,15 +67,46 @@ async function firstLoadableAvatar(candidates: string[]): Promise<string | null>
   return null;
 }
 
-async function discoverAvatarUrl(agentId: string): Promise<string | null> {
-  // Only look for explicitly named avatar files under avatars/<id>.<ext>.
-  // Do NOT scan the agent's working folder (<agentId>/...) — that contains
-  // arbitrary user uploads (screenshots, docs) and would pick them as avatars.
-  const candidates: string[] = [];
-  ["png", "jpg", "jpeg", "webp"].forEach((ext) => {
-    candidates.push(buildPublicAvatarUrl(`avatars/${agentId}.${ext}`));
-  });
+/**
+ * Nomes dos arquivos em `agent-files/avatars/`, perguntados uma vez.
+ *
+ * ⚠️ **Isto substitui uma sondagem por 404.** Antes, descobrir a foto de um
+ * agente era tentar carregar `avatars/<id>.png`, `.jpg`, `.jpeg` e `.webp` até
+ * uma dar certo. Com 13 ids e duas passadas, davam **72 requisições 404 em
+ * toda carga de página** — medido no navegador em 10/08/2026. O custo real não
+ * é a rede: é que o console fica com 72 erros falsos, e é exatamente ali que a
+ * gente procura o erro de verdade quando algo quebra.
+ *
+ * Uma listagem responde a mesma pergunta com uma requisição e nenhum erro.
+ */
+let arquivosDeAvatar: Promise<Set<string>> | null = null;
 
+function listarAvatares(): Promise<Set<string>> {
+  arquivosDeAvatar ??= api<{ arquivos: string[] }>("/storage/listar/agent-files/avatars")
+    .then((r) => new Set(r.arquivos ?? []))
+    // Falha aqui não pode derrubar o carregamento: sem a lista, ninguém tem
+    // foto descoberta por nome — o `avatarUrl` do banco continua valendo.
+    .catch(() => new Set<string>());
+  return arquivosDeAvatar;
+}
+
+/** Esquece a listagem, para um upload novo aparecer sem recarregar a página. */
+export function invalidarListaDeAvatares() {
+  arquivosDeAvatar = null;
+}
+
+async function discoverAvatarUrl(agentId: string): Promise<string | null> {
+  // Só arquivos nomeados em `avatars/<id>.<ext>`. NÃO varre a pasta de
+  // trabalho do agente (`<agentId>/...`) — lá há upload arbitrário do usuário
+  // (captura de tela, documento) e algum viraria avatar.
+  const existentes = await listarAvatares();
+  const candidates: string[] = [];
+  for (const ext of ["png", "jpg", "jpeg", "webp"]) {
+    if (existentes.has(`${agentId}.${ext}`)) {
+      candidates.push(buildPublicAvatarUrl(`avatars/${agentId}.${ext}`));
+    }
+  }
+  if (candidates.length === 0) return null;
   return firstLoadableAvatar(candidates);
 }
 
@@ -146,10 +177,14 @@ export async function loadAllAvatars(): Promise<Record<string, string>> {
     }),
   );
 
-  // Named files may exist for agents that do not have a DB avatar row yet.
+  // Pode haver arquivo nomeado para agente que ainda não tem linha de avatar
+  // no banco. Os ids saem da própria listagem — antes havia oito nomes fixos
+  // da instância original da dn.ia ("lia", "kira", "milo", "radar",
+  // "rodrigo", "cs", "rock", "sigma") que não existem aqui e só geravam 404.
+  const nomesEmDisco = await listarAvatares();
   const knownIds = new Set<string>([
     ...Array.from(candidatesByAgent.keys()),
-    "lia", "kira", "milo", "radar", "rodrigo", "cs", "rock", "sigma",
+    ...Array.from(nomesEmDisco, (n) => canonicalizeAgentId(n.replace(/\.[^.]+$/, ""))),
   ]);
   await Promise.all(
     Array.from(knownIds).map(async (canonical) => {

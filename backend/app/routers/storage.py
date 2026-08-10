@@ -413,6 +413,34 @@ async def enviar(
     )
 
 
+@router.get("/listar/{bucket}/{prefixo:path}")
+async def listar(bucket: str, prefixo: str, usuario: Usuario = Depends(usuario_atual)) -> dict:
+    """Nomes dos arquivos sob um prefixo. Existe para não sondar por 404.
+
+    ⚠️ **O motivo é concreto e foi medido no navegador em 10/08/2026.** O
+    carregador de avatares descobria a foto de cada agente por força bruta:
+    para cada um, tentava `avatars/<id>.png`, `.jpg`, `.jpeg` e `.webp` até uma
+    carregar. Com 13 ids na lista e duas passadas, isso somava **72 requisições
+    404 em toda carga de página** — e o console é justamente onde a gente lê os
+    erros de verdade quando algo quebra. Enterrar os erros reais debaixo de 72
+    falsos é caro de um jeito que não aparece em nenhuma métrica.
+
+    Devolve só nomes, nunca conteúdo, e só de bucket público — quem lista já
+    poderia baixar cada arquivo um a um.
+    """
+    if bucket not in _PUBLICOS:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"Listagem disponível apenas para buckets públicos: {', '.join(sorted(_PUBLICOS))}.",
+        )
+    # `_resolver` é quem impede travessia de caminho (`../`); reaproveitar aqui
+    # garante que a listagem obedeça exatamente à mesma regra do download.
+    alvo = _resolver(bucket, prefixo or ".")
+    if not alvo.is_dir():
+        return {"arquivos": []}
+    return {"arquivos": sorted(f.name for f in alvo.iterdir() if f.is_file())}
+
+
 @router.get("/privado/{bucket}/{caminho:path}")
 async def baixar_privado(
     bucket: str,

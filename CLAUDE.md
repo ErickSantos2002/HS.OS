@@ -410,8 +410,8 @@ O que é código e precisa de mudança manual:
 (`DNMARKETING_URL`, API de analytics da dn.ia), numa function ainda não portada.
 
 Nomes de agentes da instância original (`lia`, `rock`, `milo`, `kira`, `radar`, `sigma`, `rodrigo`)
-ainda aparecem como default em `frontend/src/hooks/use-agent-avatar.ts`, `channel-agent-reply`, `automations-api`
-e nos YAMLs de documentação. A resolução do agente **líder/orquestrador** já foi corrigida para ser
+ainda aparecem nos YAMLs de documentação. **Saíram do `use-agent-avatar.ts` em 10/08** — eram oito
+ids fixos que o carregador sondava e que não existem aqui. A resolução do agente **líder/orquestrador** já foi corrigida para ser
 dinâmica (via `agent_templates.is_leader_template`) em vez de assumir "lia" — não reintroduza o hardcode.
 
 ## Documentação que vale ler antes de mexer

@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { invalidarListaDeAvatares } from "@/hooks/use-agent-avatar";
 import { enviarArquivo, urlPublica } from "@/lib/storage";
 
 async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
@@ -23,6 +24,9 @@ export async function uploadAgentAvatar(agentId: string, dataUrl: string): Promi
   const blob = await dataUrlToBlob(dataUrl);
   const path = `avatars/${agentId}.png`;
   await enviarArquivo("agent-files", path, blob, "avatar.png");
+  // A lista de arquivos em `avatars/` é lida uma vez e guardada. Sem esta
+  // linha, a foto recém-enviada só apareceria depois de recarregar a página.
+  invalidarListaDeAvatares();
   const url = `${urlPublica("agent-files", path)}?t=${Date.now()}`;
   await api(`/agents/${encodeURIComponent(agentId)}`, {
     method: "PATCH",
