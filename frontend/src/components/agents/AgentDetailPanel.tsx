@@ -583,8 +583,11 @@ export default function AgentDetailPanel({ agent: agentProp, agentId, avatar: av
         {/* ── COMPLETED TASKS FEED (full width) ── */}
         <ResultsFeed agentId={shortId} />
 
-        {/* ── VOICE (full width, 2 sub-cards) ── */}
-        <VoiceSection agentId={shortId} />
+        {/* ── VOZ — pausada em 10/08/2026 junto com a integração ElevenLabs.
+             O card escolhia a voz do agente e testava o TTS. A função
+             `VoiceSection` continua abaixo, sem ser montada, para voltar ser
+             descomentar esta linha. Ver `docs/EM-CONSTRUCAO.md`. ── */}
+        {/* <VoiceSection agentId={shortId} /> */}
 
         {/* ── WORKSPACE ── */}
       </div>
@@ -1177,7 +1180,14 @@ function SessionsCard({ agent }: { agent: GatewayAgent }) {
   );
 }
 
-/* ── Voice section (TTS + ConvAI sub-cards) ──────────── */
+/* ── Voz — PAUSADA em 10/08/2026 ─────────────────────────
+   O card de voz (escolher voz do agente, testar TTS, aplicar em arenas)
+   saiu junto com a integração ElevenLabs. O código está preservado
+   abaixo em bloco de comentário porque é curto e vive no meio deste
+   arquivo — mover só ele para `_legado/` deixaria um buraco pior de
+   entender. Ver `docs/EM-CONSTRUCAO.md`.
+
+/\* ── Voice section (TTS + ConvAI sub-cards) ──────────── *\/
 
 import VoicePicker from "@/components/VoicePicker";
 import { setVoiceForAgent, speakText } from "@/lib/elevenlabs";
@@ -1188,7 +1198,7 @@ interface ArenaVoiceRow {
   convai_agent_id: string | null;
 }
 
-/**
+/\**
  * ⚠️ **Arena pausada em 10/08/2026.** Este hook buscava em quais arenas o agente
  * participa, para o card de voz oferecer "aplicar a mesma voz em todas". Com a
  * Arena fora do ar ele devolve vazio — o card some sozinho, sem `if` espalhado
@@ -1197,7 +1207,7 @@ interface ArenaVoiceRow {
  * O corpo original está no histórico do git e o endpoint
  * `GET /arenas/por-agente/{id}` continua no backend. Para voltar, restaure a
  * busca. Ver `docs/EM-CONSTRUCAO.md`.
- */
+ *\/
 function useAgentArenas(_agentId: string) {
   return { rows: [] as ArenaVoiceRow[], loading: false };
 }
@@ -1272,7 +1282,7 @@ function VoiceSection({ agentId }: { agentId: string }) {
     <section>
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Voz</p>
       <div className="grid grid-cols-2 gap-2">
-        {/* TTS sub-card */}
+        {/\* TTS sub-card *\/}
         <div className="glass-card rounded-2xl p-3 flex flex-col">
           <div className="flex items-center gap-1.5 mb-2">
             <Volume2 className="h-3 w-3 text-primary" />
@@ -1312,7 +1322,7 @@ function VoiceSection({ agentId }: { agentId: string }) {
           )}
         </div>
 
-        {/* ConvAI sub-card */}
+        {/\* ConvAI sub-card *\/}
         <div className="glass-card rounded-2xl p-3 flex flex-col">
           <div className="flex items-center gap-1.5 mb-2">
             <Theater className="h-3 w-3 text-primary" />
@@ -1350,11 +1360,13 @@ function VoiceSection({ agentId }: { agentId: string }) {
         </div>
       </div>
 
-      {/* O "usar a mesma voz em todas as arenas" saiu com a Arena — ver
-          `docs/EM-CONSTRUCAO.md`. */}
+      {/\* O "usar a mesma voz em todas as arenas" saiu com a Arena — ver
+          `docs/EM-CONSTRUCAO.md`. *\/}
     </section>
   );
 }
+
+──────────────────────────────────────────────────────── */
 
 
 /* ── Usage & Cost (delta over period from agent_token_snapshots) ── */

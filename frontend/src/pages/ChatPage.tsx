@@ -66,7 +66,6 @@ import {
   RefreshCw, Hash, Lock, MessageCircle, Plus, Star, Bell, RotateCcw,
 } from "lucide-react";
 import { usePendingAgentTask } from "@/hooks/use-pending-agent-task";
-import { speakText, stopTTS, getVoiceForAgent } from "@/lib/elevenlabs";
 import { playNotificationSound } from "@/lib/notification-sound";
 import {
   Dialog,
@@ -527,17 +526,8 @@ const AgentMessageList = React.memo(function AgentMessageList({
                       <div
                         className={`absolute top-1 ${isOwn ? "-left-1 -translate-x-full" : "-right-1 translate-x-full"} hidden group-hover:flex items-center gap-0.5 bg-popover border border-border rounded-md shadow-md p-0.5 z-10`}
                       >
-                        {isAgent && msg.content && (
-                          <button
-                            type="button"
-                            onClick={() => onTtsToggle(msg.id, msg.content)}
-                            className="p-1.5 rounded hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
-                            title={ttsPlaying === msg.id ? "Parar" : "Ouvir"}
-                            aria-label={ttsPlaying === msg.id ? "Parar áudio" : "Ouvir resposta"}
-                          >
-                            {ttsPlaying === msg.id ? <Square className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-                          </button>
-                        )}
+                        {/* Botão "ouvir" pausado em 10/08/2026 junto com a
+                            integração de voz — ver `docs/EM-CONSTRUCAO.md`. */}
                         <CopyMessageButton text={msg.content || ""} />
                         {isAgent && effectiveAgentId && (
                           <button
@@ -561,17 +551,7 @@ const AgentMessageList = React.memo(function AgentMessageList({
                   {/* Bottom action bar for agent responses — avoids scrolling up to copy */}
                   {isAgent && !msg.id.startsWith("optimistic-") && !msg.isError && msg.content && (
                     <div className="mt-1 flex items-center gap-0.5 opacity-60 hover:opacity-100 transition-opacity">
-                      {effectiveAgentId && (
-                        <button
-                          type="button"
-                          onClick={() => onTtsToggle(msg.id, msg.content)}
-                          className="p-1.5 rounded hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
-                          title={ttsPlaying === msg.id ? "Parar" : "Ouvir"}
-                          aria-label={ttsPlaying === msg.id ? "Parar áudio" : "Ouvir resposta"}
-                        >
-                          {ttsPlaying === msg.id ? <Square className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-                        </button>
-                      )}
+                      {/* "ouvir" pausado — ver `docs/EM-CONSTRUCAO.md` */}
                       <CopyMessageButton text={msg.content} />
                     </div>
                   )}
@@ -1207,16 +1187,9 @@ export default function ChatPage() {
     await saveArtifactTitle(messageId, trimmed);
     setArtifactTitles((prev) => ({ ...prev, [messageId]: trimmed }));
   }, []);
-  const handleTtsToggle = useCallback(async (msgId: string, content: string) => {
-    if (ttsPlaying === msgId) { stopTTS(); setTtsPlaying(null); } else {
-      try {
-        setTtsPlaying(msgId);
-        const voice = await getVoiceForAgent(effectiveAgentId);
-        const audio = await speakText(content, voice.voiceId);
-        audio.onended = () => setTtsPlaying(null);
-      } catch { setTtsPlaying(null); }
-    }
-  }, [ttsPlaying, effectiveAgentId]);
+  // ⚠️ Voz pausada em 10/08/2026. O corpo original está no histórico do git e
+  // `lib/elevenlabs.ts` foi para `_legado/voz/`. Ver `docs/EM-CONSTRUCAO.md`.
+  const handleTtsToggle = useCallback(async (_msgId: string, _content: string) => {}, []);
   const handleDeleteArtifact = useCallback(async (messageId: string) => {
     if (!messageId || !user?.id) return;
     if (messageId.startsWith("live:")) {

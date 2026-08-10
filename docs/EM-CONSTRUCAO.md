@@ -38,6 +38,7 @@ prático e continua sendo um arquivo de verdade, com histórico no git.
 |---|---|---|
 | **Arena** | 10/08/2026 | `frontend/src/_legado/arena/`, `functions/_pausado/arena-*` |
 | **War room** | 10/08/2026 | `frontend/src/_legado/warroom/`, `functions/_pausado/warroom-feed` |
+| **Voz** (ElevenLabs) | 10/08/2026 | `frontend/src/_legado/voz/`, `functions/_pausado/*elevenlabs*` |
 
 ### Arena
 
@@ -114,6 +115,44 @@ Depois, em `frontend/src/App.tsx`, trocar `<WarRoomPausada />` por
 `<WarRoomPage />` e restaurar o import. E a `warroom-feed` volta para a fila de
 portagem — ela ainda chama o Supabase.
 
+### Voz (ElevenLabs)
+
+**O que era.** Dois usos: o botão "ouvir" ao lado de cada resposta do agente no
+chat, que lia o texto em voz alta, e a escolha da voz de cada agente no painel
+dele — com um botão de testar.
+
+**Por que saiu.** Decisão do Erick: *"ninguém aqui é cego para precisar disso no
+momento"*. É acessibilidade que ninguém desta equipe usa hoje, e sustentá-la
+custa uma assinatura da ElevenLabs.
+
+⚠️ **Voltará.** A ElevenLabs deve entrar de qualquer forma para marketing, e
+quando entrar o botão de ouvir e a escolha de voz voltam junto — a chave já vai
+estar paga. Não trate isto como ideia descartada.
+
+**O que ficou de pé.** As colunas `tts_voice_id` e `tts_voice_name` em
+`agent_profiles`, e o `PATCH /agents/{id}` continua aceitando as duas. As vozes
+já escolhidas não se perdem.
+
+**Como voltar:**
+
+```bash
+git mv frontend/src/_legado/voz/elevenlabs.ts   frontend/src/lib/
+git mv frontend/src/_legado/voz/VoicePicker.tsx frontend/src/components/
+git mv backend/supabase/functions/_pausado/elevenlabs-tts \
+       backend/supabase/functions/_pausado/list-elevenlabs-voices \
+       backend/supabase/functions/
+```
+
+Depois, em `pages/ChatPage.tsx`, restaurar o import e o corpo de
+`handleTtsToggle` (estão no histórico do git) e devolver os dois botões de
+ouvir. Em `components/agents/AgentDetailPanel.tsx`, descomentar o bloco
+`── Voz — PAUSADA ──` e a linha `<VoiceSection agentId={shortId} />`.
+
+⚠️ Este é o único caso em que **comentei código no lugar** em vez de mover: a
+`VoiceSection` vive no meio do `AgentDetailPanel`, e arrancá-la deixaria um
+buraco mais difícil de entender do que o bloco comentado. As duas edge functions
+e os dois arquivos de front, esses foram parqueados normalmente.
+
 ---
 
 ## Previstos
@@ -123,8 +162,7 @@ decisão sair.
 
 | Funcionalidade | Situação |
 |---|---|
-| **Integração de voz** (ElevenLabs) | tratada como coisa futura |
-| **Lovable AI Gateway** | decisão adiada — ver abaixo |
+| **Lovable AI Gateway** | decisão em aberto — ver abaixo |
 
 O **Lovable AI Gateway** sustenta `transcribe-audio`, `chat-image-vision` e
 `parse-company-context` — transcrição de áudio, leitura de imagem no chat e
@@ -132,11 +170,10 @@ leitura automática do contexto da empresa no onboarding. Diferente da voz, esta
 são funcionalidades que a equipe usaria de verdade; a decisão é sobre qual
 provedor de LLM pagar, não sobre cortar.
 
-⚠️ **A voz é maior que a Arena.** Cortar a Arena não elimina a ElevenLabs: ela
-também alimenta o botão "ouvir" das respostas no chat (`pages/ChatPage.tsx`) e a
-escolha de voz do agente (`components/VoicePicker.tsx`, usado no
-`AgentDetailPanel`). Pausar a voz significa mexer nesses dois pontos também, e
-aí `elevenlabs-tts` e `list-elevenlabs-voices` também vão para `_pausado/`.
+⚠️ **DeepSeek não resolve as três.** Ele é só texto — serve o
+`parse-company-context` e nada mais. `transcribe-audio` precisa de áudio e
+`chat-image-vision` precisa de visão, e as duas hoje rodam num modelo multimodal
+(`google/gemini-2.5-flash`) pelo formato `chat/completions`.
 
 ---
 
