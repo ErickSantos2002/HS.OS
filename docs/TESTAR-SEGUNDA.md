@@ -172,9 +172,14 @@ avatares descobria a foto de cada agente tentando `.png`, `.jpg`, `.jpeg` e
 `.webp` até uma funcionar, para treze ids, oito deles da dn.ia e inexistentes
 aqui.
 
-Hoje `/chat`, `/skills`, `/automacoes` e `/arenas` abrem com **zero erros**
-(verificado no navegador). Sobra um aviso de `key` do React no seletor de
-modelo — é do Radix, só aparece em desenvolvimento e não afeta nada.
+Hoje `/chat`, `/skills`, `/automacoes`, `/arenas`, `/agents`, `/settings`,
+`/monitoring`, `/tasks`, `/artefatos`, `/analytics` e `/base-de-conhecimento`
+abrem com **zero erros** — verificado uma a uma no navegador.
+
+O último que sobrava era um aviso de `key` do React no seletor de modelo, e
+puxar esse fio achou um bug de verdade: a rota `/gateway/models` devolvia
+`{id, name}` e a tela lia `{qualifiedId, label}`, então o seletor listava
+quatro linhas em branco e nunca marcava o modelo escolhido. Corrigido.
 
 Ou seja: **erro no console agora é sinal, não ruído.** Se aparecer um, é de
 verdade e vale colar.

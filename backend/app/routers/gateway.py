@@ -98,11 +98,58 @@ async def status_gateway(_: Usuario = Depends(exige_papel("super_admin"))):
 
 @router.get("/models")
 async def listar_modelos(_: Usuario = Depends(usuario_atual)):
+    """Modelos que o gateway serve, no formato que o seletor do chat espera.
+
+    ⚠️ **Não é repasse.** Até 10/08/2026 esta rota devolvia a resposta crua do
+    `models.list`, que traz `{id, name, api, …}` — e o front consome
+    `{id, qualifiedId, provider, label, contextWindow}`. O resultado era um
+    seletor com quatro linhas em branco (`label` indefinido), chave `undefined`
+    no React, e a escolha nunca aparecendo como marcada, porque a comparação é
+    contra `qualifiedId`. Mesma família do `/agents` devolvendo objeto onde o
+    front esperava array: a rota "funcionava" e a tela não.
+
+    O `qualifiedId` (`provedor/modelo`) não é enfeite — é o formato que o
+    `agents.update` exige. O `id` nu ele recusa.
+    """
     cliente = await _cliente()
     try:
-        return await cliente.chamar("models.list", {"view": "configured"})
+        bruto = await cliente.chamar("models.list", {"view": "configured"})
     except ErroGateway as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+
+    modelos = []
+    for m in bruto.get("models", []) if isinstance(bruto, dict) else []:
+        ident = m.get("id")
+        if not ident:
+            continue
+        provedor = m.get("provider") or ""
+        modelos.append({
+            "id": ident,
+            # Se o gateway já mandar qualificado, não qualifica de novo.
+            "qualifiedId": ident if "/" in ident else f"{provedor}/{ident}" if provedor else ident,
+            "provider": provedor,
+            "label": m.get("name") or ident,
+            "contextWindow": m.get("contextWindow"),
+            "available": m.get("available", True),
+        })
+
+    # Qual modelo cada agente usa hoje. O seletor precisa disto para escrever
+    # "(padrão)" no modelo certo em vez de um rótulo genérico — e falhar aqui
+    # não pode derrubar a lista, que é a parte essencial.
+    padroes: dict[str, str] = {}
+    try:
+        ags = await cliente.chamar("agents.list")
+        for a in ags.get("agents", []):
+            modelo = a.get("model")
+            # `agents.list` devolve {"primary": "anthropic/claude-sonnet-4-6"};
+            # versões antigas devolvem a string nua.
+            atual = modelo.get("primary") if isinstance(modelo, dict) else modelo
+            if a.get("id") and atual:
+                padroes[a["id"]] = atual
+    except ErroGateway as e:
+        logger.warning("agents.list falhou ao montar os padrões de modelo: %s", e)
+
+    return {"models": modelos, "agentDefaults": padroes}
 
 
 @router.get("/agents")
