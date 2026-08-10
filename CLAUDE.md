@@ -425,6 +425,7 @@ dinâmica (via `agent_templates.is_leader_template`) em vez de assumir "lia" —
 | `docs/RESUMO-CONSOLIDACAO-2026-07-18.md` | O que foi corrigido em cada bloco (0 remix-ready, 1 segurança, 2 estabilidade, 3 velocidade — pausado) |
 | `docs/RESUMO-TECNICO-PARA-LIA-2026-07-18.md` | Contratos técnicos acordados com o lado do gateway (formato de `sessions_list`, dedup de heartbeat, verificação de `SOUL.md` no onboarding) |
 | `docs/REMIX_SECRETS.md` | Lista real das env das Edge Functions, levantada do código. Diz explicitamente que a chave do LLM dos agentes fica no VPS/OpenClaw, não aqui. |
+| `docs/PLANO-RECONCILIADOR.md` | A última edge function: o que ela faz, os dois bloqueios (um já resolvido) e por que "portar fiel" não é obviamente certo neste caso |
 | `.lovable/plan.md`, `.lovable/remix-audit.md` | Contexto da origem Lovable |
 
 ## Convenções
