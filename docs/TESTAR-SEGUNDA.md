@@ -35,7 +35,6 @@ Não perca tempo com estes — são conhecidos e estão documentados:
 |---|---|
 | Transcrição de áudio, visão de imagem, leitura do contexto da empresa | dependem do Lovable AI Gateway — decisão de produto pendente |
 | Voz do agente (botão "ouvir" no chat) | depende da ElevenLabs — decisão futura |
-| Tela de Skills | `skill-manage` ainda não foi portada |
 | Arena e War room | **pausadas em 10/08** — mostram "em construção" de propósito. Ver `EM-CONSTRUCAO.md` |
 | "Esqueci minha senha" (`/reset-password`) | o fluxo sumiu com o Supabase Auth |
 | Consumo em tempo real no painel do agente | `usage_events` ficou fora dos gatilhos de propósito — atualiza ao abrir |
@@ -97,7 +96,22 @@ A ordem importa: cada bloco depende do anterior estar de pé.
 - [ ] Reagir com emoji
 - [ ] Anexar arquivo
 
-### 5. O resto
+### 5. Skills — refeita em 10/08
+
+A tela mostrava **54 skills inventadas**: uma lista escrita à mão dentro do
+`use-skills.ts`, servida como "fallback" para quando a API do gateway não
+respondesse — e ela nunca respondia, porque o caminho REST morreu junto com o
+resto da API HTTP do OpenClaw. Ou seja, o fallback *era* o normal.
+
+Agora vem do `skills.status`: **53 skills reais**, com emoji, se o agente pode
+usar cada uma e o que falta instalar quando não pode.
+
+- [ ] O catálogo abre e as skills têm cara de reais (`1password`, `canvas`,
+      `browser-automation` — não `whatsapp-send`)
+- [ ] Criar uma skill gerenciada (markdown próprio), editar e excluir
+- [ ] Atribuir a um agente — ⚠️ **isto instala de verdade, ver abaixo**
+
+### 6. O resto
 
 - [ ] Automações: criar, pausar, ver histórico
 - [ ] Tarefas: abrir, checkpoint, concluir
@@ -118,6 +132,10 @@ produção. Testei só as guardas (404, 401, 403); o caminho feliz nunca rodou.
 2. **Mencionar um agente num canal** — dispara o agente de verdade
 3. **Excluir um agente** — apaga no gateway e em três tabelas
 4. **Disparar uma automação** — executa no gateway
+5. **Atribuir uma skill a um agente** — `skills.install` grava no workspace
+   dele. O formato do payload foi confirmado contra um agente inexistente
+   (passa a validação, morre em `unknown agent id`); o caminho feliz nunca
+   rodou.
 
 ---
 

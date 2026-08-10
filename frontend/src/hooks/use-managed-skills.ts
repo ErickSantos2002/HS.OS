@@ -1,6 +1,6 @@
 import { assinarTabela } from "@/lib/realtime";
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 
 export type SkillSource = "clawhub" | "git" | "manual" | "agent";
 export type SkillSyncStatus = "pending" | "synced" | "error";
@@ -55,32 +55,30 @@ function isGatewayNotConfigured(payload: unknown): boolean {
   return false;
 }
 
-async function invoke<T = any>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke("skill-manage", { body });
-
-  // supabase-js surfaces non-2xx as `error` with the response body inside
-  // `error.context`. Detect the expected 503 for un-configured installs and
-  // rethrow as a typed error so callers can render an empty state instead
-  // of a red toast.
-  if (error) {
-    let ctxBody: unknown = null;
-    try {
-      const ctx = (error as any).context;
-      if (ctx && typeof ctx.json === "function") ctxBody = await ctx.json();
-    } catch { /* ignore */ }
-    if (isGatewayNotConfigured(ctxBody) || isGatewayNotConfigured(error)) throw new GatewayNotConfiguredError();
-    // O corpo do erro é a única parte que diz O QUE falhou — "Edge Function
-    // returned a non-2xx status code" não dá nada para agir. Se o servidor
-    // mandou um motivo, é ele que sobe.
-    const motivo = (ctxBody as { error?: string } | null)?.error;
-    throw motivo ? new Error(motivo) : error;
+/**
+ * Chama a API própria e mantém o contrato de erro que a tela já esperava.
+ *
+ * A edge recebia tudo num POST com `{action}`; aqui cada ação é uma rota. A
+ * tradução ficou neste ponto único de propósito — o resto do hook e a
+ * `SkillsPage` continuam falando em `create`/`assign`/`remove`.
+ *
+ * O `GatewayNotConfiguredError` sobrevive porque a tela desenha um estado
+ * vazio com ele, não um erro vermelho: numa instalação nova, sem gateway
+ * configurado, não ter skills é o normal, não é falha.
+ */
+async function chamar<T = any>(
+  metodo: "GET" | "POST" | "PATCH" | "DELETE",
+  rota: string,
+  corpo?: unknown,
+): Promise<T> {
+  try {
+    return await api<T>(rota, { method: metodo, body: corpo });
+  } catch (e: any) {
+    if (isGatewayNotConfigured(e?.message) || isGatewayNotConfigured(e)) {
+      throw new GatewayNotConfiguredError();
+    }
+    throw e;
   }
-
-  if (isGatewayNotConfigured(data)) throw new GatewayNotConfiguredError();
-  if (data && typeof data === "object" && "error" in (data as any)) {
-    throw new Error((data as any).error);
-  }
-  return data as T;
 }
 
 const SKILLS_CHANGED_EVENT = "managed-skills-changed";
@@ -99,7 +97,7 @@ export function useManagedSkills() {
     setLoading(true);
     setError(null);
     try {
-      const data = await invoke<ManagedSkill[]>({ action: "list" });
+      const data = await chamar<ManagedSkill[]>("GET", "/skills");
       setSkills(Array.isArray(data) ? data : []);
     } catch (e: any) {
       // Gateway not configured is an expected state on a fresh remix —
@@ -143,7 +141,7 @@ export function useManagedSkills() {
     is_default?: boolean;
     agent_ids?: string[];
   }) => {
-    const result = await invoke<SkillCreateResult>({ action: "create", ...payload });
+    const result = await chamar<SkillCreateResult>("POST", "/skills", payload);
     await refetch();
     notifySkillsChanged();
     return result;
@@ -156,25 +154,27 @@ export function useManagedSkills() {
     content?: string;
     is_default?: boolean;
   }) => {
-    await invoke({ action: "update", ...payload });
+    const { skill_id, ...campos } = payload;
+    await chamar("PATCH", `/skills/${skill_id}`, campos);
     await refetch();
     notifySkillsChanged();
   }, [refetch]);
 
   const assign = useCallback(async (skill_id: string, agent_id: string, remove = false) => {
-    await invoke({ action: "assign", skill_id, agent_id, remove });
+    if (remove) await chamar("DELETE", `/skills/${skill_id}/agentes/${agent_id}`);
+    else await chamar("POST", `/skills/${skill_id}/agentes`, { agent_ids: [agent_id] });
     await refetch();
     notifySkillsChanged();
   }, [refetch]);
 
   const retry = useCallback(async (skill_id: string, agent_id: string) => {
-    await invoke({ action: "assign", skill_id, agent_id, remove: false });
+    await chamar("POST", `/skills/${skill_id}/agentes`, { agent_ids: [agent_id] });
     await refetch();
     notifySkillsChanged();
   }, [refetch]);
 
   const remove = useCallback(async (skill_id: string) => {
-    await invoke({ action: "delete", skill_id });
+    await chamar("DELETE", `/skills/${skill_id}`);
     await refetch();
     notifySkillsChanged();
   }, [refetch]);
