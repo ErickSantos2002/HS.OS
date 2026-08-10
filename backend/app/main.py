@@ -22,6 +22,7 @@ from app.routers.conversations import router as conversations_router
 from app.routers.gateway import router as gateway_router
 from app.routers.llm import router as llm_router
 from app.routers.integracoes import router as integracoes_router
+from app.routers.ia import router as ia_router
 from app.routers.push import router as push_router
 from app.routers.profiles import router as profiles_router
 from app.routers.tarefas import router as tarefas_router
@@ -104,6 +105,7 @@ app.include_router(channels_router)
 app.include_router(broadcast_router)
 app.include_router(chat_extras_router)
 app.include_router(gateway_router)
+app.include_router(ia_router)
 app.include_router(integracoes_router)
 app.include_router(llm_router)
 app.include_router(profiles_router)

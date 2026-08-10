@@ -160,20 +160,20 @@ e os dois arquivos de front, esses foram parqueados normalmente.
 Conversados mas ainda não executados. Entram aqui pelo mesmo padrão quando a
 decisão sair.
 
-| Funcionalidade | Situação |
-|---|---|
-| **Lovable AI Gateway** | decisão em aberto — ver abaixo |
+Nenhuma no momento.
 
-O **Lovable AI Gateway** sustenta `transcribe-audio`, `chat-image-vision` e
-`parse-company-context` — transcrição de áudio, leitura de imagem no chat e
-leitura automática do contexto da empresa no onboarding. Diferente da voz, estas
-são funcionalidades que a equipe usaria de verdade; a decisão é sobre qual
-provedor de LLM pagar, não sobre cortar.
+### Resolvido: Lovable AI Gateway → OpenAI (10/08/2026)
 
-⚠️ **DeepSeek não resolve as três.** Ele é só texto — serve o
-`parse-company-context` e nada mais. `transcribe-audio` precisa de áudio e
-`chat-image-vision` precisa de visão, e as duas hoje rodam num modelo multimodal
-(`google/gemini-2.5-flash`) pelo formato `chat/completions`.
+`transcribe-audio`, `chat-image-vision` e `parse-company-context` foram portadas
+para `app/routers/ia.py`, usando a OpenAI. Não estão pausadas — funcionam.
+
+⚠️ **Por que OpenAI e não DeepSeek**, que é o provedor escolhido para os agentes:
+o DeepSeek é modelo de texto. Serviria o `parse-company-context` e nada mais —
+`transcribe-audio` precisa de áudio e `chat-image-vision` precisa de visão.
+Manter dois provedores para economizar numa chamada rara não se paga.
+
+A chave sai de `OPENAI_API_KEY` pelo `ler_segredo` — banco primeiro, ambiente
+depois. Sem ela os três respondem **503 dizendo o que falta**, não 500.
 
 ---
 

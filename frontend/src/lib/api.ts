@@ -96,7 +96,11 @@ export async function api<T = unknown>(caminho: string, opcoes: Opcoes = {}): Pr
   const { body, autenticar = true, headers, ...resto } = opcoes;
 
   const cabecalhos = new Headers(headers);
-  if (body !== undefined && !cabecalhos.has("Content-Type")) {
+  // `FormData` (upload de arquivo) vai cru: o navegador precisa definir o
+  // Content-Type ele mesmo, porque o `multipart/form-data` carrega um boundary
+  // que só ele conhece. Definir o cabeçalho à mão quebra o parse do outro lado.
+  const ehFormulario = typeof FormData !== "undefined" && body instanceof FormData;
+  if (body !== undefined && !ehFormulario && !cabecalhos.has("Content-Type")) {
     cabecalhos.set("Content-Type", "application/json");
   }
   const token = autenticar ? lerToken() : null;
@@ -107,7 +111,7 @@ export async function api<T = unknown>(caminho: string, opcoes: Opcoes = {}): Pr
     resposta = await fetch(`${BASE}${caminho}`, {
       ...resto,
       headers: cabecalhos,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : ehFormulario ? (body as FormData) : JSON.stringify(body),
     });
   } catch (err) {
     // fetch só rejeita por falha de rede; erro HTTP vem como resposta normal.

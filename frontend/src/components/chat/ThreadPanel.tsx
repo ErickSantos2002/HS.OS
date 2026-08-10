@@ -510,8 +510,12 @@ export default function ThreadPanel({
       }
       const audioUrl = urlPublica("audio-messages", fileName);
       const formData = new FormData();
-      formData.append("file", blob, `audio.${ext}`);
-      const { data: transcribeData, error: transcribeErr } = await supabase.functions.invoke("transcribe-audio", { body: formData });
+      // ⚠️ O campo chama `arquivo` (a rota é nossa agora, não a edge).
+      formData.append("arquivo", blob, `audio.${ext}`);
+      const { data: transcribeData, error: transcribeErr } = await api<{ text: string }>(
+        "/ia/transcrever", { method: "POST", body: formData },
+      ).then((d) => ({ data: d, error: null as Error | null }),
+             (e: Error) => ({ data: null, error: e }));
       const transcription = transcribeErr ? "Transcrição indisponível" : (transcribeData?.text || "Mensagem de áudio");
       await onSendAudioReply(audioUrl, transcription, rootMessage.id);
     } catch (err) {

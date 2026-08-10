@@ -1,24 +1,8 @@
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import type { MediaAttachment } from "@/lib/mock-data";
 
-const IMAGE_VISION_FUNCTION = "chat-image-vision";
 const imageVisionCache = new Map<string, string>();
 
-function isNonBlockingVisionError(status: number, payload: unknown) {
-  if (status === 402 || status === 429) return true;
-  if (!payload || typeof payload !== "object") return false;
-
-  const maybePayload = payload as { error?: unknown; details?: unknown };
-  const errorText = typeof maybePayload.error === "string" ? maybePayload.error.toLowerCase() : "";
-  const detailsText = typeof maybePayload.details === "string" ? maybePayload.details.toLowerCase() : "";
-
-  return (
-    errorText.includes("créditos insuficientes") ||
-    errorText.includes("rate limits") ||
-    detailsText.includes("payment_required") ||
-    detailsText.includes("not enough credits")
-  );
-}
 
 function buildAttachmentCacheKey(attachment: MediaAttachment) {
   return attachment.url || attachment.base64 || `${attachment.name ?? "image"}:${attachment.size ?? 0}:${attachment.mimeType}`;
@@ -60,34 +44,20 @@ async function attachmentToImageDataUrl(attachment: MediaAttachment): Promise<st
 }
 
 async function requestVisionSummary(imageDataUrl: string, fileName?: string): Promise<string> {
-  const { data } = await supabase.auth.getSession();
-  const accessToken = data.session?.access_token;
-
-  const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${IMAGE_VISION_FUNCTION}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
-    body: JSON.stringify({ imageDataUrl, fileName }),
-  });
-
-  const payload = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    if (isNonBlockingVisionError(response.status, payload)) {
-      console.warn("[chat-image-vision] Vision unavailable, skipping readable summary.", {
-        status: response.status,
-        fileName,
-      });
-      return "";
-    }
-
-    throw new Error(payload?.error || `Falha ao analisar imagem (${response.status})`);
+  try {
+    const { description } = await api<{ description: string }>("/ia/descrever-imagem", {
+      method: "POST",
+      body: { image_data_url: imageDataUrl, file_name: fileName },
+    });
+    return description ?? "";
+  } catch (e) {
+    // ⚠️ Falha de visão **não bloqueia a mensagem**. A descrição é um extra
+    // para o agente (que é de texto) entender a imagem; sem ela a pessoa ainda
+    // manda o anexo e conversa. Era assim na edge e continua sendo.
+    console.warn("[visão] indisponível, seguindo sem a descrição:", (e as Error).message);
+    return "";
   }
 
-  return typeof payload?.summary === "string" ? payload.summary.trim() : "";
 }
 
 export async function getAgentReadableImageContext(attachment: MediaAttachment): Promise<string | null> {

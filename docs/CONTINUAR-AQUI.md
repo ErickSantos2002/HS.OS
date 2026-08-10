@@ -19,7 +19,7 @@ na pasta. **Todo número aqui vem de um comando**, e o comando está ao lado.
 
 | | Hoje | Total | Como medir |
 |---|---|---|---|
-| Edge functions **por portar** | — | **6** | `ls backend/supabase/functions \| grep -vE "_shared\|_pausado" \| wc -l` |
+| Edge functions **por portar** | — | **3** | `ls backend/supabase/functions \| grep -vE "_shared\|_pausado" \| wc -l` |
 | Fora da pasta (portadas) | 60 | 73 | 4 estão em `_pausado/` — ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md) |
 | Arquivos do front sem Supabase | **71** | 113 | `113 - $(grep -rl "integrations/supabase/client" frontend/src \| wc -l)` |
 | Rotas na API própria | **160** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |

@@ -136,9 +136,10 @@ export default function EmpresaTab() {
     if (!freeText.trim()) return;
     setProcessing(true);
     try {
-      const { data, error } = await supabase.functions.invoke("parse-company-context", {
-        body: { text: freeText },
-      });
+      const { data, error } = await api<any>("/ia/perfil-da-empresa", {
+        method: "POST", body: { text: freeText },
+      }).then((d) => ({ data: d, error: null as Error | null }),
+             (e: Error) => ({ data: null, error: e }));
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       applyParsed(data);

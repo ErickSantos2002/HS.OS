@@ -2118,8 +2118,12 @@ export default function ChatPage() {
       }
       const ext = getAudioFileExtension(blob.type);
       const formData = new FormData();
-      formData.append("file", blob, `audio.${ext}`);
-      const { data, error } = await supabase.functions.invoke("transcribe-audio", { body: formData });
+      // ⚠️ O campo chama `arquivo` (a rota é nossa agora, não a edge).
+      formData.append("arquivo", blob, `audio.${ext}`);
+      const { data, error } = await api<{ text: string }>("/ia/transcrever", {
+        method: "POST", body: formData,
+      }).then((d) => ({ data: d, error: null as Error | null }),
+             (e: Error) => ({ data: null, error: e }));
       if (error) {
         toast.error("Falha na transcrição do áudio.");
         return;

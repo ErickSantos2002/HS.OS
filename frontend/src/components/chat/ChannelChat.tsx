@@ -1598,8 +1598,12 @@ export default function ChannelChat({
 
       const audioUrl = urlPublica("audio-messages", fileName);
       const formData = new FormData();
-      formData.append("file", blob, `audio.${ext}`);
-      const { data: transcribeData, error: transcribeErr } = await supabase.functions.invoke("transcribe-audio", { body: formData });
+      // ⚠️ O campo chama `arquivo` (a rota é nossa agora, não a edge).
+      formData.append("arquivo", blob, `audio.${ext}`);
+      const { data: transcribeData, error: transcribeErr } = await api<{ text: string }>(
+        "/ia/transcrever", { method: "POST", body: formData },
+      ).then((d) => ({ data: d, error: null as Error | null }),
+             (e: Error) => ({ data: null, error: e }));
       const transcription = transcribeErr ? "Transcrição indisponível" : (transcribeData?.text || "Mensagem de áudio");
       const audioDisplayName = (profile?.full_name && profile.full_name.trim()) || user.email?.split("@")[0] || "Usuário";
       const audioAvatarUrl = profile?.avatar_url || null;
