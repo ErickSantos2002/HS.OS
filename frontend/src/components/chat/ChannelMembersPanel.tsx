@@ -1,6 +1,5 @@
 import { api } from "@/lib/api";
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthContext } from "@/contexts/auth-context";
 import { useAgents } from "@/hooks/use-agents";
 import { useAllAvatars, getAgentAvatar } from "@/hooks/use-agent-avatar";

@@ -2,7 +2,6 @@ import { assinarTabela } from "@/lib/realtime";
 import { api } from "@/lib/api";
 import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 
 export type TaskStatus = "running" | "checkpoint" | "done" | "failed";
 

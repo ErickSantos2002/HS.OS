@@ -1,7 +1,6 @@
 import { api } from "@/lib/api";
 import { assinarTabela } from "@/lib/realtime";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useEffect } from "react";
 
 export interface AgentResult {

@@ -153,4 +153,16 @@ async def trocar_senha(dados: TrocaSenhaIn, usuario: Usuario = Depends(usuario_a
             " WHERE id = $1::uuid",
             usuario.id, gerar_hash(dados.senha_nova),
         )
+        # Trocar a senha ativa o perfil. Quem entra por convite do admin nasce
+        # com `status='pending'` e uma senha temporária, e o `ProtectedRoute`
+        # o manda para a tela de definir senha até que isso mude. Era a edge
+        # de reset que virava a chave (`profiles.status = 'active'`); do lado
+        # de cá é o mesmo ato, na mesma transação — antes dava para sair da
+        # tela com a senha nova e o perfil ainda pendente, e voltar a cair
+        # nela no login seguinte.
+        await conn.execute(
+            "UPDATE public.profiles SET status = 'active', updated_at = now() "
+            " WHERE id = $1::uuid AND status IS DISTINCT FROM 'active'",
+            usuario.id,
+        )
     logger.info("Senha trocada por %s", usuario.id)

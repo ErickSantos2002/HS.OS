@@ -20,7 +20,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { supabase } from "@/integrations/supabase/client";
 import { KNOWN_CONNECTORS, validateDnos, fillPlaceholders, type DnosFile } from "@/lib/dnos-file";
 
 interface Props {
@@ -177,10 +176,6 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
           content: fillPlaceholders(content as string, companyProfile),
         }));
 
-      const { data: sessionRes } = await supabase.auth.getSession();
-      const jwt = sessionRes?.session?.access_token;
-      if (!jwt) throw new Error("Sessão expirada");
-
       // pending_write: true — é a ponte (dnos-files-bridge, na VPS) quem leva
       // estes arquivos ao disco de verdade, em até ~60s, e confirma. Antes,
       // eles paravam na tabela e o agente nascia sem alma no filesystem.
@@ -200,17 +195,20 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
         : [];
       for (const s of dnosSkills) {
         if (!s?.slug || !s?.content) continue;
-        const { error: skillErr } = await supabase.functions.invoke("skill-manage", {
-          body: {
-            action: "upsert",
-            slug: s.slug,
-            name: s.name || s.slug,
-            description: s.description || "",
-            content: fillPlaceholders(s.content, companyProfile),
-            agent_id: agentId,
-          },
-        });
-        if (skillErr) console.warn(`[import] skill ${s.slug} falhou:`, skillErr.message);
+        try {
+          await api(`/skills/por-slug/${encodeURIComponent(s.slug)}`, {
+            method: "PUT",
+            body: {
+              slug: s.slug,
+              name: s.name || s.slug,
+              description: s.description || "",
+              content: fillPlaceholders(s.content, companyProfile),
+              agent_ids: [agentId],
+            },
+          });
+        } catch (e) {
+          console.warn(`[import] skill ${s.slug} falhou:`, e instanceof Error ? e.message : e);
+        }
       }
 
       // 4. Patch profile with role/department/color (create-agent doesn't set these)

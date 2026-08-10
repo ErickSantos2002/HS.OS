@@ -9,7 +9,6 @@ import { usePersistentDraft } from "@/hooks/use-persistent-draft";
 import { useAuthContext } from "@/contexts/auth-context";
 import { startChannelAgentReplies, getAgentDisplayName } from "@/lib/channel-agents";
 import { getPendingAgentsForChannel, subscribeToChannelAgentPending } from "@/lib/channel-agent-pending";
-import { supabase } from "@/integrations/supabase/client";
 import { useAgentAvatar } from "@/hooks/use-agent-avatar";
 import { normalizeAgentId } from "@/lib/active-agents";
 import { useChatMedia } from "@/hooks/use-chat-media";

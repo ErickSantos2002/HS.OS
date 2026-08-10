@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,7 @@ export default function ResetPasswordPage() {
   const { branding } = useBranding();
   const themedLogo = useThemedLogo();
 
+  const [senhaAtual, setSenhaAtual] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -37,6 +38,15 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
+  // ⚠️ **Os links de e-mail não existem mais.** `type=invite` e
+  // `type=recovery` no hash eram os magic links do Supabase Auth, que saiu.
+  // O hash continua sendo lido só para o texto da tela ("Bem-vindo" no
+  // convite), porque quem chega por ele hoje chega logado — o
+  // `ProtectedRoute` manda para cá quem tem `profiles.status = 'pending'`.
+  //
+  // Um fluxo de "esqueci minha senha" de verdade precisa de envio de e-mail,
+  // que esta instalação ainda não tem. Hoje, quem esqueceu a senha pede ao
+  // administrador uma temporária e a troca aqui.
   const hash = window.location.hash;
   const isInvite = hash.includes("type=invite");
   const isRecovery = hash.includes("type=recovery");
@@ -44,16 +54,10 @@ export default function ResetPasswordPage() {
   const strength = useMemo(() => getPasswordStrength(password), [password]);
 
   useEffect(() => {
-    if (!isRecovery && !isInvite) {
-      // Check if user has a pending profile (redirected by ProtectedRoute)
-      supabase.auth.getUser().then(({ data: { user } }) => {
-        if (!user) {
-          navigate("/login", { replace: true });
-        }
-        // If user exists but no hash, they were redirected because profile is pending — allow
-      });
-    }
-  }, [navigate, isRecovery, isInvite]);
+    // Só quem está logado define senha aqui — sem sessão não há como provar
+    // quem é. Antes o `getUser()` do Supabase fazia esta checagem.
+    api("/auth/me").catch(() => navigate("/login", { replace: true }));
+  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,23 +74,23 @@ export default function ResetPasswordPage() {
     }
 
     setLoading(true);
-    const { error: updateError } = await supabase.auth.updateUser({
-      password,
-    });
-
-    if (updateError) {
-      setError(updateError.message);
-    } else {
-      // Mark profile as active now that password is set
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        await supabase
-          .from("profiles")
-          .update({ status: "active", updated_at: new Date().toISOString() })
-          .eq("id", user.id);
-      }
+    try {
+      // A senha atual é exigida aqui pelo mesmo motivo de Configurações → Perfil:
+      // o token vive no navegador, e sem a conferência quem sentasse numa
+      // máquina destravada trocaria a senha e tomaria a conta. Quem chega por
+      // convite tem a senha temporária que o administrador passou.
+      //
+      // O `profiles.status` vira 'active' do lado do servidor, na mesma
+      // transação — antes eram duas escritas separadas e dava para sair daqui
+      // com a senha nova e o perfil ainda pendente.
+      await api("/auth/trocar-senha", {
+        method: "POST",
+        body: { senha_atual: senhaAtual, senha_nova: password },
+      });
       setSuccess(true);
       setTimeout(() => navigate("/", { replace: true }), 2000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível trocar a senha.");
     }
     setLoading(false);
   };
@@ -130,6 +134,24 @@ export default function ResetPasswordPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Senha atual — a temporária, para quem chega por convite */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium text-foreground">
+                {isInvite ? "Senha temporária" : "Senha atual"}
+              </Label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <input
+                  type="password"
+                  value={senhaAtual}
+                  onChange={(e) => setSenhaAtual(e.target.value)}
+                  placeholder={isInvite ? "A que o administrador passou" : "Sua senha de hoje"}
+                  className="w-full h-12 rounded-full border border-border bg-secondary/50 pl-11 pr-12 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  required
+                />
+              </div>
+            </div>
+
             {/* Password */}
             <div className="space-y-2">
               <Label className="text-sm font-medium text-foreground">Nova senha</Label>

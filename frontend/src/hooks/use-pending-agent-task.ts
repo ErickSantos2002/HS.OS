@@ -1,7 +1,6 @@
 import { assinarTabela } from "@/lib/realtime";
 import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import type { AgentTask } from "@/hooks/use-agent-tasks";
 import {
   setPendingAgentTask,

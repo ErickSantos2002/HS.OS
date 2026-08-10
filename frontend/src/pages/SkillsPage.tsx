@@ -41,7 +41,6 @@ import {
 import { useManagedSkills, type ManagedSkill, type SkillSource, type SkillSyncStatus } from "@/hooks/use-managed-skills";
 import { useAgents } from "@/hooks/use-agents";
 import { toast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 
 /* ── Source badges ────────────────────────────────────── */
 const SOURCE_META: Record<SkillSource, { label: string; icon: React.ElementType; cls: string }> = {
@@ -477,48 +476,30 @@ function ManageSkillDialog({
     const nomeAgente = agents.find((x) => x.id === agentId)?.name ?? agentId;
     const removendo = !!assignedById.get(agentId);
     try {
-      await assign(skill.id, agentId, removendo);
+      const r = await assign(skill.id, agentId, removendo);
       if (removendo) {
-        // Confere antes de anunciar: o toast já afirmou "não tem mais" com o
-        // chip ainda marcado de erro na tela — anúncio sem verificação.
-        const { data: sobrou } = await supabase
-          .from("agent_skills")
-          .select("sync_status")
-          .eq("skill_id", skill.id).eq("agent_id", agentId)
-          .maybeSingle();
-        if (sobrou?.sync_status === "removing") {
-          // A remoção agora é executada pelo sincronizador da VPS: a linha
-          // fica 'removing' até ele confirmar. Isso é progresso, não falha.
-          toast({ title: `Skill sendo removida de ${nomeAgente}…`, description: `${skill.name} sai da lista em instantes.` });
-        } else if (sobrou) {
-          toast({
-            title: `A skill ainda consta para ${nomeAgente}`,
-            description: "A remoção não concluiu. Tente de novo em instantes.",
-            variant: "destructive",
-          });
-        } else {
-          toast({ title: `${nomeAgente} não tem mais esta skill`, description: skill.name });
-        }
+        // ⚠️ O gateway não tem desinstalação (`skills.uninstall` e irmãos
+        // respondem `unknown method`). O vínculo sai do sistema e a skill
+        // some da lista do agente, mas o arquivo continua no workspace dele
+        // até alguém removê-lo na VPS. O texto diz isso — anunciar "não tem
+        // mais" seria mentira parcial.
+        toast({
+          title: `${nomeAgente} não usa mais esta skill`,
+          description: `${skill.name} saiu da lista. O arquivo continua no workspace do agente.`,
+        });
         return;
       }
       // A confirmação relata o RESULTADO da instalação, não o clique: já
       // aconteceu de a skill constar no painel e não existir no lugar que o
-      // agente consulta. sync_status é o que o gateway respondeu de fato.
-      const { data: linha } = await supabase
-        .from("agent_skills")
-        .select("sync_status, sync_error")
-        .eq("skill_id", skill.id).eq("agent_id", agentId)
-        .maybeSingle();
-      if (linha?.sync_status === "synced") {
+      // agente consulta. `r` é o que o gateway respondeu de fato.
+      if (r?.ok) {
         toast({ title: `${nomeAgente} recebeu a skill`, description: `${skill.name} instalada e pronta para uso.` });
-      } else if (linha?.sync_status === "error") {
+      } else {
         toast({
           title: `${nomeAgente} ainda NÃO recebeu a skill`,
-          description: linha.sync_error ?? "A instalação falhou. Use o botão de tentar novamente.",
+          description: r?.error ?? "A instalação falhou. Use o botão de tentar novamente.",
           variant: "destructive",
         });
-      } else {
-        toast({ title: `Skill sendo instalada para ${nomeAgente}…`, description: `${skill.name} fica ativa em instantes — o selo confirma sozinho.` });
       }
     } catch (e) {
       // Sem isto o erro morria em silêncio: o chip clareava e nada acontecia.
@@ -536,18 +517,13 @@ function ManageSkillDialog({
     setBusy(`retry-${agentId}`);
     const nomeAgente = agents.find((x) => x.id === agentId)?.name ?? agentId;
     try {
-      await retry(skill.id, agentId);
-      const { data: linha } = await supabase
-        .from("agent_skills")
-        .select("sync_status, sync_error")
-        .eq("skill_id", skill.id).eq("agent_id", agentId)
-        .maybeSingle();
-      if (linha?.sync_status === "synced") {
+      const r = await retry(skill.id, agentId);
+      if (r?.ok) {
         toast({ title: `${nomeAgente} recebeu a skill`, description: `${skill.name} instalada e pronta para uso.` });
       } else {
         toast({
           title: "A instalação falhou de novo",
-          description: linha?.sync_error ?? "A instalação falhou de novo. O erro completo está no selo do agente.",
+          description: r?.error ?? "A instalação falhou de novo. O erro completo está no selo do agente.",
           variant: "destructive",
         });
       }

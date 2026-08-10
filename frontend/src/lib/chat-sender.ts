@@ -19,7 +19,6 @@ import { api, lerUsuarioDoToken } from "@/lib/api";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 import type { ChatMessage, MediaAttachment } from "@/lib/mock-data";
 import { QueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { createElement } from "react";
 import { RefreshCw, Check, AlertCircle } from "lucide-react";

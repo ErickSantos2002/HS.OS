@@ -2,7 +2,6 @@ import { api } from "@/lib/api";
 import { assinar } from "@/lib/realtime";
 import { useEffect, useState } from "react";
 
-import { supabase } from "@/integrations/supabase/client";
 import type { ChannelMessage } from "@/hooks/use-channels";
 
 export interface ThreadMeta {

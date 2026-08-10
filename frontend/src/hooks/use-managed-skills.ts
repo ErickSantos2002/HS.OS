@@ -30,6 +30,13 @@ export interface ManagedSkill {
   agent_skills: ManagedSkillAgentLink[];
 }
 
+/** O que o gateway respondeu ao instalar a skill num agente. */
+export interface SyncResult {
+  ok: boolean;
+  error?: string;
+  note?: string;
+}
+
 export interface SkillCreateResult {
   skillId: string;
   sync: Record<string, { ok: boolean; error?: string; note?: string }>;
@@ -160,18 +167,35 @@ export function useManagedSkills() {
     notifySkillsChanged();
   }, [refetch]);
 
+  /**
+   * Liga ou desliga a skill de um agente, devolvendo o que o gateway
+   * respondeu de fato.
+   *
+   * O retorno importa: a tela relata o RESULTADO da instalação, não o
+   * clique — já aconteceu de a skill constar no painel e não existir no
+   * lugar que o agente consulta. Antes disso vir na resposta, a
+   * `SkillsPage` relia a `agent_skills` no Supabase logo depois de chamar,
+   * só para descobrir o `sync_status`. Agora vem junto.
+   */
   const assign = useCallback(async (skill_id: string, agent_id: string, remove = false) => {
-    if (remove) await chamar("DELETE", `/skills/${skill_id}/agentes/${agent_id}`);
-    else await chamar("POST", `/skills/${skill_id}/agentes`, { agent_ids: [agent_id] });
+    if (remove) {
+      await chamar("DELETE", `/skills/${skill_id}/agentes/${agent_id}`);
+      await refetch();
+      notifySkillsChanged();
+      return null;
+    }
+    const r = await chamar<{ sync: Record<string, SyncResult> }>(
+      "POST", `/skills/${skill_id}/agentes`, { agent_ids: [agent_id] },
+    );
     await refetch();
     notifySkillsChanged();
+    return r.sync?.[agent_id] ?? null;
   }, [refetch]);
 
-  const retry = useCallback(async (skill_id: string, agent_id: string) => {
-    await chamar("POST", `/skills/${skill_id}/agentes`, { agent_ids: [agent_id] });
-    await refetch();
-    notifySkillsChanged();
-  }, [refetch]);
+  const retry = useCallback(
+    (skill_id: string, agent_id: string) => assign(skill_id, agent_id, false),
+    [assign],
+  );
 
   const remove = useCallback(async (skill_id: string) => {
     await chamar("DELETE", `/skills/${skill_id}`);

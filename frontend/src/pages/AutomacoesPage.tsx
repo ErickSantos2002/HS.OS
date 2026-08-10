@@ -2,7 +2,6 @@ import { api } from "@/lib/api";
 import { assinarTabela } from "@/lib/realtime";
 import { useEffect, useMemo, useState } from "react";
 import { useAuthContext } from "@/contexts/auth-context";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   Zap,
@@ -529,14 +528,9 @@ function AutomationForm({ open, onOpenChange, editing, agents, currentUserId, on
       return;
     }
     toast.success(editing ? "Automação atualizada" : "Automação criada");
-    // Fire-and-forget confirmation DM via Lia
-    try {
-      supabase.functions.invoke("automations-api/notify", {
-        body: { automation_id: result.data?.id, action: editing ? "updated" : "created" },
-      });
-    } catch (err) {
-      console.warn("[automations] notify dispatch failed:", err);
-    }
+    // A DM de confirmação sai de dentro do próprio salvar, no servidor. Aqui
+    // havia um `invoke("automations-api/notify")` em fire-and-forget — e a
+    // `automations-api` já não existe, então a confirmação nunca chegava.
     onSaved();
   }
 

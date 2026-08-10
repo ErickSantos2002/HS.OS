@@ -1,7 +1,6 @@
 import { assinar } from "@/lib/realtime";
 import React, { Fragment, useState, useRef, useEffect, useCallback, useMemo, useLayoutEffect } from "react";
 import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { api } from "@/lib/api";
 

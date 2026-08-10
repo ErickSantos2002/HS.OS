@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { enviarArquivo } from "@/lib/storage";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   Building2, Mic, MicOff, Sparkles, Upload, Save, Send, Loader2,

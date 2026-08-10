@@ -25,16 +25,24 @@ escondeu telas quebradas em produção. O placar tem que separar as duas:
 
 | Subsistema | Substituto | Front religado | Destino |
 |---|---|---|---|
-| Auth | ✅ | 🟡 12 chamadas soltas | JWT próprio (PyJWT + bcrypt) |
+| Auth | ✅ | 🟡 3 arquivos | JWT próprio (PyJWT + bcrypt) |
 | Storage | ✅ | ✅ **completo** | `UPLOADS_DIR` em disco, `app/routers/storage.py` |
 | Realtime (`postgres_changes`) | ✅ | ✅ **completo** | WebSocket + LISTEN/NOTIFY, `app/escuta_banco.py` |
-| Edge Functions | 🟡 60 de 73 | ✅ sem pendências | routers FastAPI |
-| Banco (via RLS, direto do browser) | 🟡 ~135 rotas | 🔴 **52 de 113 arquivos** | endpoints FastAPI |
+| Edge Functions | 🟡 71 de 73 | ✅ sem pendências | routers FastAPI |
+| Banco (via RLS, direto do browser) | ✅ ~145 rotas | ✅ **0 chamadas vivas** | endpoints FastAPI |
 
-O **banco** é o subsistema que sobrou quase inteiro — 185 chamadas `.from("…")`.
-O **Realtime saiu inteiro**: a captura é por trigger + `pg_notify`, o backend
-roteia por `channel_id`/`user_id`/`agent_id`, e nenhum arquivo abre mais
-`supabase.channel(...)`. Ver `docs/PLANO-REALTIME.md`.
+O **banco saiu inteiro** em 10/08/2026: das 185 chamadas `.from("…")` originais,
+**zero** continuam vivas, e nenhum arquivo chama mais `functions.invoke`. O que
+resta do Supabase no front são **três** arquivos, todos de *auth* ou *presença*:
+`use-typing-indicator.ts` (ainda abre `supabase.channel` para o "está
+digitando"), `use-user-status.ts` e `AddAgentDialog.tsx`.
+O **Realtime de dados saiu inteiro**: a captura é por trigger + `pg_notify`, o
+backend roteia por `channel_id`/`user_id`/`agent_id`. Ver `docs/PLANO-REALTIME.md`.
+
+⚠️ **Uma exceção sobrevive**: `use-typing-indicator.ts` ainda usa
+`supabase.channel` para o "fulano está digitando". É *broadcast* efêmero, não
+`postgres_changes` — nada disso passa pelo banco, e por isso escapou da
+portagem do realtime. Precisa de um canal equivalente no nosso WebSocket.
 
 O placar atualizado e a forma de medi-lo estão em `docs/ROADMAP.md`.
 

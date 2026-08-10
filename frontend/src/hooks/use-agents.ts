@@ -1,7 +1,6 @@
 import { assinarTabela } from "@/lib/realtime";
 import { useState, useEffect, useCallback } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { api } from "@/lib/api";
 import { getGatewayConfig, gatewayNaoPortado } from "@/lib/gateway";
 

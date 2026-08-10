@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { api } from "@/lib/api";
 import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { useAgents } from "@/hooks/use-agents";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -6,7 +7,6 @@ import { useChannels, useChannelMessages, useChannelMembers, Channel } from "@/h
 import { useAuthContext } from "@/contexts/auth-context";
 import { startChannelAgentReplies, getAgentDisplayName } from "@/lib/channel-agents";
 import { getPendingAgentsForChannel, subscribeToChannelAgentPending } from "@/lib/channel-agent-pending";
-import { supabase } from "@/integrations/supabase/client";
 import { getAudioFileExtension, useAudioRecorder } from "@/hooks/use-audio-recorder";
 import { Button } from "@/components/ui/button";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
@@ -169,15 +169,19 @@ export default function ChannelsPage() {
       }
       const audioUrl = urlPublica("audio-messages", fileName);
 
-      // 2. Transcribe via edge function
+      // 2. Transcrição pela nossa API (Whisper, via `/ia/transcrever`). Era a
+      // edge `transcribe-audio`, no Lovable AI Gateway, portada em 10/08.
       const formData = new FormData();
       formData.append("file", blob, `audio.${ext}`);
-      const { data: transcribeData, error: transcribeErr } = await supabase.functions.invoke(
-        "transcribe-audio",
-        { body: formData }
+      const transcription = await api<{ text?: string }>("/ia/transcrever", {
+        method: "POST",
+        body: formData,
+      }).then(
+        (r) => r?.text || "🎤 Mensagem de áudio",
+        // O áudio já subiu e a mensagem vai ser enviada de qualquer forma —
+        // falhar a transcrição não pode engolir a mensagem de voz.
+        () => "⚠️ Transcrição indisponível",
       );
-
-      const transcription = transcribeErr ? "⚠️ Transcrição indisponível" : (transcribeData?.text || "🎤 Mensagem de áudio");
 
       // 3. Send message with audio_url
       await sendMessage(

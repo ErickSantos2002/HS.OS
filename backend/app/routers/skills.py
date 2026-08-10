@@ -341,6 +341,53 @@ async def atribuir(skill_id: str, dados: AtribuirIn,
     return {"ok": True, "sync": sync}
 
 
+@router.put("/por-slug/{slug}")
+async def upsert(slug: str, dados: SkillIn,
+                 usuario: Usuario = Depends(usuario_atual)) -> dict:
+    """Cria ou atualiza pelo slug, e vincula a um agente.
+
+    É o caminho da **importação de agente**: um `.dnos` traz as skills do
+    agente exportado embutidas, e importar duas vezes não pode duplicar nem
+    falhar. `source` fica `'agent'` — veio de um pacote, não de alguém
+    escrevendo no editor.
+
+    O vínculo entra como `synced` sem consultar o gateway, e isso é do
+    original: os arquivos do agente importado já foram gravados pelo passo
+    anterior da importação, então a skill *está* lá. Chamar `skills.install`
+    aqui reinstalaria por cima do que acabou de ser escrito.
+    """
+    slug = _validar_slug(slug)
+    if not dados.agent_ids:
+        raise HTTPException(400, "agent_ids é obrigatório no upsert")
+
+    async with sessao(role="service_role") as conn:
+        skill_id = await conn.fetchval(
+            """
+            INSERT INTO public.skills (slug, name, description, content, source, sync_status)
+            VALUES ($1, $2, $3, $4, 'agent', 'synced')
+            ON CONFLICT (slug) DO UPDATE
+               SET name = EXCLUDED.name,
+                   description = EXCLUDED.description,
+                   content = EXCLUDED.content,
+                   updated_at = now()
+            RETURNING id
+            """,
+            slug, dados.name, dados.description or "", dados.content,
+        )
+        for agent_id in dados.agent_ids:
+            await conn.execute(
+                """
+                INSERT INTO public.agent_skills
+                       (agent_id, skill_id, installed_by, sync_status)
+                VALUES ($1, $2, 'agent', 'synced')
+                ON CONFLICT (agent_id, skill_id) DO UPDATE
+                   SET sync_status = 'synced', sync_error = NULL
+                """,
+                agent_id, skill_id,
+            )
+    return {"ok": True, "skillId": str(skill_id)}
+
+
 @router.delete("/{skill_id}/agentes/{agent_id}")
 async def desatribuir(skill_id: str, agent_id: str,
                       usuario: Usuario = Depends(usuario_atual)) -> dict:

@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 from app.database import sessao
 from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.integracoes import exige_segredo
+from app.realtime import hub, topico_usuario
 
 logger = logging.getLogger(__name__)
 
@@ -442,6 +443,88 @@ def _limpar(d: AutomacaoIn) -> tuple:
     )
 
 
+# Rótulos dos dias em português, para a confirmação sair legível. `daily` é
+# uma opção de verdade no `scheduled_day`, não ausência de valor.
+_DIA_PT = {
+    "monday": "segunda", "tuesday": "terça", "wednesday": "quarta",
+    "thursday": "quinta", "friday": "sexta", "saturday": "sábado",
+    "sunday": "domingo", "daily": "todo dia",
+}
+
+
+def _quando_em_brt(dia: str | None, hora_utc: str | None) -> str:
+    """Descreve o agendamento no fuso de quem lê, não no do banco.
+
+    O `scheduled_time` é gravado em UTC — é o que o disparador usa. Mas a
+    confirmação vai para uma pessoa em Brasília, e "às 12:00" quando ela
+    escolheu 09:00 faz parecer que o sistema entendeu errado.
+
+    O deslocamento é fixo em −3h porque o Brasil não tem horário de verão
+    desde 2019. Se voltar, isto vira `zoneinfo`.
+    """
+    if not hora_utc:
+        return "sem horário definido"
+    try:
+        h, m = (int(x) for x in hora_utc.split(":")[:2])
+    except (ValueError, IndexError):
+        return f"às {hora_utc} UTC"
+    total = (h * 60 + m - 180) % (24 * 60)
+    virou_dia = (h * 60 + m - 180) < 0
+    rotulo = _DIA_PT.get(dia or "daily", dia or "todo dia")
+    # Passar da meia-noite para trás joga para o dia anterior. Sem isto, uma
+    # automação de segunda 01:00 UTC seria anunciada como "segunda às 22:00",
+    # quando é domingo.
+    if virou_dia and dia in _DIAS:
+        rotulo = _DIA_PT[_DIAS[(_DIAS.index(dia) - 1) % 7]]
+    return f"{rotulo} às {total // 60:02d}:{total % 60:02d} BRT"
+
+
+async def _confirmar_por_dm(automacao: dict, acao: str, user_id: str) -> None:
+    """Manda ao criador uma DM do agente confirmando o que ficou agendado.
+
+    Portado do `POST /automations-api/notify`, com uma diferença de desenho:
+    a edge era um endpoint separado que a tela chamava logo depois de salvar,
+    em fire-and-forget. Aqui a confirmação sai de dentro do próprio salvar.
+
+    O motivo é concreto — a edge montava a mensagem e mandava com a
+    `BROADCAST_API_KEY`, e para o navegador poder disparar isso sem conhecer a
+    chave era preciso um endpoint a mais só para intermediar. Do lado de cá do
+    servidor esse intermediário não tem função.
+
+    Best-effort de propósito: a automação **foi** salva, e não avisar é bem
+    menos grave do que devolver erro para um salvamento que deu certo.
+    """
+    try:
+        quando = (
+            _quando_em_brt(automacao.get("scheduled_day"), automacao.get("scheduled_time"))
+            if automacao.get("type") == "scheduled"
+            else f"no gatilho {automacao.get('trigger_event')}"
+        )
+        verbo = "atualizada" if acao == "updated" else "agendada"
+        texto = f'✅ Automação "{automacao.get("name")}" {verbo} — {quando}'
+
+        async with sessao(role="service_role") as conn:
+            linha = await conn.fetchrow(
+                """
+                INSERT INTO public.conversations (agent_id, user_id, role, content)
+                VALUES ($1, $2::uuid, 'agent', $3)
+                RETURNING id::text AS id,
+                    to_char(created_at AT TIME ZONE 'UTC',
+                            'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at
+                """,
+                automacao["agent_id"], user_id, texto,
+            )
+        hub.publicar(topico_usuario(user_id), "resposta-agente", {
+            "agent_id": automacao["agent_id"],
+            "message": {"id": linha["id"], "agent_id": automacao["agent_id"],
+                        "role": "agent", "content": texto,
+                        "created_at": linha["created_at"]},
+        })
+    except Exception as e:
+        logger.warning("Confirmação da automação %s não foi enviada: %s",
+                       automacao.get("id"), e)
+
+
 @router.get("", response_model=list[AutomacaoOut])
 async def listar_automacoes(usuario: Usuario = Depends(usuario_atual)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
@@ -468,6 +551,7 @@ async def criar_automacao(dados: AutomacaoIn, usuario: Usuario = Depends(usuario
             dados.instruction, dados.is_active, usuario.id,
         )
     logger.info("Automação %s criada por %s", linha["id"], usuario.id)
+    await _confirmar_por_dm(dict(linha), "created", usuario.id)
     return AutomacaoOut(**dict(linha))
 
 
@@ -494,6 +578,7 @@ async def editar_automacao(
         )
     if linha is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Automação não encontrada.")
+    await _confirmar_por_dm(dict(linha), "updated", usuario.id)
     return AutomacaoOut(**dict(linha))
 
 

@@ -38,7 +38,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { supabase } from "@/integrations/supabase/client";
 import { shouldShowDateDivider } from "@/lib/chat-date-groups";
 import type { Reaction } from "@/hooks/use-message-reactions";
 import { getAudioFileExtension, useAudioRecorder } from "@/hooks/use-audio-recorder";

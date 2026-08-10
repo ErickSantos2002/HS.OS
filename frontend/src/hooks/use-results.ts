@@ -2,7 +2,6 @@ import { api } from "@/lib/api";
 import { assinarTabela } from "@/lib/realtime";
 import { useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useAgents } from "@/hooks/use-agents";
 import { getAgentDisplayNameById, isOfficialAgentId } from "@/lib/active-agents";
 

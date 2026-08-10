@@ -1,5 +1,4 @@
 import { api } from "@/lib/api";
-import { supabase } from "@/integrations/supabase/client";
 /**
  * Builds system-prompt blocks that teach the current agent about:
  *   1. The <live_artifact> tag format and window.dnos runtime API.
