@@ -14,11 +14,11 @@ ainda na pasta.
 
 | | Feito | Total | Comando |
 |---|---|---|---|
-| Edge functions **por portar** | — | **3** |
-| Fora da pasta (portadas) | 60 | 73 | `ls backend/supabase/functions \| grep -v _shared \| wc -l` |
-| Arquivos do front **sem Supabase** | 52 | 113 | `grep -rl "integrations/supabase/client" frontend/src \| wc -l` (63 hoje; 113 menos isso) |
-| Rotas na API própria | 120 | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
-| Chamadas `.from("…")` restantes | **4** vivas (+9 em `_legado/`) | — | `grep -rho '\.from(\s*"' frontend/src \| wc -l` |
+| Edge functions **por portar** | — | **1** |
+| Portadas | 68 | 73 | `ls backend/supabase/functions/_portado \| wc -l` (4 pausadas em `_pausado/`) |
+| Arquivos do front **com Supabase** | **1** | 278 | `grep -rl "integrations/supabase/client" frontend/src \| grep -v _legado \| wc -l` — e o que sobrou é o próprio client |
+| Rotas na API própria | **181** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
+| Chamadas `.from("…")` restantes | **0** vivas (9 em `_legado/`) | — | `grep -rho '\.from(\s*"' frontend/src \| wc -l` |
 | Arquivos ainda em `postgres_changes` | **0** | — | `grep -rl "postgres_changes" frontend/src \| grep -v _legado` |
 
 **Um lote só fecha quando duas linhas andam:** ter o endpoint no backend não é o
@@ -52,27 +52,19 @@ grep -r "functions.invoke" frontend/src --include=*.ts --include=*.tsx | grep -v
 
 Portar por **tabela**, não por tela: as três primeiras somam 53 das 185.
 
-### As 13 functions que restam
+### A function que resta
 
 | Function | Linhas | Situação |
 |---|---|---|
-| `turn-reconciler` | 864 | precisa do serviço `worker` — não há `pg_cron` na VPS |
-| `skill-manage` | 647 | tela viva, portável |
-| `warroom-feed` | 582 | tela viva, portável |
-| `collect-agent-stats` | 552 | webhook do coletor; duas formas de payload, e a real não está documentada |
-| `arena-generate` | 152 | 🔴 ElevenLabs |
-| `transcribe-audio` | 154 | 🔴 Lovable AI Gateway |
-| `chat-image-vision` | 130 | 🔴 Lovable AI Gateway |
-| `arena-convai-create` | 110 | 🔴 ElevenLabs |
-| `parse-company-context` | 102 | 🔴 Lovable AI Gateway |
-| `arena-convai-update` | 97 | 🔴 ElevenLabs |
-| `arena-convai-signed-url` | 69 | 🔴 ElevenLabs |
-| `elevenlabs-tts` | 60 | 🔴 ElevenLabs |
-| `list-elevenlabs-voices` | 51 | 🔴 ElevenLabs |
+| `turn-reconciler` | 864 | precisa de gatilho periódico — não há `pg_cron` na VPS. O protocolo **deixou de ser bloqueio**: ver [`PLANO-RECONCILIADOR.md`](PLANO-RECONCILIADOR.md) |
 
-**Nove das treze estão bloqueadas por decisão de produto**, não por dificuldade
-técnica: dependem de chave de um provedor externo. A estratégia acordada é
-portar tudo menos a chamada ao provedor, deixando-a parametrizada.
+As quatro que dependiam da ElevenLabs saíram da conta em 10/08: foram para
+`_pausado/` junto com a Arena e a voz — decisão de produto, não dificuldade
+técnica. Ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md).
+
+As três do Lovable AI Gateway (`transcribe-audio`, `chat-image-vision`,
+`parse-company-context`) foram portadas para a OpenAI no mesmo dia, em
+`app/routers/ia.py`.
 
 ## Princípios
 

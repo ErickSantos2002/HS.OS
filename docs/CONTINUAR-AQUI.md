@@ -1,7 +1,12 @@
 # Continuar aqui
 
-Ponto de retomada da portagem. Atualizado em **07/08/2026**, ao fim de três dias
-de trabalho. Leia isto, depois `CLAUDE.md` e `docs/ROADMAP.md`.
+Ponto de retomada da portagem. Atualizado em **10/08/2026**. Leia isto, depois
+`CLAUDE.md` e `docs/ROADMAP.md`.
+
+🎉 **O front saiu do Supabase.** Nenhuma chamada `.from()`, nenhum
+`functions.invoke`, nenhum `supabase.channel`. O único arquivo que ainda
+importa o client é o próprio `integrations/supabase/client.ts`, que existe só
+para lançar caso alguém o use. Resta **uma** edge function.
 
 👉 **Arena, War room e voz pausadas em 10/08** — ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md).
 
@@ -19,10 +24,11 @@ na pasta. **Todo número aqui vem de um comando**, e o comando está ao lado.
 
 | | Hoje | Total | Como medir |
 |---|---|---|---|
-| Edge functions **por portar** | — | **3** | `ls backend/supabase/functions \| grep -vE "_shared\|_pausado" \| wc -l` |
-| Fora da pasta (portadas) | 60 | 73 | 4 estão em `_pausado/` — ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md) |
-| Arquivos do front sem Supabase | **71** | 113 | `113 - $(grep -rl "integrations/supabase/client" frontend/src \| wc -l)` |
-| Rotas na API própria | **160** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
+| Edge functions **por portar** | — | **1** | `ls backend/supabase/functions \| grep -vE "_shared\|_pausado\|_portado" \| wc -l` |
+| Portadas | 68 | 73 | as outras 4 estão em `_pausado/` — ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md) |
+| Arquivos do front com Supabase | **1** | 278 | `grep -rl "integrations/supabase/client" frontend/src \| grep -v _legado \| wc -l` |
+| Rotas na API própria | **181** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
+| Chamadas `.from("…")` vivas | **0** | — | `grep -rho '\.from(\s*"' frontend/src \| grep -v _legado \| wc -l` |
 
 **Duas linhas têm que andar juntas.** "Tem substituto no backend" e "a tela usa o
 substituto" são coisas diferentes, e confundi-las já deixou telas quebradas em
@@ -37,11 +43,11 @@ diferentes, e o resumo antigo ("Realtime ✅ portado") escondia isso:
 
 | Subsistema | Substituto | Front religado | O que falta |
 |---|---|---|---|
-| **Auth** | ✅ JWT próprio (PyJWT + bcrypt) | 🟡 quase | 12 chamadas soltas; o fluxo de *reset por e-mail* não existe mais |
+| **Auth** | ✅ JWT próprio (PyJWT + bcrypt) | ✅ **completo** | o *reset por e-mail* não existe — sem envio de e-mail, quem esquece a senha pede uma temporária ao admin |
 | **Storage** | ✅ `UPLOADS_DIR` em disco | ✅ **completo** | nada |
-| **Realtime** | ✅ WebSocket + LISTEN/NOTIFY (`app/escuta_banco.py`) | ✅ **completo** | nada — `postgres_changes` zerado |
-| **Edge Functions** | 🟡 60 de 73 | ✅ sem pendências | 4 de trabalho real, 9 bloqueadas |
-| **Banco** (RLS direto do browser) | 🟡 186 rotas | 🟡 **71 de 113** | **4** chamadas vivas (+9 em `_legado/`) |
+| **Realtime** | ✅ WebSocket + LISTEN/NOTIFY (`app/escuta_banco.py`) | ✅ **completo** | nada — `postgres_changes` zerado, e o "está digitando" também passou para o `/ws` |
+| **Edge Functions** | 🟡 68 de 73 | ✅ sem pendências | só a `turn-reconciler` — ver [`PLANO-RECONCILIADOR.md`](PLANO-RECONCILIADOR.md) |
+| **Banco** (RLS direto do browser) | ✅ 181 rotas | ✅ **completo** | nada — 0 chamadas vivas (9 em `_legado/`, fora da compilação) |
 
 O **banco é o único subsistema que ainda pesa.** Os outros quatro estão prontos
 ou perto disso.
