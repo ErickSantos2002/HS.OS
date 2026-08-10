@@ -458,127 +458,84 @@ function isStructuredErrorsEnabled(): boolean {
   }
 }
 
-async function toChatMessages(messages: ChatMessage[], agentId?: string): Promise<any[]> {
-  const reorder = isReorderPromptEnabled();
-  const results: any[] = [
-    { role: "system", content: ARTIFACT_SYSTEM_PROMPT },
-  ];
-  // Blocos dinâmicos coletados aqui; posicionados no topo (flag OFF) ou logo
-  // antes da mensagem atual (flag ON) mais abaixo.
-  const dynamicBlocks: any[] = [];
+/**
+ * As instruções que o agente precisa saber uma vez por conversa.
+ *
+ * Junta o formato de artefato, os artefatos que a pessoa já tem, as integrações
+ * disponíveis, a tarefa longa pendente (se houver), o status dela e a pasta
+ * local autorizada. Tudo isto ia como blocos `role: "system"` no caminho antigo.
+ *
+ * ⚠️ **Vai como texto, não como system prompt.** O `chat.send` não tem canal de
+ * system — o agente já tem o dele, montado no OpenClaw. Isto aqui é contexto da
+ * plataforma, e chega como a primeira coisa que a pessoa "diz".
+ */
+async function montarInstrucoesDaSessao(agentId?: string): Promise<string> {
+  const blocos: string[] = [ARTIFACT_SYSTEM_PROMPT];
 
-  // Loop Architecture: inject a reminder about any pending long-running task
-  // for this agent so it resumes before doing anything else, even if its
-  // SOUL.md was truncated in the previous session.
   if (agentId) {
     try {
       const { getPendingAgentTask, buildPendingTaskSystemPrompt } = await import("@/lib/pending-agent-task");
       const pending = getPendingAgentTask(agentId);
-      if (pending) dynamicBlocks.push({ role: "system", content: buildPendingTaskSystemPrompt(pending) });
-    } catch {
-      /* ignore */
-    }
+      if (pending) blocos.push(buildPendingTaskSystemPrompt(pending));
+    } catch { /* tarefa pendente é extra */ }
   }
 
-  // Inject current user status (if any) so the agent knows the user may be away
   try {
     const { getSelfStatusCache, formatStatusForAgentContext } = await import("@/lib/user-status");
     const statusLine = formatStatusForAgentContext(getSelfStatusCache());
-    if (statusLine) dynamicBlocks.push({ role: "system", content: statusLine });
-  } catch {
-    /* ignore */
-  }
+    if (statusLine) blocos.push(statusLine);
+  } catch { /* status é extra */ }
 
-  // Inject local folder context when the user authorized a folder via File System Access API
   try {
     const { getActiveLocalFolder, buildLocalFolderSystemPrompt } = await import("@/lib/file-system-state");
     const folder = getActiveLocalFolder();
-    if (folder) dynamicBlocks.push({ role: "system", content: buildLocalFolderSystemPrompt(folder) });
-  } catch {
-    /* ignore */
-  }
+    if (folder) blocos.push(buildLocalFolderSystemPrompt(folder));
+  } catch { /* pasta local é extra */ }
 
-  // Inject live-artifacts format + user's existing live artifacts + available data integrations
   try {
     const { buildLiveArtifactsSystemBlocks } = await import("@/lib/live-artifacts-context");
-    const blocks = await buildLiveArtifactsSystemBlocks();
-    for (const block of blocks) dynamicBlocks.push({ role: "system", content: block });
-  } catch {
-    /* ignore */
-  }
+    blocos.push(...(await buildLiveArtifactsSystemBlocks()));
+  } catch { /* artefatos vivos são extra */ }
 
-  // Flag OFF (padrão): mantém a ordem atual — dinâmicos logo após o prompt estático.
-  if (!reorder) results.push(...dynamicBlocks);
-
-  // Limit prior context to the 30 most recent turns. Artifact HTML (~15KB per
-  // <live_artifact>) was being replayed on every follow-up, blowing the model
-  // window and causing timeouts. We strip artifacts + cap size on history
-  // turns (see below); the current user turn (last message) is left intact.
-  const contextMessages = messages.slice(-30);
-  const lastIndex = contextMessages.length - 1;
-  let dynamicsPlaced = !reorder; // flag OFF: já colocados acima
-
-  for (let i = 0; i < contextMessages.length; i++) {
-    const msg = contextMessages[i];
-    const role = msg.role === "agent" ? "assistant" : "user";
-    const text = msg.content?.trim() ?? "";
-    const images = (msg.media ?? []).filter((m) => m.type === "image");
-    const docs = (msg.media ?? []).filter(
-      (m) => m.type === "file" && m.extractedText && !isExtractionPlaceholder(m.extractedText)
-    );
-
-    let contextText = "";
-    if (docs.length > 0) {
-      contextText = docs
-        .map((d) => `[Arquivo: ${d.name}]\n\n${d.extractedText}`)
-        .join("\n\n---\n\n");
-
-      if (contextText) {
-        contextText += "\n\n---\n\n";
-      }
-    }
-
-    if (images.length > 0) {
-      const imageContexts = await Promise.all(
-        images.map(async (image, index) => {
-          try {
-            const summary = await getAgentReadableImageContext(image);
-            return summary ? `[Imagem ${index + 1}${image.name ? ` - ${image.name}` : ""}]\n${summary}` : null;
-          } catch (error) {
-            console.warn("[chat-sender] Failed to extract readable image context:", error);
-            return null;
-          }
-        })
-      );
-
-      const mergedImageContext = imageContexts.filter(Boolean).join("\n\n");
-      if (mergedImageContext) {
-        contextText += `${mergedImageContext}\n\n`;
-      }
-    }
-
-    // Always send as plain text — image context is already extracted above.
-    // Sending raw base64 data causes 413 errors on the gateway (nginx payload limit).
-    let content = contextText + (text || (role === "assistant" ? "[resposta]" : "[mensagem]"));
-
-    if (i < lastIndex) {
-      content = capMessage(stripArtifacts(content));
-    } else {
-      content = stripArtifacts(content);
-    }
-
-    // Flag ON (V3): insere os blocos dinâmicos logo antes da mensagem atual,
-    // fechando o prefixo estável (prompt + histórico) que a DeepSeek cacheia.
-    if (reorder && !dynamicsPlaced && i === lastIndex) {
-      results.push(...dynamicBlocks);
-      dynamicsPlaced = true;
-    }
-    results.push({ role, content });
-  }
-  // Fallback (histórico vazio): garante que os dinâmicos não se percam.
-  if (reorder && !dynamicsPlaced) results.push(...dynamicBlocks);
-  return results;
+  return blocos.filter(Boolean).join("\n\n");
 }
+
+/**
+ * Descreve em texto as imagens e documentos anexados nesta mensagem.
+ *
+ * ⚠️ **Sem isto o anexo não existe para o agente.** Ele recebe texto; a imagem
+ * fica no navegador e na tela, e o agente responde "não recebi nenhuma imagem" —
+ * foi exatamente o que aconteceu no teste de 10/08/2026.
+ *
+ * A descrição vem de `/ia/descrever-imagem` (OpenAI). Falha ali não bloqueia a
+ * mensagem: a pessoa ainda manda o anexo e conversa, o agente é que fica sem
+ * saber o que a imagem mostra.
+ */
+async function descreverImagensDoTurno(msg: ChatMessage | undefined): Promise<string> {
+  if (!msg) return "";
+  const midia = msg.media ?? [];
+  const partes: string[] = [];
+
+  const documentos = midia.filter(
+    (m) => m.type === "file" && m.extractedText && !isExtractionPlaceholder(m.extractedText),
+  );
+  for (const d of documentos) {
+    partes.push(`[Arquivo anexado: ${d.name}]\n\n${d.extractedText}`);
+  }
+
+  const imagens = midia.filter((m) => m.type === "image");
+  for (const img of imagens) {
+    try {
+      const descricao = await getAgentReadableImageContext(img);
+      if (descricao) partes.push(`[Imagem anexada${img.name ? `: ${img.name}` : ""}]\n\n${descricao}`);
+    } catch (e) {
+      console.warn("[chat-sender] descrição de imagem falhou:", (e as Error).message);
+    }
+  }
+
+  return partes.join("\n\n---\n\n");
+}
+
 
 
 /**
@@ -951,6 +908,42 @@ export function sendMessageInBackground(
         return;
       }
 
+      // ⚠️ **O `chat.send` do gateway carrega só texto.** O caminho antigo
+      // mandava um array `messages` com blocos `role: "system"` e partes de
+      // imagem — e quando o envio foi reescrito, o montador desses blocos ficou
+      // órfão sem ninguém notar. O efeito: a agente não sabia o formato de
+      // artefato (usava o `[embed]` nativo do OpenClaw) e não recebia anexo
+      // nenhum. Aqui o que era `messages` vira prefixo do texto.
+      //
+      // As duas coisas têm naturezas diferentes e por isso são tratadas
+      // separadamente:
+      //
+      // - **A imagem é do turno.** Vai sempre que houver anexo, porque descreve
+      //   o que a pessoa acabou de mandar.
+      // - **As instruções são da sessão.** O gateway guarda o histórico, então
+      //   repeti-las a cada mensagem gastaria contexto à toa. Vão só na
+      //   primeira mensagem da conversa.
+      const prefixos: string[] = [];
+
+      const ehPrimeiraDaConversa = !fullHistory.some((m) => m.role === "agent");
+      if (ehPrimeiraDaConversa) {
+        try {
+          const blocos = await montarInstrucoesDaSessao(agentId);
+          if (blocos) prefixos.push(blocos);
+        } catch (e) {
+          // Instrução é acabamento: sem ela o agente responde, só não sabe
+          // gerar artefato. Não vale bloquear a mensagem.
+          console.warn("[chat-sender] instruções da sessão falharam:", (e as Error).message);
+        }
+      }
+
+      const descricoes = await descreverImagensDoTurno(ultima);
+      if (descricoes) prefixos.push(descricoes);
+
+      const textoParaOAgente = prefixos.length
+        ? `${prefixos.join("\n\n")}\n\n---\n\n${texto}`
+        : texto;
+
       if (userId) {
         addPendingTask({
           kind: "normal",
@@ -961,7 +954,7 @@ export function sendMessageInBackground(
         });
       }
 
-      const resposta = await enviarParaAgente(agentId, texto, controller.signal);
+      const resposta = await enviarParaAgente(agentId, textoParaOAgente, controller.signal);
 
       if (manuallyStoppedRequestIds.has(requestId)) {
         // O usuário mandou parar enquanto esperávamos. A resposta pode ter
