@@ -62,7 +62,8 @@ const STATUS_CONFIG: Record<AgentStatus, { label: string; dotClass: string; glow
 interface AgentsTabProps {
   data: any | null;
   isLoading: boolean;
-  gatewayOnline: boolean;
+  /** `null` = nunca houve coleta. Não é o mesmo que o gateway estar fora. */
+  gatewayOnline: boolean | null;
   lastUpdated: Date | null;
 }
 
@@ -232,15 +233,19 @@ export function AgentsTab({ data, isLoading, gatewayOnline }: AgentsTabProps) {
     );
   }
 
-  /* Empty state */
-  if (!agentList.length && !isLoading && !gatewayOnline) {
+  /* Vazio. O texto muda conforme o motivo: mandar "verifique o gateway" para
+     quem só não tem coletor apontado aponta a investigação para o lugar
+     errado. */
+  if (!agentList.length && !isLoading && gatewayOnline !== true) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-4">
         <div className="h-16 w-16 rounded-2xl glass-card flex items-center justify-center overflow-hidden">
           <Bot className="h-8 w-8 text-muted-foreground" />
         </div>
         <p className="text-sm text-muted-foreground text-center max-w-sm">
-          Nenhum agente encontrado. Verifique o gateway.
+          {gatewayOnline === null
+            ? "Nenhuma coleta recebida ainda — o coletor da VPS precisa apontar para esta instalação."
+            : "Nenhum agente encontrado. Verifique o gateway."}
         </p>
       </div>
     );
@@ -249,7 +254,7 @@ export function AgentsTab({ data, isLoading, gatewayOnline }: AgentsTabProps) {
   return (
     <div className="space-y-6">
       {/* Alerts */}
-      {!gatewayOnline && !isLoading && (
+      {gatewayOnline === false && !isLoading && (
         <Alert variant="destructive" className="rounded-2xl border-destructive/30 bg-destructive/5 backdrop-blur-sm">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Gateway offline — agentes indisponíveis</AlertTitle>

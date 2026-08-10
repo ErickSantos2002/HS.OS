@@ -22,7 +22,7 @@ export default function MonitoringPage() {
   const {
     agents, health, cron, usage,
     gatewayStatus, processes, events,
-    isLoading, error, lastUpdated, lastCollectedAt, gatewayOnline,
+    isLoading, error, lastUpdated, lastCollectedAt, gatewayOnline, semColeta,
     healthLatencyMs, refetch,
   } = useMonitoringData();
 
@@ -80,13 +80,27 @@ export default function MonitoringPage() {
         </div>
       </div>
 
-      {/* Gateway offline alert */}
-      {!gatewayOnline && !isLoading && (
+      {/* Sem coleta ≠ gateway fora do ar. Cada caso manda a pessoa para um
+          lugar diferente, então o aviso precisa dizer qual dos dois é. */}
+      {semColeta && !isLoading && (
+        <Alert className="rounded-2xl border-border/60 bg-secondary/30 backdrop-blur-sm">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Nenhuma coleta recebida</AlertTitle>
+          <AlertDescription>
+            Estes números vêm de um coletor que roda na VPS e envia snapshots para
+            <code className="mx-1 rounded bg-muted px-1 py-0.5 text-xs">/coletor/estatisticas</code>.
+            Enquanto ele não apontar para cá, as telas ficam vazias — não é sinal
+            de que o gateway esteja fora do ar.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {gatewayOnline === false && !isLoading && (
         <Alert variant="destructive" className="rounded-2xl border-destructive/30 bg-destructive/5 backdrop-blur-sm">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>⚠️ Gateway offline</AlertTitle>
           <AlertDescription className="flex items-center gap-2">
-            Dados podem estar desatualizados.
+            A última coleta encontrou o gateway fora do ar. Dados podem estar desatualizados.
             <Button variant="outline" size="sm" onClick={() => refetch()} className="ml-2 rounded-full">
               Tentar reconectar
             </Button>

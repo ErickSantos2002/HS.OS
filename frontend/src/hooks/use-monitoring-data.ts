@@ -13,7 +13,10 @@ interface MonitoringState {
   error: string | null;
   lastUpdated: Date | null;
   lastCollectedAt: Date | null;
-  gatewayOnline: boolean;
+  /** `null` quando nunca houve coleta — não é o mesmo que offline. */
+  gatewayOnline: boolean | null;
+  /** Nenhum snapshot do coletor chegou ainda. */
+  semColeta: boolean;
   healthLatencyMs: number | null;
 }
 
@@ -39,6 +42,7 @@ export function useMonitoringData(pollingInterval = 60_000) {
     lastUpdated: null,
     lastCollectedAt: null,
     gatewayOnline: true,
+    semColeta: false,
     healthLatencyMs: null,
   });
 
@@ -62,7 +66,14 @@ export function useMonitoringData(pollingInterval = 60_000) {
       const cron = dados.cron || [];
       const usageRow = dados.usage;
 
-      const gatewayOnline = healthRow?.status === "online";
+      // ⚠️ **Ausência de coleta não é gateway fora do ar.** `healthRow` vem da
+      // tabela `gateway_health`, que só o coletor da VPS escreve. Sem nenhuma
+      // coleta a linha não existe, e tratar isso como "offline" mandava a
+      // pessoa conferir o túnel e a VPS quando o gateway estava de pé — o que
+      // faltava era o coletor. São diagnósticos diferentes e levam a lugares
+      // diferentes.
+      const semColeta = !healthRow;
+      const gatewayOnline = semColeta ? null : healthRow.status === "online";
 
       // Find most recent collected_at across all data
       const collectedDates = [
@@ -86,6 +97,7 @@ export function useMonitoringData(pollingInterval = 60_000) {
         lastUpdated: new Date(),
         lastCollectedAt: latestCollected,
         gatewayOnline,
+        semColeta,
         healthLatencyMs: healthRow?.latency_ms ?? null,
       });
     } catch (err: any) {
@@ -94,6 +106,7 @@ export function useMonitoringData(pollingInterval = 60_000) {
         isLoading: false,
         error: err.message || "Erro desconhecido",
         gatewayOnline: false,
+        semColeta: false,
         lastUpdated: new Date(),
       }));
     }

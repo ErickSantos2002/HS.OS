@@ -18,7 +18,8 @@ interface GatewayTabProps {
   processes: any | null;
   events: any | null;
   isLoading: boolean;
-  gatewayOnline: boolean;
+  /** `null` = nunca houve coleta. Não é o mesmo que o gateway estar fora. */
+  gatewayOnline: boolean | null;
   healthLatencyMs: number | null;
   onForceRefetch: () => void;
   cronSummary?: any[] | null;
@@ -95,7 +96,7 @@ export function GatewayTab({
   }, [onForceRefetch]);
 
   useEffect(() => {
-    if (restarting && gatewayOnline) {
+    if (restarting && gatewayOnline === true) {
       if (pollingRef.current) clearInterval(pollingRef.current);
       setRestarting(false);
       toast.success("Gateway voltou online!");
@@ -126,7 +127,11 @@ export function GatewayTab({
   const onlineChecks = healthHistory.filter((h) => h.status === "online").length;
   const uptimePct = totalChecks > 0 ? ((onlineChecks / totalChecks) * 100) : null;
 
-  const statusLabel = !gatewayOnline ? "OFFLINE" : restarting ? "REINICIANDO" : "ONLINE";
+  // "SEM DADOS" é um terceiro estado de verdade: nunca houve coleta, então
+  // não se sabe se está online. Dizer OFFLINE aqui era afirmar o que ninguém
+  // mediu.
+  const statusLabel =
+    gatewayOnline === null ? "SEM DADOS" : !gatewayOnline ? "OFFLINE" : restarting ? "REINICIANDO" : "ONLINE";
   const statusGlow = statusLabel === "ONLINE"
     ? "border-success/40 shadow-[0_0_24px_-6px_hsl(var(--success)/0.3)]"
     : statusLabel === "OFFLINE"
