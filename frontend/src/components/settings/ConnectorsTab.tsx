@@ -1453,7 +1453,8 @@ function CustomModal({
               Essa ferramenta NÃO EXISTE — nem no schema de tools do OpenClaw, nem
               em lugar nenhum deste repositório (confirmado 2026-07-24). Quem
               seguisse a instrução criava um conector que nenhum agente conseguia
-              usar. O caminho real é a edge function fetch-agent-credentials. */}
+              usar. O caminho real é `GET /integracoes/agent-credentials/{id}`, que
+                  autentica por segredo compartilhado — o agente carrega o dele. */}
           <div className="text-xs text-muted-foreground rounded-lg border border-border bg-secondary/30 p-3 space-y-1.5">
             <p>
               Guardar a credencial não basta: crie uma <strong>skill</strong> ensinando o agente a
@@ -1462,7 +1463,7 @@ function CustomModal({
             <p>
               Na skill, o agente busca as credenciais em{" "}
               <code className="font-mono text-[11px]">
-                GET /functions/v1/fetch-agent-credentials?agent_id=&lt;id&gt;&amp;provider=
+                GET /integracoes/agent-credentials/&lt;id&gt;?provider=
                 {name ? name.toLowerCase().split(/\s+/)[0] : "nome"}
               </code>
               . O parâmetro <code className="font-mono text-[11px]">provider</code> limita a resposta

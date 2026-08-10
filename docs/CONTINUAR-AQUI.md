@@ -166,11 +166,20 @@ existe mais e o destino dela está em *Decisões pendentes*.
   07/08. A conferência que funciona:
 
   ```bash
+  # forma 1 e 2: supabase.functions.invoke, inclusive quebrado em várias linhas
   grep -rzoP 'functions\.invoke\(\s*\n?\s*"[a-z0-9-]+"' frontend/src \
     | tr '\0' '\n' | grep -oP '"\K[a-z0-9-]+' | sort -u
+
+  # forma 3: fetch cru para a URL da edge — não usa invoke nenhum
+  grep -rn 'functions/v1/' frontend/src --include=*.ts --include=*.tsx | grep -v _legado
   ```
 
   Depois cruze cada nome com `ls backend/supabase/functions/`.
+
+  ⚠️ **A terceira forma passou por dois audits.** Em 10/08 quatro chamadas
+  ainda apontavam para edges apagadas por `fetch` direto, e o sintoma que
+  chegou foi "No suitable key or wrong key type" — o Supabase recusando a
+  chave, numa mensagem que não diz nada sobre a causa.
 - **`$N::jsonb` com uma string do Python guarda um jsonb *string*, não objeto.**
   O asyncpg deduz o tipo do cast. Use `$N::text::jsonb`. Vale igual para
   `$N::timestamptz` → `$N::text::timestamptz`.
