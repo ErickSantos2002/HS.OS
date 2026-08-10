@@ -14,7 +14,8 @@ ainda na pasta.
 
 | | Feito | Total | Comando |
 |---|---|---|---|
-| Edge functions **fora da pasta** | 60 | 73 | `ls backend/supabase/functions \| grep -v _shared \| wc -l` |
+| Edge functions **por portar** | — | **9** |
+| Fora da pasta (portadas) | 60 | 73 | `ls backend/supabase/functions \| grep -v _shared \| wc -l` |
 | Arquivos do front **sem Supabase** | 52 | 113 | `grep -rl "integrations/supabase/client" frontend/src \| wc -l` (63 hoje; 113 menos isso) |
 | Rotas na API própria | 120 | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
 | Chamadas `.from("…")` restantes | **4** vivas (+9 em `_legado/`) | — | `grep -rho '\.from(\s*"' frontend/src \| wc -l` |

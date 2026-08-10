@@ -1188,36 +1188,18 @@ interface ArenaVoiceRow {
   convai_agent_id: string | null;
 }
 
-function useAgentArenas(agentId: string) {
-  const [rows, setRows] = useState<ArenaVoiceRow[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    (async () => {
-      try {
-        // Era um join embutido do PostgREST (`arenas:arena_id(...)`), sintaxe
-        // que só existe lá. O endpoint já devolve o formato final.
-        const data = await api<ArenaVoiceRow[]>(
-          `/arenas/por-agente/${encodeURIComponent(agentId)}`,
-        ).catch(() => null);
-        if (cancelled) return;
-        if (!data) { setRows([]); return; }
-        const list: ArenaVoiceRow[] = data
-          .map((r) => r)
-          .filter(Boolean) as ArenaVoiceRow[];
-        setRows(list);
-      } catch {
-        if (!cancelled) setRows([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [agentId]);
-
-  return { rows, loading };
+/**
+ * ⚠️ **Arena pausada em 10/08/2026.** Este hook buscava em quais arenas o agente
+ * participa, para o card de voz oferecer "aplicar a mesma voz em todas". Com a
+ * Arena fora do ar ele devolve vazio — o card some sozinho, sem `if` espalhado
+ * pela tela.
+ *
+ * O corpo original está no histórico do git e o endpoint
+ * `GET /arenas/por-agente/{id}` continua no backend. Para voltar, restaure a
+ * busca. Ver `docs/EM-CONSTRUCAO.md`.
+ */
+function useAgentArenas(_agentId: string) {
+  return { rows: [] as ArenaVoiceRow[], loading: false };
 }
 
 function VoiceSection({ agentId }: { agentId: string }) {
@@ -1368,15 +1350,8 @@ function VoiceSection({ agentId }: { agentId: string }) {
         </div>
       </div>
 
-      <label className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none">
-        <input
-          type="checkbox"
-          checked={syncAllArenas}
-          onChange={(e) => setSyncAllArenas(e.target.checked)}
-          className="h-3 w-3 accent-primary"
-        />
-        Usar a mesma voz (TTS) em todas as arenas
-      </label>
+      {/* O "usar a mesma voz em todas as arenas" saiu com a Arena — ver
+          `docs/EM-CONSTRUCAO.md`. */}
     </section>
   );
 }

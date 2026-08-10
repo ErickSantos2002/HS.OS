@@ -3,6 +3,8 @@
 Ponto de retomada da portagem. Atualizado em **07/08/2026**, ao fim de três dias
 de trabalho. Leia isto, depois `CLAUDE.md` e `docs/ROADMAP.md`.
 
+👉 **Arena pausada em 10/08** — ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md).
+
 👉 **Vai testar o sistema?** Comece por [`TESTAR-SEGUNDA.md`](TESTAR-SEGUNDA.md)
 — roteiro em ordem, o que já se sabe que não funciona, e o que precisa ser
 testado junto porque tem efeito real.
@@ -17,7 +19,8 @@ na pasta. **Todo número aqui vem de um comando**, e o comando está ao lado.
 
 | | Hoje | Total | Como medir |
 |---|---|---|---|
-| Edge functions fora da pasta | **60** | 73 | `73 - $(ls backend/supabase/functions \| grep -v _shared \| wc -l)` |
+| Edge functions **por portar** | — | **9** | `ls backend/supabase/functions \| grep -vE "_shared\|_pausado" \| wc -l` |
+| Fora da pasta (portadas) | 60 | 73 | 4 estão em `_pausado/` — ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md) |
 | Arquivos do front sem Supabase | **71** | 113 | `113 - $(grep -rl "integrations/supabase/client" frontend/src \| wc -l)` |
 | Rotas na API própria | **160** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
 

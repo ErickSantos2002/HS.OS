@@ -22,9 +22,21 @@ import SessionsPage from "./pages/SessionsPage";
 import SettingsPage from "./pages/SettingsPage";
 import SkillsPage from "./pages/SkillsPage";
 import ClawHubPage from "./pages/ClawHubPage";
-import ArenasPage from "./pages/ArenasPage";
-import ArenaCreatePage from "./pages/ArenaCreatePage";
-import ArenaViewPage from "./pages/ArenaViewPage";
+// ⚠️ Arena pausada em 10/08/2026. As três telas estão em `src/_legado/arena/`,
+// fora da compilação, e as rotas caem no aviso de "em construção". Para voltar:
+// mover os arquivos de volta e trocar os `<ArenaPausada />` pelas páginas
+// originais. Ver `docs/EM-CONSTRUCAO.md`.
+import EmConstrucao from "./components/EmConstrucao";
+import { Swords } from "lucide-react";
+
+const ArenaPausada = () => (
+  <EmConstrucao
+    icone={Swords}
+    titulo="Arena"
+    resumo="A sala de debate entre agentes está pausada enquanto o resto da plataforma vai ao ar. A ideia continua de pé e o trabalho já feito está guardado."
+    oQueEra="Vários agentes com papéis atribuídos respondendo à mesma pergunta em rodadas, cada um lendo e reagindo ao que os anteriores disseram."
+  />
+);
 import LoginPage from "./pages/LoginPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ResultsPage from "./pages/ResultsPage";
@@ -153,7 +165,7 @@ const App = () => {
                             path="/arenas"
                             element={
                               <ProtectedRoute allowedRoles={["super_admin", "member"]}>
-                                <ArenasPage />
+                                <ArenaPausada />
                               </ProtectedRoute>
                             }
                           />
@@ -161,7 +173,7 @@ const App = () => {
                             path="/arenas/new"
                             element={
                               <ProtectedRoute allowedRoles={["super_admin", "member"]}>
-                                <ArenaCreatePage />
+                                <ArenaPausada />
                               </ProtectedRoute>
                             }
                           />
@@ -169,7 +181,7 @@ const App = () => {
                             path="/arenas/:arenaId"
                             element={
                               <ProtectedRoute allowedRoles={["super_admin", "member"]}>
-                                <ArenaViewPage />
+                                <ArenaPausada />
                               </ProtectedRoute>
                             }
                           />

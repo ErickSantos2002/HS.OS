@@ -1,5 +1,15 @@
 """Arenas — os debates entre agentes com persona.
 
+⚠️ **PAUSADA em 10/08/2026.** O front foi para `frontend/src/_legado/arena/` e as
+rotas da tela caem num aviso de "em construção". Este router continua registrado
+e funcionando de propósito: ele está testado, não custa nada de pé, e mantê-lo é
+o que faz "voltar a Arena" ser mover arquivos de front em vez de reescrever a
+API. Ver `docs/EM-CONSTRUCAO.md`.
+
+Enquanto a Arena estiver pausada, **nenhuma tela chama estas rotas** — se algo
+aqui aparecer no log de acesso, é sinal de que sobrou uma chamada em algum
+lugar.
+
 Uma arena guarda o elenco (`agents`), o roteiro (`prompt`, `react_code`) e a
 configuração de voz. As mensagens e sessões vivem em tabelas próprias, com
 `ON DELETE CASCADE` a partir daqui — apagar a arena leva o histórico junto, e é
