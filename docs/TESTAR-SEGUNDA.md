@@ -40,6 +40,22 @@ Não perca tempo com estes — são conhecidos e estão documentados:
 | "Esqueci minha senha" (`/reset-password`) | o fluxo sumiu com o Supabase Auth |
 | Consumo em tempo real no painel do agente | `usage_events` ficou fora dos gatilhos de propósito — atualiza ao abrir |
 | Artefatos publicados no painel do agente | a tabela não tem vínculo com agente; a lista é vazia por construção |
+| **Parar a resposta do agente** | o botão para a TELA de esperar, não o agente. Ver abaixo |
+
+### Sobre parar a resposta
+
+O botão de interromper **nunca parou o agente** — só a tela de esperar. Isso não
+é regressão da migração: o `/stop` ao gateway está atrás da flag
+`dnos_flag_real_stop`, desligada por padrão desde o remix.
+
+E sondei o gateway em 10/08: **ele não tem método de parada**. `agent.stop`,
+`chat.cancel`, `run.cancel` e outros quatro candidatos respondem `unknown
+method`. O único caminho é mandar `/stop` como mensagem de chat e torcer para o
+OpenClaw interpretar a barra.
+
+⚠️ Não liguei a flag. Se o gateway **não** interpretar, a agente recebe o texto
+"/stop" e responde a ele — pior que o sintoma atual, que é a resposta original
+chegando atrasada. É um teste para fazermos juntos, num agente combinado.
 
 ---
 
