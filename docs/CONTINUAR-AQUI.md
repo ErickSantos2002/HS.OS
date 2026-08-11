@@ -267,6 +267,21 @@ Escrito e testado só nas guardas, porque o caminho feliz tem efeito real:
   deploy apaga avatares, anexos e documentos gerados.
 - **O WebSocket exige `wss://`** em produção: o token vai na query (a API do
   navegador não permite cabeçalho), então em `ws://` viajaria em claro.
+- **Desligar a ponte `dnos-files-bridge` na VPS** — pendência aberta em
+  11/08/2026, **de propósito com data para depois**.
+
+  Ela copiava os arquivos dos agentes para a tabela `agent_files` a cada 60s.
+  Existia porque o gateway não deixava lê-los direto; hoje deixa, e painel,
+  exportação e importação já falam com o gateway. A tabela está com **zero
+  linhas** — nesta instalação a ponte nunca escreveu nada.
+
+  ⚠️ **Não desligue antes de importar um agente pela tela, de ponta a ponta.**
+  O caminho novo foi testado (agente `testo`, sete arquivos, criado e apagado
+  em 11/08), mas a importação completa pela interface ainda não rodou. A ponte
+  parada não faz mal; religá-la depois de desligada exige entrar na VPS.
+
+  Quando for: `systemctl disable --now dnos-files-bridge` no 62.72.11.28.
+
 - **O tempo real vive na memória de um processo.** Com mais de um worker do
   uvicorn, quem está no worker A não recebe o que foi publicado no B. Hoje roda
   em processo único e está correto — **mas isso vira problema ao escalar.**
@@ -278,10 +293,8 @@ Escrito e testado só nas guardas, porque o caminho feliz tem efeito real:
 | Decisão | Por quê importa |
 |---|---|
 | **Trocar a senha `admin123`** | Conta `super_admin` que guarda o token do gateway. O endpoint existe (`POST /auth/trocar-senha`) e a tela está pronta. Fazer **antes** de liberar para a equipe. |
-| Lovable AI Gateway e ElevenLabs | Ver acima — travam 9 das 13 functions restantes. |
 | Flags `dnos_flag_*` viram padrão? | São 4 correções de estabilidade hoje **desligadas**: o sistema roda com os bugs antigos ativos. |
 | Manter as 191 policies de RLS? | Funcionam, mas duplicam a autorização do FastAPI. Se aposentar, vira a `003`. |
-| Gerenciador de pacotes do front | Convivem `bun.lock`, `bun.lockb` e `package-lock.json`. |
 | Fluxo de "esqueci minha senha" | Sumiu com o Supabase Auth. A `ResetPasswordPage` ainda existe e não funciona. |
 | Variante do wordmark para tema escuro | O "OS" cinza tem contraste baixo no escuro. |
 
