@@ -185,22 +185,22 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
     setExportingId(id);
     try {
       // GET porque é leitura pura. O `agent_id` vai na rota, não no corpo.
-      const data = await api<{ dnos_version?: string; agent?: { agent_id?: string } }>(
+      const data = await api<{ hsos_version?: string; dnos_version?: string; agent?: { agent_id?: string } }>(
         `/agents/${encodeURIComponent(id)}/export`,
       );
-      if (!data?.dnos_version || !data.agent?.agent_id) {
+      if (!(data?.hsos_version ?? data?.dnos_version) || !data.agent?.agent_id) {
         throw new Error("Resposta inválida do servidor");
       }
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `${id}.dnos`;
+      a.download = `${id}.hsos`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      toast({ title: "Exportado", description: `${agent.name} exportado como ${id}.dnos` });
+      toast({ title: "Exportado", description: `${agent.name} exportado como ${id}.hsos` });
     } catch (err) {
       toast({ title: "Erro ao exportar", description: (err as Error).message, variant: "destructive" });
     } finally {

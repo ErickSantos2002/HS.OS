@@ -1,4 +1,4 @@
-"""Exportação de agente em `.dnos` — portado de `export-agent`.
+"""Exportação de agente em `.hsos` (era `.dnos`) — portado de `export-agent`.
 
 O arquivo exportado viaja entre instalações, então **tudo que identifica esta
 empresa tem que virar placeholder**. A limpeza é determinística e acontece em
@@ -387,6 +387,16 @@ async def exportar(agent_id: str, _: Usuario = Depends(usuario_atual)):
 
     a = dict(agente) if agente else {}
     return {
+        # ⚠️ **Os dois nomes saem no arquivo, de propósito.** `hsos_version` é
+        # o campo desta plataforma; `dnos_version` fica junto porque um
+        # `.hsos` pode acabar sendo aberto por uma instalação que ainda não
+        # conhece o nome novo — e ela recusaria o arquivo inteiro por causa de
+        # uma chave. Escrever os dois custa uma linha; não escrever custa uma
+        # importação que falha sem a pessoa entender por quê.
+        #
+        # O caminho de volta já é tolerante: quem importa aceita qualquer um
+        # dos dois. Quando não houver mais instalação antiga, some daqui.
+        "hsos_version": "1.1",
         "dnos_version": "1.1",
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "source": origem,

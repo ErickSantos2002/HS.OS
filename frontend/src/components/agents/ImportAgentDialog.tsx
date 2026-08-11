@@ -20,7 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { KNOWN_CONNECTORS, validateDnos, fillPlaceholders, type DnosFile } from "@/lib/dnos-file";
+import { KNOWN_CONNECTORS, validateDnos, fillPlaceholders, type HsosFile } from "@/lib/hsos-file";
 
 interface Props {
   open: boolean;
@@ -41,7 +41,7 @@ const DEFAULT_MODEL = "openclaw:agent";
 const workspaceFor = (agentId: string) => `/root/.openclaw/workspace-${agentId}`;
 
 export default function ImportAgentDialog({ open, onOpenChange, onImported }: Props) {
-  const [dnos, setDnos] = useState<DnosFile | null>(null);
+  const [dnos, setDnos] = useState<HsosFile | null>(null);
   const [connectorStatus, setConnectorStatus] = useState<ConnectorStatus[]>([]);
   const [importing, setImporting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -62,7 +62,9 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
   }, [onOpenChange, reset]);
 
   const parseAndPreview = useCallback(async (file: File) => {
-    if (!file.name.toLowerCase().endsWith(".dnos")) {
+    // Aceita a extensão antiga: um agente exportado antes do rebrand precisa
+    // continuar entrando, e quem tem o arquivo não sabe que o nome mudou.
+    if (!/\.(hsos|dnos)$/i.test(file.name)) {
       toast.error("Arquivo inválido ou corrompido.");
       return;
     }
@@ -79,7 +81,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
       toast.error(`Arquivo inválido ou corrompido. ${validation}`);
       return;
     }
-    const d = parsed as DnosFile;
+    const d = parsed as HsosFile;
     setDnos(d);
 
     // Cross-check required_connectors with integrations table
@@ -187,7 +189,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
         throw new Error(`Falha ao gravar arquivos: ${syncRes.erro}`);
       }
 
-      // Skills reais do .dnos (v1.1): recria cada uma via skill-manage e
+      // Skills reais do .hsos (v1.1): recria cada uma via skill-manage e
       // vincula ao agente importado. Best-effort por skill — uma falha não
       // derruba a importação inteira.
       const dnosSkills = Array.isArray((dnos as unknown as { skills?: unknown }).skills)
@@ -246,7 +248,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
               Importar agente
             </DialogTitle>
             <DialogDescription>
-              Arquivo .dnos gerado no HS.OS — o agente é criado com as habilidades e configurações originais.
+              Arquivo .hsos gerado no HS.OS — o agente é criado com as habilidades e configurações originais.
             </DialogDescription>
           </DialogHeader>
 
@@ -264,13 +266,13 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
                 <Upload className="h-5 w-5 text-primary" />
               </div>
               <p className="text-sm font-display font-bold text-foreground">
-                Arraste um arquivo .dnos aqui
+                Arraste um arquivo .hsos aqui
               </p>
               <p className="text-xs text-muted-foreground mt-1">ou clique para selecionar</p>
               <input
                 ref={inputRef}
                 type="file"
-                accept=".dnos,application/json"
+                accept=".hsos,.dnos,application/json"
                 onChange={onFileInput}
                 className="hidden"
               />

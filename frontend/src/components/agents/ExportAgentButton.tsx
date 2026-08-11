@@ -39,7 +39,7 @@ export default function ExportAgentButton({ agentId, agentName, variant = "icon"
   // Chamada única e síncrona: o export-agent pede pro orquestrador ler os
   // arquivos AO VIVO na VPS (com as próprias ferramentas dele — não depende
   // do Gateway expor endpoint HTTP de leitura, que falha pra agentes sem
-  // template público) e devolve o .dnos pronto na mesma resposta. Sem Loop
+  // template público) e devolve o .hsos pronto na mesma resposta. Sem Loop
   // Architecture: exportação é só leitura, sem efeito colateral, então um
   // retry simples em caso de falha é seguro — não precisa de todo o controle
   // de estado (task/checkpoint/polling) que existe pra proteger contra
@@ -52,11 +52,11 @@ export default function ExportAgentButton({ agentId, agentName, variant = "icon"
     setBusy(true);
     try {
       const data = await api<any>(`/agents/${encodeURIComponent(agentId)}/export`);
-      if (!data || typeof data !== "object" || !(data as any).dnos_version || !(data as any).agent?.agent_id) {
+      if (!data || typeof data !== "object" || !((data as any).hsos_version ?? (data as any).dnos_version) || !(data as any).agent?.agent_id) {
         throw new Error((data as any)?.error || "Resposta inválida do servidor");
       }
-      triggerDownload(`${agentId}.dnos`, JSON.stringify(data, null, 2));
-      toast.success(`${agentName ?? agentId} exportado como ${agentId}.dnos`);
+      triggerDownload(`${agentId}.hsos`, JSON.stringify(data, null, 2));
+      toast.success(`${agentName ?? agentId} exportado como ${agentId}.hsos`);
     } catch (err) {
       toast.error((err as Error).message || "Não foi possível exportar o agente.");
     } finally {
@@ -81,7 +81,7 @@ export default function ExportAgentButton({ agentId, agentName, variant = "icon"
     <button
       onClick={handleExport}
       disabled={busy}
-      title={busy ? `Exportando... (${elapsedSec}s)` : "Exportar como .dnos"}
+      title={busy ? `Exportando... (${elapsedSec}s)` : "Exportar como .hsos"}
       className={`inline-flex items-center justify-center h-7 w-7 rounded-lg glass-card hover:border-primary/30 hover:text-primary transition-colors disabled:opacity-50 ${className}`}
     >
       {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}

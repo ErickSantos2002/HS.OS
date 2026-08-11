@@ -1,8 +1,19 @@
-// .dnos — proprietary export format for shareable dnOS agents.
-// Internally JSON, extension .dnos identifies the ecosystem.
+// `.hsos` — formato de exportação de agente. JSON por dentro; a extensão
+// identifica o ecossistema.
+//
+// ⚠️ **Era `.dnos`, com o campo `dnos_version`.** Renomeado em 11/08/2026, no
+// rebrand. A leitura aceita os dois nomes de propósito: arquivo exportado
+// antes da mudança tem que continuar importando, e quem exportou não tem como
+// saber que o nome mudou. A escrita usa só o novo.
+//
+// Quando não houver mais `.dnos` circulando, dá para tirar o `dnos_version` do
+// `versaoDoArquivo` — mas isso é decisão de uma pessoa que saiba que não há,
+// não algo para deduzir do código.
 
-export interface DnosFile {
-  dnos_version: string;
+export interface HsosFile {
+  hsos_version?: string;
+  /** Nome antigo do campo. Só leitura — nada novo grava aqui. */
+  dnos_version?: string;
   exported_at: string;
   agent: {
     agent_id: string;
@@ -139,11 +150,16 @@ export function fillPlaceholders(content: string, profile: CompanyProfileLite | 
   return out;
 }
 
-/** Validate parsed JSON as a DnosFile. Returns error string or null. */
+/** A versão declarada no arquivo, sob qualquer um dos dois nomes. */
+export function versaoDoArquivo(d: Partial<HsosFile> | null | undefined): string | null {
+  return d?.hsos_version ?? d?.dnos_version ?? null;
+}
+
+/** Valida o JSON como arquivo de agente. Devolve o erro, ou null. */
 export function validateDnos(raw: unknown): string | null {
   if (!raw || typeof raw !== "object") return "Arquivo inválido.";
-  const d = raw as Partial<DnosFile>;
-  if (!d.dnos_version) return "Campo dnos_version ausente.";
+  const d = raw as Partial<HsosFile>;
+  if (!versaoDoArquivo(d)) return "Campo hsos_version ausente.";
   if (!d.agent || typeof d.agent !== "object") return "Bloco agent ausente.";
   if (!d.agent.agent_id || !/^[a-z0-9-]{2,32}$/.test(d.agent.agent_id)) return "agent_id inválido.";
   if (!d.agent.name) return "agent.name ausente.";
@@ -152,12 +168,12 @@ export function validateDnos(raw: unknown): string | null {
   return null;
 }
 
-export function triggerDownload(dnos: DnosFile) {
+export function triggerDownload(dnos: HsosFile) {
   const blob = new Blob([JSON.stringify(dnos, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${dnos.agent.agent_id}.dnos`;
+  a.download = `${dnos.agent.agent_id}.hsos`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
