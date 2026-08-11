@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Download, BookOpen, FileCode } from "lucide-react";
+import { Download, BookOpen, FileCode, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { generateDocumentationYaml } from "@/lib/dnos-documentation-yaml";
 
@@ -205,7 +205,7 @@ export default function DocumentationPage({ embedded }: { embedded?: boolean } =
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement("a");
                   a.href = url;
-                  a.download = "dnos-documentation.yaml";
+                  a.download = "hs-os-documentacao.yaml";
                   a.click();
                   URL.revokeObjectURL(url);
                 }}
@@ -216,11 +216,46 @@ export default function DocumentationPage({ embedded }: { embedded?: boolean } =
             </div>
           </div>
 
+          {/* ⚠️ Aviso de defasagem. Fica FORA do `contentRef` de propósito:
+              o `contentRef` é o que vira PDF, e um PDF baixado hoje pode ser
+              lido daqui a meses, quando este aviso já não fizer sentido — ou,
+              pior, quando o texto tiver sido corrigido e o aviso desmentir
+              algo que já está certo. Na tela ele é sempre atual; no papel,
+              não. */}
+          <div className="mb-8 rounded-xl border border-warning/40 bg-warning/5 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+              <div className="text-sm">
+                <p className="font-semibold text-foreground">
+                  A parte técnica desta documentação está desatualizada — última revisão em julho de 2026.
+                </p>
+                <p className="text-muted-foreground mt-1.5">
+                  A plataforma saiu do Supabase entre julho e agosto de 2026, e as seções de
+                  arquitetura ainda descrevem o desenho anterior. Em concreto: as{" "}
+                  <em>edge functions</em> citadas não existem mais — viraram rotas da API própria —
+                  e a API dos artefatos passou de <code className="text-xs bg-secondary px-1 rounded">window.dnos</code>{" "}
+                  para <code className="text-xs bg-secondary px-1 rounded">window.hsos</code>, com o
+                  nome antigo mantido só como apelido.
+                </p>
+                <p className="text-muted-foreground mt-1.5">
+                  <strong className="text-foreground">O que continua confiável:</strong> a visão geral,
+                  os conceitos, os papéis e o funcionamento das telas. O que descreve nomes de função,
+                  tabelas e chamadas internas, não.
+                </p>
+                <p className="text-muted-foreground mt-1.5">
+                  Para o estado atual, o repositório é a fonte:{" "}
+                  <code className="text-xs bg-secondary px-1 rounded">docs/CONTINUAR-AQUI.md</code>{" "}
+                  e <code className="text-xs bg-secondary px-1 rounded">CLAUDE.md</code>.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div ref={contentRef}>
             {/* 1. VISÃO GERAL */}
             <SectionHeading id="visao-geral" title="1. Visão Geral" />
             <P>
-              O <strong>HS.OS</strong> (HS.OS Operating System) é a plataforma central de orquestração de agentes de inteligência
+              O <strong>HS.OS</strong> é a plataforma central de orquestração de agentes de inteligência
               artificial da HS.OS. Ele permite que equipes interajam, coordenem e monitorem uma frota de agentes especializados
               em tempo real, através de uma interface unificada inspirada em sistemas operacionais de missão.
             </P>
@@ -1428,7 +1463,7 @@ curl -X POST \\
             {/* Footer */}
             <div className="mt-12 pt-6 border-t border-border text-center">
               <p className="text-xs text-muted-foreground">
-                HS.OS — HS.OS Operating System • Documentação gerada automaticamente • {new Date().toLocaleDateString("pt-BR")}
+                HS.OS • Documentação gerada automaticamente • {new Date().toLocaleDateString("pt-BR")}
               </p>
             </div>
 

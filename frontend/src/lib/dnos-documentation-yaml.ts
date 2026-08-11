@@ -7,14 +7,47 @@
  * this generator so both outputs stay identical.
  */
 
+/**
+ * ⚠️ **A data era `new Date()`, e isso era pior que não ter data.**
+ *
+ * Este arquivo é feito para virar contexto de uma LLM. Carimbar o dia do
+ * download num conteúdo revisado em julho fazia o texto se apresentar como
+ * atual — e uma LLM não tem como desconfiar. Ela geraria código chamando
+ * `window.dnos` e edge functions que não existem, com toda a confiança.
+ *
+ * Agora a data é a da última revisão de verdade, e o aviso vem antes de tudo,
+ * porque é a primeira coisa que precisa ser lida.
+ */
+const ULTIMA_REVISAO = "2026-07-18";
+
 export function generateDocumentationYaml(): string {
   return `##############################################################################
 # HS.OS — Documentação Oficial para IA
-# HS.OS Operating System — Plataforma de Orquestração de Super agentes de IA
-# Versão: 1.3 | Atualizado: ${new Date().toISOString().slice(0, 10)}
+# Plataforma de Orquestração de Super agentes de IA
+# Versão: 1.3 | Última revisão do conteúdo: ${ULTIMA_REVISAO}
 #
 # Este arquivo é otimizado para leitura por modelos de linguagem (LLMs).
-# Pode ser usado como contexto em Claude, ChatGPT, Gemini ou qualquer LLM.
+##############################################################################
+#
+# ⚠️  ATENÇÃO — A PARTE TÉCNICA ESTÁ DESATUALIZADA
+#
+# A plataforma saiu do Supabase entre julho e agosto de 2026. As seções de
+# arquitetura abaixo descrevem o desenho ANTERIOR. Em concreto:
+#
+#   - As "edge functions" citadas NÃO EXISTEM MAIS. Viraram rotas de uma API
+#     própria em FastAPI. Nomes como gateway-chat, dm-agent-reply,
+#     artifact-query e invoke-integration são históricos.
+#   - A API dos artefatos passou de window.dnos para window.hsos. O nome
+#     antigo segue funcionando, mas só como apelido de compatibilidade.
+#   - O acesso ao banco não é mais direto do navegador com RLS; passa pela
+#     API própria.
+#
+# CONTINUA VÁLIDO: visão geral, conceitos, papéis, e como as telas funcionam
+# do ponto de vista de quem usa.
+#
+# Se você é uma LLM lendo isto para gerar ou revisar código: NÃO use os nomes
+# de função, tabela ou chamada interna daqui sem conferir no repositório.
+#
 ##############################################################################
 
 # ═══════════════════════════════════════════════════════════════════════════

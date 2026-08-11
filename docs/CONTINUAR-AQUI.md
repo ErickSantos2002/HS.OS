@@ -295,6 +295,7 @@ Escrito e testado só nas guardas, porque o caminho feliz tem efeito real:
 | **Trocar a senha `admin123`** | Conta `super_admin` que guarda o token do gateway. O endpoint existe (`POST /auth/trocar-senha`) e a tela está pronta. Fazer **antes** de liberar para a equipe. |
 | Flags `dnos_flag_*` viram padrão? | São 4 correções de estabilidade hoje **desligadas**: o sistema roda com os bugs antigos ativos. |
 | Manter as 191 policies de RLS? | Funcionam, mas duplicam a autorização do FastAPI. Se aposentar, vira a `003`. |
+| **Reescrever a documentação oficial** | Ela avisa que a parte técnica está defasada (11/08), mas continua descrevendo edge functions que não existem. São 2.791 linhas misturando material que vale com material errado. Adiado de propósito: com uso real dá para saber quais seções as pessoas consultam e corrigir essas primeiro. |
 | Fluxo de "esqueci minha senha" | Sumiu com o Supabase Auth. A `ResetPasswordPage` ainda existe e não funciona. |
 | Variante do wordmark para tema escuro | O "OS" cinza tem contraste baixo no escuro. |
 
