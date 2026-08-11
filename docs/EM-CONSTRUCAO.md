@@ -39,6 +39,7 @@ prático e continua sendo um arquivo de verdade, com histórico no git.
 | **Arena** | 10/08/2026 | `frontend/src/_legado/arena/`, `functions/_pausado/arena-*` |
 | **War room** | 10/08/2026 | `frontend/src/_legado/warroom/`, `functions/_pausado/warroom-feed` |
 | **Voz** (ElevenLabs) | 10/08/2026 | `frontend/src/_legado/voz/`, `functions/_pausado/*elevenlabs*` |
+| **`turn-reconciler`** | 11/08/2026 | `functions/_pausado/turn-reconciler` — ver [`DECISAO-RECONCILIADOR.md`](DECISAO-RECONCILIADOR.md) |
 
 ### Arena
 

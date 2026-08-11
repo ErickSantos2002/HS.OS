@@ -24,7 +24,7 @@ na pasta. **Todo número aqui vem de um comando**, e o comando está ao lado.
 
 | | Hoje | Total | Como medir |
 |---|---|---|---|
-| Edge functions **por portar** | — | **1** | `ls backend/supabase/functions \| grep -vE "_shared\|_pausado\|_portado" \| wc -l` |
+| Edge functions **por portar** | — | **0** | `ls backend/supabase/functions \| grep -vE "_shared\|_pausado\|_portado" \| wc -l` |
 | Portadas | 68 | 73 | as outras 4 estão em `_pausado/` — ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md) |
 | Arquivos do front com Supabase | **1** | 278 | `grep -rl "integrations/supabase/client" frontend/src \| grep -v _legado \| wc -l` |
 | Rotas na API própria | **181** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
@@ -46,7 +46,7 @@ diferentes, e o resumo antigo ("Realtime ✅ portado") escondia isso:
 | **Auth** | ✅ JWT próprio (PyJWT + bcrypt) | ✅ **completo** | o *reset por e-mail* não existe — sem envio de e-mail, quem esquece a senha pede uma temporária ao admin |
 | **Storage** | ✅ `UPLOADS_DIR` em disco | ✅ **completo** | nada |
 | **Realtime** | ✅ WebSocket + LISTEN/NOTIFY (`app/escuta_banco.py`) | ✅ **completo** | nada — `postgres_changes` zerado, e o "está digitando" também passou para o `/ws` |
-| **Edge Functions** | 🟡 68 de 73 | ✅ sem pendências | só a `turn-reconciler` — ver [`PLANO-RECONCILIADOR.md`](PLANO-RECONCILIADOR.md) |
+| **Edge Functions** | ✅ 73 de 73 | ✅ sem pendências | nada — 65 portadas, 8 arquivadas por decisão |
 | **Banco** (RLS direto do browser) | ✅ 181 rotas | ✅ **completo** | nada — 0 chamadas vivas (9 em `_legado/`, fora da compilação) |
 
 O **banco é o único subsistema que ainda pesa.** Os outros quatro estão prontos

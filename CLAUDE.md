@@ -28,7 +28,7 @@ escondeu telas quebradas em produção. O placar tem que separar as duas:
 | Auth | ✅ | ✅ **completo** | JWT próprio (PyJWT + bcrypt) |
 | Storage | ✅ | ✅ **completo** | `UPLOADS_DIR` em disco, `app/routers/storage.py` |
 | Realtime (`postgres_changes`) | ✅ | ✅ **completo** | WebSocket + LISTEN/NOTIFY, `app/escuta_banco.py` |
-| Edge Functions | 🟡 **72 de 73** | ✅ sem pendências | routers FastAPI |
+| Edge Functions | ✅ **73 de 73** | ✅ sem pendências | routers FastAPI |
 | Banco (via RLS, direto do browser) | ✅ ~145 rotas | ✅ **0 chamadas vivas** | endpoints FastAPI |
 
 O **banco saiu inteiro** em 10/08/2026: das 185 chamadas `.from("…")` originais,
@@ -65,8 +65,12 @@ scripts/           túnel SSH para o OpenClaw
 docker-compose.yml backend:8002 + frontend:80
 ```
 
-**`backend/supabase/` é um placar.** Cada Edge Function portada para um endpoint FastAPI
-sai de lá. Quando a pasta esvaziar, a saída do Supabase acabou.
+**`backend/supabase/` era um placar, e ele fechou em 11/08/2026.** Não há mais Edge Function
+por portar: 65 viraram endpoints FastAPI e 8 foram arquivadas em `_pausado/` por decisão —
+Arena, war room, voz e a `turn-reconciler`. A última tem o porquê escrito em
+[`docs/DECISAO-RECONCILIADOR.md`](docs/DECISAO-RECONCILIADOR.md): ela existia para consertar
+uma entrega que se perdia, e o nosso desenho **puxa** a resposta do gateway em vez de esperar
+que a empurrem — o buraco que ela tapava não existe aqui.
 
 **Retomando o trabalho? Comece por [`docs/CONTINUAR-AQUI.md`](docs/CONTINUAR-AQUI.md)** — estado
 atual, próximos passos em ordem de dependência e as armadilhas que custam uma tarde.

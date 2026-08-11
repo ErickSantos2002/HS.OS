@@ -14,7 +14,7 @@ ainda na pasta.
 
 | | Feito | Total | Comando |
 |---|---|---|---|
-| Edge functions **por portar** | — | **1** |
+| Edge functions **por portar** | — | **0** |
 | Portadas | 68 | 73 | `ls backend/supabase/functions/_portado \| wc -l` (4 pausadas em `_pausado/`) |
 | Arquivos do front **com Supabase** | **1** | 278 | `grep -rl "integrations/supabase/client" frontend/src \| grep -v _legado \| wc -l` — e o que sobrou é o próprio client |
 | Rotas na API própria | **181** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
@@ -52,19 +52,11 @@ grep -r "functions.invoke" frontend/src --include=*.ts --include=*.tsx | grep -v
 
 Portar por **tabela**, não por tela: as três primeiras somam 53 das 185.
 
-### A function que resta
+### Nenhuma function resta
 
-| Function | Linhas | Situação |
-|---|---|---|
-| `turn-reconciler` | 864 | precisa de gatilho periódico — não há `pg_cron` na VPS. O protocolo **deixou de ser bloqueio**: ver [`PLANO-RECONCILIADOR.md`](PLANO-RECONCILIADOR.md) |
-
-As quatro que dependiam da ElevenLabs saíram da conta em 10/08: foram para
-`_pausado/` junto com a Arena e a voz — decisão de produto, não dificuldade
-técnica. Ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md).
-
-As três do Lovable AI Gateway (`transcribe-audio`, `chat-image-vision`,
-`parse-company-context`) foram portadas para a OpenAI no mesmo dia, em
-`app/routers/ia.py`.
+O placar fechou em 11/08/2026: 65 portadas e 8 arquivadas por decisão. A última
+foi a `turn-reconciler` — o porquê está em
+[`DECISAO-RECONCILIADOR.md`](DECISAO-RECONCILIADOR.md).
 
 ## Princípios
 
