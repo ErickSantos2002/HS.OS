@@ -18,6 +18,7 @@ import StatCard from "@/components/dashboard/StatCard";
 import { getAgentDisplayNameById, normalizeAgentId, getModelForAgent } from "@/lib/active-agents";
 import type { GatewayAgent, ChannelConfig, AgentTool } from "@/hooks/use-agents";
 import { useAgents } from "@/hooks/use-agents";
+import { AgentEditDrawer, type EditableAgent } from "@/components/agents/AgentEditDrawer";
 import { useAgentAvatar } from "@/hooks/use-agent-avatar";
 import { useAgentResults, type AgentResult } from "@/hooks/use-agent-results";
 import { useAgentCrons, type AgentCron } from "@/hooks/use-agent-crons";
@@ -308,7 +309,7 @@ function initialsOf(name: string) {
 
 export default function AgentDetailPanel({ agent: agentProp, agentId, avatar: avatarProp, onClose, fullWidth }: Props) {
   const navigate = useNavigate();
-  const { agents } = useAgents();
+  const { agents, refetch: recarregarAgentes } = useAgents();
   const resolvedAgent =
     agentProp ??
     (agentId
@@ -318,6 +319,9 @@ export default function AgentDetailPanel({ agent: agentProp, agentId, avatar: av
   const shortId = normalizeAgentId(resolvedAgent?.id ?? fallbackId);
   const displayName = getAgentDisplayNameById(resolvedAgent?.id ?? fallbackId, resolvedAgent?.name);
   const isActive = resolvedAgent?.status === "active";
+
+  // O editor real do agente. Ver o botão "Editar", mais abaixo.
+  const [editando, setEditando] = useState<EditableAgent | null>(null);
 
   const profile = useAgentProfile(shortId);
   const stats = useAgentStats(shortId);
@@ -454,7 +458,19 @@ export default function AgentDetailPanel({ agent: agentProp, agentId, avatar: av
                   }`}
                 >
                   <span className={`h-1.5 w-1.5 rounded-full ${liveColor}`} />
-                  {live === "online" ? "ONLINE" : live === "recent" ? "RECENTE" : "OFFLINE"}
+                  {/* ⚠️ "OFFLINE" aqui era mentira por omissão. Este selo sai
+                      de `latest_updated_at`, coluna que **só o coletor da VPS
+                      preenche** — sem coleta ele é nulo, e o agente aparecia
+                      como fora do ar enquanto respondia normalmente no gateway.
+                      Mesmo engano do banner do /monitoring, corrigido em 10/08.
+                      Sem dado, o honesto é dizer que não se sabe. */}
+                  {live === "online"
+                    ? "ONLINE"
+                    : live === "recent"
+                      ? "RECENTE"
+                      : meta.data?.latest_updated_at
+                        ? "OFFLINE"
+                        : "SEM DADOS"}
                 </span>
 
                 {/* Leadership */}
@@ -484,8 +500,27 @@ export default function AgentDetailPanel({ agent: agentProp, agentId, avatar: av
                 >
                   <MessageSquare className="h-3 w-3" /> Abrir Chat
                 </button>
+                {/* ⚠️ Este botão não fazia nada. Ele navegava para
+                    `/agents/{id}?tab=settings`, e **ninguém no projeto lê esse
+                    `tab`** — a única ocorrência da string era esta linha. O
+                    resultado era ir para o painel onde a pessoa já estava, sem
+                    sinal nenhum de que o clique foi registrado.
+
+                    O editor de verdade existe e funciona: é o `AgentEditDrawer`,
+                    que até agora só abria por Configurações → Usuários →
+                    Configurar. Não havia motivo para ele não abrir daqui. */}
                 <button
-                  onClick={() => navigate(`/agents/${encodeURIComponent(agent.id)}?tab=settings`)}
+                  onClick={() =>
+                    setEditando({
+                      agent_id: shortId,
+                      openclaw_id: resolvedAgent?.openclawId ?? null,
+                      name: resolvedAgent?.name ?? displayName,
+                      // O drawer relê o perfil e usa isto só como valor
+                      // inicial, mas mandar o certo evita o campo piscar
+                      // com um emoji genérico antes de carregar.
+                      emoji: resolvedAgent?.emoji ?? "",
+                    })
+                  }
                   className="flex items-center gap-1 text-[10px] font-medium px-2.5 py-1 rounded-lg bg-secondary/60 text-foreground hover:bg-secondary transition-colors"
                 >
                   <Edit3 className="h-3 w-3" /> Editar
@@ -591,6 +626,24 @@ export default function AgentDetailPanel({ agent: agentProp, agentId, avatar: av
 
         {/* ── WORKSPACE ── */}
       </div>
+
+      {/* O editor. Abre pelo botão "Editar" do cabeçalho; é o mesmo drawer de
+          Configurações → Usuários → Configurar, não uma segunda tela. */}
+      <AgentEditDrawer
+        agent={editando}
+        onOpenChange={(aberto) => !aberto && setEditando(null)}
+        onSaved={() => {
+          // Nome e emoji aparecem no cabeçalho deste painel e saem da lista
+          // de agentes — sem recarregar, a edição salva e a tela continua
+          // mostrando o valor antigo.
+          void recarregarAgentes?.();
+          setEditando(null);
+        }}
+        onDeleted={() => {
+          setEditando(null);
+          onClose?.();
+        }}
+      />
     </div>
   );
 }

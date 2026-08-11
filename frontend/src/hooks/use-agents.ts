@@ -58,6 +58,11 @@ export interface GatewayAgent {
   lastChannel: string;
   /** Timestamp (ms) of last SSE status update for stale detection */
   lastStatusUpdate?: number;
+  /** Id no gateway quando difere do `id`. A edição precisa dos dois. */
+  openclawId?: string | null;
+  emoji?: string | null;
+  department?: string | null;
+  isLeader?: boolean;
 }
 
 function parseTools(raw: any): AgentTool[] {
