@@ -259,7 +259,14 @@ deixou de ser. Consequências ao portar:
 - `export-agent` pede ao **LLM do orquestrador** para ler os arquivos e devolver JSON, com prompt de
   ~170s de timeout, justamente porque não havia outro jeito. Agora há leitura determinística.
 - A ponte `dnos-files-bridge` na VPS (timer de 60s espelhando arquivos para a tabela `agent_files`)
-  existe pelo mesmo motivo. Vale reavaliar se ainda precisa existir.
+  existia pelo mesmo motivo. **Saiu do caminho em 11/08/2026**: painel, exportação e importação
+  falam com o gateway direto, e nenhum arquivo do front toca a `agent_files`. A tabela está com
+  zero linhas — a ponte nunca escreveu nada aqui — e pode ser desligada na VPS.
+
+⚠️ **`agents.create` exige `workspace`**, e a convenção dos agentes existentes é
+`/root/.openclaw/workspace-<sufixo>`. O gateway ainda cria um `BOOTSTRAP.md` sozinho no workspace
+novo (~1.7 KB), que não é um dos sete canônicos e nada do nosso lado escreve. Levantado em
+11/08/2026 criando e apagando um agente de teste.
 - `agents.files.get` usa **`name`** (nome canônico); `agents.workspace.get` usa **`path`**. Trocar um
   pelo outro dá `unexpected property`.
 

@@ -178,15 +178,38 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
           content: fillPlaceholders(content as string, companyProfile),
         }));
 
-      // pending_write: true — é a ponte (dnos-files-bridge, na VPS) quem leva
-      // estes arquivos ao disco de verdade, em até ~60s, e confirma. Antes,
-      // eles paravam na tabela e o agente nascia sem alma no filesystem.
-      const syncRes = await api(`/agents/${encodeURIComponent(agentId)}/arquivos-espelhados`, {
-        method: "PUT",
-        body: filesPayload.map((f: any) => ({ file_name: f.file_name, content: f.content })),
-      }).then(() => ({ ok: true, erro: "" }), (e: Error) => ({ ok: false, erro: e.message }));
-      if (!syncRes.ok) {
-        throw new Error(`Falha ao gravar arquivos: ${syncRes.erro}`);
+      // ⚠️ **Escreve no gateway, não na tabela.** Isto gravava em `agent_files`
+      // com `pending_write: true`, esperando que a ponte `dnos-files-bridge`
+      // levasse os arquivos ao disco em ~60s. A ponte não roda nesta
+      // instalação — a tabela está com zero linhas — então o agente importado
+      // nascia sem SOUL.md nem IDENTITY.md no workspace, e nada avisava: a
+      // gravação na tabela dava certo, e a importação terminava "com sucesso".
+      //
+      // `agents.files.set` escreve direto e confirma na hora. Um arquivo por
+      // chamada, em série, porque a ordem importa menos que saber QUAL falhou:
+      // com Promise.all, um erro no TOOLS.md apareceria como uma rejeição
+      // anônima no meio de quatro.
+      const falhas: string[] = [];
+      for (const f of filesPayload) {
+        try {
+          await api(
+            `/agents/${encodeURIComponent(agentId)}/arquivos/${encodeURIComponent(f.file_name)}`,
+            { method: "PUT", body: { content: f.content } },
+          );
+        } catch (e) {
+          falhas.push(`${f.file_name}: ${e instanceof Error ? e.message : "erro"}`);
+        }
+      }
+      // SOUL.md e IDENTITY.md são o que define o agente; sem eles não há
+      // agente, e seguir para as skills seria enfeitar uma casa sem parede.
+      const essenciaisQuebrados = falhas.filter((m) => /^(SOUL|IDENTITY)\.md:/.test(m));
+      if (essenciaisQuebrados.length) {
+        throw new Error(`Falha ao gravar arquivos: ${essenciaisQuebrados.join(" · ")}`);
+      }
+      if (falhas.length) {
+        // Os demais são complementares: avisa e segue, em vez de desfazer um
+        // agente que já foi criado no gateway.
+        toast.warning(`Agente criado, mas alguns arquivos falharam: ${falhas.join(" · ")}`);
       }
 
       // Skills reais do .hsos (v1.1): recria cada uma via skill-manage e
