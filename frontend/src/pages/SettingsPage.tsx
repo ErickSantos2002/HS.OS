@@ -8,7 +8,7 @@ import { useBranding } from "@/hooks/use-branding";
 import { useAuthContext } from "@/contexts/auth-context";
 import { toast } from "@/hooks/use-toast";
 import { Settings, Wifi, WifiOff, Loader2, Save, Upload, RotateCcw, Paintbrush, Image, Building2, User, Lock, AlertTriangle, Link2, FileText, UserCog, BookOpen, Bell, Download, Palette, KeyRound, Activity, Zap, DollarSign, Server, Clock, CheckCircle, XCircle, Timer } from "lucide-react";
-import { generateDesignSystemYaml } from "@/lib/dnos-design-system-yaml";
+import { generateDesignSystemYaml } from "@/lib/design-system-yaml";
 import { getPricingFor } from "@/lib/model-pricing";
 import { useGatewayStatus } from "@/hooks/useGatewayStatus";
 
@@ -181,13 +181,19 @@ export default function SettingsPage() {
   };
 
   const [searchParams] = useSearchParams();
-  type TabId = "profile" | "identity" | "gateway" | "artifacts" | "dnos" | "users" | "documentation" | "integrations" | "empresa";
-  const initialTab = (searchParams.get("tab") as TabId) || "profile";
+  type TabId = "profile" | "identity" | "gateway" | "artifacts" | "hsos" | "users" | "documentation" | "integrations" | "empresa";
+  // A aba "dnos" virou "hsos" no rebrand. Link antigo — bookmark, mensagem
+  // no chat, aquele redirect de `/dnos` que ficou de herança — continua
+  // abrindo a aba certa em vez de cair no perfil sem explicação.
+  const aba = (bruta: string | null): TabId =>
+    ((bruta === "dnos" ? "hsos" : bruta) as TabId) || "profile";
+
+  const initialTab = aba(searchParams.get("tab"));
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
   useEffect(() => {
-    const t = searchParams.get("tab") as TabId | null;
-    if (t) setActiveTab(t);
+    const t = searchParams.get("tab");
+    if (t) setActiveTab(aba(t));
   }, [searchParams]);
 
 
@@ -428,7 +434,7 @@ export default function SettingsPage() {
     { id: "artifacts", label: "Artefatos", icon: Link2 },
     ...(isMemberOrAdmin ? [{ id: "documentation" as TabId, label: "Documentação", icon: BookOpen }] : []),
     ...(isAdmin ? [{ id: "gateway" as TabId, label: "Gateway", icon: Wifi }] : []),
-    { id: "dnos", label: "HS.OS", icon: FileText },
+    { id: "hsos", label: "HS.OS", icon: FileText },
   ];
 
 
@@ -1072,7 +1078,7 @@ export default function SettingsPage() {
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement("a");
                     a.href = url;
-                    a.download = `dnos-design-system-${new Date().toISOString().slice(0, 10)}.yaml`;
+                    a.download = `hs-os-design-system-${new Date().toISOString().slice(0, 10)}.yaml`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
@@ -1335,7 +1341,7 @@ export default function SettingsPage() {
 
 
       {/* HS.OS Tab */}
-      {activeTab === "dnos" && (
+      {activeTab === "hsos" && (
         <div className="-mx-6 -mb-6">
           <MissionControlDossierPage embedded />
         </div>

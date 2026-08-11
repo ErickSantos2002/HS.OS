@@ -244,7 +244,7 @@ const App = () => {
                               </ProtectedRoute>
                             }
                           />
-                          <Route path="/dnos" element={<Navigate to="/settings?tab=dnos" replace />} />
+                          <Route path="/dnos" element={<Navigate to="/settings?tab=hsos" replace />} />
 
                           <Route
                             path="/monitoring"
@@ -263,7 +263,7 @@ const App = () => {
                             }
                           />
                           <Route path="/documentation" element={<Navigate to="/settings?tab=documentation" replace />} />
-                          <Route path="/mission-control" element={<Navigate to="/settings?tab=dnos" replace />} />
+                          <Route path="/mission-control" element={<Navigate to="/settings?tab=hsos" replace />} />
                           <Route path="/users" element={<Navigate to="/settings?tab=users" replace />} />
                           <Route path="/profile" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                           <Route path="*" element={<NotFound />} />

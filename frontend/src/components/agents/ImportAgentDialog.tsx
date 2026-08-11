@@ -20,7 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { KNOWN_CONNECTORS, validateDnos, fillPlaceholders, type HsosFile } from "@/lib/hsos-file";
+import { KNOWN_CONNECTORS, validarArquivo, fillPlaceholders, type HsosFile } from "@/lib/hsos-file";
 
 interface Props {
   open: boolean;
@@ -41,7 +41,7 @@ const DEFAULT_MODEL = "openclaw:agent";
 const workspaceFor = (agentId: string) => `/root/.openclaw/workspace-${agentId}`;
 
 export default function ImportAgentDialog({ open, onOpenChange, onImported }: Props) {
-  const [dnos, setDnos] = useState<HsosFile | null>(null);
+  const [arquivo, setArquivo] = useState<HsosFile | null>(null);
   const [connectorStatus, setConnectorStatus] = useState<ConnectorStatus[]>([]);
   const [importing, setImporting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -49,7 +49,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const reset = useCallback(() => {
-    setDnos(null);
+    setArquivo(null);
     setConnectorStatus([]);
     setImporting(false);
     setDragOver(false);
@@ -64,7 +64,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
   const parseAndPreview = useCallback(async (file: File) => {
     // Aceita a extensão antiga: um agente exportado antes do rebrand precisa
     // continuar entrando, e quem tem o arquivo não sabe que o nome mudou.
-    if (!/\.(hsos|dnos)$/i.test(file.name)) {
+    if (!/\.(hsos|arquivo)$/i.test(file.name)) {
       toast.error("Arquivo inválido ou corrompido.");
       return;
     }
@@ -76,13 +76,13 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
       toast.error("Arquivo inválido ou corrompido.");
       return;
     }
-    const validation = validateDnos(parsed);
+    const validation = validarArquivo(parsed);
     if (validation) {
       toast.error(`Arquivo inválido ou corrompido. ${validation}`);
       return;
     }
     const d = parsed as HsosFile;
-    setDnos(d);
+    setArquivo(d);
 
     // Cross-check required_connectors with integrations table
     const required = d.required_connectors ?? [];
@@ -125,10 +125,10 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
   };
 
   const runImport = useCallback(async (force = false) => {
-    if (!dnos) return;
+    if (!arquivo) return;
     setImporting(true);
     try {
-      const agentId = dnos.agent.agent_id;
+      const agentId = arquivo.agent.agent_id;
 
       if (!force) {
         const existing = await api<any>(
@@ -147,17 +147,17 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
         method: "POST",
         body: {
           openclaw_id: agentId,
-          name: dnos.agent.name,
-          emoji: dnos.agent.emoji || "🤖",
-          specialty: dnos.agent.role || dnos.agent.description || "Agente importado do HS.OS",
-          description: dnos.agent.description || "",
+          name: arquivo.agent.name,
+          emoji: arquivo.agent.emoji || "🤖",
+          specialty: arquivo.agent.role || arquivo.agent.description || "Agente importado do HS.OS",
+          description: arquivo.agent.description || "",
           model: DEFAULT_MODEL,
           workspace: workspaceFor(agentId),
           channels: ["webchat"],
-          skills_description: dnos.capabilities.join(", "),
-          skills_tags: dnos.capabilities.slice(0, 12),
-          integrations_used: dnos.required_connectors,
-          persona_description: dnos.agent.description || "",
+          skills_description: arquivo.capabilities.join(", "),
+          skills_tags: arquivo.capabilities.slice(0, 12),
+          integrations_used: arquivo.required_connectors,
+          persona_description: arquivo.agent.description || "",
           lia_onboarding: false,
         },
       });
@@ -171,7 +171,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
       // de placeholder cru (a exportação só faz o caminho contrário, nunca
       // existiu o inverso na importação).
       const companyProfile = await api<any>("/integracoes/empresa/perfil").catch(() => null);
-      const filesPayload = Object.entries(dnos.files)
+      const filesPayload = Object.entries(arquivo.files)
         .filter(([, content]) => typeof content === "string" && content)
         .map(([file_name, content]) => ({
           file_name,
@@ -215,10 +215,10 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
       // Skills reais do .hsos (v1.1): recria cada uma via skill-manage e
       // vincula ao agente importado. Best-effort por skill — uma falha não
       // derruba a importação inteira.
-      const dnosSkills = Array.isArray((dnos as unknown as { skills?: unknown }).skills)
-        ? ((dnos as unknown as { skills: Array<{ slug?: string; name?: string; description?: string; content?: string }> }).skills)
+      const skillsDoArquivo = Array.isArray((arquivo as unknown as { skills?: unknown }).skills)
+        ? ((arquivo as unknown as { skills: Array<{ slug?: string; name?: string; description?: string; content?: string }> }).skills)
         : [];
-      for (const s of dnosSkills) {
+      for (const s of skillsDoArquivo) {
         if (!s?.slug || !s?.content) continue;
         try {
           await api(`/skills/por-slug/${encodeURIComponent(s.slug)}`, {
@@ -240,26 +240,26 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
       await api(`/agents/${encodeURIComponent(agentId)}`, {
         method: "PATCH",
         body: {
-          role: dnos.agent.role ?? null,
-          department: dnos.agent.department ?? null,
-          color: dnos.agent.color ?? null,
+          role: arquivo.agent.role ?? null,
+          department: arquivo.agent.department ?? null,
+          color: arquivo.agent.color ?? null,
         },
       }).catch(() => { /* o agente já foi criado; o cargo é acabamento */ });
 
-      toast.success(`${dnos.agent.name} importado com sucesso.`);
+      toast.success(`${arquivo.agent.name} importado com sucesso.`);
       onImported?.(agentId);
       closeAll();
     } catch (err) {
       toast.error((err as Error).message || "Falha ao importar agente");
       setImporting(false);
     }
-  }, [dnos, onImported, closeAll]);
+  }, [arquivo, onImported, closeAll]);
 
   const avatarStyle = useMemo(() => ({
-    background: dnos?.agent.color
-      ? `linear-gradient(135deg, ${dnos.agent.color}, ${dnos.agent.color}80)`
+    background: arquivo?.agent.color
+      ? `linear-gradient(135deg, ${arquivo.agent.color}, ${arquivo.agent.color}80)`
       : undefined,
-  }), [dnos]);
+  }), [arquivo]);
 
   return (
     <>
@@ -275,7 +275,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
             </DialogDescription>
           </DialogHeader>
 
-          {!dnos && (
+          {!arquivo && (
             <div
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
@@ -295,14 +295,14 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
               <input
                 ref={inputRef}
                 type="file"
-                accept=".hsos,.dnos,application/json"
+                accept=".hsos,.arquivo,application/json"
                 onChange={onFileInput}
                 className="hidden"
               />
             </div>
           )}
 
-          {dnos && (
+          {arquivo && (
             <div className="space-y-4">
               {/* Preview card */}
               <div className="glass-card rounded-2xl p-4 flex items-center gap-3">
@@ -314,14 +314,14 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-display font-bold text-foreground truncate">
-                    {dnos.agent.name}
+                    {arquivo.agent.name}
                   </div>
-                  {dnos.agent.role && (
-                    <div className="text-[11px] text-muted-foreground truncate">{dnos.agent.role}</div>
+                  {arquivo.agent.role && (
+                    <div className="text-[11px] text-muted-foreground truncate">{arquivo.agent.role}</div>
                   )}
                   <div className="flex gap-2 mt-0.5 text-[10px] font-mono text-muted-foreground">
-                    {dnos.agent.department && <span>{dnos.agent.department}</span>}
-                    <span>por {dnos.agent.author || "HS.OS"}</span>
+                    {arquivo.agent.department && <span>{arquivo.agent.department}</span>}
+                    <span>por {arquivo.agent.author || "HS.OS"}</span>
                   </div>
                 </div>
               </div>
@@ -369,7 +369,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
             >
               Cancelar
             </button>
-            {dnos && (
+            {arquivo && (
               <button
                 onClick={() => runImport()}
                 disabled={importing}
@@ -388,7 +388,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
           <AlertDialogHeader>
             <AlertDialogTitle>Agente já existe</AlertDialogTitle>
             <AlertDialogDescription>
-              Já existe um agente com o id <span className="font-mono">{dnos?.agent.agent_id}</span>.
+              Já existe um agente com o id <span className="font-mono">{arquivo?.agent.agent_id}</span>.
               Deseja sobrescrever o perfil e os arquivos do agente atual?
             </AlertDialogDescription>
           </AlertDialogHeader>

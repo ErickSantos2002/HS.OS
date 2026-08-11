@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { NavLink } from "@/components/NavLink";
 import { useBranding, useThemedLogo, useThemedMark } from "@/hooks/use-branding";
 import { useTheme } from "next-themes";
-import dnosLogoLight from "@/assets/hs-os-logo.png";
-import dnosMarkLight from "@/assets/hs-mark.png";
-import dnosMarkDark from "@/assets/hs-mark.png";
+import logoClaro from "@/assets/hs-os-logo.png";
+import marcaClara from "@/assets/hs-mark.png";
+import marcaEscura from "@/assets/hs-mark.png";
 import { useAuthContext } from "@/contexts/auth-context";
 import type { AppRole } from "@/hooks/use-auth";
 import { APP_VERSION, formatBuildDate } from "@/lib/app-version";
@@ -195,7 +195,7 @@ export function AppSidebar() {
             />
           ) : isLight ? (
             <img
-              src={dnosLogoLight}
+              src={logoClaro}
               alt={branding.companyName || "HS.OS"}
               className="h-9 w-auto object-contain shrink-0"
             />

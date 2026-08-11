@@ -3,7 +3,7 @@ import { ChevronRight, Home } from "lucide-react";
 
 const routeLabels: Record<string, string> = {
   "": "Dashboard",
-  dnos: "HS.OS",
+  hsos: "HS.OS",
   chat: "Chat",
   results: "Resultados",
   agents: "Super agentes",

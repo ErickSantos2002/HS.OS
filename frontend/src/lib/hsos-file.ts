@@ -156,7 +156,7 @@ export function versaoDoArquivo(d: Partial<HsosFile> | null | undefined): string
 }
 
 /** Valida o JSON como arquivo de agente. Devolve o erro, ou null. */
-export function validateDnos(raw: unknown): string | null {
+export function validarArquivo(raw: unknown): string | null {
   if (!raw || typeof raw !== "object") return "Arquivo inválido.";
   const d = raw as Partial<HsosFile>;
   if (!versaoDoArquivo(d)) return "Campo hsos_version ausente.";
@@ -168,12 +168,12 @@ export function validateDnos(raw: unknown): string | null {
   return null;
 }
 
-export function triggerDownload(dnos: HsosFile) {
-  const blob = new Blob([JSON.stringify(dnos, null, 2)], { type: "application/json" });
+export function triggerDownload(arquivo: HsosFile) {
+  const blob = new Blob([JSON.stringify(arquivo, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${dnos.agent.agent_id}.hsos`;
+  a.download = `${arquivo.agent.agent_id}.hsos`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

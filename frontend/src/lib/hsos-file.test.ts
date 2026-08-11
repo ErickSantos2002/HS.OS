@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateDnos, versaoDoArquivo } from "./hsos-file";
+import { validarArquivo, versaoDoArquivo } from "./hsos-file";
 
 /**
  * O que estes testes protegem: **arquivo exportado antes do rebrand tem que
@@ -41,26 +41,26 @@ describe("versaoDoArquivo", () => {
   });
 });
 
-describe("validateDnos", () => {
+describe("validarArquivo", () => {
   it("aceita o formato novo", () => {
-    expect(validateDnos({ ...base, hsos_version: "1.1" })).toBeNull();
+    expect(validarArquivo({ ...base, hsos_version: "1.1" })).toBeNull();
   });
 
   it("aceita o formato antigo", () => {
-    expect(validateDnos({ ...base, dnos_version: "1.1" })).toBeNull();
+    expect(validarArquivo({ ...base, dnos_version: "1.1" })).toBeNull();
   });
 
   it("recusa arquivo sem versão nenhuma", () => {
-    expect(validateDnos(base)).toMatch(/vers/i);
+    expect(validarArquivo(base)).toMatch(/vers/i);
   });
 
   it("recusa agent_id fora do formato", () => {
     // O agent_id vira nome de pasta no workspace — daí a validação apertada.
-    expect(validateDnos({ ...base, hsos_version: "1.1", agent: { agent_id: "../fuga", name: "x" } }))
+    expect(validarArquivo({ ...base, hsos_version: "1.1", agent: { agent_id: "../fuga", name: "x" } }))
       .toMatch(/agent_id/);
   });
 
   it("exige SOUL.md, que é o que define o agente", () => {
-    expect(validateDnos({ ...base, hsos_version: "1.1", files: {} })).toMatch(/SOUL/);
+    expect(validarArquivo({ ...base, hsos_version: "1.1", files: {} })).toMatch(/SOUL/);
   });
 });
