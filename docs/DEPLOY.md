@@ -72,7 +72,25 @@ OPENCLAW_GATEWAY_URL=http://172.18.0.1:18789
 OPENCLAW_ADMIN_TOKEN=<token do gateway>
 ```
 
-Três armadilhas que já custaram tempo:
+Quatro armadilhas que já custaram tempo:
+
+- **É `172.18.0.1`, não `172.17.0.1`.** Esta é a que mais engana, porque o
+  `172.17.0.1` é a resposta certa em quase todo lugar: é o gateway do `docker0`,
+  o jeito padrão de um container falar com o host. Mas o EasyPanel roda **Swarm**,
+  e aí o caminho é a `docker_gwbridge` — que é onde o túnel escuta. Errar o
+  dígito dá `Connection refused` **com o túnel perfeitamente de pé**, o que
+  manda a investigação para o lugar errado: em 11/08/2026 fomos conferir o
+  serviço do túnel (ativo há 6 dias, zero reinícios), a URL pública e o token
+  antes de olhar o número da bridge. Diagnóstico em uma linha:
+
+  ```bash
+  curl -s https://hsosapi.healthsafetytech.com/gateway/config -H "Authorization: Bearer <token>"
+  ```
+
+  Se sair `172.17`, é isso. Trocar a env e reiniciar o serviço basta — a
+  variável é lida em tempo de execução, não precisa rebuild. E note o
+  `fixado_por_env: true`: com ele, o valor correto que está em `public.vps_config`
+  é ignorado, porque o `.env` vence por decisão de projeto.
 
 - **`postgresql://`, não `postgresql+psycopg2://`.** O segundo é formato do
   SQLAlchemy e o asyncpg rejeita a URL.
