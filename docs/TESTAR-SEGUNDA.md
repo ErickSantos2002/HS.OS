@@ -140,7 +140,11 @@ produção. Testei só as guardas (404, 401, 403); o caminho feliz nunca rodou.
 2. **Mencionar um agente num canal** — dispara o agente de verdade
 3. **Excluir um agente** — apaga no gateway e em três tabelas
 4. **Disparar uma automação** — executa no gateway
-5. **Atribuir uma skill a um agente** — `skills.install` grava no workspace
+5. **Importar um agente (`.hsos`)** — hoje ele grava os arquivos numa tabela
+   que a ponte da VPS deveria aplicar no disco, e a ponte não roda. O
+   substituto (`agents.files.set`) escreve direto no workspace de produção e
+   nunca foi exercitado.
+6. **Atribuir uma skill a um agente** — `skills.install` grava no workspace
    dele. O formato do payload foi confirmado contra um agente inexistente
    (passa a validação, morre em `unknown agent id`); o caminho feliz nunca
    rodou.

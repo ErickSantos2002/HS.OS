@@ -41,7 +41,21 @@ router = APIRouter(prefix="/agents", tags=["agents"])
 # Nomes canônicos que compõem o pacote. `LEARNINGS.md` entra quando existe: é o
 # aprendizado portável, limpo por construção, mas passa pela mesma sanitização
 # dos demais — cinto e suspensório para o arquivo que viaja entre empresas.
-_ARQUIVOS = ["SOUL.md", "IDENTITY.md", "TOOLS.md", "AGENTS.md", "LEARNINGS.md"]
+# ⚠️ **Lista curada, não "tudo do workspace" — e a diferença é deliberada.**
+# O agente tem sete arquivos; estes quatro são os que definem *o que ele é* e
+# viajam bem para outra instalação.
+#
+# Ficam de fora, de propósito:
+#   MEMORY.md    — memória acumulada: nomes de cliente, detalhe de negócio,
+#                  conversa específica. A limpeza deste módulo é regex, e
+#                  confiar quilobytes de texto livre a um regex é pior do que
+#                  não levar o arquivo.
+#   USER.md      — para quem o agente trabalha. Mesma razão.
+#   HEARTBEAT.md — estado operacional, sem sentido em outra instalação.
+#
+# `LEARNINGS.md` estava aqui e **não existe no gateway** — sobra da instância
+# de origem, removida em 11/08/2026.
+_ARQUIVOS = ["SOUL.md", "IDENTITY.md", "TOOLS.md", "AGENTS.md"]
 
 _ID_VALIDO = re.compile(r"^[a-z0-9-]{2,32}$")
 
@@ -309,29 +323,33 @@ async def exportar(agent_id: str, _: Usuario = Depends(usuario_atual)):
     if not _ID_VALIDO.match(aid):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "agent_id inválido.")
 
-    async with sessao(role="service_role") as conn:
-        # Fonte primária: a tabela mantida pela ponte determinística na VPS.
-        linhas = await conn.fetch(
-            "SELECT file_name, content FROM public.agent_files "
-            "WHERE agent_id = $1 AND file_name = ANY($2::text[])",
-            aid, _ARQUIVOS,
-        )
-    por_nome = {
-        l["file_name"]: (l["content"] or "").strip() or None for l in linhas
-    }
+    # ⚠️ **O gateway vem primeiro, e a tabela é só reserva.** A ordem era a
+    # inversa, herdada da edge, de quando o gateway não expunha leitura de
+    # arquivo e a `agent_files` era a única fonte. Hoje `agents.files.get`
+    # funciona e é o disco de verdade; a tabela é um espelho de até 60s de
+    # atraso mantido por uma ponte na VPS que, nesta instalação, nunca
+    # escreveu nada — está com zero linhas. Perguntar primeiro a ela era
+    # consultar um cache vazio para depois fazer a pergunta certa.
+    por_nome: dict[str, str | None] = {}
+    origem = "gateway"
+    try:
+        por_nome = dict(await _ler_do_gateway(aid))
+    except ErroGateway as e:
+        logger.warning("Leitura pelo gateway falhou para %s: %s", aid, e)
 
-    origem = "bridge"
     if not por_nome.get("SOUL.md") or not por_nome.get("IDENTITY.md"):
-        origem = "gateway"
-        try:
-            do_gateway = await _ler_do_gateway(aid)
-        except ErroGateway as e:
-            raise HTTPException(
-                status.HTTP_502_BAD_GATEWAY,
-                f"Não foi possível exportar: {e} A ponte de arquivos ainda não "
-                "espelhou este agente e a leitura pelo gateway falhou.",
+        origem = "bridge"
+        async with sessao(role="service_role") as conn:
+            linhas = await conn.fetch(
+                "SELECT file_name, content FROM public.agent_files "
+                "WHERE agent_id = $1 AND file_name = ANY($2::text[])",
+                aid, _ARQUIVOS,
             )
-        for nome, conteudo in do_gateway.items():
+        do_espelho = {
+            l["file_name"]: (l["content"] or "").strip() or None for l in linhas
+        }
+        # Preenche só o que faltou: o gateway, quando responde, é a verdade.
+        for nome, conteudo in do_espelho.items():
             por_nome[nome] = por_nome.get(nome) or conteudo
 
     soul, identity = por_nome.get("SOUL.md"), por_nome.get("IDENTITY.md")
