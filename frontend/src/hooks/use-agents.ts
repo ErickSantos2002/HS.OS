@@ -20,6 +20,8 @@ interface RespostaAgentes {
     emoji?: string | null;
     avatarUrl?: string | null;
     department?: string | null;
+    openclawId?: string | null;
+    isLeader?: boolean;
   }>;
   defaultId: string | null;
   gatewayOnline: boolean;
@@ -206,6 +208,14 @@ async function fetchAgents(_userId?: string, _isAdmin?: boolean): Promise<Gatewa
     sessions: a.sessions ?? 0,
     lastActive: a.lastActive ?? new Date().toISOString(),
     lastChannel: a.lastChannel ?? "",
+    // ⚠️ Estes quatro estavam declarados no tipo e **não eram copiados aqui**.
+    // O TypeScript não acusa porque campo opcional ausente é válido, então
+    // quem os lia recebia `undefined` para sempre: o hook do nome do líder
+    // caía no genérico, e o botão "Editar" do painel mandava o emoji vazio.
+    openclawId: a.openclawId ?? null,
+    emoji: a.emoji ?? null,
+    department: a.department ?? null,
+    isLeader: !!a.isLeader,
   }));
 }
 

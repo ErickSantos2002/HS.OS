@@ -9,6 +9,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { useNomeDoLider } from "@/hooks/use-agente-lider";
 
 export type AccessType = "all" | "admins_only" | "specific_users";
 
@@ -28,6 +29,7 @@ interface Props {
 }
 
 export function AgentAccessDialog({ open, onOpenChange, agentId, agentName, onSaved }: Props) {
+  const lider = useNomeDoLider();
   const [accessType, setAccessType] = useState<AccessType>("all");
   const [allowedUserIds, setAllowedUserIds] = useState<string[]>([]);
   const [users, setUsers] = useState<PlatformUser[]>([]);
@@ -85,7 +87,7 @@ export function AgentAccessDialog({ open, onOpenChange, agentId, agentName, onSa
       });
       return;
     }
-    toast({ title: "Acesso atualizado", description: "Lia foi notificada." });
+    toast({ title: "Acesso atualizado", description: `${lider} foi notificado.` });
     onSaved?.();
     onOpenChange(false);
   }

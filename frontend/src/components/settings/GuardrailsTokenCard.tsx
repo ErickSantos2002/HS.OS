@@ -3,6 +3,7 @@ import { Shield, Eye, EyeOff, Copy, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
+import { useNomeDoLider } from "@/hooks/use-agente-lider";
 
 // A URL que a VPS deve chamar para gravar guardrails. É **texto mostrado**, não
 // uma chamada daqui — quem chama é o serviço lá. Aponta para a nossa API, não
@@ -12,6 +13,7 @@ const ENDPOINT_URL = `${
 }/integracoes/guardrails`;
 
 export default function GuardrailsTokenCard() {
+  const lider = useNomeDoLider();
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [visible, setVisible] = useState(false);
@@ -46,7 +48,7 @@ export default function GuardrailsTokenCard() {
       </div>
 
       <p className="text-xs text-muted-foreground leading-relaxed">
-        Endpoint dedicado para o agente orquestrador (Lia) cadastrar guardrails de cada agente
+        Endpoint dedicado para {lider} cadastrar guardrails de cada agente
         diretamente via API. O token só permite escrever no campo <code className="font-mono">guardrails</code> de <code className="font-mono">agent_profiles</code>.
       </p>
 

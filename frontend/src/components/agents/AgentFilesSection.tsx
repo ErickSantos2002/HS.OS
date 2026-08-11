@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { FileText, FolderOpen, Loader2, RefreshCw } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { normalizeAgentId } from "@/lib/active-agents";
+import { useNomeDoLider } from "@/hooks/use-agente-lider";
 
 interface AgentFileRow {
   agent_id: string;
@@ -22,6 +23,7 @@ interface Props {
 }
 
 export default function AgentFilesSection({ agentId }: Props) {
+  const lider = useNomeDoLider();
   const shortId = normalizeAgentId(agentId);
   const [rows, setRows] = useState<AgentFileRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -69,7 +71,7 @@ export default function AgentFilesSection({ agentId }: Props) {
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-sm font-display font-bold text-foreground">Arquivos</h2>
-            <p className="text-[10px] text-muted-foreground">Workspace do agente — somente leitura (sincronizado pela Lia)</p>
+            <p className="text-[10px] text-muted-foreground">Workspace do agente — somente leitura · quem sincroniza: {lider}</p>
           </div>
           <span className="text-[10px] text-muted-foreground font-mono">{sorted.length}</span>
           <button
@@ -91,7 +93,7 @@ export default function AgentFilesSection({ agentId }: Props) {
           <div className="p-10 text-center">
             <FolderOpen className="h-7 w-7 mx-auto text-muted-foreground mb-2" />
             <p className="text-sm text-muted-foreground">Nenhum arquivo sincronizado</p>
-            <p className="text-xs text-muted-foreground mt-1">Peça à Lia para rodar o sync.</p>
+            <p className="text-xs text-muted-foreground mt-1">Peça o sync para {lider}.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr]">

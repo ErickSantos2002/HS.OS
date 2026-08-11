@@ -39,6 +39,7 @@ import { uploadAgentAvatar } from "@/lib/avatar-upload";
 import { Camera } from "lucide-react";
 import { useGatewayModels } from "@/hooks/use-gateway-models";
 import { useAuthContext } from "@/contexts/auth-context";
+import { useNomeDoLider } from "@/hooks/use-agente-lider";
 
 export interface PendingAgent {
   agent_id: string;
@@ -104,6 +105,7 @@ interface PlatformUser {
 }
 
 export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
+  const lider = useNomeDoLider();
   const [step, setStep] = useState<Step>(1);
   const { models: gatewayModels, isFallback: modelsAreFallback } = useGatewayModels();
 
@@ -173,8 +175,8 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
   const [progress, setProgress] = useState<{
     openclaw: StepState;
     supabase: StepState;
-    lia: StepState;
-  }>({ openclaw: "pending", supabase: "pending", lia: "pending" });
+    lider: StepState;
+  }>({ openclaw: "pending", supabase: "pending", lider: "pending" });
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [errorStep, setErrorStep] = useState<string | null>(null);
 
@@ -217,7 +219,7 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
     setSubmitting(false);
     setErrors({});
     setPhase("form");
-    setProgress({ openclaw: "pending", supabase: "pending", lia: "pending" });
+    setProgress({ openclaw: "pending", supabase: "pending", lider: "pending" });
     setErrorMsg(null);
     setErrorStep(null);
   }, [open]);
@@ -499,7 +501,7 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
     setPhase("progress");
     setErrorMsg(null);
     setErrorStep(null);
-    setProgress({ openclaw: "running", supabase: "pending", lia: "pending" });
+    setProgress({ openclaw: "running", supabase: "pending", lider: "pending" });
 
     try {
       const resultado = await api<{ orquestrador_avisado: boolean }>("/agents", {
@@ -533,7 +535,7 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
       setProgress({
         openclaw: "done",
         supabase: "done",
-        lia: resultado.orquestrador_avisado ? "done" : "error",
+        lider: resultado.orquestrador_avisado ? "done" : "error",
       });
       if (!resultado.orquestrador_avisado) {
         toast({
@@ -580,7 +582,7 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
   function retry() {
     setPhase("form");
     setStep(8);
-    setProgress({ openclaw: "pending", supabase: "pending", lia: "pending" });
+    setProgress({ openclaw: "pending", supabase: "pending", lider: "pending" });
     setErrorMsg(null);
     setErrorStep(null);
   }
@@ -967,7 +969,7 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
           {phase === "form" && step === 5 && (
             <>
               <p className="text-sm text-muted-foreground">
-                Descreva como você quer que este agente seja. A Lia vai escrever a alma dele.
+                Descreva como você quer que este agente seja. {lider} vai escrever a alma dele.
               </p>
 
               <Field label="Persona" hint="Recomendado">
@@ -1013,7 +1015,7 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
 
               <div className="flex items-start gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs text-foreground">
                 <Sparkles className="h-3.5 w-3.5 mt-0.5 text-primary shrink-0" />
-                A Lia vai configurar os agendamentos no servidor com base na sua descrição.
+                {lider} vai configurar os agendamentos no servidor com base na sua descrição.
               </div>
 
               <button
@@ -1224,7 +1226,7 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
                   <ul className="text-xs text-muted-foreground space-y-1">
                     <li>• Agente registrado no OpenClaw</li>
                     <li>• Workspace criado no servidor</li>
-                    <li>• Lia notificada para configurar arquivos (SOUL, persona, crons)</li>
+                    <li>• {lider} notificado para configurar arquivos (SOUL, persona, crons)</li>
                     <li>• Agente adicionado à lista de usuários</li>
                   </ul>
                 </div>
@@ -1234,10 +1236,10 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-sm flex items-center gap-2 text-foreground">
-                      ✨ Onboarding completo pela Lia
+                      ✨ Onboarding completo: {lider}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      A Lia vai criar SOUL.md, IDENTITY.md, TOOLS.md e configurar o agente com base no contexto que você forneceu.
+                      {lider} vai criar SOUL.md, IDENTITY.md, TOOLS.md e configurar o agente com base no contexto que você forneceu.
                     </p>
                   </div>
                   <Switch checked={liaOnboarding} onCheckedChange={setLiaOnboarding} />
@@ -1311,7 +1313,7 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
               </div>
 
               <p className="text-xs text-muted-foreground">
-                ⏱ A Lia levará alguns minutos para configurar o workspace completo do agente. O
+                ⏱ {lider} levará alguns minutos para configurar o workspace completo do agente. O
                 status aparecerá como <span className="text-sky-400">🔵 Configurando</span> até a
                 configuração ser concluída.
               </p>
@@ -1499,12 +1501,13 @@ function ProgressView({
   errorStep,
 }: {
   phase: "form" | "progress" | "done" | "error";
-  progress: { openclaw: StepState; supabase: StepState; lia: StepState };
+  progress: { openclaw: StepState; supabase: StepState; lider: StepState };
   name: string;
   emoji: string;
   errorMsg: string | null;
   errorStep: string | null;
 }) {
+  const lider = useNomeDoLider();
   if (phase === "progress" || phase === "error") {
     return (
       <div className="space-y-4">
@@ -1513,8 +1516,8 @@ function ProgressView({
         </p>
         <div className="rounded-xl border border-border/40 bg-secondary/20 p-5 space-y-3">
           <StepRow state={progress.openclaw} label="Registrando no OpenClaw" />
-          <StepRow state={progress.supabase} label="Salvando no dnos" />
-          <StepRow state={progress.lia} label="Notificando Lia" />
+          <StepRow state={progress.supabase} label="Salvando na plataforma" />
+          <StepRow state={progress.lider} label={`Notificando ${lider}`} />
         </div>
         {phase === "error" && errorMsg && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
@@ -1529,8 +1532,8 @@ function ProgressView({
     <div className="space-y-4">
       <div className="rounded-xl border border-border/40 bg-secondary/20 p-5 space-y-3">
         <StepRow state="done" label="Registrado no OpenClaw" />
-        <StepRow state="done" label="Salvo no dnos" />
-        <StepRow state="done" label="Lia notificada" />
+        <StepRow state="done" label="Salvo na plataforma" />
+        <StepRow state="done" label={`${lider} notificado`} />
       </div>
       <div className="rounded-xl border border-sky-500/40 bg-sky-500/10 p-4 flex items-start gap-3">
         <span className="text-xl">{emoji}</span>
@@ -1539,7 +1542,7 @@ function ProgressView({
             <span className="text-sky-400">🔵</span> <strong>{name}</strong> está sendo configurado.
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            A Lia finalizará o setup em alguns minutos.
+            {lider} finalizará o setup em alguns minutos.
           </p>
         </div>
       </div>

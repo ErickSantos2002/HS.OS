@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Sparkles, RefreshCw, ChevronDown, ChevronRight, CheckCircle2, AlertCircle, Clock } from "lucide-react";
+import { useNomeDoLider } from "@/hooks/use-agente-lider";
 
 type LogRow = {
   id: string;
@@ -18,7 +19,8 @@ type LogRow = {
   responded_at: string | null;
 };
 
-export default function LiaOnboardingLog({ agentId }: { agentId: string }) {
+export default function OnboardingDoLiderLog({ agentId }: { agentId: string }) {
+  const lider = useNomeDoLider();
   const { role } = useAuth();
   const { toast } = useToast();
   const [rows, setRows] = useState<LogRow[]>([]);
@@ -38,7 +40,7 @@ export default function LiaOnboardingLog({ agentId }: { agentId: string }) {
       error = e;
     }
     if (error) {
-      console.warn("[LiaOnboardingLog] load failed", error.message);
+      console.warn("[OnboardingDoLiderLog] load failed", error.message);
     }
     setRows((data as unknown as LogRow[]) ?? []);
     setLoading(false);
@@ -59,7 +61,7 @@ export default function LiaOnboardingLog({ agentId }: { agentId: string }) {
       if ((data as any)?.success === false) {
         throw new Error((data as any)?.error || "Falha ao reenviar");
       }
-      toast({ title: "Briefing reenviado para a Lia", description: "Aguardando resposta..." });
+      toast({ title: `Briefing reenviado para ${lider}`, description: "Aguardando resposta..." });
       setTimeout(load, 2000);
     } catch (e) {
       toast({ title: "Falha ao reenviar", description: (e as Error).message, variant: "destructive" });
@@ -76,7 +78,7 @@ export default function LiaOnboardingLog({ agentId }: { agentId: string }) {
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
           <h3 className="text-sm font-display font-bold uppercase tracking-wider text-foreground">
-            Onboarding da Lia
+            Onboarding: {lider}
           </h3>
           <span className="text-[10px] font-mono text-muted-foreground">{rows.length} envio(s)</span>
         </div>
@@ -90,7 +92,7 @@ export default function LiaOnboardingLog({ agentId }: { agentId: string }) {
         <p className="text-xs text-muted-foreground">Carregando histórico...</p>
       ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          Nenhum briefing registrado para este agente. Clique em "Reenviar briefing" para disparar agora — assim a Lia recebe os campos atuais do agente e cria/atualiza os arquivos no VPS.
+          Nenhum briefing registrado para este agente. Clique em "Reenviar briefing" para disparar agora — assim {lider} recebe os campos atuais do agente e cria/atualiza os arquivos no VPS.
         </p>
       ) : (
         <div className="space-y-2">
@@ -130,7 +132,7 @@ export default function LiaOnboardingLog({ agentId }: { agentId: string }) {
                     </div>
                     {r.lia_response && (
                       <div>
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 font-mono">Resposta da Lia</div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 font-mono">Resposta: {lider}</div>
                         <pre className="whitespace-pre-wrap break-words rounded-lg bg-background/60 border border-border p-2 max-h-64 overflow-y-auto scrollbar-thin text-[11px] leading-relaxed">
 {r.lia_response}
                         </pre>

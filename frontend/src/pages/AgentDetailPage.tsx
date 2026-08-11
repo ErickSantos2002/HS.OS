@@ -2,7 +2,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { ArrowLeft, Bot, Users } from "lucide-react";
 import AgentDetailPanel from "@/components/agents/AgentDetailPanel";
 import AgentFilesSection from "@/components/agents/AgentFilesSection";
-import LiaOnboardingLog from "@/components/agents/LiaOnboardingLog";
+import OnboardingDoLiderLog from "@/components/agents/OnboardingDoLiderLog";
 
 import { useAgents } from "@/hooks/use-agents";
 import { useAllAvatars } from "@/hooks/use-agent-avatar";
@@ -33,7 +33,7 @@ export default function AgentDetailPage() {
         <div className="flex-1 min-w-0 space-y-4">
           <AgentDetailPanel agentId={decodedId} fullWidth />
           <AgentFilesSection agentId={decodedId} />
-          <LiaOnboardingLog agentId={decodedId} />
+          <OnboardingDoLiderLog agentId={decodedId} />
         </div>
 
 

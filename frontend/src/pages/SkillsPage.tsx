@@ -41,6 +41,7 @@ import {
 import { useManagedSkills, type ManagedSkill, type SkillSource, type SkillSyncStatus } from "@/hooks/use-managed-skills";
 import { useAgents } from "@/hooks/use-agents";
 import { toast } from "@/hooks/use-toast";
+import { useNomeDoLider } from "@/hooks/use-agente-lider";
 
 /* ── Source badges ────────────────────────────────────── */
 const SOURCE_META: Record<SkillSource, { label: string; icon: React.ElementType; cls: string }> = {
@@ -96,6 +97,7 @@ function InstallSkillDialog({
   onOpenChange: (v: boolean) => void;
   onCreated: () => void;
 }) {
+  const lider = useNomeDoLider();
   const { agents } = useAgents();
   const { create } = useManagedSkills();
   const [tab, setTab] = useState<"git" | "manual" | "clawhub">("manual");
@@ -281,7 +283,7 @@ function InstallSkillDialog({
         slug: guessSlug || `git-${Date.now()}`,
         name: finalName,
         description: `Instalada via Git: ${cloneUrl}`,
-        content: `# Instalação via Git\n\nRepositório: ${cloneUrl}\n\nSincronização pendente — a Lia processará este item no próximo ciclo.`,
+        content: `# Instalação via Git\n\nRepositório: ${cloneUrl}\n\nSincronização pendente — ${lider} processará este item no próximo ciclo.`,
         source: "git",
         source_url: cloneUrl,
         is_default: isDefault,
@@ -290,7 +292,7 @@ function InstallSkillDialog({
 
       toast({
         title: "Skill enfileirada",
-        description: "A Lia buscará o SKILL.md no repositório e sincronizará em seguida.",
+        description: `${lider} buscará o SKILL.md no repositório e sincronizará em seguida.`,
       });
       onCreated();
       reset();
@@ -369,7 +371,7 @@ function InstallSkillDialog({
               <label className="text-xs font-medium text-muted-foreground">URL do repositório Git</label>
               <Input value={gitUrl} onChange={(e) => setGitUrl(e.target.value)} placeholder="https://github.com/owner/skill-repo" />
               <p className="text-[11px] text-muted-foreground">
-                A skill é registrada como pendente — a Lia executa <code className="text-[10px] bg-secondary/40 px-1 rounded">openclaw skills install</code> no próximo ciclo.
+                A skill é registrada como pendente — {lider} executa <code className="text-[10px] bg-secondary/40 px-1 rounded">openclaw skills install</code> no próximo ciclo.
               </p>
             </div>
           </TabsContent>
