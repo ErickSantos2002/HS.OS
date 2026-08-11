@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Building2, X } from "lucide-react";
 
-const DISMISS_KEY = "dnos:company-onboarding-banner-dismissed";
+const DISMISS_KEY = "hsos:company-onboarding-banner-dismissed";
 
 export function CompanyOnboardingBanner() {
   const [show, setShow] = useState(false);

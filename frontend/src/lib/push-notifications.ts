@@ -84,7 +84,7 @@ export async function subscribeToPushNotifications(
     // rotated it after a long idle), force a fresh subscribe so push won't
     // silently die.
     const cachedEndpoint = (() => {
-      try { return localStorage.getItem("dnos:push:endpoint"); } catch { return null; }
+      try { return localStorage.getItem("hsos:push:endpoint"); } catch { return null; }
     })();
     if (subscription && cachedEndpoint && cachedEndpoint !== subscription.endpoint) {
       try { await subscription.unsubscribe(); } catch { /* noop */ }
@@ -123,7 +123,7 @@ export async function subscribeToPushNotifications(
     if (error) {
       console.warn("[push] failed to persist subscription:", error.message);
     } else {
-      try { localStorage.setItem("dnos:push:endpoint", endpoint); } catch { /* noop */ }
+      try { localStorage.setItem("hsos:push:endpoint", endpoint); } catch { /* noop */ }
       console.log("[push] subscription saved");
     }
 

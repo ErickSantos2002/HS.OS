@@ -115,7 +115,7 @@ export default function SettingsPage() {
     const result = await showNotification({
       title: "Teste HS.OS 🔔",
       body: "Se você está vendo isso, as notificações nativas estão funcionando!",
-      tag: `dnos-test-${Date.now()}`,
+      tag: `hsos-test-${Date.now()}`,
     });
 
     const resultLine = result.ok

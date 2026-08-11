@@ -1,7 +1,7 @@
 import { api } from "@/lib/api";
 /**
  * Builds system-prompt blocks that teach the current agent about:
- *   1. The <live_artifact> tag format and window.dnos runtime API.
+ *   1. The <live_artifact> tag format and window.hsos runtime API.
  *   2. The user's existing live artifacts (so it can UPDATE instead of duplicating).
  *   3. The company's configured integrations with data_endpoints available
  *      for artifacts to consume.
@@ -25,14 +25,14 @@ Você pode criar painéis HTML/JS que se atualizam automaticamente com dados rea
   <script>
     async function load() {
       // Dados externos: SEMPRE via módulos por integração
-      const campaigns = await window.dnos.meta.campaigns({
+      const campaigns = await window.hsos.meta.campaigns({
         account_id: 'act_xxx',
         date_preset: 'last_30d',
         fields: 'name,spend,impressions,ctr'
       })
 
       // Dados internos do Supabase (RLS aplicado)
-      const results = await window.dnos.query('agent_results', {
+      const results = await window.hsos.query('agent_results', {
         select: 'title, value, created_at',
         order: { column: 'created_at', ascending: false },
         limit: 5
@@ -42,25 +42,25 @@ Você pode criar painéis HTML/JS que se atualizam automaticamente com dados rea
       renderChart(campaigns.data, results)
     }
     load()
-    window.dnos.onRefresh(load)
+    window.hsos.onRefresh(load)
   </script>
 </body>
 </html>
 </live_artifact>
 
-API window.dnos:
-- window.dnos.<integracao>.<endpoint>(params) → chama endpoint externo (ex.: window.dnos.meta.campaigns({...})). Use SEMPRE este formato para dados externos.
-- window.dnos.query(table, { select, filters, order, limit }) → linhas de tabela interna respeitando RLS.
-- window.dnos.onRefresh(cb) → callback executado a cada refresh (automático ou manual).
-- window.dnos.refreshInterval → segundos (0 = manual). window.dnos.lastRefreshed → Date do último refresh.
-- window.dnos.user → { id, email, role, name } do usuário logado.
-- window.dnos.showError('mensagem') → exibe overlay de erro visível ao usuário.
+API window.hsos:
+- window.hsos.<integracao>.<endpoint>(params) → chama endpoint externo (ex.: window.hsos.meta.campaigns({...})). Use SEMPRE este formato para dados externos.
+- window.hsos.query(table, { select, filters, order, limit }) → linhas de tabela interna respeitando RLS.
+- window.hsos.onRefresh(cb) → callback executado a cada refresh (automático ou manual).
+- window.hsos.refreshInterval → segundos (0 = manual). window.hsos.lastRefreshed → Date do último refresh.
+- window.hsos.user → { id, email, role, name } do usuário logado.
+- window.hsos.showError('mensagem') → exibe overlay de erro visível ao usuário.
 
 REGRAS OBRIGATÓRIAS (não negociáveis):
 - PROIBIDO usar try/catch que retorne dados fictícios como fallback. Se a API falhar, o overlay de erro é automático — não invente valores.
-- PROIBIDO hardcodar números, listas ou métricas simulando dados reais. Todo valor exibido deve vir de window.dnos.
-- PROIBIDO chamar window.dnos.invoke diretamente. Use os módulos por integração (window.dnos.<integracao>.<endpoint>).
-- Se quiser sinalizar erro manualmente, use window.dnos.showError(...) — nunca renderize dados falsos.
+- PROIBIDO hardcodar números, listas ou métricas simulando dados reais. Todo valor exibido deve vir de window.hsos.
+- PROIBIDO chamar window.hsos.invoke diretamente. Use os módulos por integração (window.hsos.<integracao>.<endpoint>).
+- Se quiser sinalizar erro manualmente, use window.hsos.showError(...) — nunca renderize dados falsos.
 - \`refresh\` em segundos (0 = manual). Padrão 30.
 - Para ATUALIZAR um artefato vivo existente: <live_artifact id="[UUID]" title="..." refresh="30">HTML</live_artifact>. O id DEVE ser o UUID exato listado no bloco "Artefatos vivos existentes" (formato 8-4-4-4-12). PROIBIDO inventar id, usar slug (ex.: "metodo-organogramia-v3"), abreviar UUID ou colocar "...". Se não tiver o UUID, omita o atributo id e emita como novo — o HS.OS deduplica por título automaticamente.
 - Sempre inclua o HTML completo dentro da tag. Sem placeholders, sem arquivos externos além de CDNs.
@@ -85,7 +85,7 @@ Regras (não negociáveis):
 - PROIBIDO responder "PDF gerado com sucesso", "aqui está o Word", "documento pronto" ou qualquer variante SEM emitir a tag <generate_document>. Se não emitiu a tag, o arquivo não existe.
 - PROIBIDO colar o conteúdo do documento como texto/markdown no chat no lugar do arquivo.
 - PROIBIDO usar <live_artifact> para entregar PDF/DOCX. A tag <live_artifact> é APENAS para painéis interativos ao vivo (dashboards, gráficos, controles).
-- PROIBIDO montar <a download href="blob:..."> ou usar window.dnos.downloadPDF/downloadDOCX para essa finalidade — a via oficial de arquivo é <generate_document>.
+- PROIBIDO montar <a download href="blob:..."> ou usar window.hsos.downloadPDF/downloadDOCX para essa finalidade — a via oficial de arquivo é <generate_document>.
 - O JSON dentro da tag deve ser JSON válido. Para PDF siga o formato do pdfmake (chaves content, styles, defaultStyle, pageSize, pageMargins, table etc.). Para DOCX use { title, sections: [{ heading?: 'H1'|'H2'|'H3', text, bold?, italic? }] }.
 - Você pode acompanhar a tag com uma frase curta ("Aqui está o relatório:") antes ou depois — mas a tag é obrigatória.
 
@@ -183,14 +183,14 @@ export async function buildLiveArtifactsSystemBlocks(): Promise<string[]> {
         const params = Array.isArray(def?.params) && def.params.length > 0
           ? ` (params: ${def.params.join(", ")})`
           : "";
-        endpointLines.push(`- window.dnos.${key}.${name}(${Array.isArray(def?.params) && def.params.length > 0 ? `{ ${def.params.join(", ")} }` : ""})${desc}`);
+        endpointLines.push(`- window.hsos.${key}.${name}(${Array.isArray(def?.params) && def.params.length > 0 ? `{ ${def.params.join(", ")} }` : ""})${desc}`);
       }
     }
 
     for (const [key, endpoints] of Object.entries(FALLBACK_DATA_ENDPOINTS)) {
       if (!configured.has(key)) continue;
       for (const [name, def] of Object.entries(endpoints)) {
-        endpointLines.push(`- window.dnos.${key}.${name}({ ${def.params.join(", ")} }) — ${def.description}`);
+        endpointLines.push(`- window.hsos.${key}.${name}({ ${def.params.join(", ")} }) — ${def.description}`);
       }
     }
 
@@ -200,7 +200,7 @@ export async function buildLiveArtifactsSystemBlocks(): Promise<string[]> {
           "Módulos de integração disponíveis para artefatos vivos (chame diretamente, sem try/catch com fallback):",
           ...endpointLines,
           "",
-          "Tabelas internas via: window.dnos.query('<tabela>', { ... })",
+          "Tabelas internas via: window.hsos.query('<tabela>', { ... })",
         ].join("\n"),
       );
     }
@@ -208,11 +208,11 @@ export async function buildLiveArtifactsSystemBlocks(): Promise<string[]> {
     /* ignore */
   }
 
-  // Whitelist of internal tables the agent may query via window.dnos.query().
+  // Whitelist of internal tables the agent may query via window.hsos.query().
   // Prevents hallucinated table names like 'contacts' that don't exist.
   blocks.push(
     [
-      "Tabelas internas disponíveis para window.dnos.query('<tabela>', {...}) — use APENAS estas:",
+      "Tabelas internas disponíveis para window.hsos.query('<tabela>', {...}) — use APENAS estas:",
       "- agent_results (title, value, agent_id, created_at) — resultados/entregas de agentes",
       "- agent_tasks (title, status, agent_id, created_at) — tarefas dos agentes",
       "- agent_activity_log (agent_id, action, timestamp) — log de atividades",
@@ -226,7 +226,7 @@ export async function buildLiveArtifactsSystemBlocks(): Promise<string[]> {
       "- artifacts_published (title, slug, created_at)",
       "- notifications, drafts, wiki_documents, wiki_spaces, teams, team_agents, skills, agent_skills",
       "",
-      "PROIBIDO consultar tabelas fora desta lista (ex.: 'contacts', 'customers', 'leads' NÃO existem neste projeto). Se o dado desejado não existir, use window.dnos.showError('...') explicando o que falta em vez de inventar uma tabela.",
+      "PROIBIDO consultar tabelas fora desta lista (ex.: 'contacts', 'customers', 'leads' NÃO existem neste projeto). Se o dado desejado não existir, use window.hsos.showError('...') explicando o que falta em vez de inventar uma tabela.",
     ].join("\n"),
   );
 

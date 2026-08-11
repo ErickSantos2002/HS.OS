@@ -12,7 +12,7 @@ import { toast } from "sonner";
  */
 
 const POLL_MS = 2 * 60 * 1000;
-const TOAST_ID = "dnos-update-available";
+const TOAST_ID = "hsos-update-available";
 
 function isPreviewOrDev(): boolean {
   if (!import.meta.env.PROD) return true;

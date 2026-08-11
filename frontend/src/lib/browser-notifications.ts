@@ -3,7 +3,7 @@
  * Disparadas pelo cliente quando há aba aberta (mesmo em background).
  * Não cobre app totalmente fechado — isso exigiria Web Push + Service Worker + VAPID.
  */
-const STORAGE_KEY = "dnos:browserNotifications";
+const STORAGE_KEY = "hsos:browserNotifications";
 
 export function isSupported(): boolean {
   return typeof window !== "undefined" && "Notification" in window;

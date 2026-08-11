@@ -321,15 +321,18 @@ Mudanças de risco no caminho do chat entraram atrás de flags **em `localStorag
 Não há tabela nem UI — liga-se pelo console do navegador:
 
 ```js
-localStorage.setItem('dnos_flag_real_stop', 'on')                  // /stop real no gateway
-localStorage.setItem('dnos_flag_structured_errors', 'on')          // reconhece erro do gateway (HTTP 200 + JSON)
-localStorage.setItem('dnos_flag_fix_overflow_falsepositive', 'on') // só reseta sessão em erro real
-localStorage.setItem('dnos_flag_reorder_prompt', 'on')             // reordena prompt p/ cache do modelo
+localStorage.setItem('hsos_flag_real_stop', 'on')                  // /stop real no gateway
+localStorage.setItem('hsos_flag_structured_errors', 'on')          // reconhece erro do gateway (HTTP 200 + JSON)
+localStorage.setItem('hsos_flag_fix_overflow_falsepositive', 'on') // só reseta sessão em erro real
+localStorage.setItem('hsos_flag_reorder_prompt', 'on')             // reordena prompt p/ cache do modelo
 ```
 
 Todas definidas em `frontend/src/lib/chat-sender.ts`. Desligar volta ao comportamento antigo na hora, sem deploy.
-Se o rebrand renomear o prefixo `dnos_`, lembre que isso **desliga silenciosamente** as flags de quem já
-estava com elas ativas.
+
+O prefixo era `dnos_` e virou `hsos_` em 11/08/2026. **Quem já tinha uma flag ligada não a perdeu:**
+`frontend/src/lib/chaves-locais.ts` lê o nome novo e, não achando, adota o antigo e o regrava — a
+migração acontece na primeira leitura, sem varredura no boot. Vale para todas as chaves `dnos:`/`dnos-`.
+Exceção: o IndexedDB continua `dnos-fs`, porque renomear ali órfã a pasta local que a pessoa conectou.
 
 ### Estado e persistência
 

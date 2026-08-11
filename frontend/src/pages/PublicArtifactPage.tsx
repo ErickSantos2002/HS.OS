@@ -62,7 +62,7 @@ export default function PublicArtifactPage() {
       <div className="flex flex-col items-center justify-center h-screen bg-background gap-4">
         <p className="text-lg text-muted-foreground">{error}</p>
         <Link to="/login" className="text-primary hover:underline text-sm">
-          Abrir dnos
+          Abrir {branding.companyName || "HS.OS"}
         </Link>
       </div>
     );
@@ -96,7 +96,7 @@ export default function PublicArtifactPage() {
             className="flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
           >
             <ExternalLink className="h-3.5 w-3.5" />
-            Abrir dnos
+            Abrir {branding.companyName || "HS.OS"}
           </Link>
         </div>
       </header>

@@ -21,10 +21,10 @@
  * exatamente no bump de geração.
  */
 
-const STORAGE_PREFIX = "dnos:model-override:";
+const STORAGE_PREFIX = "hsos:model-override:";
 
 /** Evento disparado quando um override muda, para a UI reagir sem prop drilling. */
-export const MODEL_OVERRIDE_EVENT = "dnos:model-override-changed";
+export const MODEL_OVERRIDE_EVENT = "hsos:model-override-changed";
 
 // Espelha o localStorage para leitura síncrona (o envio da mensagem não pode
 // depender de I/O) e para funcionar quando o storage está indisponível.

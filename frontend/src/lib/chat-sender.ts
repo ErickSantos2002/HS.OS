@@ -22,6 +22,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createElement } from "react";
 import { RefreshCw, Check, AlertCircle } from "lucide-react";
+import { gravarChave, lerChave } from "@/lib/chaves-locais";
 
 const RESET_COMMANDS = new Set(["/new", "/reset"]);
 function isResetCommand(text: string) {
@@ -78,7 +79,7 @@ function getSessionGen(canonicalAgentId: string): number {
   if (sessionGenCache.has(canonicalAgentId)) return sessionGenCache.get(canonicalAgentId)!;
   let value = 0;
   try {
-    const raw = localStorage.getItem(`dnos:session-gen:${canonicalAgentId}`);
+    const raw = lerChave(`hsos:session-gen:${canonicalAgentId}`);
     const parsed = raw ? parseInt(raw, 10) : 0;
     if (Number.isFinite(parsed) && parsed > 0) value = parsed;
   } catch {
@@ -91,7 +92,7 @@ function bumpSessionGen(canonicalAgentId: string): number {
   const next = getSessionGen(canonicalAgentId) + 1;
   sessionGenCache.set(canonicalAgentId, next); // in-memory é autoritativo p/ esta aba
   try {
-    localStorage.setItem(`dnos:session-gen:${canonicalAgentId}`, String(next));
+    gravarChave(`hsos:session-gen:${canonicalAgentId}`, String(next));
   } catch {
     /* falha de storage não impede o reset nesta aba */
   }
@@ -127,11 +128,11 @@ export function wasAgentResponseStopped(agentId: string) {
  * Feature flag (cancelamento real): quando ligada, "parar" também envia /stop
  * ao gateway em vez de só abortar o fetch local (que hoje só esconde a resposta
  * da tela — o agente continua rodando e gastando no servidor). Testar com:
- * localStorage.setItem('dnos_flag_real_stop','on'). OFF = comportamento atual.
+ * localStorage.setItem('hsos_flag_real_stop','on'). OFF = comportamento atual.
  */
 function isRealStopEnabled(): boolean {
   try {
-    return localStorage.getItem("dnos_flag_real_stop") === "on";
+    return lerChave("hsos_flag_real_stop") === "on";
   } catch {
     return false;
   }
@@ -432,11 +433,11 @@ function capMessage(text: string, maxBytes = 2048): string {
  * (logo antes da mensagem atual) em vez do topo. Isso mantém o prefixo estável
  * (prompt estático + histórico) para a DeepSeek cachear a conversa acumulada, em
  * vez de reprocessar tudo a cada turno. Testar com: localStorage.setItem(
- * 'dnos_flag_reorder_prompt','on'). OFF por padrão = comportamento atual idêntico.
+ * 'hsos_flag_reorder_prompt','on'). OFF por padrão = comportamento atual idêntico.
  */
 function isReorderPromptEnabled(): boolean {
   try {
-    return localStorage.getItem("dnos_flag_reorder_prompt") === "on";
+    return lerChave("hsos_flag_reorder_prompt") === "on";
   } catch {
     return false;
   }
@@ -447,11 +448,11 @@ function isReorderPromptEnabled(): boolean {
  * do gateway (que vem disfarçado de HTTP 200 com JSON {error, detail}) e mostra
  * "Falhou: <motivo>" na hora, em vez de tentar ler como stream e cair no poll de
  * 15 minutos ("trabalhando…" mentiroso). Testar: localStorage.setItem(
- * 'dnos_flag_structured_errors','on'). OFF por padrão = comportamento atual.
+ * 'hsos_flag_structured_errors','on'). OFF por padrão = comportamento atual.
  */
 function isStructuredErrorsEnabled(): boolean {
   try {
-    return localStorage.getItem("dnos_flag_structured_errors") === "on";
+    return lerChave("hsos_flag_structured_errors") === "on";
   } catch {
     return false;
   }
@@ -725,7 +726,7 @@ function formatElapsed(ms: number): string {
 
 /* ── Pending long-task registry (survives page refresh) ── */
 
-const PENDING_STORAGE_KEY = "dnos:pending-long-tasks";
+const PENDING_STORAGE_KEY = "hsos:pending-long-tasks";
 
 type PendingTaskKind = "normal" | "long";
 
@@ -743,7 +744,7 @@ const NORMAL_PENDING_BUDGET_MS = 5 * 60_000;
 
 function loadPendingTasks(): PendingLongTask[] {
   try {
-    return JSON.parse(localStorage.getItem(PENDING_STORAGE_KEY) || "[]");
+    return JSON.parse(lerChave(PENDING_STORAGE_KEY) || "[]");
   } catch {
     return [];
   }

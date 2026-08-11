@@ -22,6 +22,7 @@ import { type ChatMessage, type MediaAttachment } from "@/lib/mock-data";
 import { formatFileSize } from "@/lib/file-upload";
 import { Bot, FileText, File as FileIcon, Copy, Check, BellDot } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { lerChave } from "@/lib/chaves-locais";
 import {
   loadPersistedHistory,
   loadOlderMessages,
@@ -1665,8 +1666,8 @@ export default function ChatPage() {
       } catch { /* ignore persistence error */ }
       sendMessageInBackground(agentId, [...(messagesByAgentRef.current[agentId] ?? []), userMsg]);
     };
-    window.addEventListener("dnos:file-op-result", handler);
-    return () => window.removeEventListener("dnos:file-op-result", handler);
+    window.addEventListener("hsos:file-op-result", handler);
+    return () => window.removeEventListener("hsos:file-op-result", handler);
   }, [effectiveAgentId, user?.id, appendAgentMessage, upsertAgentMessage]);
 
   /* ── Notify agent when user revokes local folder ── */
@@ -2345,7 +2346,7 @@ export default function ChatPage() {
 
   const [dmFavorites, setDmFavorites] = useState<Set<string>>(() => {
     try {
-      const raw = localStorage.getItem("dnos:dm:favorites");
+      const raw = lerChave("hsos:dm:favorites");
       if (raw) return new Set(JSON.parse(raw));
     } catch {}
     return new Set();
@@ -2354,7 +2355,7 @@ export default function ChatPage() {
     setDmFavorites(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
-      try { localStorage.setItem("dnos:dm:favorites", JSON.stringify(Array.from(next))); } catch {}
+      try { localStorage.setItem("hsos:dm:favorites", JSON.stringify(Array.from(next))); } catch {}
       return next;
     });
   }, []);

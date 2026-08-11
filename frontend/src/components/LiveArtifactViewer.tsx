@@ -56,26 +56,26 @@ function buildBridge(args: {
 }): string {
   const publicMode = args.publicMode ? "true" : "false";
 
-  // Generate window.dnos.<integration>.<endpoint>(params) modules dynamically.
+  // Generate window.hsos.<integration>.<endpoint>(params) modules dynamically.
   // These are the canonical way agents call external APIs — internally they
-  // route through window.dnos.invoke, which posts to the parent viewer.
+  // route through window.hsos.invoke, which posts to the parent viewer.
   const integrationModules = args.integrations
     .map(({ integration_type, endpoints }) => {
       const safeType = integration_type.replace(/[^a-z0-9_]/gi, "_");
       const methods = endpoints
         .map(
           (ep) =>
-            `    ${JSON.stringify(ep)}: function(params){ return window.dnos.invoke(${JSON.stringify(integration_type)}, { endpoint: ${JSON.stringify(ep)}, params: params || {} }); }`,
+            `    ${JSON.stringify(ep)}: function(params){ return window.hsos.invoke(${JSON.stringify(integration_type)}, { endpoint: ${JSON.stringify(ep)}, params: params || {} }); }`,
         )
         .join(",\n");
-      return `  window.dnos[${JSON.stringify(safeType)}] = {\n${methods}\n  };`;
+      return `  window.hsos[${JSON.stringify(safeType)}] = {\n${methods}\n  };`;
     })
     .join("\n");
 
   return `<script>
 (function () {
   var pending = {};
-  window.dnos = {
+  window.hsos = {
     user: ${JSON.stringify(args.user)},
     refreshInterval: ${args.refreshInterval},
     lastRefreshed: new Date(),
@@ -84,7 +84,7 @@ function buildBridge(args: {
       return new Promise(function (resolve, reject) {
         var id = Math.random().toString(36).slice(2);
         pending[id] = { resolve: resolve, reject: reject };
-        window.parent.postMessage({ type: 'dnos_query', id: id, table: table, options: options || {} }, '*');
+        window.parent.postMessage({ type: 'hsos_query', id: id, table: table, options: options || {} }, '*');
       });
     },
     invoke: function (integration, options) {
@@ -93,7 +93,7 @@ function buildBridge(args: {
         var id = Math.random().toString(36).slice(2);
         pending[id] = { resolve: resolve, reject: reject };
         window.parent.postMessage({
-          type: 'dnos_invoke', id: id,
+          type: 'hsos_invoke', id: id,
           integration: integration,
           endpoint: (options || {}).endpoint,
           params: (options || {}).params || {}
@@ -108,30 +108,30 @@ function buildBridge(args: {
   };
   window.addEventListener('message', function (e) {
     var d = e.data || {};
-    if (d.type === 'dnos_query_result' || d.type === 'dnos_invoke_result') {
+    if (d.type === 'hsos_query_result' || d.type === 'hsos_invoke_result') {
       var p = pending[d.id];
       if (!p) return;
       delete pending[d.id];
       if (d.error) p.reject(new Error(d.error)); else p.resolve(d.data);
     }
-    if (d.type === 'dnos_refresh') { window.dnos._triggerRefresh(); }
+    if (d.type === 'hsos_refresh') { window.hsos._triggerRefresh(); }
   });
 
-  // ─── Integration modules (window.dnos.<integration>.<endpoint>) ─────────
+  // ─── Integration modules (window.hsos.<integration>.<endpoint>) ─────────
 ${integrationModules}
 
   // ─── Automatic error overlay ────────────────────────────────────────────
   // Any unhandled Promise rejection surfaces as a red banner. Agents must
-  // never wrap window.dnos calls in try/catch with fake fallback data — if
+  // never wrap window.hsos calls in try/catch with fake fallback data — if
   // the API fails, the user must see it.
-  function _dnosShowError(msg) {
-    var el = document.getElementById('_dnos_err');
+  function _hsosShowError(msg) {
+    var el = document.getElementById('_hsos_err');
     if (!el) {
       el = document.createElement('div');
-      el.id = '_dnos_err';
+      el.id = '_hsos_err';
       el.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ef4444;color:#fff;padding:12px 16px;font-family:system-ui,-apple-system,sans-serif;font-size:13px;z-index:2147483647;display:flex;align-items:center;justify-content:space-between;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,0.3)';
       var span = document.createElement('span');
-      span.id = '_dnos_err_msg';
+      span.id = '_hsos_err_msg';
       span.style.cssText = 'flex:1;min-width:0;word-break:break-word';
       var btn = document.createElement('button');
       btn.textContent = 'Fechar';
@@ -140,16 +140,16 @@ ${integrationModules}
       el.appendChild(span); el.appendChild(btn);
       (document.body || document.documentElement).appendChild(el);
     }
-    document.getElementById('_dnos_err_msg').textContent = 'Falha ao carregar dados: ' + msg;
+    document.getElementById('_hsos_err_msg').textContent = 'Falha ao carregar dados: ' + msg;
     el.style.display = 'flex';
   }
   window.addEventListener('unhandledrejection', function (e) {
     var r = e.reason;
     var msg = (r && r.message) ? r.message : (typeof r === 'string' ? r : 'erro desconhecido');
-    _dnosShowError(msg);
+    _hsosShowError(msg);
     e.preventDefault && e.preventDefault();
   });
-  window.dnos.showError = _dnosShowError;
+  window.hsos.showError = _hsosShowError;
 
   // ─── Download helpers (delegated to parent) ─────────────────────────────
   // Sandbox de artefato tem origem opaca — <a download>.click() em blob URL
@@ -169,18 +169,18 @@ ${integrationModules}
   }
   function _postDownload(filename, mime, bytes) {
     window.parent.postMessage({
-      type: 'dnos_download',
+      type: 'hsos_download',
       filename: filename || 'arquivo',
       mime: mime || 'application/octet-stream',
       bytes: bytes,
     }, '*');
   }
-  window.dnos.saveBlob = function (blob, filename) {
+  window.hsos.saveBlob = function (blob, filename) {
     return blob.arrayBuffer().then(function (buf) {
       _postDownload(filename, blob.type || 'application/octet-stream', buf);
     });
   };
-  window.dnos.downloadPDF = async function (docDefinition, filename) {
+  window.hsos.downloadPDF = async function (docDefinition, filename) {
     await _loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js');
     await _loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.min.js');
     return await new Promise(function (resolve, reject) {
@@ -194,7 +194,7 @@ ${integrationModules}
       } catch (e) { reject(e); }
     });
   };
-  window.dnos.downloadDOCX = async function (doc, filename) {
+  window.hsos.downloadDOCX = async function (doc, filename) {
     await _loadScript('https://unpkg.com/docx@8.5.0/build/index.js');
     var blob = await window.docx.Packer.toBlob(doc);
     var buf = await blob.arrayBuffer();
@@ -204,6 +204,19 @@ ${integrationModules}
       buf,
     );
   };
+
+  // ⚠️ **O apelido não é enfeite: é o que impede quebrar o que já existe.**
+  // Esta API se chamava \`window.dnos\`, e todo artefato que os agentes já
+  // geraram tem \`window.dnos.query(...)\` escrito no HTML guardado no banco.
+  // Esse HTML não é reescrito — o atalho é montado aqui e colado nele a cada
+  // exibição. Sem esta linha, artefato antigo abriria e morreria no primeiro
+  // clique, com \`undefined is not an object\`, e ninguém ligaria o erro ao
+  // rebrand.
+  //
+  // É o mesmo objeto, não uma cópia: o que for adicionado a um aparece no
+  // outro. Só sai quando não houver mais artefato antigo no banco — e isso é
+  // uma consulta, não um palpite.
+  window.dnos = window.hsos;
 })();
 </script>
 `;
@@ -233,17 +246,22 @@ interface LiveArtifactViewerProps {
   onClose?: () => void;
 }
 
-const PUBLIC_APP_ORIGIN = "https://dnos.dnia.ai";
-
+/**
+ * A origem dos links públicos de artefato.
+ *
+ * ⚠️ **Isto tinha `https://dnos.dnia.ai` embutido como reserva**, e usava a
+ * reserva sempre que o host fosse de preview do Lovable **ou `localhost`**. Ou
+ * seja: publicar um artefato rodando local gerava um link para o domínio de
+ * outra empresa. Os hosts de preview do Lovable não existem mais, e o
+ * `localhost` cair na reserva era efeito colateral da mesma condição.
+ *
+ * A origem atual é sempre a resposta certa: em produção é o domínio de
+ * verdade, e em desenvolvimento um link `localhost` é honesto — diz que
+ * aquele link só vale na sua máquina, em vez de apontar para um site alheio.
+ */
 function getPublicAppOrigin() {
-  if (typeof window === "undefined") return PUBLIC_APP_ORIGIN;
-  const origin = window.location.origin;
-  const isPreviewHost =
-    origin.includes("lovableproject.com") ||
-    origin.includes("id-preview--") ||
-    origin.includes("localhost");
-
-  return isPreviewHost ? PUBLIC_APP_ORIGIN : origin;
+  if (typeof window === "undefined") return "";
+  return window.location.origin;
 }
 
 function canonicalIntegrationType(row: {
@@ -340,7 +358,7 @@ export default function LiveArtifactViewer({
   }, []);
 
   // Load active integrations + their data_endpoints so the bridge can expose
-  // window.dnos.<integration>.<endpoint>() modules. Public mode: skip (invoke
+  // window.hsos.<integration>.<endpoint>() modules. Public mode: skip (invoke
   // is blocked anyway).
   const [integrations, setIntegrations] = useState<
     Array<{ integration_type: string; endpoints: string[] }>
@@ -423,7 +441,7 @@ export default function LiveArtifactViewer({
 
       const post = (msg: any) => target?.postMessage(msg, "*");
 
-      if (data.type === "dnos_query") {
+      if (data.type === "hsos_query") {
         try {
           // O substituto do `artifact-query` existe desde a portagem; esta
           // chamada tinha ficado apontando para a edge, e a mensagem que
@@ -441,7 +459,7 @@ export default function LiveArtifactViewer({
           if (body?.error) {
             const message = body.error;
             setDataError(message);
-            post({ type: "dnos_query_result", id: data.id, error: message });
+            post({ type: "hsos_query_result", id: data.id, error: message });
           } else {
             setDataError(null);
             const refreshedAt = new Date();
@@ -452,18 +470,18 @@ export default function LiveArtifactViewer({
                 body: { tocar_refresh: true },
               });
             }
-            post({ type: "dnos_query_result", id: data.id, data: body?.data ?? body });
+            post({ type: "hsos_query_result", id: data.id, data: body?.data ?? body });
           }
         } catch (err: any) {
           const message = String(err?.message ?? err);
           setDataError(message);
-          post({ type: "dnos_query_result", id: data.id, error: message });
+          post({ type: "hsos_query_result", id: data.id, error: message });
         }
       }
 
-      if (data.type === "dnos_invoke") {
+      if (data.type === "hsos_invoke") {
         if (publicMode || !jwt) {
-          post({ type: "dnos_invoke_result", id: data.id, error: "Integrações não disponíveis no modo público." });
+          post({ type: "hsos_invoke_result", id: data.id, error: "Integrações não disponíveis no modo público." });
           return;
         }
         try {
@@ -487,7 +505,7 @@ export default function LiveArtifactViewer({
           if (falhou || body?.error) {
             const message = body?.error || "Falha ao chamar a integração.";
             setDataError(message);
-            post({ type: "dnos_invoke_result", id: data.id, error: message });
+            post({ type: "hsos_invoke_result", id: data.id, error: message });
           } else {
             setDataError(null);
             const refreshedAt = new Date();
@@ -498,16 +516,16 @@ export default function LiveArtifactViewer({
                 body: { tocar_refresh: true },
               });
             }
-            post({ type: "dnos_invoke_result", id: data.id, data: body?.data ?? body });
+            post({ type: "hsos_invoke_result", id: data.id, data: body?.data ?? body });
           }
         } catch (err: any) {
           const message = String(err?.message ?? err);
           setDataError(message);
-          post({ type: "dnos_invoke_result", id: data.id, error: message });
+          post({ type: "hsos_invoke_result", id: data.id, error: message });
         }
       }
 
-      if (data.type === "dnos_download") {
+      if (data.type === "hsos_download") {
 
         try {
           const bytes = data.bytes as ArrayBuffer | undefined;
@@ -540,16 +558,16 @@ export default function LiveArtifactViewer({
     if (!artifact || artifact.refresh_interval <= 0) return;
     const timer = window.setInterval(() => {
       setDataError(null);
-      iframeRef.current?.contentWindow?.postMessage({ type: "dnos_refresh" }, "*");
-      fullscreenIframeRef.current?.contentWindow?.postMessage({ type: "dnos_refresh" }, "*");
+      iframeRef.current?.contentWindow?.postMessage({ type: "hsos_refresh" }, "*");
+      fullscreenIframeRef.current?.contentWindow?.postMessage({ type: "hsos_refresh" }, "*");
     }, artifact.refresh_interval * 1000);
     return () => window.clearInterval(timer);
   }, [artifact?.refresh_interval, artifact?.id, publicMode]);
 
   const manualRefresh = useCallback(() => {
     setDataError(null);
-    iframeRef.current?.contentWindow?.postMessage({ type: "dnos_refresh" }, "*");
-    fullscreenIframeRef.current?.contentWindow?.postMessage({ type: "dnos_refresh" }, "*");
+    iframeRef.current?.contentWindow?.postMessage({ type: "hsos_refresh" }, "*");
+    fullscreenIframeRef.current?.contentWindow?.postMessage({ type: "hsos_refresh" }, "*");
   }, []);
 
   const changeInterval = useCallback(async (value: number) => {
@@ -971,7 +989,7 @@ export default function LiveArtifactViewer({
               <CodeIcon className="h-4 w-4 text-primary" /> Editar HTML
             </DialogTitle>
             <DialogDescription>
-              Salvar recarrega o iframe. O objeto <code>window.dnos</code> continua disponível.
+              Salvar recarrega o iframe. O objeto <code>window.hsos</code> continua disponível.
             </DialogDescription>
           </DialogHeader>
           <textarea
@@ -1089,7 +1107,7 @@ export default function LiveArtifactViewer({
                     <div className="text-[11px] text-muted-foreground">
                       {publishIsPublic
                         ? "Qualquer pessoa com o link"
-                        : "Somente usuários logados da dnos"}
+                        : "Somente usuários logados da plataforma"}
                     </div>
                   </div>
                 </div>

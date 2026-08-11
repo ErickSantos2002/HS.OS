@@ -51,7 +51,7 @@ const DEFAULT_TEMPLATE = `<!DOCTYPE html>
   <script>
     async function load() {
       try {
-        const rows = await window.dnos.query('agent_results', {
+        const rows = await window.hsos.query('agent_results', {
           select: 'title, value, created_at',
           order: { column: 'created_at', ascending: false },
           limit: 10
@@ -65,7 +65,7 @@ const DEFAULT_TEMPLATE = `<!DOCTYPE html>
       }
     }
     load();
-    window.dnos.onRefresh(load);
+    window.hsos.onRefresh(load);
   </script>
 </body>
 </html>`;
@@ -388,7 +388,7 @@ export default function ArtifactsPage() {
               <Zap className="h-4 w-4 text-primary" /> Novo artefato vivo
             </DialogTitle>
             <DialogDescription>
-              O objeto <code>window.dnos</code> fica disponível dentro do artefato.
+              O objeto <code>window.hsos</code> fica disponível dentro do artefato.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

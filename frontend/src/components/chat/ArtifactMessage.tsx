@@ -33,7 +33,7 @@ interface ArtifactMessageProps {
 // Global dedup persisted in sessionStorage so reloading the page does not
 // re-execute <file_op> blocks from historical agent messages (which would
 // also re-trigger the auto-reply pipeline and look like "messages sent alone").
-const EXECUTED_STORAGE_KEY = "dnos:executed-file-ops";
+const EXECUTED_STORAGE_KEY = "hsos:executed-file-ops";
 function loadExecuted(): Set<string> {
   try {
     const raw = sessionStorage.getItem(EXECUTED_STORAGE_KEY);
@@ -108,13 +108,13 @@ function FileOpsRenderer({ text }: { text: string }) {
             resultText = `OK — "${op.path}" → "${op.newPath}".`;
           }
           finish({ status: "done", content: op.action === "read" ? resultText : undefined });
-          window.dispatchEvent(new CustomEvent("dnos:file-op-result", {
+          window.dispatchEvent(new CustomEvent("hsos:file-op-result", {
             detail: { action: op.action, path: op.path, newPath: op.newPath, ok: true, result: resultText },
           }));
         } catch (err) {
           const errMsg = String(err);
           finish({ status: "error", error: errMsg });
-          window.dispatchEvent(new CustomEvent("dnos:file-op-result", {
+          window.dispatchEvent(new CustomEvent("hsos:file-op-result", {
             detail: { action: op.action, path: op.path, newPath: op.newPath, ok: false, result: errMsg },
           }));
         }
@@ -180,7 +180,7 @@ export default function ArtifactMessage({ content, className, agentId, onArtifac
 
 /* ── Live artifacts renderer ── */
 
-const LIVE_EXECUTED_KEY = "dnos:executed-live-artifacts";
+const LIVE_EXECUTED_KEY = "hsos:executed-live-artifacts";
 function loadLiveExecuted(): Record<string, string> {
   try {
     const raw = sessionStorage.getItem(LIVE_EXECUTED_KEY);
@@ -286,7 +286,7 @@ function LiveArtifactsRenderer({
 
 /* ── Generate document renderer ── */
 
-const DOCS_EXECUTED_KEY = "dnos:executed-generate-documents";
+const DOCS_EXECUTED_KEY = "hsos:executed-generate-documents";
 type DocsRecord = { id: string; size_bytes: number };
 function loadDocsExecuted(): Record<string, DocsRecord> {
   try {

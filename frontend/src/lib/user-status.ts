@@ -31,8 +31,8 @@ export interface ActiveStatus {
   setAt: string; // ISO
 }
 
-const SELF_STATUS_CACHE_KEY = "dnos:user-status:self";
-const EXPIRY_ACK_PREFIX = "dnos:user-status:ack:";
+const SELF_STATUS_CACHE_KEY = "hsos:user-status:self";
+const EXPIRY_ACK_PREFIX = "hsos:user-status:ack:";
 
 export function getSelfStatusCache(): ActiveStatus | null {
   try {

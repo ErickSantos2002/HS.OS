@@ -19,6 +19,10 @@ export type FileOperation = {
   error?: string;
 };
 
+// ⚠️ Continua "dnos-fs" de propósito. Isto é nome de banco IndexedDB, não
+// chave de localStorage: renomear não migra nada, cria um banco vazio e órfã
+// o handle da pasta local que a pessoa conectou — ela teria que reconectar,
+// sem entender por quê. O nome não aparece em lugar nenhum da interface.
 const DB_NAME = "dnos-fs";
 const STORE_NAME = "folder-handles";
 

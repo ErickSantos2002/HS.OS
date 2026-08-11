@@ -7,7 +7,7 @@ import {
   setEnabled as setBrowserNotifEnabled,
 } from "@/lib/browser-notifications";
 
-const DISMISS_KEY = "dnos:notifBannerDismissedAt";
+const DISMISS_KEY = "hsos:notifBannerDismissedAt";
 const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 function shouldShow(): boolean {
