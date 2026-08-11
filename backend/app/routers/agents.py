@@ -21,6 +21,7 @@ camada de renomeação em `use-agents.ts`.
 import json
 import logging
 import re
+from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -1905,7 +1906,26 @@ async def consumo_do_agente(
 
 @router.get("/{agent_id}/estatisticas")
 async def estatisticas_do_agente(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
-    """A última coleta de estatísticas deste agente, ou `null` se nunca houve."""
+    """Atividade deste agente: do coletor quando há, do gateway quando não há.
+
+    ⚠️ **Antes isto devolvia `null` e a tela concluía "OFFLINE".** A `agent_stats`
+    tem um único escritor — o coletor que roda na VPS — e enquanto ele não
+    apontar para esta instalação a tabela fica vazia. O painel lia `null` em
+    `latest_updated_at` e mostrava o agente como fora do ar, com ele
+    respondendo normalmente no gateway. Afirmar "offline" a partir de "não sei"
+    é o erro; é o mesmo que o `/monitoring` cometia.
+
+    Mas a correção boa não é dizer "sem dados" — é ir buscar. O
+    `sessions.list` do gateway traz `updatedAt` por sessão, e a chave é
+    composta (`agent:<id>:<resto>`), então dá para saber a última atividade de
+    cada agente **ao vivo**, sem coletor nenhum. É informação melhor que a do
+    coletor, que é um retrato de alguns minutos atrás.
+
+    O coletor continua tendo precedência quando existe: ele traz `top_sessions`
+    e custo, que o `sessions.list` não dá de graça. O gateway preenche a
+    lacuna, e `origem` diz de onde veio — a tela precisa distinguir "ao vivo"
+    de "última coleta".
+    """
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             "SELECT session_count, latest_updated_at, top_sessions, model "
@@ -1913,7 +1933,45 @@ async def estatisticas_do_agente(agent_id: str, usuario: Usuario = Depends(usuar
             " ORDER BY collected_at DESC LIMIT 1",
             agent_id,
         )
-    return json.loads(json.dumps(dict(linha), default=str)) if linha else None
+    if linha and linha["latest_updated_at"]:
+        d = json.loads(json.dumps(dict(linha), default=str))
+        d["origem"] = "coletor"
+        return d
+
+    try:
+        c = await cfg.carregar()
+        r = await obter_cliente(c.url, c.token).chamar("sessions.list", {"limit": 200})
+    except ErroGateway as e:
+        logger.warning("sessions.list falhou ao medir atividade de %s: %s", agent_id, e)
+        return None
+
+    alvo = agent_id.lower()
+    mais_recente, quantas, modelo = None, 0, None
+    for s in r.get("sessions", []):
+        partes = (s.get("key") or "").split(":")
+        # `agent:nina:hsos-<uuid>` — o id fica no meio. Qualquer outro formato
+        # não é sessão de agente e não conta.
+        if len(partes) < 3 or partes[0] != "agent" or partes[1].lower() != alvo:
+            continue
+        quantas += 1
+        modelo = modelo or s.get("model")
+        q = s.get("updatedAt")
+        if isinstance(q, (int, float)) and (mais_recente is None or q > mais_recente):
+            mais_recente = q
+
+    if not quantas:
+        return None
+    return {
+        "session_count": quantas,
+        # `updatedAt` vem em milissegundos; a tela espera ISO.
+        "latest_updated_at": (
+            datetime.fromtimestamp(mais_recente / 1000, tz=timezone.utc).isoformat()
+            if mais_recente else None
+        ),
+        "top_sessions": [],
+        "model": modelo,
+        "origem": "gateway",
+    }
 
 
 @router.get("/{agent_id}/integracoes")

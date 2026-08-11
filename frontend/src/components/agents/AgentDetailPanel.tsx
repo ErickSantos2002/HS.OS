@@ -183,6 +183,8 @@ function useAgentStats(shortId: string) {
 /* ── agent_stats meta (sessions, last activity, top_sessions) ── */
 
 interface AgentMeta {
+  /** "gateway" = medido agora; "coletor" = último retrato da VPS. */
+  origem?: "gateway" | "coletor" | null;
   session_count: number | null;
   latest_updated_at: string | null;
   top_sessions: any[] | null;
@@ -210,6 +212,7 @@ function useAgentMeta(shortId: string) {
             latest_updated_at: data?.latest_updated_at ?? null,
             top_sessions: ts,
             model: data?.model ?? null,
+            origem: data?.origem ?? null,
           });
         }
         setLoading(false);
@@ -458,18 +461,20 @@ export default function AgentDetailPanel({ agent: agentProp, agentId, avatar: av
                   }`}
                 >
                   <span className={`h-1.5 w-1.5 rounded-full ${liveColor}`} />
-                  {/* ⚠️ "OFFLINE" aqui era mentira por omissão. Este selo sai
-                      de `latest_updated_at`, coluna que **só o coletor da VPS
-                      preenche** — sem coleta ele é nulo, e o agente aparecia
-                      como fora do ar enquanto respondia normalmente no gateway.
-                      Mesmo engano do banner do /monitoring, corrigido em 10/08.
-                      Sem dado, o honesto é dizer que não se sabe. */}
+                  {/* ⚠️ Aqui dizia "OFFLINE" para duas situações diferentes:
+                      o agente estar parado, e a gente não saber. Hoje o
+                      backend busca a última atividade no `sessions.list` do
+                      gateway quando o coletor não tem nada, então "sem dados"
+                      virou exceção rara — e "OCIOSO" descreve o que de fato
+                      se mediu. "OFFLINE" seria afirmar que o agente não
+                      responde, e ninguém testou isso: um agente sem sessão
+                      recente atende normalmente na próxima mensagem. */}
                   {live === "online"
                     ? "ONLINE"
                     : live === "recent"
                       ? "RECENTE"
                       : meta.data?.latest_updated_at
-                        ? "OFFLINE"
+                        ? "OCIOSO"
                         : "SEM DADOS"}
                 </span>
 
