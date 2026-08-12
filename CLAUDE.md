@@ -228,9 +228,13 @@ chat.send { sessionKey, message, idempotencyKey, agentId? }  →  { runId, statu
 - ⚠️ **Sem `agentId` vai para o agente padrão** (`defaultId` do `agents.list`, hoje `nina`), sem
   aviso nenhum. Foi assim que uma sondagem mandou "ping" para a `nina` por engano. **Sempre mande
   `agentId` explícito**, mesmo quando parecer óbvio qual é o alvo.
-- A chave real da sessão é **composta**: `sessionKey: "x"` com `agentId: "nina"` vira
-  `agent:nina:x`. É esse nome composto que aparece no `sessions.list` e é o que o
-  `sessions.delete` exige (em `key`, não em `sessionKey`).
+- ⚠️ **A chave da sessão tem que ser mandada COMPOSTA**: `agent:<agentId>:<sufixo>`. Mandar só o
+  sufixo com `agentId` junto é **recusado** — o gateway extrai o agente da própria chave e confere,
+  devolvendo `agentId "X" does not match session key "Y"`. É esse nome composto que aparece no
+  `sessions.list` e é o que o `sessions.delete` exige (em `key`, não em `sessionKey`).
+  Em 12/08/2026 isto derrubou **todos** os avisos ao agente líder: o `_avisar_agente` mandava
+  `system:<assunto>`, o gateway recusava, e como o envio era best-effort o erro morria no log —
+  a tela dizia "agente criado" para um agente que nasceu com o template em branco.
 - **`idempotencyKey` é obrigatório** e o `runId` volta igual a ele. O gateway passou a deduplicar
   nativamente — vale conferir se isso não resolve sozinho a execução duplicada catalogada em
   A1–A19 da auditoria, antes de reimplementar a fila do `chat-sender.ts`.

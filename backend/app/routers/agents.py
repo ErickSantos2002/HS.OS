@@ -589,7 +589,20 @@ async def _avisar_agente(openclaw_id: str, assunto: str, mensagem: str) -> None:
                 # `agentId` explícito e obrigatório na prática: sem ele o
                 # gateway manda para o agente padrão, silenciosamente.
                 "agentId": openclaw_id,
-                "sessionKey": f"system:{assunto}",
+                # ⚠️ **A chave da sessão é composta, e o gateway VALIDA isso.**
+                # Aqui era `system:{assunto}`, e todo aviso ao líder morria com
+                # `agentId "nina" does not match session key "system:…"`. Como
+                # o envio é best-effort, o erro só ia para o log: a tela dizia
+                # "agente criado", o agente nascia com o template em branco, e
+                # ninguém sabia que o líder nunca tinha sido avisado.
+                #
+                # A chave vai COMPOSTA — `agent:<id>:<sufixo>` — porque o
+                # gateway extrai o agente dela e confere contra o `agentId`.
+                # Mandar só o sufixo é recusado, e mandar um prefixo qualquer
+                # (era `system:…`) é recusado do mesmo jeito. O
+                # `_chave_sessao` de conversations.py já documentava isto; o
+                # aviso ao líder tinha ficado de fora.
+                "sessionKey": f"agent:{openclaw_id}:sistema-{assunto}",
                 "message": mensagem,
                 # Único por envio, senão o gateway deduplica pelo runId e o
                 # segundo aviso do mesmo assunto some.
@@ -599,6 +612,42 @@ async def _avisar_agente(openclaw_id: str, assunto: str, mensagem: str) -> None:
         logger.info("Aviso '%s' enviado a %s.", assunto, openclaw_id)
     except ErroGateway as e:
         logger.warning("Aviso '%s' a %s falhou: %s", assunto, openclaw_id, e)
+
+
+async def _avisar_lider_ou_falhar(assunto: str, mensagem: str) -> None:
+    """Como `_avisar_lider`, mas **levanta** quando não consegue entregar.
+
+    Existe porque há um caso em que o aviso não é consequência da mudança —
+    ele **é** a mudança: criar agente. O `create-agent` registra o agente no
+    gateway e depende do orquestrador para escrever a alma dele. Se a mensagem
+    não chega, o agente nasce com o template em branco do OpenClaw e ninguém
+    fica sabendo.
+
+    Foi exatamente o que aconteceu em 12/08/2026: a chave de sessão ia no
+    formato errado, o gateway recusava, o erro morria no log, e a tela dizia
+    "agente criado" para um agente vazio.
+    """
+    async with sessao(role="service_role") as conn:
+        lider = await conn.fetchrow(
+            "SELECT COALESCE(NULLIF(openclaw_id, ''), agent_id) AS oid "
+            "FROM public.agent_profiles WHERE is_leader = true LIMIT 1"
+        )
+    if lider is None:
+        raise ErroGateway("Nenhum agente está marcado como líder.")
+
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise ErroGateway("Gateway não configurado.")
+    await obter_cliente(c.url, c.token).chamar(
+        "chat.send",
+        {
+            "agentId": lider["oid"],
+            "sessionKey": f"agent:{lider['oid']}:sistema-{assunto}",
+            "message": mensagem,
+            "idempotencyKey": f"{assunto}:{uuid4()}",
+        },
+    )
+    logger.info("Aviso '%s' entregue a %s.", assunto, lider["oid"])
 
 
 async def _avisar_lider(assunto: str, mensagem: str) -> None:
@@ -1315,6 +1364,32 @@ def _briefing(d: AgenteNovoIn) -> str:
     )
 
 
+async def _desfazer_criacao(openclaw_id: str) -> None:
+    """Apaga o que a criação já tinha feito, quando ela não pôde terminar.
+
+    Best-effort de propósito, e na ordem inversa da criação: primeiro o
+    gateway, depois o banco. Se um dos dois falhar, o outro é limpo mesmo
+    assim — sobra menos lixo do que abortar no meio do desfazer.
+
+    O `agent_creation_log` **fica**: é a trilha de que a tentativa existiu, e
+    apagá-la esconderia justamente o que se quer investigar depois.
+    """
+    try:
+        c = await cfg.carregar()
+        if c.configurado:
+            await obter_cliente(c.url, c.token).chamar("agents.delete", {"agentId": openclaw_id})
+            logger.info("Desfazendo: %s removido do gateway.", openclaw_id)
+    except ErroGateway as e:
+        logger.warning("Desfazendo: gateway não removeu %s: %s", openclaw_id, e)
+
+    try:
+        async with sessao(role="service_role") as conn:
+            await conn.execute("DELETE FROM public.agent_profiles WHERE agent_id = $1", openclaw_id)
+        logger.info("Desfazendo: %s removido do banco.", openclaw_id)
+    except Exception as e:  # noqa: BLE001
+        logger.error("Desfazendo: banco não removeu %s: %s", openclaw_id, e)
+
+
 @router.post("", response_model=AgenteNovoOut, status_code=status.HTTP_201_CREATED)
 async def criar(
     dados: AgenteNovoIn,
@@ -1390,16 +1465,34 @@ async def criar(
             dados.openclaw_id, briefing,
         )
 
-    avisado = True
+    # ⚠️ **Briefing não entregue desfaz a criação inteira.**
+    #
+    # Antes daqui saía `orquestrador_avisado: false` e o agente ficava. Só que
+    # `_avisar_lider` **nunca levanta** — está no docstring dela —, então o
+    # `except` era código morto e o campo vinha `true` sempre. Em 12/08/2026 um
+    # agente foi criado assim: a tela disse "criado", ele apareceu na lista com
+    # status `configuring`, e nasceu com o template em branco do OpenClaw
+    # porque o orquestrador jamais foi avisado.
+    #
+    # Agente sem alma é pior que erro na criação: o erro a pessoa vê e refaz;
+    # o agente vazio fica na lista parecendo pronto. Por isso, aqui, falha na
+    # entrega desfaz o que já foi feito — no gateway e no banco — e devolve
+    # 502 dizendo o que houve.
     try:
-        await _avisar_lider(f"create-agent:{dados.openclaw_id}", briefing)
-    except Exception as e:  # noqa: BLE001
-        avisado = False
-        logger.warning("Briefing de %s não enviado: %s", dados.openclaw_id, e)
+        await _avisar_lider_ou_falhar(f"create-agent:{dados.openclaw_id}", briefing)
+    except ErroGateway as e:
+        logger.error("Briefing de %s não entregue — desfazendo: %s", dados.openclaw_id, e)
+        await _desfazer_criacao(dados.openclaw_id)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"O agente não foi criado: não consegui avisar o orquestrador ({e}). "
+            "Nada ficou pela metade — nem no gateway, nem aqui. Verifique se o "
+            "agente líder está de pé e tente de novo.",
+        ) from e
 
     logger.info("Agente %s criado por super_admin", dados.openclaw_id)
     return AgenteNovoOut(
-        agent_id=dados.openclaw_id, criado_no_gateway=True, orquestrador_avisado=avisado
+        agent_id=dados.openclaw_id, criado_no_gateway=True, orquestrador_avisado=True
     )
 
 
