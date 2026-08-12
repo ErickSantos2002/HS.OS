@@ -16,6 +16,45 @@ testado junto porque tem efeito real.
 
 ---
 
+## Retomando em 13/08/2026 — nesta ordem
+
+Os quatro agentes especializados foram apagados em 12/08, por decisão: cada um
+tinha sido montado enquanto se aprendia a ferramenta, sem padrão. Só a `nina`
+restou. Os workspaces completos estão em `~/backups/agentes-hsos-2026-08-12/`
+— é o único registro deles.
+
+A ordem combinada, e o porquê dela:
+
+1. **Preencher a aba Empresa** (Configurações → Empresa). A tabela
+   `company_profile` está vazia, e ela é a **fonte** do conhecimento
+   compartilhado: ao salvar, o backend monta um bloco `# Empresa` e manda a
+   orquestradora distribuir no contexto de todos os agentes. É assim que a
+   plataforma de origem resolve isso — não é arquivo comum, é distribuição.
+
+2. **Converter o [`AGENT_CREATION.md`](AGENT_CREATION.md) em skill.** O
+   procedimento não pode virar arquivo no workspace: o gateway só escreve os
+   sete canônicos, e arquivo fora deles não carrega sozinho. A skill é
+   carregada sob demanda; no contexto dela fica só *"para criar agente, use a
+   skill X"*. Confirmado com quem opera a plataforma de origem.
+   ⚠️ Até isso existir, o briefing aponta para um arquivo que não está no
+   workspace dela.
+
+3. **A orquestradora cria o primeiro agente**, de ponta a ponta. É o teste que
+   fecha o ciclo.
+
+Dois consertos de 12/08 que tornam isso possível: o aviso ao líder ia num
+formato que o gateway recusava (todos os avisos estavam quebrados, não só o de
+criação), e a falha era engolida — a tela dizia "criado" para um agente vazio.
+Hoje, briefing não entregue **desfaz** a criação.
+
+⚠️ **Pendência de segurança que não pode esperar:** a senha de superusuário dos
+bancos DataCore (`administrador`/`administrador`) esteve em texto puro no
+workspace de um agente por três meses, indo para a LLM a cada sessão. O agente
+foi apagado, mas **a senha precisa ser trocada** — e o sanitizador da exportação
+não a remove, o que é bug nosso.
+
+---
+
 ## Placar — medido, não mantido à mão
 
 O contador deste arquivo já mentiu uma vez: eu vinha incrementando a cada port

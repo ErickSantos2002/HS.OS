@@ -1345,22 +1345,24 @@ def _briefing(d: AgenteNovoIn) -> str:
         "Restrições importantes:\n"
         f'"{d.behavior_restrictions or "Nenhuma definida"}"\n\n'
         f"{crons}\n\n"
-        "Execute TODOS os passos do AGENT_CREATION.md:\n"
-        f"1. Crie o workspace {d.workspace} no VPS\n"
-        "2. Escreva SOUL.md com a personalidade descrita acima — seja criativo e "
-        "detalhado, capture a essência do agente\n"
-        "3. Escreva IDENTITY.md com missão, especialidade, tom de voz e exemplos "
-        "de respostas\n"
-        f"4. Escreva TOOLS.md listando as integrações: {integracoes}\n"
-        "5. Escreva AGENTS.md (relações com outros agentes da equipe)\n"
-        "6. Escreva MEMORY.md (vazio, pronto para uso)\n"
-        "7. Escreva HEARTBEAT.md (status inicial)\n"
-        "8. Atualize /root/.openclaw/AGENTS_DIRECTORY.md adicionando o novo agente\n"
-        "9. Configure os crons descritos acima no openclaw.json\n"
-        "10. Reinicie o gateway para carregar o novo agente\n"
-        "11. Ao final desta mensagem, resuma o que foi configurado e liste os "
-        "arquivos criados com o caminho completo\n\n"
-        "Capricha no SOUL.md — é a alma do agente. NÃO pule a execução das ferramentas."
+        # ⚠️ **O procedimento mora no AGENT_CREATION.md, não aqui.** Esta lista
+        # era de 11 passos e três estavam errados em 12/08/2026: mandava criar
+        # o workspace (a API já criou, com os arquivos semeados), atualizar um
+        # AGENTS_DIRECTORY.md que não existe, e reiniciar o gateway — que
+        # derruba o túnel e as sessões de todo mundo, sem necessidade.
+        #
+        # Repetir procedimento em dois lugares garante que um dos dois fique
+        # velho. O briefing manda os DADOS daquele agente; o documento manda o
+        # COMO, e é atualizável sem deploy.
+        "O agente já existe no gateway: workspace criado e os sete arquivos "
+        "semeados com o template em branco do OpenClaw. Seu trabalho é "
+        "substituir esse template.\n\n"
+        "Siga o AGENT_CREATION.md do seu workspace. Ele diz o que vai em cada "
+        "arquivo, o que todo agente herda e o que muda por agente.\n\n"
+        "Ao terminar, liste cada arquivo criado com o caminho completo e "
+        "resuma o que ficou configurado.\n\n"
+        "Capricha no SOUL.md — é a alma do agente. NÃO pule a execução das "
+        "ferramentas: descrever o que faria não cria arquivo nenhum."
     )
 
 
