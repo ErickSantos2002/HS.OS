@@ -263,8 +263,11 @@ Escrito e testado só nas guardas, porque o caminho feliz tem efeito real:
 
 ## Pendências de infraestrutura que a portagem criou
 
-- **`UPLOADS_DIR` precisa ser volume persistente** no EasyPanel. Sem isso, todo
-  deploy apaga avatares, anexos e documentos gerados.
+- ~~**`UPLOADS_DIR` volume persistente**~~ — confirmado montado no EasyPanel
+  pelo Erick em 12/08/2026.
+- ~~**Backup do banco**~~ — instalado em 12/08/2026, diário às 03:20 com 14
+  dias de retenção e restauração verificada. Ver [`DEPLOY.md`](DEPLOY.md).
+  **Falta**: cópia para fora da máquina.
 - **O WebSocket exige `wss://`** em produção: o token vai na query (a API do
   navegador não permite cabeçalho), então em `ws://` viajaria em claro.
 - **Desligar a ponte `dnos-files-bridge` na VPS** — pendência aberta em

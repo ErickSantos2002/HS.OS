@@ -55,6 +55,37 @@ fim da linha anterior e corrompe as duas. Aconteceu aqui, e o sintoma é
 diagnóstico é `ssh-keygen -lf ~/.ssh/authorized_keys`, que lista só as chaves que
 o servidor consegue de fato ler.
 
+## Backup do banco
+
+Instalado em 12/08/2026 pelo `scripts/instalar-backup.sh`, na VPS da aplicação:
+
+```bash
+scp scripts/instalar-backup.sh root@62.72.11.28:/root/
+ssh root@62.72.11.28 'bash /root/instalar-backup.sh'
+```
+
+`pg_dump` diário às 03:20, formato custom, 14 dias em `/var/backups/hsos`
+(permissão 700 — o dump tem hash de senha e os segredos de integração). O
+`systemd` cuida do agendamento; o script é idempotente.
+
+O dump sai **de dentro do container** do Postgres, então a versão do cliente
+sempre casa com a do servidor e a senha vem do ambiente dele, não de um arquivo.
+
+⚠️ **O script termina restaurando o que acabou de gerar**, num banco
+descartável, e conferindo as contagens. Backup que ninguém restaurou é
+esperança. Se o restore falhar, a instalação falha.
+
+Para restaurar de verdade:
+
+```bash
+CID=$(docker ps --format '{{.ID}} {{.Names}}' | grep -i postgres | awk '{print $1}')
+docker exec -i $CID sh -c 'pg_restore -U $POSTGRES_USER -d hsos --clean --if-exists' \
+  < /var/backups/hsos/hsos-<data>.dump
+```
+
+⚠️ **Os dumps ficam na mesma máquina do banco.** Cobrem erro humano e bug de
+aplicação; **não** cobrem perder a máquina. Cópia para fora é o passo seguinte.
+
 ## Backend
 
 **Build:** contexto `backend/`, Dockerfile padrão. Sem build args.
