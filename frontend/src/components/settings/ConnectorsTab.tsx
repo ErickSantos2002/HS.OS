@@ -79,7 +79,10 @@ interface ConnectorRow {
   icon: string | null;
   updated_at: string;
   integration_type: string | null;
-  credentials: any;
+  /** Sempre `undefined` na listagem — valor de segredo não vem para o cliente. */
+  credentials?: any;
+  /** Os *nomes* das chaves guardadas. Nunca os valores. */
+  credential_keys: string[] | null;
   type: ConnectorKind | null;
   template_id: string | null;
   agents_using: string[] | null;
@@ -93,13 +96,6 @@ interface AgentOption {
   agent_id: string;
   name: string;
 }
-
-/** Table columns we read. */
-// `credentials` NÃO é listado aqui de propósito: valores de segredo nunca vêm
-// para o cliente na listagem. A edição hidrata via edge function
-// `reveal-connector-credentials` (só super_admin). Ver migration de REVOKE.
-const SELECT_COLS =
-  "id, name, category, key_name, key_preview, is_configured, description, icon, updated_at, integration_type, type, template_id, agents_using, added_by_agent, last_validated_at, last_validation_ok, last_validation_error";
 
 
 
@@ -470,7 +466,9 @@ export default function ConnectorsTab() {
       description: payload.description ?? null,
       icon: payload.icon ?? "🔑",
       integration_type: payload.integration_type ?? (payload.type === "mcp" ? "mcp" : "api_key"),
-      credentials: payload.credentials ?? [],
+      // `null`, não `[]`: o servidor lê ausente como "não mexer nas credenciais".
+      // Com `[]` ele entendia "esvaziar", e salvar uma troca de nome apagava a chave.
+      credentials: payload.credentials ?? null,
       type: payload.type,
       template_id: payload.template_id ?? null,
       agents_using: payload.agents_using ?? [],
@@ -1038,10 +1036,16 @@ function TemplateModal({
 
   if (!template) return null;
 
+  // Chaves que o servidor já guarda. Campo em branco cujo nome está aqui
+  // significa "manter a que está lá" — a tela nunca recebe o valor de volta,
+  // então exigir preenchimento obrigaria a redigitar o segredo só para
+  // renomear o conector.
+  const guardadas = new Set(editing?.credential_keys ?? []);
+
   async function save() {
     if (!template) return;
     for (const f of template.fields) {
-      if (!values[f.key]?.trim()) {
+      if (!values[f.key]?.trim() && !guardadas.has(f.key)) {
         toast({ title: "Campo obrigatório", description: f.label, variant: "destructive" });
         return;
       }
@@ -1093,6 +1097,7 @@ function TemplateModal({
               revealed={!!revealed[f.key]}
               onToggleReveal={() => setRevealed((r) => ({ ...r, [f.key]: !r[f.key] }))}
               onChange={(v) => setValues((s) => ({ ...s, [f.key]: v }))}
+              guardada={guardadas.has(f.key)}
             />
           ))}
 
@@ -1129,21 +1134,32 @@ function FieldInput({
   revealed,
   onToggleReveal,
   onChange,
+  guardada = false,
 }: {
   field: ConnectorField;
   value: string;
   revealed: boolean;
   onToggleReveal: () => void;
   onChange: (v: string) => void;
+  /** O servidor já tem uma chave com este nome — deixar em branco a mantém. */
+  guardada?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs text-muted-foreground">{field.label}</Label>
+      <Label className="text-xs text-muted-foreground">
+        {field.label}
+        {guardada && !value && (
+          <span className="ml-2 text-[11px] text-muted-foreground/70">
+            já configurada — deixe em branco para manter
+          </span>
+        )}
+      </Label>
       <div className="flex items-center gap-1.5">
         <Input
           type={field.secret && !revealed ? "password" : "text"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          placeholder={guardada && !value ? "••••••••" : undefined}
           className="font-mono text-sm flex-1 min-w-0 focus-visible:ring-1 focus-visible:ring-offset-0"
           autoComplete="off"
           spellCheck={false}
@@ -1316,7 +1332,13 @@ function CustomModal({
     if (!open) return;
     setKind((editing?.type as ConnectorKind) ?? "api");
     setName(editing?.name ?? "");
+    // Os nomes das chaves guardadas vêm da listagem; os valores, nunca. Semear
+    // com valor vazio mostra à pessoa o que existe — antes o diálogo abria em
+    // branco, e salvar substituía o conjunto pelo pouco que ela redigitasse.
     const map = credentialsAsMap(editing?.credentials);
+    for (const nome of editing?.credential_keys ?? []) {
+      if (!(nome in map)) map[nome] = "";
+    }
     const entries = Object.entries(map);
     setPairs(entries.length ? entries.map(([k, v]) => ({ key: k, value: v })) : [{ key: "", value: "" }]);
     setSelectedAgents(editing?.agents_using ?? []);
@@ -1343,7 +1365,13 @@ function CustomModal({
       toast({ title: "Informe um nome", variant: "destructive" });
       return;
     }
-    const cleanPairs = pairs.filter((p) => p.key.trim() && p.value.trim());
+    // Par com nome e sem valor é legítimo ao editar: significa "manter a chave
+    // guardada". Só o nome em branco descarta a linha. Ao criar não há nada
+    // guardado, então exigimos o valor.
+    const guardadas = new Set(editing?.credential_keys ?? []);
+    const cleanPairs = pairs.filter(
+      (p) => p.key.trim() && (p.value.trim() || guardadas.has(p.key.trim())),
+    );
     if (!cleanPairs.length) {
       toast({ title: "Adicione ao menos um campo", variant: "destructive" });
       return;
@@ -1423,7 +1451,11 @@ function CustomModal({
                   className="font-mono text-sm"
                 />
                 <Input
-                  placeholder="valor"
+                  placeholder={
+                    (editing?.credential_keys ?? []).includes(p.key.trim()) && !p.value
+                      ? "•••• guardado"
+                      : "valor"
+                  }
                   value={p.value}
                   onChange={(e) => updatePair(i, { value: e.target.value })}
                   className="font-mono text-sm"

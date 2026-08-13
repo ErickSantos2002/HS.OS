@@ -723,9 +723,16 @@ async def revelar_credenciais_conector(
 ):
     """Mostra ao admin as credenciais que o **ambiente** tem para este conector.
 
-    ⚠️ Devolve valor em claro, e por isso é `super_admin`. Existe para o admin
-    conferir o que de fato está configurado no servidor — a tela normal mostra
-    só `key_preview`.
+    ⚠️ Devolve valor em claro, e por isso é `super_admin`. É o único ponto do
+    sistema que devolve credencial ao navegador.
+
+    ⚠️ **Só lê variável de ambiente do backend, nunca o `credentials` do banco**
+    — e essa assimetria já custou caro. O formulário grava no banco; este
+    endpoint lê do ambiente. Chave digitada na tela, portanto, nunca volta a
+    aparecer, e a tela precisa saber disso: quem diz o que está guardado no
+    banco é o `credential_keys` da listagem, que devolve os **nomes** das
+    chaves. Antes de existir, o formulário abria em branco e salvar apagava o
+    que a pessoa não redigitou.
 
     Procura em três lugares, na ordem do original: os nomes de chave gravados em
     `credentials`, o `key_name` da integração, e o prefixo derivado do
@@ -1260,13 +1267,26 @@ async def gravar_perfil_da_empresa(
 #
 # ⚠️ **As credenciais nunca saem daqui.** A listagem devolve `key_preview` (os
 # últimos caracteres) e o booleano `is_configured`; o `credentials` inteiro fica
-# no servidor. A tela nunca precisou dele — só de saber se está configurado e de
-# mostrar a ponta da chave para a pessoa reconhecer qual é.
+# no servidor.
+#
+# O que ela devolve **é** `credential_keys`: os *nomes* das chaves guardadas,
+# nunca os valores. Sem isso a tela não tinha como saber que existem, abria o
+# formulário em branco, e salvar depois de reeditar apagava as credenciais que
+# a pessoa não redigitou — sem nada na tela indicando que existiam.
 
 _COLUNAS_CONECTOR = """
     id::text AS id, name, category, key_name, key_preview, is_configured,
     description, icon, integration_type, type, template_id::text AS template_id,
     agents_using, added_by_agent, last_validation_ok, last_validation_error,
+    COALESCE((
+        SELECT array_agg(nome)
+          FROM jsonb_array_elements(
+                   CASE WHEN jsonb_typeof(credentials) = 'array'
+                        THEN credentials ELSE '[]'::jsonb END
+               ) AS c,
+               LATERAL COALESCE(c->>'key_name', c->>'key') AS nome
+         WHERE nome IS NOT NULL AND nome <> ''
+    ), '{}') AS credential_keys,
     to_char(updated_at         AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS updated_at,
     to_char(last_validated_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS last_validated_at
 """
@@ -1302,6 +1322,57 @@ def _previa(credenciais) -> tuple[str | None, bool]:
     if not valor:
         return None, False
     return (f"…{valor[-4:]}" if len(valor) > 4 else "…"), True
+
+
+def _pares_de_credencial(bruto) -> list[dict] | None:
+    """Normaliza o `credentials` da tabela para lista de pares, ou `None`."""
+    if isinstance(bruto, str):
+        try:
+            bruto = json.loads(bruto)
+        except ValueError:
+            return None
+    return [c for c in bruto if isinstance(c, dict)] if isinstance(bruto, list) else None
+
+
+def _mesclar_credenciais(guardadas, recebidas):
+    """Junta o que chegou com o que já estava, **por nome de chave**.
+
+    Três casos, nesta ordem:
+
+    - `recebidas is None` → devolve `None`: não mexer no campo.
+    - formato de objeto (o caso MCP, `{transport, url, token, …}`) → substitui
+      inteiro. Não há par a mesclar, e mesclar objeto por chave apagaria campo
+      que a tela deixou de mandar.
+    - lista de pares → mescla: **valor vazio preserva o guardado**. É o que
+      permite renomear um conector, ou trocar uma chave só, sem redigitar o
+      resto — a tela nunca recebe os valores de volta e não teria como.
+
+    Omitir a chave da lista continua sendo como se apaga uma credencial.
+    """
+    if recebidas is None:
+        return None
+    novas = _pares_de_credencial(recebidas)
+    if novas is None:
+        return recebidas
+
+    antigas = {
+        str(c.get("key_name") or c.get("key") or ""): c
+        for c in (_pares_de_credencial(guardadas) or [])
+    }
+
+    mescladas: list[dict] = []
+    for nova in novas:
+        nome = str(nova.get("key_name") or nova.get("key") or "").strip()
+        if not nome:
+            continue
+        valor = str(nova.get("value") or "")
+        if not valor:
+            valor = str((antigas.get(nome) or {}).get("value") or "")
+        par = {"key_name": nome, "value": valor}
+        if nova.get("label"):
+            par["label"] = nova["label"]
+        mescladas.append(par)
+    return mescladas
 
 
 @router.post("/conectores", status_code=status.HTTP_201_CREATED)
@@ -1360,9 +1431,26 @@ async def editar_conector(
     Não é descuido: a tela não recebe a credencial de volta na listagem, então
     ela não tem como reenviá-la ao editar só o nome. Tratar ausente como "apagar"
     faria renomear um conector desconectá-lo.
+
+    ⚠️ Isso valia só para o `credentials` **inteiro** ausente, e não bastava: a
+    tela sempre manda a lista, e mandar a lista SUBSTITUÍA o conjunto. Um
+    conector com três chaves, reaberto e salvo com uma redigitada, perdia as
+    outras duas — em silêncio, porque a tela nem sabia que existiam.
+
+    Agora a mescla é **por chave**, a mesma regra de `registrar_integracao`:
+    chave que chega com valor vazio preserva o valor guardado. É o que permite
+    renomear um conector, ou trocar só uma de várias chaves, sem redigitar o
+    resto. Apagar uma chave continua possível — é omiti-la da lista.
     """
-    previa, configurado = _previa(dados.credentials)
     async with sessao(role="service_role") as conn:
+        atual = await conn.fetchval(
+            "SELECT credentials FROM public.integrations WHERE id = $1::uuid",
+            conector_id,
+        )
+        mescladas = _mesclar_credenciais(atual, dados.credentials)
+        previa, configurado = _previa(
+            mescladas if mescladas is not None else atual
+        )
         achado = await conn.fetchval(
             """
             UPDATE public.integrations SET
@@ -1380,7 +1468,7 @@ async def editar_conector(
             conector_id, dados.name, dados.category, dados.key_name,
             dados.integration_type, dados.description, dados.icon, dados.type,
             dados.template_id or "",
-            json.dumps(dados.credentials) if dados.credentials is not None else None,
+            json.dumps(mescladas) if mescladas is not None else None,
             previa, configurado, dados.agents_using,
         )
     if achado is None:
@@ -1410,66 +1498,3 @@ async def modelos_de_conector(usuario: Usuario = Depends(usuario_atual)):
     return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
 
 
-# Sufixos convencionais de variável de ambiente. A edge tentava esta lista
-# porque não há registro de qual variável pertence a qual conector — a
-# convenção `{TEMPLATE}_{CAMPO}` é o que existe de acordo.
-_SUFIXOS_CONVENCIONAIS = (
-    "API_KEY", "ACCESS_TOKEN", "CLIENT_ID", "CLIENT_SECRET", "REFRESH_TOKEN",
-    "SECRET_KEY", "WEBHOOK_SECRET", "BOT_TOKEN", "ACCOUNT_SID", "AUTH_TOKEN",
-    "PHONE_NUMBER_ID", "PAGE_ID", "AD_ACCOUNT_ID", "APP_ID", "BASE_URL", "TOKEN",
-)
-
-
-@router.get("/conectores/{conector_id}/credenciais")
-async def revelar_credenciais(
-    conector_id: str, _: Usuario = Depends(exige_papel("super_admin"))
-):
-    """Mostra as credenciais guardadas em variável de ambiente. Só `super_admin`.
-
-    ⚠️ **Este é o único ponto do sistema que devolve credencial ao navegador**, e
-    existe por um motivo estreito: o formulário de editar conector precisa
-    preencher os campos que já estão configurados, senão salvar uma alteração de
-    nome apagaria a chave por vir com o campo vazio.
-
-    Só lê **variáveis de ambiente do backend**, nunca o `credentials` do banco.
-    A diferença importa: o que está no banco a tela já sabe que existe (pelo
-    `is_configured`), e o que está no ambiente é o que ela não tem como
-    adivinhar.
-
-    A busca é por convenção porque não há registro de qual variável pertence a
-    qual conector: tenta o `key_name` de cada credencial, o `key_name` da linha,
-    e `{TEMPLATE}_{CAMPO}` para os sufixos usuais.
-    """
-    async with sessao(role="service_role") as conn:
-        linha = await conn.fetchrow(
-            "SELECT name, key_name, credentials, template_id "
-            "  FROM public.integrations WHERE id = $1::uuid",
-            conector_id,
-        )
-    if linha is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conector não encontrado.")
-
-    nomes: list[str] = []
-    credenciais = linha["credentials"]
-    if isinstance(credenciais, str):
-        try:
-            credenciais = json.loads(credenciais)
-        except ValueError:
-            credenciais = None
-    if isinstance(credenciais, list):
-        nomes += [
-            str(c.get("key_name") or c.get("key") or "").strip()
-            for c in credenciais
-            if isinstance(c, dict)
-        ]
-    if linha["key_name"]:
-        nomes.append(str(linha["key_name"]))
-    if linha["template_id"]:
-        prefixo = re.sub(r"[^A-Z0-9]+", "_", str(linha["template_id"]).upper())
-        nomes += [f"{prefixo}_{s}" for s in _SUFIXOS_CONVENCIONAIS]
-
-    achadas = {n: os.environ[n] for n in nomes if n and os.environ.get(n)}
-    logger.info(
-        "Credenciais do conector %s reveladas: %d variáveis.", linha["name"], len(achadas)
-    )
-    return {"success": True, "credentials": achadas}
