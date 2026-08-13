@@ -52,6 +52,37 @@ em `~/backups/limpeza-2026-08-13/*.csv`. Na VPS saíram as pastas de agente
 morto e os workspaces órfãos (`~/limpar-vps.sh`, com arquivo `.tar.gz` antes de
 remover).
 
+### Bancos de dados viraram o quarto tipo de conector
+
+E a `nina` já consulta o banco do HS.OS pela tela — cadastro → `mcp.servers` no
+gateway → `tools.alsoAllow` do agente, tudo por `config.patch`, sem tocar a VPS.
+
+**Banco é tool, não skill.** Consultar é ação; o agente não precisa reaprender a
+consultar, precisa poder executar. Skill continua sendo o certo para
+procedimento com julgamento nosso dentro — como criar um agente. A troca custa
+contexto (tool ocupa o prompt todo turno, skill só quando invocada) e para banco
+compensa.
+
+⚠️ **O usuário do banco é a trava, não a nossa coluna.** `db_somente_leitura` só
+escolhe qual credencial usar. O usuário `leitura` do HS.OS tem
+`pg_read_all_data`, `default_transaction_read_only = on` e **`BYPASSRLS`** — os
+dois primeiros recusam escrita antes de olhar permissão; o terceiro foi preciso
+porque as 191 policies de RLS exigem `auth.uid()`, que só existe quando o
+backend emite `SET LOCAL app.current_user_id`. O servidor MCP abre a conexão e
+manda SQL puro, então **sem `BYPASSRLS` as 69 tabelas devolviam zero linhas** e
+a agente concluía que o banco estava vazio.
+
+⚠️ **`sslmode=prefer` não quer dizer o mesmo em todo driver.** O libpq (psql,
+asyncpg) rebaixa para texto puro quando o servidor recusa SSL; o node-postgres,
+que roda dentro do MCP, trata como exigência e falha. O teste passava e o agente
+falhava. Use `disable` para servidor sem SSL — a tela avisa e a publicação
+recusa.
+
+⚠️ **Dívida conhecida:** o servidor MCP recebe a URL por argv, e argv aparece no
+`ps`. Contido enquanto só o root roda na VPS; **deixa de ser aceitável quando
+existir escrita**, e o conserto é um servidor MCP nosso lendo do ambiente. Por
+isso publicar banco marcado como leitura-e-escrita responde 501 hoje.
+
 ---
 
 ## Retomando — nesta ordem
@@ -69,7 +100,17 @@ A ordem combinada, e o porquê dela:
    primeira versão mandava a orquestradora fazer, custou 34 mil tokens, e ela
    escreveu em quatro workspaces que não existiam mais.
 
-2. **Converter o [`AGENT_CREATION.md`](AGENT_CREATION.md) em skill.** O
+2. **Reescrever o `USER.md` da `nina`** — é o último dos sete que ainda está
+   como veio. Diz "SO-HS" e não conhece o HS.OS. É também onde entra a
+   informação de sessão que a plataforma de origem manda (nome, id e papel de
+   quem está falando), confirmado com quem a opera.
+
+   Os outros seis foram reescritos em 12–13/08 e estão em ordem: `SOUL.md`,
+   `IDENTITY.md`, `AGENTS.md`, `MEMORY.md`, `HEARTBEAT.md` e `TOOLS.md` — este
+   último no dia em que ela ganhou o banco. Backups em
+   `~/backups/agentes-hsos-2026-08-12/`.
+
+3. **Converter o [`AGENT_CREATION.md`](AGENT_CREATION.md) em skill.** O
    procedimento não pode virar arquivo no workspace: o gateway só escreve os
    sete canônicos, e arquivo fora deles não carrega sozinho. A skill é
    carregada sob demanda; no contexto dela fica só *"para criar agente, use a
@@ -77,7 +118,7 @@ A ordem combinada, e o porquê dela:
    ⚠️ Até isso existir, o briefing aponta para um arquivo que não está no
    workspace dela.
 
-3. **A orquestradora cria o primeiro agente**, de ponta a ponta. É o teste que
+4. **A orquestradora cria o primeiro agente**, de ponta a ponta. É o teste que
    fecha o ciclo.
 
 Dois consertos de 12/08 que tornam isso possível: o aviso ao líder ia num
