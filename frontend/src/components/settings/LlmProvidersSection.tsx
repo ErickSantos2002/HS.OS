@@ -287,14 +287,14 @@ export function DialogoProvedor({ tipoInicial, provedorId, modelosAtuais, aoFech
     setSalvando(true); setErro(null);
     try {
       const selecionados = (lista ?? []).filter((m) => marcados.has(m.id));
-      // ⚠️ **A chave NÃO vai no salvar.** Ela serviu só para a busca de modelos
-      // acima. O backend recusa `api_key` com 501, de propósito: ele não tem
-      // como gravá-la, e aceitar em silêncio faria a tela dizer que mudou algo
-      // que continuaria igual. O que este salvar faz é o catálogo — quais
-      // modelos ficam no seletor.
+      // A chave vai junto quando preenchida: ela é gravada em
+      // `models.providers.<id>.apiKey` pelo config.patch. Vazio, o backend
+      // mantém a que já está lá — a tela nunca recebe a credencial de volta e
+      // não teria como reenviá-la.
       const r = await chamar({
         action: "save", provider_type: tipoParaEnvio,
         ...(tipoParaEnvio === "custom" ? { provider_id: idParaEnvio, base_url: urlParaEnvio } : {}),
+        ...(chave ? { api_key: chave } : {}),
         models: selecionados,
       });
       // ⚠️ Modelo que o gateway não resolve é recolhido pelo backend, e a
@@ -350,8 +350,8 @@ export function DialogoProvedor({ tipoInicial, provedorId, modelosAtuais, aoFech
               encostava no primeiro campo — quem abre isto quer preencher. */}
           <DialogDescription>
             {editando
-              ? "Escolha quais modelos ficam disponíveis no seletor."
-              : "Liste os modelos do provedor e escolha quais ficam no seletor. A credencial em si é gravada no gateway, não aqui."}
+              ? "Busque os modelos com a chave já gravada. Cole uma nova só para trocá-la."
+              : "Cole a chave e busque os modelos — a lista vem da API do provedor."}
           </DialogDescription>
         </DialogHeader>
 
@@ -391,19 +391,14 @@ export function DialogoProvedor({ tipoInicial, provedorId, modelosAtuais, aoFech
             </div>
           )}
 
-          {/* ⚠️ A chave aqui serve SÓ para perguntar ao provedor quais modelos
-              existem. Ela não é gravada em lugar nenhum — nem aqui, nem no
-              gateway, que não expõe método para isso (17 sondados em 13/08,
-              todos `unknown method`). Quem grava é o CLI da VPS. Antes este
-              campo dizia "Chave de API" e sugeria que salvar a instalaria. */}
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">
-              Chave de API — só para listar os modelos
+              {editando ? "Nova chave de API (opcional)" : "Chave de API"}
             </Label>
             <div className="flex gap-2">
               <Input
                 type="password"
-                placeholder={editando ? "vazio usa a chave já gravada no gateway" : "cole para listar os modelos"}
+                placeholder={editando ? "vazio mantém a chave atual" : "cole aqui"}
                 value={chave}
                 className="font-mono text-sm"
                 onChange={(e) => setChave(e.target.value)}
@@ -419,16 +414,9 @@ export function DialogoProvedor({ tipoInicial, provedorId, modelosAtuais, aoFech
                 Buscar modelos
               </Button>
             </div>
-            {/* A pergunta que a tela precisa responder é "então onde eu ponho a
-                chave?". Sem isto, quem chega aqui cola no único campo que
-                existe e acha que instalou. */}
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Esta chave não é gravada — serve só para perguntar ao provedor
-              quais modelos existem. A credencial que os agentes usam fica no
-              gateway, e quem a escreve é o CLI da VPS:{" "}
-              <code className="font-mono text-[10px] bg-muted px-1 py-0.5 rounded">
-                openclaw models auth paste-api-key --agent &lt;id&gt;
-              </code>
+              Usada para listar os modelos e gravada no gateway ao salvar.
+              Deixar em branco ao editar mantém a chave atual.
             </p>
           </div>
 

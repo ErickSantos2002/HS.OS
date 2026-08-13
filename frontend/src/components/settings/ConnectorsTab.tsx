@@ -329,14 +329,11 @@ export default function ConnectorsTab() {
         logo: visual.logo,
         grupo: "llm",
         estado: conectado ? "conectado" : "disponivel",
-        // ⚠️ Este texto dizia "cole uma chave em Configurar para gerenciar por
-        // aqui", e era falso: o gateway não expõe método para gravar
-        // credencial, então colar não faz nada (o backend responde 501). Pior,
-        // convidava a tentar justamente quando a chave estava quebrada. Quem
-        // grava é o CLI da VPS — dizer isso é mais útil que oferecer um botão
-        // que não cumpre.
+        // Provedor que veio do CLI (perfil em `auth.profiles`) funciona, mas
+        // não é gerenciado daqui até alguém colar uma chave — aí ele passa a
+        // ter nó em `models.providers` e a tela assume a credencial.
         detalhe: nativa
-          ? "Credencial gerenciada no gateway (openclaw models auth) — aqui você escolhe os modelos"
+          ? "Conectada por perfil criado no gateway — cole uma chave em Configurar para gerenciar por aqui"
           : conectado && !p?.modelos?.length
             ? "Nenhum modelo selecionado"
             : null,

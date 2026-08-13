@@ -1,40 +1,60 @@
-"""Provedores de LLM — o catálogo de modelos do gateway.
+"""Provedores de LLM — credencial e catálogo, os dois pelo `config.patch`.
 
-⚠️ **Este módulo não grava credencial, e não é por opção.** Levantado ao vivo em
-13/08/2026: a chave de LLM não vive na config do gateway. Vive em
-`auth_profile_store`, no SQLite de **cada agente**, e o `openclaw.json` só
-declara que o perfil existe e em que modo (`auth.profiles`). Sondamos 17 nomes
-de método de escrita de auth — `models.auth.set`, `auth.profiles.set`,
-`credentials.set`, … — e **todos** respondem `unknown method`. A única escrita
-suportada é pelo CLI, na própria VPS:
+Duas coisas, dois lugares da config, **um patch só**:
 
-    openclaw models auth paste-api-key --agent <id>
+- **a credencial** em `models.providers.<id>.apiKey`
+- **o catálogo** (quais modelos aparecem no seletor) em `agents.defaults.models`
 
-O que sobra para cá, e funciona bem, é **o catálogo**: quais modelos aparecem no
-seletor, em `agents.defaults.models`. Esse o `config.patch` altera a quente.
+Separá-los foi o que deixou modelo no seletor apontando para provedor
+inexistente em 01/08/2026.
 
-Por isso "o provedor existe" significa **tem perfil em `auth.profiles`**, não
-"tem nó em `models.providers`". Nesta instalação a seção `models` nem existe no
-`openclaw.json` — `models.providers` estava vazio enquanto `anthropic:default`
-alimentava a Nina normalmente.
+⚠️ **A precedência do cofre do agente.** A credencial também pode existir em
+`auth_profile_store`, no SQLite de cada agente — é o que o `openclaw onboard`
+cria. Quando existe, ela **ganha** do `models.providers` da config: em
+13/08/2026 uma chave nova gravada aqui foi solenemente ignorada enquanto o
+gateway insistia num perfil morto (`profile=sha256:154a23a3efe6`, 401 a cada
+turno). Esvaziar `auth.profiles` não resolve — o cofre sobrevive à declaração.
+O que resolve é zerar a ordem:
 
-⚠️ Isso reinterpreta a nota de 01/08/2026, que concluiu que "adicionar provedor
-a quente crasha o reload" e criou a fila `llm_provider_ops` para contornar. O que
-crashava era **injetar uma seção `models` que o schema não conhece**. A fila
-tratou o sintoma, e nunca funcionou por outro motivo: o sincronizador que a
-consumiria não foi escrito. Uma op de 13/08 ficou `pending` enquanto a tela
-prometia "confirma em segundos".
+    {"auth": {"order": {"anthropic": []}}}
 
-Contrato do `config.patch`, confirmado com o corpo exato de uma chamada real:
-  - `raw` é **string**, não objeto (objeto é recusado com "at /raw: must be string")
+Com a ordem vazia o gateway não tenta perfil nenhum daquele provedor e usa a
+config. Instalação nascida pela API (como as do dn.os) nunca tem esse conflito;
+a nossa tem porque foi criada pelo CLI.
+
+⚠️ **Duas conclusões anteriores estavam erradas.** Ficam escritas para não
+voltarem, porque as duas custaram horas:
+
+1. *"Adicionar provedor a quente crasha o reload"* (01/08/2026). O `config.schema`
+   declara `models.providers` com `apiKey` aceitando string,
+   `additionalProperties: false` e **nenhum campo obrigatório** — o nó que
+   mandávamos era válido em cada campo. Naquele dia houve escrita de provedor
+   **e** um `openai/gpt-5.4-mini` que o gateway não resolvia no catálogo, e
+   entrada irresolvível derruba toda execução de agente. O crash foi atribuído à
+   escrita que coincidiu.
+
+2. *"O gateway não expõe como gravar credencial"* (13/08/2026). Sondei 17 nomes
+   de método de auth-profile, todos `unknown method`, e concluí impossível. Era
+   a abstração errada: quem grava é o `config.patch`. E inferi "não suportado"
+   de "não usado" — `models` estava ausente do `openclaw.json` porque esta
+   instância foi configurada pelo CLI, não porque a seção fosse rejeitada.
+
+O padrão comum: **culpar a escrita que coincidiu, em vez de ler o contrato.** O
+`config.schema` existe e responde; consultar leva trinta segundos.
+
+Contrato do `config.patch`, levantado contra o gateway real:
+  - `raw` é **string**, não objeto ("at /raw: must be string")
   - `baseHash` é **obrigatório** — lock otimista. O campo chama `baseHash`;
-    mandar `hash` é rejeitado, e isso fez tentativas anteriores falharem sem
-    ninguém entender
-  - a semântica é JSON Merge Patch (RFC 7386): objeto faz merge profundo, array
-    **substitui**, `null` **deleta**. Mandar só `agents.defaults.models` preserva
-    crons, agentes e o resto da config
+    mandar `hash` é rejeitado
+  - semântica de JSON Merge Patch (RFC 7386): objeto faz merge profundo, array
+    **substitui**, `null` **deleta**
+  - remover item de **array** exige `replacePaths` com os caminhos exatos, ou
+    `config.apply` para troca da config inteira
+  - o patch dispara reload, e **o reload derruba o WebSocket**: erro de conexão
+    logo depois não quer dizer que não gravou. Ver `_aplicar_patch`.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -70,6 +90,11 @@ _PADROES = {
     "anthropic": {"api": "anthropic-messages", "baseUrl": "https://api.anthropic.com/v1", "auth": "api-key"},
     "gemini": {"api": "google-generative-ai", "baseUrl": "https://generativelanguage.googleapis.com/v1beta", "auth": "api-key"},
 }
+
+# O gateway devolve a chave mascarada com esta sentinela em `config.get`.
+# Reenviá-la gravaria a máscara POR CIMA da credencial real — o campo tem 21
+# caracteres e passaria por uma chave curta sem ninguém notar.
+_SENTINELA = "__OPENCLAW_REDACTED__"
 
 _ID_CUSTOM = re.compile(r"^[a-z0-9][a-z0-9-]{1,23}$")
 
@@ -110,6 +135,76 @@ async def _config_do_gateway() -> tuple[dict, str]:
 
 def _provedores(parsed: dict) -> dict:
     return ((parsed.get("models") or {}).get("providers") or {})
+
+
+# O gateway nomeia os caminhos que recusou nesta mensagem. Aproveitamos os
+# nomes em vez de adivinhá-los.
+_ARRAYS_RECUSADOS = re.compile(r"array path\(s\):\s*([^.]*?)(?:\.\s*Pass|\s*Pass|$)", re.I)
+
+
+async def _aplicar_patch(patch: dict, base_hash: str, conferir) -> None:
+    """Manda um `config.patch`, contornando as duas armadilhas do gateway.
+
+    ⚠️ **1. Remover item de array exige `replacePaths`.** O gateway recusa com
+    "would remove entries from array path(s): X, Y — pass replacePaths…" em vez
+    de apagar em silêncio. É trava boa; só precisamos obedecê-la. Como a
+    mensagem já traz os caminhos exatos, repetimos a chamada com eles em vez de
+    tentar prever quais serão.
+
+    ⚠️ **2. Erro de conexão depois do patch NÃO significa que não gravou.** O
+    patch faz o gateway recarregar, e o reload derruba o WebSocket — a exceção
+    chega **depois** da escrita. Em 13/08/2026 isso me fez afirmar duas vezes
+    que uma alteração não tinha sido aplicada quando ela estava lá; a segunda
+    afirmação virou um diagnóstico errado que custou uma hora. Por isso, ao
+    falhar por conexão, relemos a config e perguntamos ao `conferir` se o efeito
+    aconteceu. Só é erro se de fato não aconteceu.
+
+    `conferir(parsed) -> bool` recebe a config relida e diz se o patch pegou.
+    """
+    c = await cfg.carregar()
+    corpo: dict = {"raw": json.dumps(patch), "baseHash": base_hash}
+
+    try:
+        await obter_cliente(c.url, c.token).chamar("config.patch", corpo)
+        return
+    except ErroGateway as e:
+        achado = _ARRAYS_RECUSADOS.search(str(e))
+        if not achado:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY, f"O gateway recusou a alteração: {e}"
+            )
+        caminhos = [p.strip() for p in achado.group(1).split(",") if p.strip()]
+        logger.info("Repetindo o patch com replacePaths=%s", caminhos)
+    except OSError as e:
+        # Conexão caiu: pode ter gravado. Confere antes de acusar.
+        if await _pegou(conferir):
+            logger.info("Patch aplicado apesar da queda de conexão (%s).", e)
+            return
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Falha ao falar com o gateway: {e}")
+
+    corpo["replacePaths"] = caminhos
+    try:
+        await obter_cliente(c.url, c.token).chamar("config.patch", corpo)
+    except ErroGateway as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"O gateway recusou a alteração: {e}")
+    except OSError as e:
+        if await _pegou(conferir):
+            return
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Falha ao falar com o gateway: {e}")
+
+
+async def _pegou(conferir) -> bool:
+    """Relê a config e pergunta se o patch fez efeito. O gateway leva um
+    instante para voltar do reload, daí as tentativas."""
+    for espera in (1.0, 2.0, 4.0):
+        await asyncio.sleep(espera)
+        try:
+            parsed, _ = await _config_do_gateway()
+        except (HTTPException, ErroGateway, OSError):
+            continue
+        if conferir(parsed):
+            return True
+    return False
 
 
 async def _modelos_sem_api(esperados: set[str]) -> set[str]:
@@ -154,12 +249,14 @@ async def _retirar_do_catalogo(modelos: set[str]) -> None:
         return
     _parsed, base_hash = await _config_do_gateway()
     patch = {"agents": {"defaults": {"models": {m: None for m in modelos}}}}
-    c = await cfg.carregar()
     try:
-        await obter_cliente(c.url, c.token).chamar(
-            "config.patch", {"raw": json.dumps(patch), "baseHash": base_hash}
+        await _aplicar_patch(
+            patch, base_hash,
+            conferir=lambda cfg_: not (
+                set(modelos) & set(((cfg_.get("agents") or {}).get("defaults") or {}).get("models") or {})
+            ),
         )
-    except ErroGateway as e:
+    except (HTTPException, ErroGateway) as e:
         # Não levanta: o catálogo principal já foi gravado e a resposta vai
         # avisar quais não colaram. Levantar aqui faria a tela dizer que nada
         # foi salvo, o que seria falso.
@@ -449,58 +546,68 @@ def _identificador(tipo: str, provider_id: str | None) -> str:
 
 @router.post("/provedores")
 async def salvar(dados: SalvarIn, _: Usuario = Depends(exige_papel("super_admin"))):
-    """Gerencia o provedor no gateway — **o catálogo, nunca a credencial.**
+    """Grava o provedor no gateway: a credencial **e** o catálogo de modelos.
 
-    A divisão não é escolha nossa, é como este gateway funciona:
+    Duas coisas, em lugares diferentes da config:
 
-    - **A credencial** (a API key) vive em `auth_profile_store`, no SQLite de
-      cada agente. Não está na config, e o gateway **não expõe método nenhum**
-      para gravá-la — 17 nomes sondados em 13/08/2026, todos `unknown method`.
-      Só o CLI da VPS escreve: `openclaw models auth paste-api-key`.
-    - **O catálogo** (quais modelos aparecem no seletor) vive em
-      `agents.defaults.models`, na config, e esse sim o `config.patch` altera a
-      quente. É o que fazemos aqui.
+    - **A credencial** vai em `models.providers.<id>.apiKey`.
+    - **O catálogo** (quais modelos aparecem no seletor) vai em
+      `agents.defaults.models`.
 
-    Por isso "provedor existe" passou a significar **tem credencial** — ou seja,
-    tem perfil em `auth.profiles` — e não "tem nó em `models.providers`". Esse
-    nó está vazio nesta instalação e o gateway nem lê a seção: `models` não
-    existe no `openclaw.json`.
+    As duas por `config.patch`, a quente. Vão no **mesmo patch**: provedor e
+    catálogo separados foi o que deixou modelo fantasma no seletor em 01/08.
 
-    ⚠️ Isso reinterpreta a nota de 01/08/2026 que dizia que "adicionar provedor
-    a quente crasha o reload". O que crashava era injetar uma seção `models` que
-    o schema não conhece. Removida a injeção, o patch de catálogo é seguro —
-    ele mexe numa seção que já existe.
+    ⚠️ **Duas conclusões anteriores sobre isto estavam erradas, e as duas
+    custaram caro.** Ficam registradas para não voltarem:
+
+    1. *"Adicionar provedor a quente crasha o reload"* (01/08/2026). O `config.
+       schema` do gateway declara `models.providers` com `apiKey` aceitando
+       string, `additionalProperties: false` e **nenhum campo obrigatório** —
+       o nó que mandávamos era válido. Naquele dia houve escrita de provedor
+       **e** um `openai/gpt-5.4-mini` que o gateway não resolvia no catálogo, e
+       hoje sabemos que entrada irresolvível derruba toda execução de agente. O
+       crash foi atribuído à escrita que coincidiu.
+
+    2. *"O gateway não expõe como gravar credencial"* (13/08/2026, manhã). Eu
+       sondei 17 nomes de método de auth-profile, todos `unknown method`, e
+       concluí que era impossível. Era a abstração errada: quem grava é o
+       `config.patch`, que eu já tinha na mão. E inferi "não suportado" de "não
+       usado" — `models` estava ausente do `openclaw.json` porque esta
+       instância foi configurada pelo CLI (`auth.profiles`), não porque a seção
+       fosse ignorada.
+
+    O padrão comum aos dois: **culpar a escrita que coincidiu, em vez de ler o
+    contrato.** O schema estava a uma chamada de distância nas duas vezes.
+
+    ⚠️ `models.mode` é `merge` por padrão: os provedores embutidos continuam e o
+    nosso nó sobrepõe. Por isso mandamos o mínimo — só `apiKey` para provedor
+    nativo. Reenviar `api`/`baseUrl` de um built-in é chance de divergir dele
+    sem ganho.
     """
     tipo = dados.provider_type.strip().lower()
     ident = _identificador(tipo, dados.provider_id)
-
-    if dados.api_key.strip() or dados.integration_id:
-        raise HTTPException(
-            status.HTTP_501_NOT_IMPLEMENTED,
-            "A API key não pode ser gravada por aqui — nem para instalar, nem para "
-            f'rotacionar. A credencial do "{ident}" vive no banco de cada agente e '
-            "só o CLI da VPS a escreve:\n\n"
-            f"    openclaw models auth paste-api-key --agent <id-do-agente>\n\n"
-            "Aceitar a chave aqui e não gravá-la seria pior: a tela diria que "
-            "mudou algo que continuaria igual.",
-        )
+    chave = dados.api_key.strip()
+    if chave == _SENTINELA:
+        # A tela nunca deveria reenviar a máscara, mas se reenviar, gravá-la
+        # trocaria a credencial real por 21 caracteres inúteis — e o sintoma
+        # seria 401 em todo agente, sem nada dizendo o que houve.
+        chave = ""
 
     parsed, base_hash = await _config_do_gateway()
     padroes = ((parsed.get("agents") or {}).get("defaults") or {})
     perfis = ((parsed.get("auth") or {}).get("profiles") or {})
 
-    # Credencial existe se há QUALQUER perfil deste provedor. O nó legado em
-    # `models.providers` também conta, para instalação que ainda o tenha.
+    # Credencial já existente: nó em `models.providers` ou perfil em
+    # `auth.profiles` (o caminho do CLI). Qualquer um serve — o que não pode é
+    # gravar catálogo para um provedor sem nenhuma forma de autenticar.
     tem_credencial = bool(_provedores(parsed).get(ident)) or any(
-        str(chave).split(":", 1)[0] == ident for chave in perfis
+        str(k).split(":", 1)[0] == ident for k in perfis
     )
-    if not tem_credencial:
+    if not chave and not tem_credencial:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            f'O provedor "{ident}" não tem credencial no gateway, então não há o que '
-            "pôr no seletor. Grave a chave na VPS primeiro:\n\n"
-            f"    openclaw models auth paste-api-key --agent <id-do-agente>\n\n"
-            "Feito isso, ele aparece aqui sozinho e você escolhe os modelos.",
+            f'O provedor "{ident}" não tem credencial no gateway. Cole a API key '
+            "para instalá-lo — sem ela não há como executar modelo nenhum.",
         )
 
     catalogo_atual = [k for k in (padroes.get("models") or {}) if k.startswith(f"{ident}/")]
@@ -518,23 +625,39 @@ async def salvar(dados: SalvarIn, _: Usuario = Depends(exige_papel("super_admin"
             "sem opção deste provedor.",
         )
 
-    # ⚠️ Só `agents.defaults.models`. Nada de `models.providers`: é a seção que
-    # este gateway ignora e que derrubava o reload.
-    patch = {"agents": {"defaults": {"models": {
+    # Provedor e catálogo no MESMO patch. Separá-los foi o que deixou modelo no
+    # seletor apontando para provedor que não existia.
+    patch: dict = {"agents": {"defaults": {"models": {
         **catalogo_novo,
         **{k: None for k in catalogo_remover},
     }}}}
 
-    c = await cfg.carregar()
-    try:
-        await obter_cliente(c.url, c.token).chamar(
-            "config.patch",
-            # `raw` é STRING e `baseHash` é obrigatório — os dois detalhes que
-            # fizeram tentativas anteriores falharem sem ninguém entender.
-            {"raw": json.dumps(patch), "baseHash": base_hash},
-        )
-    except ErroGateway as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"O gateway recusou a alteração: {e}")
+    if chave:
+        # Mínimo possível. Com `models.mode: merge` o provedor embutido continua
+        # valendo e só a chave sobrepõe; reenviar `api`/`baseUrl` de um built-in
+        # é chance de divergir dele sem ganho nenhum.
+        no: dict = {"apiKey": chave}
+        if tipo not in _PROVEDORES:
+            # Provedor personalizado não tem built-in para herdar: precisa dizer
+            # como falar e para onde.
+            no.update(_PADROES.get(tipo) or {"api": "openai-completions", "auth": "api-key"})
+            if dados.base_url:
+                no["baseUrl"] = dados.base_url
+            no["apiKey"] = chave
+        elif dados.base_url:
+            no["baseUrl"] = dados.base_url
+        patch["models"] = {"providers": {ident: no}}
+
+    await _aplicar_patch(
+        patch, base_hash,
+        # Pegou se todo modelo escolhido está no catálogo — e, quando veio
+        # chave, se o provedor passou a existir.
+        conferir=lambda cfg_: (
+            set(catalogo_novo)
+            <= set(((cfg_.get("agents") or {}).get("defaults") or {}).get("models") or {})
+            and (not chave or ident in _provedores(cfg_))
+        ),
+    )
 
     logger.info(
         "Catálogo de %s atualizado: %d modelo(s), %d removido(s)",
@@ -629,13 +752,12 @@ async def remover(dados: RemocaoIn, _: Usuario = Depends(exige_papel("super_admi
         )
 
     patch = {"agents": {"defaults": {"models": {k: None for k in catalogo}}}}
-    c = await cfg.carregar()
-    try:
-        await obter_cliente(c.url, c.token).chamar(
-            "config.patch", {"raw": json.dumps(patch), "baseHash": base_hash}
-        )
-    except ErroGateway as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"O gateway recusou a remoção: {e}")
+    await _aplicar_patch(
+        patch, base_hash,
+        conferir=lambda cfg_: not (
+            set(catalogo) & set(((cfg_.get("agents") or {}).get("defaults") or {}).get("models") or {})
+        ),
+    )
 
     logger.info("Provedor %s saiu do seletor (%d modelos)", ident, len(catalogo))
     return {"ok": True, "removido": ident, "modelos": len(catalogo),
