@@ -297,12 +297,27 @@ export function DialogoProvedor({ tipoInicial, provedorId, modelosAtuais, aoFech
         ...(tipoParaEnvio === "custom" ? { provider_id: idParaEnvio, base_url: urlParaEnvio } : {}),
         models: selecionados,
       });
-      toast({
-        title: "Modelos atualizados",
-        description:
-          `${r.modelos ?? selecionados.length} modelo(s) no seletor` +
-          (r.removidos ? `, ${r.removidos} removido(s).` : "."),
-      });
+      // ⚠️ Modelo que o gateway não resolve é recolhido pelo backend, e a
+      // pessoa **precisa** saber: o id veio da API do provedor e parecia
+      // legítimo. Calar aqui deixaria a tela mostrando uma seleção que não é
+      // a que ficou gravada.
+      const naoSuportados: string[] = r.nao_suportados ?? [];
+      if (naoSuportados.length) {
+        toast({
+          variant: "destructive",
+          title: `${naoSuportados.length} modelo(s) não suportado(s) pelo gateway`,
+          description:
+            `${naoSuportados.join(", ")} — a API do provedor oferece, mas este ` +
+            "gateway não sabe executar, então foram retirados. Os demais ficaram.",
+        });
+      } else {
+        toast({
+          title: "Modelos atualizados",
+          description:
+            `${r.modelos ?? selecionados.length} modelo(s) no seletor` +
+            (r.removidos ? `, ${r.removidos} removido(s).` : "."),
+        });
+      }
       aoFechar(true);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "falha ao salvar");
@@ -404,6 +419,17 @@ export function DialogoProvedor({ tipoInicial, provedorId, modelosAtuais, aoFech
                 Buscar modelos
               </Button>
             </div>
+            {/* A pergunta que a tela precisa responder é "então onde eu ponho a
+                chave?". Sem isto, quem chega aqui cola no único campo que
+                existe e acha que instalou. */}
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Esta chave não é gravada — serve só para perguntar ao provedor
+              quais modelos existem. A credencial que os agentes usam fica no
+              gateway, e quem a escreve é o CLI da VPS:{" "}
+              <code className="font-mono text-[10px] bg-muted px-1 py-0.5 rounded">
+                openclaw models auth paste-api-key --agent &lt;id&gt;
+              </code>
+            </p>
           </div>
 
           {erro && (

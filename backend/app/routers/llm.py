@@ -112,6 +112,60 @@ def _provedores(parsed: dict) -> dict:
     return ((parsed.get("models") or {}).get("providers") or {})
 
 
+async def _modelos_sem_api(esperados: set[str]) -> set[str]:
+    """Quais dos `esperados` o gateway **não** conseguiu resolver.
+
+    O `models.list` espelha o catálogo, mas só preenche `api` para id que o
+    registro interno conhece. `api` vazio é o sinal de que o id entrou no
+    catálogo e não virou modelo utilizável.
+
+    Em caso de dúvida devolve vazio: acusar falsamente um modelo bom e recolhê-lo
+    seria pior que deixar passar — quem valida de fato é a execução.
+    """
+    try:
+        c = await cfg.carregar()
+        r = await obter_cliente(c.url, c.token).chamar("models.list", {})
+    except (ErroGateway, HTTPException, OSError) as e:
+        logger.info("models.list indisponível na verificação: %s", e)
+        return set()
+
+    payload = r.get("payload") if isinstance(r.get("payload"), dict) else r
+    vistos = payload.get("models")
+    if not isinstance(vistos, list) or not vistos:
+        return set()
+
+    resolvidos = {
+        f"{m.get('provider')}/{m.get('id')}"
+        for m in vistos
+        if isinstance(m, dict) and m.get("api")
+    }
+    # Só acusa id que apareceu na lista e veio sem `api`. Id que sumiu por
+    # completo é outro problema e não se conserta recolhendo-o.
+    presentes = {
+        f"{m.get('provider')}/{m.get('id')}" for m in vistos if isinstance(m, dict)
+    }
+    return (esperados & presentes) - resolvidos
+
+
+async def _retirar_do_catalogo(modelos: set[str]) -> None:
+    """Desfaz a inclusão de modelos que não resolveram. Relê o hash: o patch
+    anterior o invalidou, e reusá-lo é recusado pelo lock otimista."""
+    if not modelos:
+        return
+    _parsed, base_hash = await _config_do_gateway()
+    patch = {"agents": {"defaults": {"models": {m: None for m in modelos}}}}
+    c = await cfg.carregar()
+    try:
+        await obter_cliente(c.url, c.token).chamar(
+            "config.patch", {"raw": json.dumps(patch), "baseHash": base_hash}
+        )
+    except ErroGateway as e:
+        # Não levanta: o catálogo principal já foi gravado e a resposta vai
+        # avisar quais não colaram. Levantar aqui faria a tela dizer que nada
+        # foi salvo, o que seria falso.
+        logger.error("Falhei ao recolher %s do catálogo: %s", modelos, e)
+
+
 async def _saude_auth() -> dict:
     """Estado das credenciais segundo o próprio gateway (`models.authStatus`).
 
@@ -486,8 +540,36 @@ async def salvar(dados: SalvarIn, _: Usuario = Depends(exige_papel("super_admin"
         "Catálogo de %s atualizado: %d modelo(s), %d removido(s)",
         ident, len(catalogo_novo), len(catalogo_remover),
     )
-    return {"ok": True, "provedor": ident, "modelos": len(catalogo_novo),
-            "removidos": len(catalogo_remover)}
+
+    # ⚠️ **Confere depois de escrever, e desfaz o que não resolveu.**
+    #
+    # O catálogo aceita qualquer id: são chaves com valor `{}`. Quem resolve o
+    # modelo é um registro interno do gateway, e id que ele não conhece entra no
+    # catálogo e volta no `models.list` **sem `api`**. Isso não é cosmético —
+    # em 13/08/2026 bastou um `claude-sonnet-4-5-20250929` inválido no catálogo
+    # para toda execução de agente morrer em 261 ms com zero token, inclusive a
+    # de quem usava um modelo válido. O sintoma foi "The agent run failed before
+    # producing a reply", sem nenhuma pista do motivo.
+    #
+    # A lista de modelos vem da API do provedor, que oferece ids que este
+    # gateway pode não suportar — então não dá para validar antes. Escrever,
+    # conferir e recolher o que não colou é o que resta.
+    nao_resolvidos = await _modelos_sem_api(set(catalogo_novo))
+    if nao_resolvidos:
+        await _retirar_do_catalogo(nao_resolvidos)
+        logger.warning(
+            "Modelos recolhidos do catálogo por não resolverem no gateway: %s",
+            ", ".join(sorted(nao_resolvidos)),
+        )
+
+    aplicados = [m for m in catalogo_novo if m not in nao_resolvidos]
+    return {
+        "ok": True, "provedor": ident,
+        "modelos": len(aplicados),
+        "removidos": len(catalogo_remover),
+        # A tela avisa em vez de fingir que salvou os que voltaram atrás.
+        "nao_suportados": sorted(m.split("/", 1)[-1] for m in nao_resolvidos),
+    }
 
 
 class RemocaoIn(BaseModel):
