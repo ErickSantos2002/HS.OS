@@ -289,6 +289,54 @@ mensagem para ela. Para descobrir formato de parâmetro sem escrever, use um **`
 `/health` respondendo 200. `chamar()` já reconecta uma vez; em script solto, repita antes de
 concluir que o gateway caiu.
 
+⚠️ **Erro de conexão logo depois de um `config.patch` NÃO significa que não gravou.** O patch
+dispara o reload, e o reload derruba o WebSocket — a exceção chega **depois** da escrita. Em
+13/08/2026 isso produziu dois diagnósticos errados seguidos, um deles custando uma hora. Releia a
+config e confira o efeito antes de concluir que falhou; `_aplicar_patch` em `backend/app/routers/llm.py`
+faz isso e é o único lugar que deveria chamar `config.patch`.
+
+### Configurar LLM: credencial e catálogo, os dois pela config
+
+Levantado ao vivo em 13/08/2026, depois de **três conclusões erradas minhas** que valem mais que a
+resposta:
+
+- **`models.providers.<id>.apiKey` é o caminho suportado para a credencial.** O `config.schema`
+  (existe como método RPC, e responde) declara a seção com `apiKey` aceitando string ou SecretRef,
+  `additionalProperties: false` e **nenhum campo obrigatório**. Consultá-lo leva trinta segundos e
+  teria evitado a tarde inteira.
+- **Não confunda "não usado" com "não suportado".** `models` estava ausente do `openclaw.json` porque
+  esta instância foi configurada pelo CLI, não porque o gateway rejeitasse a seção. Foi essa
+  inferência que me levou a afirmar três vezes que configurar pela tela era impossível.
+- **A nota de 01/08 sobre "hot-add crasha o reload" estava errada** e custou uma fila inteira
+  (`llm_provider_ops`) que nunca teve executor. O nó era válido; naquele dia havia *também* um modelo
+  irresolvível no catálogo, e o crash foi atribuído à escrita que coincidiu.
+
+⚠️ **O cofre do agente ganha da config.** A credencial também pode viver em `auth_profile_store`, no
+SQLite de cada agente (`~/.openclaw/agents/<id>/agent/openclaw-agent.sqlite`) — é o que o
+`openclaw onboard` cria. Quando existe, ela **vence** o `models.providers`, e esvaziar
+`auth.profiles` não adianta: o cofre sobrevive à declaração. O que resolve é zerar a ordem:
+
+```json
+{"auth": {"order": {"anthropic": []}}}
+```
+
+⚠️ **Modelo que o gateway não resolve envenena o catálogo inteiro.** `agents.defaults.models` aceita
+qualquer id (são chaves com valor `{}`), mas quem resolve é um registro interno; id desconhecido volta
+no `models.list` **sem `api`** e faz **toda** execução de agente falhar em ~200ms com zero token —
+inclusive a de quem usa modelo válido. A lista que a tela oferece vem da API do provedor, que tem ids
+que este gateway não executa. Não dá para validar antes (o modelo só aparece depois de entrar no
+catálogo): escreva, confira com `models.list` e recolha o que não colou.
+
+⚠️ **Remover item de array exige `replacePaths`.** O `config.patch` recusa com "would remove entries
+from array path(s): …" em vez de apagar em silêncio, e **nomeia os caminhos na mensagem** — use os
+nomes que ele deu. Existe também `config.apply` para troca da config inteira.
+
+⚠️ **Depois de um 401 o perfil entra em cooldown** e as execuções seguintes falham em ~200ms sem
+tentar. Isso faz o tempo de falha variar (261ms → 3589ms → 195ms) e convida a atribuir a variação à
+última coisa que você mexeu. Não atribua: leia
+`journalctl --user -u openclaw-gateway.service`, que traz `profile=sha256:…`, o status HTTP e o
+`rawError` do provedor. Foi o log que desfez cada palpite errado deste dia.
+
 **O vazamento do token foi fechado (Lote 1).** `frontend/src/lib/gateway.ts` não conhece mais o
 `admin_token` — expõe só `{url, temToken, configurado}`. Toda chamada ao gateway passa por
 `/gateway/*` ou `/agents`. **Não reintroduza o token no front** ao portar os pontos que ainda usam
