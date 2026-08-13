@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.gateway import config as cfg_gateway
+from app.gateway import config as cfg_gateway, patch as patch_gw
 from app.gateway.client import ErroGateway as ErroGatewayCli, obter_cliente as obter_cliente_gw
 from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.integracoes import exige_segredo, ler_segredo
@@ -1623,6 +1623,9 @@ async def testar_banco(
             """
         )
         so_leitura_na_sessao = await alvo.fetchval("SHOW default_transaction_read_only")
+        # ⚠️ Guardado porque `sslmode=prefer` significa coisas diferentes em
+        # drivers diferentes — ver o aviso montado abaixo.
+        ssl_no_servidor = await alvo.fetchval("SHOW ssl")
         tabelas = [
             dict(r) for r in await alvo.fetch(
                 """
@@ -1641,6 +1644,26 @@ async def testar_banco(
     # escrever é uma trava que não existe. Melhor dizer agora que descobrir
     # quando um agente alterar algo.
     avisos = []
+
+    # ⚠️ **`sslmode=prefer` não quer dizer a mesma coisa em todo driver.** O
+    # `libpq` (psql, asyncpg) tenta SSL e **rebaixa** para texto puro quando o
+    # servidor recusa; o `node-postgres`, que é quem roda dentro do servidor
+    # MCP, trata `prefer` como exigência e falha com "The server does not
+    # support SSL connections".
+    #
+    # A consequência é traiçoeira: este teste passava e o agente falhava, porque
+    # os dois falam com o mesmo banco por bibliotecas diferentes. Aconteceu em
+    # 13/08/2026, no primeiro banco publicado. Testar com um driver e servir com
+    # outro só vale se o teste souber da diferença.
+    if str(ssl_no_servidor).lower() in ("off", "false") and linha["db_sslmode"] != "disable":
+        avisos.append(
+            f'Este servidor está com SSL desligado, e o conector diz '
+            f'`sslmode={linha["db_sslmode"]}`. A conexão daqui funciona (o libpq '
+            "rebaixa sozinho), mas a do agente **não vai**: o driver do MCP trata "
+            "qualquer coisa diferente de `disable` como exigência de SSL. "
+            "Mude para `disable`."
+        )
+
     if somente_leitura and escreve and so_leitura_na_sessao != "on":
         avisos.append(
             f'O usuário "{usuario}" **pode escrever** neste banco, apesar de o '
@@ -1656,6 +1679,157 @@ async def testar_banco(
         "pode_escrever": bool(escreve),
         "schemas": tabelas,
         "avisos": avisos,
+    }
+
+
+# O servidor MCP que transforma o banco em ferramenta do agente.
+#
+# Escolhido depois de rodar os dois candidatos contra o DataCore real em
+# 13/08/2026. Este expõe **uma** tool, `query`, e embrulha tudo em transação
+# `READ ONLY` — mandar `CREATE TABLE` volta com "cannot execute CREATE TABLE in
+# a read-only transaction". Somado ao usuário de leitura do Postgres, são duas
+# recusas independentes.
+_MCP_PACOTE_LEITURA = "@modelcontextprotocol/server-postgres"
+
+# ⚠️ **Este servidor recebe a URL por argv, e argv é visível em `ps`.** Não é
+# hipotético: qualquer processo do mesmo usuário na VPS enxerga a senha. Hoje
+# só o root roda lá, então o risco é contido — mas é dívida registrada, e o
+# conserto é um servidor MCP nosso que leia a URL do ambiente. Quando existir
+# escrita, essa dívida deixa de ser aceitável.
+
+
+def _nome_mcp(nome: str) -> str:
+    """Apelido curto e estável para o servidor no `mcp.servers`."""
+    base = re.sub(r"[^a-z0-9]+", "-", nome.strip().lower()).strip("-")
+    return f"banco-{base or 'sem-nome'}"
+
+
+@router.post("/conectores/{conector_id}/publicar-banco")
+async def publicar_banco(
+    conector_id: str,
+    _: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Declara o banco como ferramenta no gateway, e libera para os agentes.
+
+    Banco é **ação**, não procedimento — por isso vira tool, e não skill. O
+    agente não precisa reaprender a consultar a cada vez; precisa poder
+    executar. (Skill continua sendo o certo para procedimento com julgamento
+    nosso dentro, como criar um agente.)
+
+    Duas escritas no mesmo `config.patch`:
+
+    - `mcp.servers.<apelido>` — o servidor, com a URL de conexão
+    - `agents.list[].tools.alsoAllow` — quem pode usar
+
+    ⚠️ **`mcp.servers` é global; o acesso é que é por agente.** Declarar o
+    servidor não dá acesso a ninguém: o `alsoAllow` de cada agente é que
+    concede. Um banco publicado sem agente na lista existe e não serve a
+    ninguém, que é o padrão certo — acesso a banco é concessão explícita.
+    """
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            "SELECT name, db_host, db_porta, db_base, db_sslmode, db_somente_leitura, "
+            "       credentials, agents_using "
+            "  FROM public.integrations "
+            " WHERE id = $1::uuid AND integration_type = 'database'",
+            conector_id,
+        )
+    if linha is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conector de banco não encontrado.")
+
+    if not linha["db_somente_leitura"]:
+        raise HTTPException(
+            status.HTTP_501_NOT_IMPLEMENTED,
+            f'O banco "{linha["name"]}" está marcado como leitura e escrita, e o '
+            "servidor MCP que usamos hoje só executa consulta — ele embrulha tudo "
+            "em transação READ ONLY. Publicar assim entregaria uma ferramenta que "
+            "recusa metade do que a tela promete. Escrita precisa de um servidor "
+            "próprio, e ainda não existe.",
+        )
+
+    # ⚠️ Conferir o SSL **antes** de publicar, e não depois. O driver de dentro
+    # do MCP (node-postgres) trata `sslmode` diferente do libpq: só `disable`
+    # dispensa SSL de verdade. Publicar sem isso entrega uma ferramenta que
+    # falha na primeira consulta, longe de quem pode consertar — foi o que
+    # aconteceu no primeiro banco publicado, em 13/08/2026.
+    if linha["db_sslmode"] != "disable":
+        import asyncpg
+        try:
+            alvo = await asyncpg.connect(
+                _url_do_banco(linha, linha["credentials"], True), timeout=12
+            )
+        except Exception as e:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                f"Não consegui conectar para conferir antes de publicar: {e}",
+            )
+        try:
+            ssl_ligado = str(await alvo.fetchval("SHOW ssl")).lower() not in ("off", "false")
+        finally:
+            await alvo.close()
+        if not ssl_ligado:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f'Este servidor está com SSL desligado, mas o conector diz '
+                f'`sslmode={linha["db_sslmode"]}`. A conexão de teste funciona '
+                "porque o libpq rebaixa sozinho; a do agente falharia com "
+                '"The server does not support SSL connections", porque o driver '
+                "do MCP não rebaixa. Mude o conector para `disable` e publique "
+                "de novo.",
+            )
+
+    url = _url_do_banco(linha, linha["credentials"], somente_leitura=True)
+    apelido = _nome_mcp(linha["name"])
+    agentes = list(linha["agents_using"] or [])
+
+    parsed, base_hash = await patch_gw.config_do_gateway()
+
+    servidor = {
+        "command": "npx",
+        "args": ["-y", _MCP_PACOTE_LEITURA, url],
+        # Só `query` sai deste servidor. É o que ele tem hoje, mas fixar a lista
+        # significa que uma versão futura com tool de escrita não passa a valer
+        # sozinha num `npx -y`, que sempre pega a última.
+        "toolFilter": {"include": ["query"]},
+    }
+
+    # O nome da tool que o agente vê. Sem isto no `alsoAllow`, o servidor existe
+    # e nenhum agente o alcança.
+    ferramenta = f"mcp__{apelido}__query"
+    lista_agentes = []
+    for a in (parsed.get("agents") or {}).get("list") or []:
+        if a.get("id") not in agentes:
+            continue
+        atuais = list(((a.get("tools") or {}).get("alsoAllow")) or [])
+        if ferramenta not in atuais:
+            atuais.append(ferramenta)
+        lista_agentes.append({"id": a.get("id"), "tools": {"alsoAllow": atuais}})
+
+    ausentes = [a for a in agentes
+                if a not in {x.get("id") for x in (parsed.get("agents") or {}).get("list") or []}]
+
+    patch: dict = {"mcp": {"servers": {apelido: servidor}}}
+    if lista_agentes:
+        # ⚠️ `agents.list` é ARRAY, e array SUBSTITUI no merge patch. Mandar só os
+        # agentes alterados apagaria os demais. Por isso a lista vai inteira, com
+        # os não-alterados preservados como estão.
+        por_id = {x.get("id"): x for x in lista_agentes}
+        patch["agents"] = {"list": [
+            {**a, **por_id.get(a.get("id"), {})}
+            for a in (parsed.get("agents") or {}).get("list") or []
+        ]}
+
+    await patch_gw.aplicar_patch(
+        patch, base_hash,
+        conferir=lambda c: apelido in (((c.get("mcp") or {}).get("servers")) or {}),
+    )
+
+    logger.info("Banco %s publicado como %s para %s", linha["name"], apelido, agentes)
+    return {
+        "ok": True, "servidor": apelido, "ferramenta": ferramenta,
+        "agentes": [a for a in agentes if a not in ausentes],
+        "agentes_inexistentes": ausentes,
+        "somente_leitura": True,
     }
 
 

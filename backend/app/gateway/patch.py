@@ -1,0 +1,120 @@
+"""Escrita na config do gateway — o `config.patch`, com as armadilhas dele.
+
+Mora aqui, e não no router que o usou primeiro, porque **toda** escrita de
+config deve passar por um lugar só. Foram duas as armadilhas descobertas em
+13/08/2026, e cada uma custou um diagnóstico errado antes de virar código.
+"""
+
+import asyncio
+import json
+import logging
+import re
+
+from fastapi import HTTPException, status
+
+from app.gateway import config as cfg
+from app.gateway.client import ErroGateway, obter_cliente
+
+logger = logging.getLogger(__name__)
+
+
+async def config_do_gateway() -> tuple[dict, str]:
+    """Lê a config e devolve `(parsed, hash)`.
+
+    O `hash` é o lock otimista do `config.patch`. Sem ele não se escreve —
+    gravar sem lock arrisca sobrescrever mudança que entrou no meio.
+    """
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
+    try:
+        r = await obter_cliente(c.url, c.token).chamar("config.get", {})
+    except ErroGateway as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"config.get falhou: {e}")
+
+    payload = r.get("payload") if isinstance(r.get("payload"), dict) else r
+    parsed = payload.get("parsed") or payload.get("sourceConfig") or {}
+    base_hash = payload.get("hash")
+    if not isinstance(base_hash, str) or not base_hash:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "Hash da config indisponível — abortado por segurança.",
+        )
+    return parsed, base_hash
+
+
+# O gateway nomeia os caminhos que recusou nesta mensagem. Aproveitamos os
+# nomes em vez de adivinhá-los.
+#
+# ⚠️ A primeira versão usava `[^.]*?`, que **exclui ponto** — e todo caminho de
+# config tem ponto (`mcp.servers.banco-x.args`). O retry nunca disparava, e o
+# defeito ficou escondido porque os testes da época passavam `replacePaths` à
+# mão. Aqui a captura vai até o `. Pass` literal que fecha a frase.
+_ARRAYS_RECUSADOS = re.compile(
+    r"array path\(s\):\s*(.+?)\.?\s*(?:Pass\s+replacePaths|$)", re.I | re.S
+)
+
+
+async def aplicar_patch(patch: dict, base_hash: str, conferir) -> None:
+    """Manda um `config.patch`, contornando as duas armadilhas do gateway.
+
+    ⚠️ **1. Remover item de array exige `replacePaths`.** O gateway recusa com
+    "would remove entries from array path(s): X, Y — pass replacePaths…" em vez
+    de apagar em silêncio. É trava boa; só precisamos obedecê-la. Como a
+    mensagem já traz os caminhos exatos, repetimos a chamada com eles em vez de
+    tentar prever quais serão.
+
+    ⚠️ **2. Erro de conexão depois do patch NÃO significa que não gravou.** O
+    patch faz o gateway recarregar, e o reload derruba o WebSocket — a exceção
+    chega **depois** da escrita. Em 13/08/2026 isso me fez afirmar duas vezes
+    que uma alteração não tinha sido aplicada quando ela estava lá; a segunda
+    afirmação virou um diagnóstico errado que custou uma hora. Por isso, ao
+    falhar por conexão, relemos a config e perguntamos ao `conferir` se o efeito
+    aconteceu. Só é erro se de fato não aconteceu.
+
+    `conferir(parsed) -> bool` recebe a config relida e diz se o patch pegou.
+    """
+    c = await cfg.carregar()
+    corpo: dict = {"raw": json.dumps(patch), "baseHash": base_hash}
+
+    try:
+        await obter_cliente(c.url, c.token).chamar("config.patch", corpo)
+        return
+    except ErroGateway as e:
+        achado = _ARRAYS_RECUSADOS.search(str(e))
+        if not achado:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY, f"O gateway recusou a alteração: {e}"
+            )
+        caminhos = [p.strip() for p in achado.group(1).split(",") if p.strip()]
+        logger.info("Repetindo o patch com replacePaths=%s", caminhos)
+    except OSError as e:
+        # Conexão caiu: pode ter gravado. Confere antes de acusar.
+        if await _pegou(conferir):
+            logger.info("Patch aplicado apesar da queda de conexão (%s).", e)
+            return
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Falha ao falar com o gateway: {e}")
+
+    corpo["replacePaths"] = caminhos
+    try:
+        await obter_cliente(c.url, c.token).chamar("config.patch", corpo)
+    except ErroGateway as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"O gateway recusou a alteração: {e}")
+    except OSError as e:
+        if await _pegou(conferir):
+            return
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Falha ao falar com o gateway: {e}")
+
+
+async def _pegou(conferir) -> bool:
+    """Relê a config e pergunta se o patch fez efeito. O gateway leva um
+    instante para voltar do reload, daí as tentativas."""
+    for espera in (1.0, 2.0, 4.0):
+        await asyncio.sleep(espera)
+        try:
+            parsed, _ = await config_do_gateway()
+        except (HTTPException, ErroGateway, OSError):
+            continue
+        if conferir(parsed):
+            return True
+    return False
