@@ -1510,6 +1510,23 @@ async def editar_conector(
 async def excluir_conector(
     conector_id: str, _: Usuario = Depends(exige_papel("super_admin"))
 ):
+    """Exclui o conector — e, se for banco, tira o MCP do gateway junto.
+
+    ⚠️ **A ordem é: gateway primeiro, banco depois.** Se a limpeza do gateway
+    falhar, o conector continua aqui e dá para tentar de novo; ao contrário, o
+    registro sumiria e sobraria no gateway um servidor MCP com a senha nos
+    `args`, sem nada no HS.OS apontando para ele. Órfão com credencial é pior
+    que exclusão que não completou.
+    """
+    async with sessao(role="service_role") as conn:
+        banco = await conn.fetchval(
+            "SELECT name FROM public.integrations "
+            " WHERE id = $1::uuid AND integration_type = 'database'",
+            conector_id,
+        )
+    if banco:
+        await _despublicar_banco(banco)
+
     async with sessao(role="service_role") as conn:
         marca = await conn.execute(
             "DELETE FROM public.integrations WHERE id = $1::uuid", conector_id
@@ -1831,6 +1848,57 @@ async def publicar_banco(
         "agentes_inexistentes": ausentes,
         "somente_leitura": True,
     }
+
+
+async def _despublicar_banco(nome: str) -> bool:
+    """Tira o servidor MCP do gateway e a ferramenta dos agentes.
+
+    ⚠️ Chamado ao **excluir** um conector de banco, e isso não é higiene: o
+    servidor guarda a URL de conexão — com senha — nos `args`. Um conector
+    apagado no HS.OS cujo MCP continua no gateway vira credencial esquecida numa
+    config que ninguém mais olha, apontando para um banco que a plataforma
+    deixou de gerenciar.
+
+    Devolve `False` quando não havia o que remover. Nunca levanta: a exclusão do
+    conector não pode ficar refém do gateway estar de pé — mas o que não deu
+    para limpar vai para o log, nomeado.
+    """
+    apelido = _nome_mcp(nome)
+    ferramenta = f"mcp__{apelido}__query"
+    try:
+        parsed, base_hash = await patch_gw.config_do_gateway()
+    except HTTPException as e:
+        logger.error("Gateway fora do ar: o MCP %s continua lá. (%s)", apelido, e.detail)
+        return False
+
+    if apelido not in ((parsed.get("mcp") or {}).get("servers") or {}):
+        return False
+
+    patch: dict = {"mcp": {"servers": {apelido: None}}}
+
+    # `agents.list` é array: vai inteira, com a ferramenta tirada de quem a
+    # tinha. Mandar só os alterados apagaria os demais agentes.
+    lista = (parsed.get("agents") or {}).get("list") or []
+    if any(ferramenta in (((a.get("tools") or {}).get("alsoAllow")) or []) for a in lista):
+        patch["agents"] = {"list": [
+            {**a, "tools": {**(a.get("tools") or {}),
+                            "alsoAllow": [x for x in (((a.get("tools") or {}).get("alsoAllow")) or [])
+                                          if x != ferramenta]}}
+            if ferramenta in (((a.get("tools") or {}).get("alsoAllow")) or []) else a
+            for a in lista
+        ]}
+
+    try:
+        await patch_gw.aplicar_patch(
+            patch, base_hash,
+            conferir=lambda c: apelido not in (((c.get("mcp") or {}).get("servers")) or {}),
+        )
+    except HTTPException as e:
+        logger.error("Não removi o MCP %s do gateway: %s", apelido, e.detail)
+        return False
+
+    logger.info("MCP %s removido do gateway.", apelido)
+    return True
 
 
 @router.get("/bancos-do-agente/{agent_id}")

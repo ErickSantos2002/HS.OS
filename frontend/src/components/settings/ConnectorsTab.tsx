@@ -28,6 +28,7 @@ import {
   Brain,
   AlertCircle,
   RefreshCw,
+  Database,
 } from "lucide-react";
 
 import {
@@ -52,6 +53,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
@@ -83,6 +85,13 @@ interface ConnectorRow {
   credentials?: any;
   /** Os *nomes* das chaves guardadas. Nunca os valores. */
   credential_keys: string[] | null;
+  /** Só preenchidos quando `integration_type === "database"`. Endereço vem para
+   *  a tela; senha, não — por isso são colunas e não campos de `credentials`. */
+  db_host: string | null;
+  db_porta: number | null;
+  db_base: string | null;
+  db_sslmode: string | null;
+  db_somente_leitura: boolean | null;
   type: ConnectorKind | null;
   template_id: string | null;
   agents_using: string[] | null;
@@ -170,7 +179,7 @@ type Entrada = {
   nome: string;
   subtitulo: string;
   logo: string | null;
-  grupo: "llm" | "api" | "mcp";
+  grupo: "llm" | "api" | "mcp" | "banco";
   /** `atencao` é o meio-termo que faltava: existe, mas no lugar errado (a
    *  chave de LLM guardada no HS.OS em vez do gateway). */
   estado: "conectado" | "disponivel" | "atencao";
@@ -199,6 +208,7 @@ const GRUPOS = [
   { id: "llm", titulo: "Modelos de IA", legenda: "Quem responde pelos seus agentes" },
   { id: "api", titulo: "APIs e serviços", legenda: "Ferramentas que os agentes acessam" },
   { id: "mcp", titulo: "MCPs", legenda: "Servidores de ferramentas" },
+  { id: "banco", titulo: "Bancos de dados", legenda: "O que os agentes consultam" },
 ] as const;
 
 export default function ConnectorsTab() {
@@ -213,9 +223,11 @@ export default function ConnectorsTab() {
   // Dois eixos, dois controles: "que tipo" e "só o que está ligado" são
   // perguntas diferentes, e misturá-las na mesma fileira de chips obrigava a
   // escolher uma e perder a outra.
-  const [filtro, setFiltro] = useState<"tudo" | "llm" | "api" | "mcp">("tudo");
+  const [filtro, setFiltro] = useState<"tudo" | "llm" | "api" | "mcp" | "banco">("tudo");
   const [somenteConectados, setSomenteConectados] = useState(false);
   const [dialogoLlm, setDialogoLlm] = useState<null | { tipo: string; provedorId?: string }>(null);
+  // `false` = fechado; `null` = aberto para criar; linha = aberto para editar.
+  const [dialogoBanco, setDialogoBanco] = useState<ConnectorRow | null | false>(false);
 
   // Modal states
   const [templateModal, setTemplateModal] = useState<ConnectorTemplate | null>(null);
@@ -368,8 +380,34 @@ export default function ConnectorsTab() {
       });
     }
 
+    // ── Bancos de dados. Entram antes do laço genérico porque têm forma
+    //    própria: endereço visível, modo de acesso, e o estado que importa não
+    //    é "tem chave" e sim "está publicado como ferramenta do agente".
+    for (const r of rows) {
+      if (r.integration_type !== "database") continue;
+      const publicado = (r.agents_using ?? []).filter(Boolean).length > 0;
+      lista.push({
+        chave: `banco:${r.id}`,
+        nome: r.name,
+        subtitulo: r.db_somente_leitura ? "Banco — só leitura" : "Banco — leitura e escrita",
+        logo: logoForName(r.name),
+        grupo: "banco",
+        // "conectado" aqui quer dizer que algum agente alcança. Um banco
+        // cadastrado e sem agente não está errado, mas também não serve a
+        // ninguém ainda — e a tela deve dizer isso em vez de mostrar um ✓.
+        estado: publicado ? "conectado" : "atencao",
+        detalhe: `${r.db_host ?? "?"}:${r.db_porta ?? "?"}/${r.db_base ?? "?"}`
+          + (publicado ? "" : " — nenhum agente tem acesso"),
+        pilulas: r.db_sslmode ? [`ssl ${r.db_sslmode}`] : undefined,
+        uso: (r.agents_using ?? []).filter(Boolean),
+        abrir: () => editarBanco(r),
+        remover: () => setDeleteTarget(r),
+      });
+    }
+
     // ── Conectores sem template: personalizados e MCPs criados à mão.
     for (const r of rows) {
+      if (r.integration_type === "database") continue;
       if (r.template_id && CONNECTOR_CATALOG.some((t) => t.id === r.template_id)) continue;
       // Conector de LLM legado (chave no HS.OS, não no gateway) — some da
       // lista quando o provedor já estiver conectado no gateway, senão o
@@ -455,6 +493,10 @@ export default function ConnectorsTab() {
     // Legacy / custom connector
     setEditing(row);
     setCustomModalOpen(true);
+  }
+
+  function editarBanco(row: ConnectorRow) {
+    setDialogoBanco(row);
   }
 
   async function persistConnector(payload: Partial<ConnectorRow> & { name: string; type: ConnectorKind }) {
@@ -625,7 +667,9 @@ export default function ConnectorsTab() {
                 ? { rotulo: "Outra IA", legenda: "Groq, OpenRouter, Mistral, xAI e outras", icone: Brain, ao: () => setDialogoLlm({ tipo: "" }) }
                 : g.id === "mcp"
                   ? { rotulo: "Novo MCP", legenda: "Servidor de ferramentas próprio", icone: Zap, ao: () => { setEditing(null); setMcpModalOpen(true); } }
-                  : { rotulo: "Serviço personalizado", legenda: "Uma API que não está no catálogo", icone: Wrench, ao: () => { setEditing(null); setCustomModalOpen(true); } };
+                  : g.id === "banco"
+                    ? { rotulo: "Novo banco", legenda: "Postgres que os agentes vão consultar", icone: Database, ao: () => setDialogoBanco(null) }
+                    : { rotulo: "Serviço personalizado", legenda: "Uma API que não está no catálogo", icone: Wrench, ao: () => { setEditing(null); setCustomModalOpen(true); } };
             const IconeCriar = criar.icone;
             return (
               <section key={g.id} className="space-y-2.5">
@@ -686,6 +730,17 @@ export default function ConnectorsTab() {
           aoFechar={(mudou) => {
             setDialogoLlm(null);
             if (mudou) { void llm.recarregar(); llm.vigiar(); }
+          }}
+        />
+      )}
+
+      {dialogoBanco !== false && (
+        <DialogoBanco
+          editando={dialogoBanco}
+          agents={agents}
+          aoFechar={(mudou) => {
+            setDialogoBanco(false);
+            if (mudou) void load();
           }}
         />
       )}
@@ -790,7 +845,8 @@ function EsqueletoCard() {
  * "conectar" e "editar" moravam em abas diferentes da tela.
  */
 function ServicoCard({ entrada: e, nomeAgente }: { entrada: Entrada; nomeAgente: (id: string) => string }) {
-  const IconeGrupo = e.grupo === "llm" ? Brain : e.grupo === "mcp" ? Zap : KeyRound;
+  const IconeGrupo = e.grupo === "llm" ? Brain : e.grupo === "mcp" ? Zap
+    : e.grupo === "banco" ? Database : KeyRound;
   const disponivel = e.estado === "disponivel";
   return (
     // O card inteiro é o alvo do clique. Antes, cada card carregava dois
@@ -920,6 +976,328 @@ function ServicoCard({ entrada: e, nomeAgente }: { entrada: Entrada; nomeAgente:
 
 
 /* Agent picker used by all modals */
+/**
+ * Cadastro de banco de dados.
+ *
+ * Tem forma própria porque as perguntas são outras: endereço, modo de acesso e
+ * dois pares de credencial — não "cole a chave". E tem dois botões que os
+ * outros conectores não têm, por um motivo aprendido caro:
+ *
+ * - **Testar** conecta de verdade e conta o que achou. "Cadastrei" e "funciona"
+ *   são coisas diferentes, e esta plataforma já acumulou telas que diziam a
+ *   primeira achando que diziam a segunda.
+ * - **Publicar** é o que entrega o banco ao agente (vira `mcp.servers` no
+ *   gateway). Sem esse passo o cadastro existe e ninguém o alcança — por isso a
+ *   tela mostra "nenhum agente tem acesso" em vez de um ✓.
+ */
+interface TesteBanco {
+  ok: boolean;
+  usuario: string;
+  versao: string;
+  somente_leitura_na_sessao: boolean;
+  pode_escrever: boolean;
+  schemas: Array<{ schema: string; tabelas: number }>;
+  avisos: string[];
+}
+
+interface PublicacaoBanco {
+  ok: boolean;
+  servidor: string;
+  ferramenta: string;
+  agentes: string[];
+  agentes_inexistentes: string[];
+}
+
+function DialogoBanco({
+  editando,
+  agents,
+  aoFechar,
+}: {
+  editando: ConnectorRow | null;
+  agents: AgentOption[];
+  aoFechar: (mudou: boolean) => void;
+}) {
+  const [nome, setNome] = useState(editando?.name ?? "");
+  const [host, setHost] = useState(editando?.db_host ?? "");
+  const [porta, setPorta] = useState(String(editando?.db_porta ?? 5432));
+  const [base, setBase] = useState(editando?.db_base ?? "");
+  const [sslmode, setSslmode] = useState(editando?.db_sslmode ?? "prefer");
+  const [soLeitura, setSoLeitura] = useState(editando?.db_somente_leitura ?? true);
+  const [cred, setCred] = useState<Record<string, string>>({
+    ro_usuario: "", ro_senha: "", rw_usuario: "", rw_senha: "",
+  });
+  const [agentes, setAgentes] = useState<string[]>(editando?.agents_using ?? []);
+  const [salvando, setSalvando] = useState(false);
+  const [testando, setTestando] = useState(false);
+  const [resultado, setResultado] = useState<TesteBanco | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const guardadas = new Set(editando?.credential_keys ?? []);
+  const temRw = guardadas.has("rw_usuario") || !!cred.rw_usuario;
+
+  function corpo() {
+    return {
+      name: nome.trim(),
+      category: "Bancos",
+      key_name: `${toEnvKey(nome)}_DB`,
+      integration_type: "database",
+      type: "database",
+      db_host: host.trim(),
+      db_porta: Number(porta) || 5432,
+      db_base: base.trim(),
+      db_sslmode: sslmode,
+      db_somente_leitura: soLeitura,
+      agents_using: agentes,
+      // Campo em branco cujo nome já está guardado significa "manter" — o
+      // servidor mescla por chave. É o que permite renomear sem redigitar
+      // senha, e vale igual para os conectores de API.
+      credentials: Object.entries(cred)
+        .filter(([k, v]) => v.trim() || guardadas.has(k))
+        .map(([key_name, value]) => ({ key_name, value })),
+    };
+  }
+
+  async function salvar(): Promise<string | null> {
+    if (!nome.trim() || !host.trim() || !base.trim()) {
+      setErro("Nome, endereço e nome da base são obrigatórios.");
+      return null;
+    }
+    setSalvando(true); setErro(null);
+    try {
+      if (editando) {
+        await api(`/integracoes/conectores/${editando.id}`, { method: "PATCH", body: corpo() });
+        return editando.id;
+      }
+      const r = await api<{ id: string }>("/integracoes/conectores", { method: "POST", body: corpo() });
+      return r.id;
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
+      return null;
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function testar() {
+    setTestando(true); setErro(null); setResultado(null);
+    const id = await salvar();
+    if (!id) { setTestando(false); return; }
+    try {
+      const r = await api<TesteBanco>(
+        `/integracoes/conectores/${id}/testar-banco?somente_leitura=${soLeitura}`,
+        { method: "POST" },
+      );
+      setResultado(r);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
+    } finally {
+      setTestando(false);
+    }
+  }
+
+  async function publicar() {
+    setSalvando(true); setErro(null);
+    const id = await salvar();
+    if (!id) { setSalvando(false); return; }
+    try {
+      const r = await api<PublicacaoBanco>(`/integracoes/conectores/${id}/publicar-banco`, { method: "POST" });
+      toast({
+        title: "Banco publicado",
+        description: `${r.agentes.length} agente(s) agora podem consultar. Ferramenta: ${r.ferramenta}`,
+      });
+      aoFechar(true);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  const campo = (rotulo: string, chave: string, tipo = "text") => (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">
+        {rotulo}
+        {guardadas.has(chave) && !cred[chave] && (
+          <span className="ml-2 text-[11px] text-muted-foreground/70">
+            já configurada — em branco mantém
+          </span>
+        )}
+      </Label>
+      <Input
+        type={tipo}
+        value={cred[chave]}
+        placeholder={guardadas.has(chave) && !cred[chave] ? "••••••••" : undefined}
+        onChange={(e) => setCred((s) => ({ ...s, [chave]: e.target.value }))}
+        className="font-mono text-sm"
+        autoComplete="off"
+      />
+    </div>
+  );
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) aoFechar(false); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            {editando ? editando.name : "Adicionar banco de dados"}
+          </DialogTitle>
+          <DialogDescription>
+            O agente consulta por uma ferramenta. Quem impede escrita é o usuário
+            do Postgres, não esta tela.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Nome</Label>
+            <Input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="DataCoreHS" />
+          </div>
+
+          <div className="grid grid-cols-[1fr_88px] gap-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Endereço</Label>
+              <Input value={host} onChange={(e) => setHost(e.target.value)}
+                     placeholder="10.0.0.5" className="font-mono text-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Porta</Label>
+              <Input value={porta} onChange={(e) => setPorta(e.target.value)}
+                     inputMode="numeric" className="font-mono text-sm" />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Base</Label>
+            <Input value={base} onChange={(e) => setBase(e.target.value)}
+                   placeholder="meu_banco" className="font-mono text-sm" />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">SSL</Label>
+            <Select value={sslmode} onValueChange={setSslmode}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="disable">disable — servidor sem SSL</SelectItem>
+                <SelectItem value="require">require — exige SSL</SelectItem>
+                <SelectItem value="prefer">prefer — tenta e rebaixa</SelectItem>
+                <SelectItem value="verify-ca">verify-ca</SelectItem>
+                <SelectItem value="verify-full">verify-full</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* ⚠️ `prefer` engana: o driver do agente NÃO rebaixa, ao contrário
+                do psql. Um banco sem SSL cadastrado como `prefer` passa no teste
+                e falha na mão do agente — aconteceu no primeiro que publicamos.
+                O servidor recusa publicar assim, mas dizer antes é melhor. */}
+            {sslmode === "prefer" && (
+              <p className="text-[11px] text-amber-500/90 leading-relaxed">
+                Se o servidor não tiver SSL, use <code className="font-mono">disable</code>.
+                O <code className="font-mono">prefer</code> funciona no teste daqui, mas o
+                agente falha — ele usa outro driver, que não rebaixa sozinho.
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-1.5 pt-2 border-t border-border">
+            <Label className="text-xs text-muted-foreground">Acesso</Label>
+            <div className="flex gap-2">
+              {[
+                { v: true,  r: "Só leitura",         d: "consulta" },
+                { v: false, r: "Leitura e escrita",  d: "consulta e altera" },
+              ].map((o) => (
+                <button
+                  key={String(o.v)}
+                  type="button"
+                  onClick={() => setSoLeitura(o.v)}
+                  className={cn(
+                    "flex-1 rounded-lg border px-3 py-2 text-left text-xs transition",
+                    soLeitura === o.v
+                      ? "border-primary/50 bg-primary/10 text-foreground"
+                      : "border-border text-muted-foreground hover:border-primary/40",
+                  )}
+                >
+                  <div className="font-medium">{o.r}</div>
+                  <div className="opacity-70">{o.d}</div>
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Isto só escolhe qual credencial usar. A garantia de verdade é o
+              usuário do banco: um com <code className="font-mono">pg_read_all_data</code> e{" "}
+              <code className="font-mono">default_transaction_read_only</code> recusa escrita
+              mesmo que alguém instrua o agente a tentar.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {campo("Usuário (leitura)", "ro_usuario")}
+            {campo("Senha (leitura)", "ro_senha", "password")}
+          </div>
+          {!soLeitura && (
+            <div className="grid grid-cols-2 gap-2">
+              {campo("Usuário (escrita)", "rw_usuario")}
+              {campo("Senha (escrita)", "rw_senha", "password")}
+            </div>
+          )}
+          {!soLeitura && !temRw && (
+            <p className="text-[11px] text-amber-500/90">
+              Sem credencial de escrita cadastrada, este banco não pode ser publicado
+              nesse modo.
+            </p>
+          )}
+
+          <AgentPicker agents={agents} selected={agentes} onChange={setAgentes} />
+          {agentes.length === 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              Sem agente selecionado o banco fica cadastrado e ninguém o alcança.
+              Acesso a banco é concessão explícita.
+            </p>
+          )}
+
+          {erro && (
+            <p className="text-xs text-destructive border border-destructive/30 bg-destructive/10 rounded-lg px-3 py-2 whitespace-pre-line">
+              {erro}
+            </p>
+          )}
+
+          {resultado && (
+            <div className="text-xs rounded-lg border border-border bg-secondary/30 p-3 space-y-1">
+              <p className="text-foreground">
+                Conectado como <code className="font-mono">{resultado.usuario}</code> · Postgres{" "}
+                {String(resultado.versao).split(" ")[0]}
+              </p>
+              <p className="text-muted-foreground">
+                {resultado.pode_escrever ? "pode escrever" : "não pode escrever"}
+                {resultado.somente_leitura_na_sessao && " · sessão em modo leitura"}
+              </p>
+              <p className="text-muted-foreground">
+                {(resultado.schemas ?? []).map((s) => `${s.schema}: ${s.tabelas} tabelas`).join(" · ") || "nenhuma tabela visível"}
+              </p>
+              {(resultado.avisos ?? []).map((a, i) => (
+                <p key={i} className="text-amber-500/90 leading-relaxed">⚠️ {a}</p>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="ghost" onClick={() => aoFechar(false)} disabled={salvando || testando}>
+            Cancelar
+          </Button>
+          <Button variant="outline" onClick={() => void testar()} disabled={salvando || testando}>
+            {testando && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Testar conexão
+          </Button>
+          <Button onClick={() => void publicar()} disabled={salvando || testando}>
+            {salvando && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Salvar e publicar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function AgentPicker({
   agents,
   selected,
