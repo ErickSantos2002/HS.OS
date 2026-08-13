@@ -1813,14 +1813,25 @@ async def publicar_banco(
     # O nome da tool que o agente vê. Sem isto no `alsoAllow`, o servidor existe
     # e nenhum agente o alcança.
     ferramenta = f"mcp__{apelido}__query"
+
+    # ⚠️ **Publicar CONCEDE e REVOGA.** Acrescentar acesso a quem entrou na lista
+    # sem tirar de quem saiu deixaria a tela dizendo uma coisa e o gateway
+    # fazendo outra — e é a permissão que fica sobrando, não faltando. Aconteceu
+    # em 13/08/2026: um banco ficou sem agente na tela e a Nina continuou com a
+    # ferramenta dele.
     lista_agentes = []
     for a in (parsed.get("agents") or {}).get("list") or []:
-        if a.get("id") not in agentes:
-            continue
         atuais = list(((a.get("tools") or {}).get("alsoAllow")) or [])
-        if ferramenta not in atuais:
+        tem = ferramenta in atuais
+        deve = a.get("id") in agentes
+        if tem == deve:
+            continue
+        if deve:
             atuais.append(ferramenta)
-        lista_agentes.append({"id": a.get("id"), "tools": {"alsoAllow": atuais}})
+        else:
+            atuais = [x for x in atuais if x != ferramenta]
+        lista_agentes.append({"id": a.get("id"),
+                              "tools": {**(a.get("tools") or {}), "alsoAllow": atuais}})
 
     ausentes = [a for a in agentes
                 if a not in {x.get("id") for x in (parsed.get("agents") or {}).get("list") or []}]
