@@ -1,12 +1,12 @@
 # Continuar aqui
 
-Ponto de retomada da portagem. Atualizado em **10/08/2026**. Leia isto, depois
+Ponto de retomada da portagem. Atualizado em **13/08/2026**. Leia isto, depois
 `CLAUDE.md` e `docs/ROADMAP.md`.
 
 🎉 **O front saiu do Supabase.** Nenhuma chamada `.from()`, nenhum
 `functions.invoke`, nenhum `supabase.channel`. O único arquivo que ainda
 importa o client é o próprio `integrations/supabase/client.ts`, que existe só
-para lançar caso alguém o use. Resta **uma** edge function.
+para lançar caso alguém o use. **Zero** edge functions por portar.
 
 👉 **Arena, War room e voz pausadas em 10/08** — ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md).
 
@@ -16,7 +16,45 @@ testado junto porque tem efeito real.
 
 ---
 
-## Retomando em 13/08/2026 — nesta ordem
+## O que aconteceu em 13/08/2026
+
+Dia inteiro na tela de **Conectores**, que passou de "parece funcionar" para
+funcionando. Quatro consertos e uma descoberta que muda o desenho.
+
+**Conectores (APIs de terceiros).** Editar um conector apagava as chaves que
+você não redigitou. A tela nunca recebe os valores — está certo —, mas também
+não sabia que existiam, então abria em branco e o servidor tratava o que a
+pessoa digitou como o conjunto final. Agora a listagem devolve `credential_keys`
+(os **nomes**, nunca os valores) e o PATCH mescla por chave.
+
+**Provedores de LLM.** O card da Anthropic dizia "não conectado" sobre a
+credencial que estava alimentando a `nina` naquele instante. O front já tinha a
+lógica certa (`nativas`, em `LlmProvidersSection.tsx`); o backend é que nunca
+mandava `perfis`. Mesma família do `useAgents` que derrubava quatro campos
+declarados — **TypeScript afirma, não confere**.
+
+**E o principal: configurar LLM pela tela funciona.** Passei o dia afirmando o
+contrário, três vezes, e o Erick segurou o argumento de que o pessoal da dn.ia
+não toca a VPS. Ele estava certo. Detalhes e os erros de raciocínio estão em
+`CLAUDE.md`, seção *"Configurar LLM"* — vale ler antes de mexer em `llm.py`.
+
+A `nina` ficou muda por horas por causa de uma chave inválida, não por nada
+disso. Quem resolveu foi o log do gateway
+(`journalctl --user -u openclaw-gateway.service`), que desfez **cada** palpite
+que fizemos por correlação. É a primeira ferramenta a usar quando um agente
+falha, não a última.
+
+**Limpeza feita no mesmo dia:** 6 sessões de teste no gateway, o log de criação
+de dois agentes que não existem, 6 mensagens de canal de teste, e as 4
+tentativas que gravaram *"The agent run failed"* **como se fosse fala da
+`nina`** — ela relia a conversa e via aquilo como coisa que tinha dito. Backup
+em `~/backups/limpeza-2026-08-13/*.csv`. Na VPS saíram as pastas de agente
+morto e os workspaces órfãos (`~/limpar-vps.sh`, com arquivo `.tar.gz` antes de
+remover).
+
+---
+
+## Retomando — nesta ordem
 
 Os quatro agentes especializados foram apagados em 12/08, por decisão: cada um
 tinha sido montado enquanto se aprendia a ferramenta, sem padrão. Só a `nina`
@@ -25,11 +63,11 @@ restou. Os workspaces completos estão em `~/backups/agentes-hsos-2026-08-12/`
 
 A ordem combinada, e o porquê dela:
 
-1. **Preencher a aba Empresa** (Configurações → Empresa). A tabela
-   `company_profile` está vazia, e ela é a **fonte** do conhecimento
-   compartilhado: ao salvar, o backend monta um bloco `# Empresa` e manda a
-   orquestradora distribuir no contexto de todos os agentes. É assim que a
-   plataforma de origem resolve isso — não é arquivo comum, é distribuição.
+1. ~~**Preencher a aba Empresa**~~ ✅ **feito em 13/08.** O bloco da empresa é
+   escrito pelo backend direto no `AGENTS.md` de cada agente, entre marcadores
+   `hsos:empresa:inicio/fim`, iterando o `agents.list`. Sem LLM no caminho: a
+   primeira versão mandava a orquestradora fazer, custou 34 mil tokens, e ela
+   escreveu em quatro workspaces que não existiam mais.
 
 2. **Converter o [`AGENT_CREATION.md`](AGENT_CREATION.md) em skill.** O
    procedimento não pode virar arquivo no workspace: o gateway só escreve os
@@ -64,10 +102,10 @@ na pasta. **Todo número aqui vem de um comando**, e o comando está ao lado.
 | | Hoje | Total | Como medir |
 |---|---|---|---|
 | Edge functions **por portar** | — | **0** | `ls backend/supabase/functions \| grep -vE "_shared\|_pausado\|_portado" \| wc -l` |
-| Portadas | 68 | 73 | as outras 4 estão em `_pausado/` — ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md) |
+| Portadas | 65 | 73 | as outras 8 estão em `_pausado/` — ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md) |
 | Arquivos do front com Supabase | **1** | 278 | `grep -rl "integrations/supabase/client" frontend/src \| grep -v _legado \| wc -l` |
-| Rotas na API própria | **181** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
-| Chamadas `.from("…")` vivas | **0** | — | `grep -rho '\.from(\s*"' frontend/src \| grep -v _legado \| wc -l` |
+| Rotas na API própria | **240** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
+| Chamadas `.from("…")` vivas | **0** | — | `grep -rln '\.from(\s*"' frontend/src \| grep -v _legado \| wc -l` |
 
 **Duas linhas têm que andar juntas.** "Tem substituto no backend" e "a tela usa o
 substituto" são coisas diferentes, e confundi-las já deixou telas quebradas em
@@ -86,25 +124,27 @@ diferentes, e o resumo antigo ("Realtime ✅ portado") escondia isso:
 | **Storage** | ✅ `UPLOADS_DIR` em disco | ✅ **completo** | nada |
 | **Realtime** | ✅ WebSocket + LISTEN/NOTIFY (`app/escuta_banco.py`) | ✅ **completo** | nada — `postgres_changes` zerado, e o "está digitando" também passou para o `/ws` |
 | **Edge Functions** | ✅ 73 de 73 | ✅ sem pendências | nada — 65 portadas, 8 arquivadas por decisão |
-| **Banco** (RLS direto do browser) | ✅ 181 rotas | ✅ **completo** | nada — 0 chamadas vivas (9 em `_legado/`, fora da compilação) |
+| **Banco** (RLS direto do browser) | ✅ 240 rotas | ✅ **completo** | nada — 0 chamadas vivas (9 em `_legado/`, fora da compilação) |
 
 O **banco é o único subsistema que ainda pesa.** Os outros quatro estão prontos
 ou perto disso.
 
-### As 4 chamadas que restam
+### Nenhuma chamada viva
 
+As duas que restavam saíram: `SkillsPage` passou a falar com o router
+`skills.py`, e o `ResetPasswordPage` deixou de consultar `profiles`.
+
+Sobram **9 chamadas em `_legado/`**, distribuídas em cinco arquivos do wizard de
+setup antigo. Nada ali é compilado nem roteado — o `grep` as encontra e é só
+isso. Conferir com nome de arquivo, não com `-h`:
+
+```bash
+grep -rln '\.from(\s*"' frontend/src | grep -v _legado | wc -l   # 0
 ```
-3  pages/SkillsPage.tsx        agent_skills
-1  pages/ResetPasswordPage.tsx profiles
-```
 
-`agent_skills` depende do `skill-manage`, que ainda não foi portado — portar a
-leitura sem a escrita deixaria a tela meio funcionando.
-
-`ResetPasswordPage` faz parte do fluxo de recuperação por e-mail, que não existe
-mais desde a saída do Supabase Auth. O destino dela está em *Decisões pendentes*.
-
-Mais 9 chamadas vivem em `_legado/`, que não está roteado.
+⚠️ O comando do placar acima usava `grep -rho`, que descarta o nome do arquivo e
+faz o `grep -v _legado` seguinte não filtrar nada — ele reportava 9 chamadas
+"vivas" que não existem. Corrigido; use o `-l` acima quando for medir.
 
 ---
 
