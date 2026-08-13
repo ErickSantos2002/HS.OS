@@ -21,6 +21,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
+from app.gateway import config as cfg_gateway
+from app.gateway.client import ErroGateway as ErroGatewayCli, obter_cliente as obter_cliente_gw
 from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.integracoes import exige_segredo, ler_segredo
 from app.realtime import hub, topico_usuario
@@ -763,15 +765,92 @@ async def revelar_credenciais_conector(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+# Marcadores do bloco gerado. Existem para o reenvio SUBSTITUIR o bloco em vez
+# de empilhar cópias, e para o resto do AGENTS.md — que o agente ou a
+# orquestradora podem ter escrito — sobreviver intacto.
+_MARCA_INICIO = "<!-- hsos:empresa:inicio -->"
+_MARCA_FIM = "<!-- hsos:empresa:fim -->"
+
+
+def _com_bloco_da_empresa(atual: str, bloco: str) -> str:
+    """Insere ou substitui o bloco da empresa no conteúdo do `AGENTS.md`."""
+    novo = f"{_MARCA_INICIO}\n{bloco}\n{_MARCA_FIM}"
+    i, f = atual.find(_MARCA_INICIO), atual.find(_MARCA_FIM)
+    if i != -1 and f != -1 and f > i:
+        return atual[:i] + novo + atual[f + len(_MARCA_FIM):]
+    return (atual.rstrip() + "\n\n" + novo + "\n") if atual.strip() else novo + "\n"
+
+
+async def _distribuir_contexto(bloco: str) -> list[dict]:
+    """Escreve o bloco da empresa no `AGENTS.md` de cada agente que existe.
+
+    ⚠️ **Isto era trabalho da orquestradora, e não devia ser.** A instrução
+    antiga mandava ela ler o `openclaw.json`, descobrir os workspaces e escrever
+    um `COMPANY.md` em cada um. Três coisas estavam erradas:
+
+    1. **O `COMPANY.md` não carrega sozinho.** A instrução afirmava que "será
+       injetado automaticamente no contexto de cada agente" — não é. O OpenClaw
+       carrega sete nomes fixos, e esse não é um deles. O time só saberia da
+       empresa se alguém mandasse abrir o arquivo, o que ninguém faz.
+    2. **Inserir texto igual em N arquivos é mecânico.** Um LLM não agrega nada
+       ali, e cobra por isso: em 13/08/2026 a operação gastou 34 mil tokens.
+    3. **Ela errou.** A memória dela dizia que havia quatro agentes; o
+       `agents.list` dizia que havia um. Ela escolheu a memória, escreveu em
+       workspaces inexistentes e relatou "concluído" sem reler.
+
+    Agora o backend faz: itera o `agents.list` (que é a verdade sobre quem
+    existe), escreve no `AGENTS.md` — que **é** um dos sete — entre marcadores,
+    e **relê para conferir**. Zero token, zero invenção.
+    """
+    c = await cfg_gateway.carregar()
+    if not c.configurado:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado."
+        )
+    cliente = obter_cliente_gw(c.url, c.token)
+
+    try:
+        lista = await cliente.chamar("agents.list")
+    except ErroGatewayCli as e:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, f"Não consegui listar os agentes: {e}"
+        ) from e
+
+    resultado: list[dict] = []
+    for a in lista.get("agents", []):
+        aid = a.get("id")
+        if not aid:
+            continue
+        try:
+            r = await cliente.chamar("agents.files.get", {"agentId": aid, "name": "AGENTS.md"})
+            atual = (r.get("file") or {}).get("content") or ""
+            await cliente.chamar(
+                "agents.files.set",
+                {"agentId": aid, "name": "AGENTS.md", "content": _com_bloco_da_empresa(atual, bloco)},
+            )
+            # Relê: escrever sem conferir é como a operação de hoje relatou
+            # sucesso para um arquivo que não estava lá.
+            v = await cliente.chamar("agents.files.get", {"agentId": aid, "name": "AGENTS.md"})
+            ok = _MARCA_INICIO in ((v.get("file") or {}).get("content") or "")
+            resultado.append({"agent_id": aid, "ok": ok,
+                              "erro": None if ok else "escrito, mas o bloco não apareceu na releitura"})
+        except ErroGatewayCli as e:
+            resultado.append({"agent_id": aid, "ok": False, "erro": str(e)})
+    return resultado
+
+
 @router.post("/onboarding-empresa", status_code=status.HTTP_202_ACCEPTED)
 async def onboarding_empresa(usuario: Usuario = Depends(exige_papel("super_admin"))):
-    """Manda o orquestrador escrever o `COMPANY.md` no workspace de cada agente.
+    """Escreve o contexto da empresa no `AGENTS.md` de cada agente.
 
-    O arquivo é injetado no contexto de todo agente, e é o que faz o time saber
-    para qual empresa trabalha. Sem ele, cada agente responde no vácuo.
+    É o que faz o time saber para qual empresa trabalha. Sem isso, cada agente
+    responde no vácuo.
 
-    Marca `onboarding_notified_at` ao fim — é o que a tela usa para saber se o
-    time já foi apresentado à empresa.
+    Vai no `AGENTS.md` porque ele é um dos sete que o OpenClaw carrega sozinho.
+    Ver `_distribuir_contexto` para por que deixou de ser um `COMPANY.md`
+    escrito pela orquestradora.
+
+    `onboarding_notified_at` só é marcada quando todos receberam.
     """
     async with sessao(role="service_role") as conn:
         p = await conn.fetchrow("SELECT * FROM public.company_profile LIMIT 1")
@@ -795,31 +874,26 @@ async def onboarding_empresa(usuario: Usuario = Depends(exige_papel("super_admin
         linhas.append(f"\n**Contexto adicional:**\n{p['extra_context']}")
     company_md = "\n".join(linhas).strip()
 
-    mensagem = (
-        "Você precisa atualizar o contexto de todos os agentes do time com as "
-        "informações da empresa cliente.\n"
-        "Siga estes passos:\n"
-        "1. Leia o arquivo de configuração do OpenClaw em ~/.openclaw/openclaw.json "
-        "para obter a lista de agentes e seus workspaces\n"
-        "2. Para cada agente listado em agents.list, escreva ou sobrescreva o arquivo "
-        "COMPANY.md no workspace desse agente com o conteúdo abaixo\n"
-        "3. Confirme quando todos os arquivos tiverem sido escritos\n\n"
-        "Conteúdo do COMPANY.md a ser escrito em cada workspace:\n---\n"
-        f"{company_md}\n---\n\n"
-        "Este arquivo será injetado automaticamente no contexto de cada agente e "
-        "permitirá que eles conheçam a empresa para qual trabalham."
-    )
+    resultado = await _distribuir_contexto(company_md)
+    escritos = [r for r in resultado if r["ok"]]
+    falhas = [r for r in resultado if not r["ok"]]
 
-    from app.routers.agents import _avisar_lider
+    # A data só é marcada quando TODOS receberam. Antes ela era gravada de
+    # qualquer jeito, e a tela dizia "Super agentes atualizados" mesmo quando
+    # nada tinha sido atualizado — afirmava o envio, não o resultado.
+    if resultado and not falhas:
+        async with sessao(role="service_role") as conn:
+            await conn.execute(
+                "UPDATE public.company_profile SET onboarding_notified_at = now() WHERE id = $1",
+                p["id"],
+            )
 
-    await _avisar_lider("onboarding-empresa", mensagem)
-    async with sessao(role="service_role") as conn:
-        await conn.execute(
-            "UPDATE public.company_profile SET onboarding_notified_at = now() WHERE id = $1",
-            p["id"],
-        )
-    logger.info("Onboarding da empresa disparado por %s", usuario.id)
-    return {"dispatched": True}
+    logger.info("Contexto da empresa distribuído: %d ok, %d falha(s)", len(escritos), len(falhas))
+    return {
+        "ok": bool(resultado) and not falhas,
+        "atualizados": [r["agent_id"] for r in escritos],
+        "falhas": falhas,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -405,6 +405,28 @@ Edge Function `manifest` para refletir o branding — ver `applyManifest()` em `
 Versão de build: `frontend/vite.config.ts` injeta `__APP_VERSION__` e `__APP_BUILD_DATE__` a partir do SHA do git
 no momento do build. `use-version-check` compara e avisa o usuário quando há versão nova.
 
+## A regra dos sete arquivos
+
+⚠️ **O OpenClaw carrega exatamente sete nomes no contexto do agente**: `AGENTS.md`, `SOUL.md`,
+`TOOLS.md`, `IDENTITY.md`, `USER.md`, `HEARTBEAT.md` e `MEMORY.md`. Arquivo com qualquer outro
+nome no workspace **não entra no contexto** — só é lido se alguém mandar o agente abrir.
+
+Não há como configurar isso: em 27 KB de `config.get` do gateway não aparece um único nome de
+arquivo. E `agents.files.set` **recusa** nome fora dos sete (`unsupported file`).
+
+**A consequência prática:** se o agente precisa saber sempre, tem que caber dentro de um dos sete.
+Não existe meio-termo. Duas tentativas de contornar isso já falharam aqui:
+
+- Um `COMPANY.md` com o perfil da empresa, escrito no workspace de três agentes. Ninguém nunca o
+  leu, porque ninguém mandou.
+- A distribuição do contexto da empresa, que mandava a orquestradora escrever esse mesmo
+  `COMPANY.md`, com a instrução afirmando que ele "será injetado automaticamente no contexto" —
+  o que nunca foi verdade. Corrigido em 13/08/2026: o backend escreve no `AGENTS.md`, entre
+  marcadores, sem passar por LLM.
+
+Para instrução que o agente usa **de vez em quando**, o mecanismo certo é uma **skill** — o
+OpenClaw as carrega sob demanda (as 53 do gateway são todas `always: false`).
+
 ## Rebrand — o que é dado e o que é hardcoded
 
 Boa parte da marca **já é dinâmica**, vinda da tabela `branding` via `frontend/src/hooks/use-branding.ts`:
