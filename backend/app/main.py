@@ -1,7 +1,10 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.router import router as auth_router
@@ -63,6 +66,8 @@ async def lifespan(app: FastAPI):
     await close_db()
 
 
+logger = logging.getLogger(__name__)
+
 app = FastAPI(
     title="HS.OS API",
     description="API da plataforma de agentes de IA HS.OS",
@@ -93,6 +98,31 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "hsos-api"}
+
+
+@app.exception_handler(RequestValidationError)
+async def registrar_validacao(request: Request, exc: RequestValidationError):
+    """Loga qual campo o FastAPI recusou, e por quê.
+
+    Sem isto um 422 não deixa rastro nenhum: o log de acesso mostra
+    "422 Unprocessable Content" e mais nada, então o defeito só existe na tela
+    de quem tentou. Em 13/08/2026 isso custou uma investigação inteira para um
+    "Input should be a valid string" cujo campo ninguém sabia.
+
+    ⚠️ **Nunca logamos o valor recebido.** O `input` do Pydantic viria junto, e
+    numa rota de conector isso é senha em texto puro no log. O nome do campo e a
+    razão bastam para achar o defeito.
+    """
+    campos = [
+        {"campo": ".".join(str(p) for p in (e.get("loc") or [])), "erro": e.get("msg")}
+        for e in exc.errors()
+    ]
+    logger.warning(
+        "422 em %s %s — %s",
+        request.method, request.url.path,
+        "; ".join(f"{c['campo']}: {c['erro']}" for c in campos) or "(sem detalhe)",
+    )
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
 
 app.include_router(agents_router)

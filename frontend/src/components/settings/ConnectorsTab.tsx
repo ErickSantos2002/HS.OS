@@ -102,7 +102,16 @@ interface ConnectorRow {
 }
 
 interface AgentOption {
-  agent_id: string;
+  // ⚠️ `GET /agents` devolve `id`, não `agent_id`. Este arquivo chamava de
+  // `agent_id` e resolvia com `as AgentOption[]` — um cast que faz o
+  // TypeScript aceitar e deixa o valor `undefined` em silêncio. O seletor
+  // empurrava `undefined` para a lista de acesso, virava `null` no JSON, e o
+  // backend recusava com "agents_using.0: Input should be a valid string".
+  //
+  // O mesmo defeito foi achado e consertado em `AutomacoesPage` antes, com o
+  // aviso escrito lá — e sobreviveu aqui. Usar o nome da API é o que impede a
+  // terceira vez.
+  id: string;
   name: string;
 }
 
@@ -253,7 +262,12 @@ export default function ConnectorsTab() {
       setRows((data as any) ?? []);
     }
     if (!agentsRes.error && agentsRes.data) {
-      setAgents(agentsRes.data as AgentOption[]);
+      // Mapear, não converter — ver o aviso em `AgentOption`.
+      setAgents(
+        (agentsRes.data as Array<{ id?: unknown; name?: unknown }>)
+          .map((a) => ({ id: String(a?.id ?? ""), name: String(a?.name ?? a?.id ?? "") }))
+          .filter((a) => a.id),
+      );
     }
     setLoading(false);
   }, []);
@@ -465,7 +479,7 @@ export default function ConnectorsTab() {
   }, [entradas]);
 
   const nomeAgente = useCallback(
-    (id: string) => agents.find((a) => a.agent_id === id)?.name ?? id,
+    (id: string) => agents.find((a) => a.id === id)?.name ?? id,
     [agents],
   );
 
@@ -1027,6 +1041,12 @@ function DialogoBanco({
     ro_usuario: "", ro_senha: "", rw_usuario: "", rw_senha: "",
   });
   const [agentes, setAgentes] = useState<string[]>(editando?.agents_using ?? []);
+  // ⚠️ **Quem já foi criado não pode ser criado de novo.** "Testar conexão"
+  // salva antes de testar (não dá para testar o que não existe), e sem guardar
+  // o id o "Salvar e publicar" seguinte tentava POST outra vez — 409, com uma
+  // mensagem sobre duplicata que não tem nada a ver com o que a pessoa fez.
+  // Aconteceu no primeiro cadastro real pela tela, em 13/08/2026.
+  const [idSalvo, setIdSalvo] = useState<string | null>(editando?.id ?? null);
   const [salvando, setSalvando] = useState(false);
   const [testando, setTestando] = useState(false);
   const [resultado, setResultado] = useState<TesteBanco | null>(null);
@@ -1064,11 +1084,12 @@ function DialogoBanco({
     }
     setSalvando(true); setErro(null);
     try {
-      if (editando) {
-        await api(`/integracoes/conectores/${editando.id}`, { method: "PATCH", body: corpo() });
-        return editando.id;
+      if (idSalvo) {
+        await api(`/integracoes/conectores/${idSalvo}`, { method: "PATCH", body: corpo() });
+        return idSalvo;
       }
       const r = await api<{ id: string }>("/integracoes/conectores", { method: "POST", body: corpo() });
+      setIdSalvo(r.id);
       return r.id;
     } catch (e) {
       setErro(e instanceof Error ? e.message : String(e));
@@ -1323,12 +1344,12 @@ function AgentPicker({
       </div>
       <div className="flex flex-wrap gap-1.5">
         {agents.map((a) => {
-          const active = selected.includes(a.agent_id);
+          const active = selected.includes(a.id);
           return (
             <button
-              key={a.agent_id}
+              key={a.id}
               type="button"
-              onClick={() => toggle(a.agent_id)}
+              onClick={() => toggle(a.id)}
               className={cn(
                 "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs transition",
                 active
