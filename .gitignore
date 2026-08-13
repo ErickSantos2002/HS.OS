@@ -12,10 +12,14 @@ dist
 dist-ssr
 *.local
 
-# Environment files (nunca versionar — usar .env.example)
+# Environment files (nunca versionar — usar o .example ao lado)
+# ⚠️ `!.env.example` era exato demais: `.env.bancos.example` caía no `.env.*` e
+# ficava de fora do repositório, que é o oposto do que um template quer. O
+# `*.example` abaixo libera qualquer modelo, e só ele.
 .env
 .env.*
 !.env.example
+!.env.*.example
 
 # Python / backend
 .venv/

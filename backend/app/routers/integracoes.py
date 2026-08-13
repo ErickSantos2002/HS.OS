@@ -1287,6 +1287,10 @@ _COLUNAS_CONECTOR = """
                LATERAL COALESCE(c->>'key_name', c->>'key') AS nome
          WHERE nome IS NOT NULL AND nome <> ''
     ), '{}') AS credential_keys,
+    -- Endereço vai para a tela; senha, não. Por isso host/porta/base são colunas
+    -- e não campos dentro de `credentials` — misturar obrigaria a escolher entre
+    -- expor o segredo ou esconder o endereço.
+    db_host, db_porta, db_base, db_sslmode, db_somente_leitura,
     to_char(updated_at         AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS updated_at,
     to_char(last_validated_at  AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS last_validated_at
 """
@@ -1314,6 +1318,20 @@ class ConectorIn(BaseModel):
     template_id: str | None = None
     credentials: list | dict | None = None
     agents_using: list[str] = []
+
+    # ── Conector de banco de dados ───────────────────────────────────────────
+    # Só valem quando `integration_type == "database"`. O CHECK
+    # `integrations_db_completo_check` recusa banco sem host/porta/base, então
+    # cadastro pela metade não passa daqui.
+    db_host: str | None = None
+    db_porta: int | None = Field(default=None, ge=1, le=65535)
+    db_base: str | None = None
+    db_sslmode: str = "prefer"
+    # ⚠️ **Não é a trava.** Diz apenas qual par de credenciais a conexão usa.
+    # Quem recusa um UPDATE é o usuário do Postgres do outro lado — o de leitura
+    # do DataCore, por exemplo, é membro de `pg_read_all_data` e tem
+    # `default_transaction_read_only = on`.
+    db_somente_leitura: bool = True
 
 
 def _previa(credenciais) -> tuple[str | None, bool]:
@@ -1406,15 +1424,19 @@ async def criar_conector(
             INSERT INTO public.integrations
                 (name, category, key_name, integration_type, description, icon,
                  type, template_id, credentials, key_preview, is_configured,
-                 agents_using)
+                 agents_using, db_host, db_porta, db_base, db_sslmode,
+                 db_somente_leitura)
             VALUES ($1,$2,$3,$4,$5,$6,$7, NULLIF($8,''),
-                    $9::text::jsonb, $10, $11, $12)
+                    $9::text::jsonb, $10, $11, $12,
+                    NULLIF($13,''), $14, NULLIF($15,''), $16, $17)
             RETURNING id::text
             """,
             dados.name, dados.category, dados.key_name, dados.integration_type,
             dados.description, dados.icon, dados.type, dados.template_id or "",
             json.dumps(dados.credentials) if dados.credentials is not None else None,
             previa, configurado, dados.agents_using,
+            dados.db_host or "", dados.db_porta, dados.db_base or "",
+            dados.db_sslmode, dados.db_somente_leitura,
         )
     logger.info("Conector %s criado.", dados.name)
     return {"id": ident}
@@ -1461,6 +1483,13 @@ async def editar_conector(
                 key_preview   = COALESCE($11, key_preview),
                 is_configured = CASE WHEN $10 IS NULL THEN is_configured ELSE $12 END,
                 agents_using = $13,
+                -- Campo de banco vazio mantém o que está lá, mesma regra da
+                -- credencial: a tela pode estar editando só o nome.
+                db_host    = COALESCE(NULLIF($14,''), db_host),
+                db_porta   = COALESCE($15, db_porta),
+                db_base    = COALESCE(NULLIF($16,''), db_base),
+                db_sslmode = $17,
+                db_somente_leitura = $18,
                 updated_at = now()
              WHERE id = $1::uuid
             RETURNING id
@@ -1470,6 +1499,8 @@ async def editar_conector(
             dados.template_id or "",
             json.dumps(mescladas) if mescladas is not None else None,
             previa, configurado, dados.agents_using,
+            dados.db_host or "", dados.db_porta, dados.db_base or "",
+            dados.db_sslmode, dados.db_somente_leitura,
         )
     if achado is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conector não encontrado.")
@@ -1485,6 +1516,194 @@ async def excluir_conector(
         )
     if marca.rsplit(" ", 1)[-1] == "0":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Conector não encontrado.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bancos de dados — o quarto tipo de conector
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Banco é a ferramenta principal dos agentes, e até aqui o acesso existia
+# **fora** da plataforma: variáveis de ambiente no processo do gateway
+# (`DATACOREHS_PASSWORD`, `GROWTHHSAPI_DB_PASS`, `TALENTHS_PASSWORD`). Invisível
+# pela tela, sem saber qual agente usa o quê, e trocar senha exigia mexer na VPS.
+#
+# ⚠️ **`db_somente_leitura` não protege nada sozinho.** Ele escolhe qual par de
+# credenciais a conexão usa. Quem recusa um UPDATE é o usuário do Postgres do
+# outro lado — e é lá que a trava tem que estar, porque essa não depende de o
+# agente se comportar nem de a tela mandar o parâmetro certo.
+
+_CHAVES_BANCO = {
+    True:  ("ro_usuario", "ro_senha"),
+    False: ("rw_usuario", "rw_senha"),
+}
+
+
+def _credencial_do_banco(credenciais, somente_leitura: bool) -> tuple[str, str]:
+    """Tira o par usuário/senha do modo pedido. Levanta se não estiver lá."""
+    lista = _pares_de_credencial(credenciais) or []
+    por_nome = {str(c.get("key_name") or ""): str(c.get("value") or "") for c in lista}
+    ku, ks = _CHAVES_BANCO[somente_leitura]
+    usuario, senha = por_nome.get(ku, ""), por_nome.get(ks, "")
+    if not usuario or not senha:
+        modo = "leitura" if somente_leitura else "leitura e escrita"
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Este banco não tem credencial de {modo} cadastrada. "
+            f"Preencha {ku} e {ks} antes de usá-lo nesse modo.",
+        )
+    return usuario, senha
+
+
+def _url_do_banco(linha, credenciais, somente_leitura: bool) -> str:
+    usuario, senha = _credencial_do_banco(credenciais, somente_leitura)
+    # `quote` em usuário e senha: senha com `@` ou `/` quebra a URL em silêncio
+    # e o erro que volta é "could not translate host name".
+    return (
+        f"postgresql://{quote(usuario, safe='')}:{quote(senha, safe='')}"
+        f"@{linha['db_host']}:{linha['db_porta']}/{quote(str(linha['db_base']), safe='')}"
+        f"?sslmode={linha['db_sslmode']}"
+    )
+
+
+@router.post("/conectores/{conector_id}/testar-banco")
+async def testar_banco(
+    conector_id: str,
+    somente_leitura: bool = True,
+    _: Usuario = Depends(exige_papel("super_admin")),
+):
+    """Conecta de verdade e conta o que encontrou. **Nunca escreve.**
+
+    Existe porque "cadastrei" e "funciona" são coisas diferentes, e a plataforma
+    já acumulou casos em que a tela dizia a primeira achando que dizia a
+    segunda. Um conector de banco que não conecta só vira erro na cara do agente
+    depois — longe de quem pode consertar.
+
+    Também confere se a credencial de leitura é **mesmo** de leitura: pergunta
+    ao Postgres se aquele usuário poderia escrever. Quem responde é o banco, não
+    a nossa coluna.
+    """
+    import asyncpg
+
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow(
+            "SELECT name, db_host, db_porta, db_base, db_sslmode, credentials "
+            "  FROM public.integrations WHERE id = $1::uuid AND integration_type = 'database'",
+            conector_id,
+        )
+    if linha is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conector de banco não encontrado.")
+
+    url = _url_do_banco(linha, linha["credentials"], somente_leitura)
+    try:
+        alvo = await asyncpg.connect(url, timeout=12)
+    except Exception as e:
+        # A mensagem do driver é a informação útil aqui (host errado, senha
+        # recusada, banco inexistente) — engoli-la deixaria a tela dizendo só
+        # "falhou", que é o que não ajuda ninguém.
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"Não consegui conectar: {type(e).__name__}: {e}",
+        )
+
+    try:
+        usuario = await alvo.fetchval("SELECT current_user")
+        versao = await alvo.fetchval("SHOW server_version")
+        # `pg_read_all_data` e `default_transaction_read_only` não aparecem em
+        # `role_table_grants`; perguntar direto ao banco é o que funciona nos
+        # dois desenhos.
+        escreve = await alvo.fetchval(
+            """
+            SELECT bool_or(
+                     has_table_privilege(current_user, c.oid, 'INSERT') OR
+                     has_table_privilege(current_user, c.oid, 'UPDATE') OR
+                     has_table_privilege(current_user, c.oid, 'DELETE'))
+              FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE c.relkind = 'r'
+               AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+            """
+        )
+        so_leitura_na_sessao = await alvo.fetchval("SHOW default_transaction_read_only")
+        tabelas = [
+            dict(r) for r in await alvo.fetch(
+                """
+                SELECT n.nspname AS schema, count(*) AS tabelas
+                  FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE c.relkind = 'r'
+                   AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+                 GROUP BY 1 ORDER BY 2 DESC
+                """
+            )
+        ]
+    finally:
+        await alvo.close()
+
+    # O aviso importa: um conector marcado como leitura cuja credencial pode
+    # escrever é uma trava que não existe. Melhor dizer agora que descobrir
+    # quando um agente alterar algo.
+    avisos = []
+    if somente_leitura and escreve and so_leitura_na_sessao != "on":
+        avisos.append(
+            f'O usuário "{usuario}" **pode escrever** neste banco, apesar de o '
+            "conector estar marcado como só-leitura. Crie um usuário de leitura "
+            "(GRANT pg_read_all_data + ALTER ROLE … SET default_transaction_read_only = on) "
+            "— a marcação aqui não impede escrita, só escolhe a credencial."
+        )
+
+    logger.info("Teste de banco %s: OK como %s", linha["name"], usuario)
+    return {
+        "ok": True, "usuario": usuario, "versao": versao,
+        "somente_leitura_na_sessao": so_leitura_na_sessao == "on",
+        "pode_escrever": bool(escreve),
+        "schemas": tabelas,
+        "avisos": avisos,
+    }
+
+
+@router.get("/bancos-do-agente/{agent_id}")
+async def bancos_do_agente(
+    agent_id: str,
+    _: None = Depends(exige_segredo("GUARDRAILS_API_TOKEN")),
+):
+    """Os bancos que este agente pode consultar, com a URL de conexão pronta.
+
+    ⚠️ **Devolve senha em claro**, como o `/agent-credentials` — é o ponto do
+    endpoint. Por isso está atrás do segredo compartilhado e nunca é exposto ao
+    navegador.
+
+    O modo vem do cadastro (`db_somente_leitura`), e o agente não escolhe: pedir
+    escrita não é uma opção que ele tenha, porque a URL entregue já carrega o
+    usuário do modo configurado.
+    """
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            "SELECT name, description, db_host, db_porta, db_base, db_sslmode, "
+            "       db_somente_leitura, credentials "
+            "  FROM public.integrations "
+            " WHERE integration_type = 'database' AND is_configured = true "
+            "   AND $1 = ANY(agents_using) ORDER BY name",
+            agent_id,
+        )
+
+    bancos = []
+    for linha in linhas:
+        try:
+            url = _url_do_banco(linha, linha["credentials"], linha["db_somente_leitura"])
+        except HTTPException:
+            # Banco cadastrado sem a credencial do modo dele: some da lista em
+            # vez de derrubar as outras. O teste da tela é onde isso aparece.
+            logger.warning("Banco %s sem credencial do modo configurado.", linha["name"])
+            continue
+        bancos.append({
+            "nome": linha["name"],
+            "descricao": linha["description"],
+            "host": linha["db_host"], "porta": linha["db_porta"],
+            "base": linha["db_base"],
+            "somente_leitura": linha["db_somente_leitura"],
+            "url": url,
+        })
+
+    logger.info("Bancos entregues a %s: %d", agent_id, len(bancos))
+    return {"bancos": bancos}
 
 
 @router.get("/modelos-de-conector")
