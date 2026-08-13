@@ -38,7 +38,15 @@ export interface EstadoLlm {
   ops?: OpPendente[];
   provedores: Record<string, Provedor>;
   catalogo: string[];
+  /** Os perfis de auth do gateway, chaveados por `<provedor>:<perfil>`. É o
+   *  que diz a verdade sobre a credencial: ela não vive em `provedores`, vive
+   *  no SQLite de cada agente, e isto é o que o gateway declara ter. */
   perfis: Record<string, { provider?: string; mode?: string }>;
+  /** Ordem de tentativa por provedor — o primeiro que funciona é o usado. */
+  ordem_perfis?: Record<string, string[]>;
+  /** Saúde por perfil, do `models.authStatus`. Só perfil com validade (OAuth)
+   *  aparece; ausência não é problema, é ausência de prazo para vencer. */
+  saude_auth?: Record<string, { tipo?: string; status?: string; expira_em?: number | null }>;
   agentes: Array<{ id: string; model: string | null }>;
   padrao: { primary?: string; fallbacks?: string[] } | null;
 }
@@ -144,10 +152,10 @@ export function useLlmProviders() {
 
   useEffect(() => { void recarregar(); }, [recarregar]);
 
-  // Instalar/remover provedor passa pela VPS (o gateway recusa hot-add) — a
-  // lista se atualiza sozinha até a operação sair da fila. Para quando a fila
-  // esvazia E o gateway volta a responder; o teto é só rede de segurança,
-  // porque um reinício pode passar dos 32s do limite anterior.
+  // Acompanha até o gateway voltar a responder. Desde 13/08 nada mais entra na
+  // fila `llm_provider_ops` — instalar credencial não é possível por aqui —, mas
+  // a vigilância continua útil: alterar o catálogo faz o gateway recarregar, e
+  // durante esse instante ele não responde. O teto é rede de segurança.
   const vigiar = useCallback(() => {
     let vezes = 0;
     const id = setInterval(async () => {
@@ -279,25 +287,22 @@ export function DialogoProvedor({ tipoInicial, provedorId, modelosAtuais, aoFech
     setSalvando(true); setErro(null);
     try {
       const selecionados = (lista ?? []).filter((m) => marcados.has(m.id));
+      // ⚠️ **A chave NÃO vai no salvar.** Ela serviu só para a busca de modelos
+      // acima. O backend recusa `api_key` com 501, de propósito: ele não tem
+      // como gravá-la, e aceitar em silêncio faria a tela dizer que mudou algo
+      // que continuaria igual. O que este salvar faz é o catálogo — quais
+      // modelos ficam no seletor.
       const r = await chamar({
         action: "save", provider_type: tipoParaEnvio,
         ...(tipoParaEnvio === "custom" ? { provider_id: idParaEnvio, base_url: urlParaEnvio } : {}),
-        ...(chave ? { api_key: chave } : {}),
         models: selecionados,
       });
-      if (r.queued) {
-        toast({
-          title: "Provedor sendo instalado…",
-          description: "A instalação conclui em segundos e o card fica conectado sozinho.",
-        });
-      } else {
-        toast({
-          title: r.verified ? "Provedor salvo e verificado" : "Provedor salvo",
-          description: r.verified
-            ? `${selecionados.length} modelo(s) disponíveis no seletor.`
-            : (r.aviso ?? "Confira o estado antes de usar."),
-        });
-      }
+      toast({
+        title: "Modelos atualizados",
+        description:
+          `${r.modelos ?? selecionados.length} modelo(s) no seletor` +
+          (r.removidos ? `, ${r.removidos} removido(s).` : "."),
+      });
       aoFechar(true);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "falha ao salvar");
@@ -330,8 +335,8 @@ export function DialogoProvedor({ tipoInicial, provedorId, modelosAtuais, aoFech
               encostava no primeiro campo — quem abre isto quer preencher. */}
           <DialogDescription>
             {editando
-              ? "Busque os modelos com a chave já gravada. Cole uma nova só para trocá-la."
-              : "Cole a chave e busque os modelos — a lista vem da API do provedor."}
+              ? "Escolha quais modelos ficam disponíveis no seletor."
+              : "Liste os modelos do provedor e escolha quais ficam no seletor. A credencial em si é gravada no gateway, não aqui."}
           </DialogDescription>
         </DialogHeader>
 
@@ -371,14 +376,19 @@ export function DialogoProvedor({ tipoInicial, provedorId, modelosAtuais, aoFech
             </div>
           )}
 
+          {/* ⚠️ A chave aqui serve SÓ para perguntar ao provedor quais modelos
+              existem. Ela não é gravada em lugar nenhum — nem aqui, nem no
+              gateway, que não expõe método para isso (17 sondados em 13/08,
+              todos `unknown method`). Quem grava é o CLI da VPS. Antes este
+              campo dizia "Chave de API" e sugeria que salvar a instalaria. */}
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground">
-              {editando ? "Nova chave de API (opcional)" : "Chave de API"}
+              Chave de API — só para listar os modelos
             </Label>
             <div className="flex gap-2">
               <Input
                 type="password"
-                placeholder={editando ? "vazio mantém a atual" : "cole aqui"}
+                placeholder={editando ? "vazio usa a chave já gravada no gateway" : "cole para listar os modelos"}
                 value={chave}
                 className="font-mono text-sm"
                 onChange={(e) => setChave(e.target.value)}
@@ -426,7 +436,7 @@ export function DialogoProvedor({ tipoInicial, provedorId, modelosAtuais, aoFech
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => aoFechar(false)}>Cancelar</Button>
-          <Button onClick={() => void salvar()} disabled={salvando || marcados.size === 0 || (!editando && !chave) || faltaIdentidade}>
+          <Button onClick={() => void salvar()} disabled={salvando || marcados.size === 0 || faltaIdentidade}>
             {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
             Salvar {marcados.size > 0 ? `(${marcados.size} modelo${marcados.size > 1 ? "s" : ""})` : ""}
           </Button>
