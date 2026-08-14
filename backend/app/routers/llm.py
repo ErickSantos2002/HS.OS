@@ -87,7 +87,9 @@ _PROVEDORES = {"deepseek": "deepseek", "openai": "openai",
 # `/v1` bate em `api.openai.com/responses` e 404; com `/v1`, responde.
 _PADROES = {
     "openai": {"api": "openai-completions", "baseUrl": "https://api.openai.com/v1", "auth": "api-key"},
-    "deepseek": {"api": "openai-completions", "baseUrl": "https://api.deepseek.com", "auth": "api-key"},
+    # `/v1` verificado ao vivo em 14/08/2026: com ele, `deepseek-chat` e
+    # `deepseek-reasoner` resolvem como `openai-completions` e executam.
+    "deepseek": {"api": "openai-completions", "baseUrl": "https://api.deepseek.com/v1", "auth": "api-key"},
     "anthropic": {"api": "anthropic-messages", "baseUrl": "https://api.anthropic.com/v1", "auth": "api-key"},
     "gemini": {"api": "google-generative-ai", "baseUrl": "https://generativelanguage.googleapis.com/v1beta", "auth": "api-key"},
 }
@@ -584,6 +586,43 @@ async def salvar(dados: SalvarIn, _: Usuario = Depends(exige_papel("administrado
     # gateway pode não suportar — então não dá para validar antes. Escrever,
     # conferir e recolher o que não colou é o que resta.
     nao_resolvidos = await _modelos_sem_api(set(catalogo_novo))
+
+    # ⚠️ **Nada resolveu? O provedor provavelmente não é embutido neste gateway.**
+    #
+    # `_PROVEDORES` é a lista que a NOSSA tela oferece, e o código a usava como
+    # se fosse "o que o gateway tem embutido". São coisas diferentes: em
+    # 14/08/2026 o `deepseek` estava lá e o gateway não o conhecia — o
+    # `models.authStatus` só lista `anthropic` e `claude-cli`. Mandar só a
+    # `apiKey` deixava o provedor sem `api` nem `baseUrl`, todos os modelos
+    # voltavam sem `api`, e a rotina abaixo recolhia o catálogo inteiro. A tela
+    # dizia "não suportados" e ninguém tinha como adivinhar o motivo.
+    #
+    # Só reparamos quando **nenhum** resolveu: se algum resolveu, o provedor é
+    # embutido e reescrever `api`/`baseUrl` por cima seria arriscar divergir
+    # dele sem ganho.
+    if nao_resolvidos == set(catalogo_novo) and _PADROES.get(tipo):
+        logger.info("Nenhum modelo de %s resolveu; declarando o provedor.", ident)
+        declaracao: dict = {**_PADROES[tipo]}
+        if dados.base_url:
+            declaracao["baseUrl"] = dados.base_url
+        # O gateway precisa saber quais modelos este provedor tem — o catálogo
+        # sozinho é só uma chave, sem forma nem nome. `id` e `name` são os dois
+        # campos obrigatórios do schema.
+        declaracao["models"] = [
+            {
+                "id": m.id,
+                "name": m.name or m.id,
+                **({"contextWindow": m.contextWindow} if m.contextWindow else {}),
+            }
+            for m in dados.models
+        ]
+        _, h2 = await _config_do_gateway()
+        await _aplicar_patch(
+            {"models": {"providers": {ident: declaracao}}}, h2,
+            conferir=lambda c: bool((_provedores(c).get(ident) or {}).get("api")),
+        )
+        nao_resolvidos = await _modelos_sem_api(set(catalogo_novo))
+
     if nao_resolvidos:
         await _retirar_do_catalogo(nao_resolvidos)
         logger.warning(

@@ -888,7 +888,14 @@ async def atualizar(
             """
             SELECT agent_id, name, emoji, avatar_url, model, channels, status,
                    department, description, specialty, workspace,
-                   is_leader, leader_id, is_official, color, sort_order
+                   is_leader, leader_id, is_official, color, sort_order,
+                   -- ⚠️ Estes dois faltavam, e o `AgenteOut` tem default
+                   -- `"all"` / `[]`: a resposta do PATCH afirmava que o agente
+                   -- estava aberto a todo mundo mesmo quando o banco dizia
+                   -- `specific_users` com onze pessoas. O banco nunca foi
+                   -- alterado — mentia só a resposta, que é o que a tela usa
+                   -- para atualizar o cache depois de salvar.
+                   access_type, allowed_user_ids
             FROM public.agent_profiles WHERE agent_id = $1
             """,
             agent_id,
@@ -943,6 +950,8 @@ async def atualizar(
         isOfficial=bool(d.get("is_official")),
         sortOrder=d.get("sort_order"),
         color=d.get("color"),
+        accessType=d.get("access_type") or "all",
+        allowedUserIds=[str(x) for x in (d.get("allowed_user_ids") or [])],
     )
 
 

@@ -327,6 +327,34 @@ inclusive a de quem usa modelo válido. A lista que a tela oferece vem da API do
 que este gateway não executa. Não dá para validar antes (o modelo só aparece depois de entrar no
 catálogo): escreva, confira com `models.list` e recolha o que não colou.
 
+⚠️ **Provedor não-embutido precisa ser DECLARADO, não só ter chave.** Levantado em 14/08/2026
+tentando pôr o DeepSeek: `models.providers.deepseek.apiKey` estava lá e nada funcionava. O gateway
+tem `anthropic` embutido — sabe URL, adaptador e modelos dele — e não tem o DeepSeek. Sem
+declaração, os ids entram em `agents.defaults.models` e voltam do `models.list` **sem `api`**, que é
+o estado que envenena o catálogo inteiro. O que resolve:
+
+```json
+{"models": {"providers": {"deepseek": {
+  "baseUrl": "https://api.deepseek.com/v1",
+  "api": "openai-completions",
+  "models": [{"id": "deepseek-chat", "name": "DeepSeek V3", "contextWindow": 65536, "maxTokens": 8192}]
+}}}}
+```
+
+O `api` é um enum do schema: `openai-completions`, `openai-responses`, `anthropic-messages`,
+`google-generative-ai`, `google-vertex`, `github-copilot`, `bedrock-converse-stream`, `ollama`,
+`azure-openai-responses` e `openai-chatgpt-responses`. Cada item de `models` exige `id` e `name`.
+
+⚠️ **`_PROVEDORES` em `llm.py` é "o que a nossa tela oferece", NÃO "o que o gateway tem embutido".**
+O código tratava as duas coisas como a mesma e por isso mandava só a `apiKey` para o DeepSeek. Como
+saber quem é embutido: `models.authStatus` lista os que o gateway conhece — aqui, só `anthropic` e
+`claude-cli`.
+
+⚠️ **Tirar a declaração NÃO faz os modelos pararem de resolver na hora.** Removi `api`/`baseUrl`/
+`models` do nó do DeepSeek e o `models.list` continuou devolvendo os dois com `api` — o gateway
+guarda o catálogo já resolvido. Consequência prática: **config quebrada pode parecer sã até o
+próximo restart**, e um teste que depende de "quebrar de propósito" não reproduz o defeito.
+
 ⚠️ **Remover item de array exige `replacePaths`.** O `config.patch` recusa com "would remove entries
 from array path(s): …" em vez de apagar em silêncio, e **nomeia os caminhos na mensagem** — use os
 nomes que ele deu. Existe também `config.apply` para troca da config inteira.
