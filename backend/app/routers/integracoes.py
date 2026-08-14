@@ -1856,10 +1856,24 @@ async def publicar_banco(
             for a in (parsed.get("agents") or {}).get("list") or []
         ]}
 
-    await patch_gw.aplicar_patch(
-        patch, base_hash,
-        conferir=lambda c: apelido in (((c.get("mcp") or {}).get("servers")) or {}),
-    )
+    # ⚠️ **Conferir a concessão, não só o servidor.** A versão anterior olhava
+    # apenas se `mcp.servers.<apelido>` existia — e ele já existia de uma
+    # publicação anterior para outro agente. O patch podia falhar em conceder a
+    # ferramenta e mesmo assim ser dado como bem-sucedido. Foi assim que o
+    # `atlas` "ganhou" dois conectores que nunca chegaram nele.
+    def _conferir(c: dict) -> bool:
+        if apelido not in (((c.get("mcp") or {}).get("servers")) or {}):
+            return False
+        tem = {
+            a.get("id")
+            for a in ((c.get("agents") or {}).get("list") or [])
+            if ferramenta in (((a.get("tools") or {}).get("alsoAllow")) or [])
+        }
+        return all(x in tem for x in agentes if x in {
+            a.get("id") for a in ((c.get("agents") or {}).get("list") or [])
+        })
+
+    await patch_gw.aplicar_patch(patch, base_hash, conferir=_conferir)
 
     logger.info("Banco %s publicado como %s para %s", linha["name"], apelido, agentes)
     return {

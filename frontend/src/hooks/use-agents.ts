@@ -22,6 +22,8 @@ interface RespostaAgentes {
     department?: string | null;
     openclawId?: string | null;
     isLeader?: boolean;
+    accessType?: string;
+    allowedUserIds?: string[];
   }>;
   defaultId: string | null;
   gatewayOnline: boolean;
@@ -65,6 +67,10 @@ export interface GatewayAgent {
   emoji?: string | null;
   department?: string | null;
   isLeader?: boolean;
+  /** Quem alcança este agente: `all` | `admins_only` | `specific_users`. */
+  accessType?: string;
+  /** Ids de pessoa, quando `accessType` é `specific_users`. */
+  allowedUserIds?: string[];
 }
 
 function parseTools(raw: any): AgentTool[] {
@@ -216,6 +222,8 @@ async function fetchAgents(_userId?: string, _isAdmin?: boolean): Promise<Gatewa
     emoji: a.emoji ?? null,
     department: a.department ?? null,
     isLeader: !!a.isLeader,
+    accessType: a.accessType ?? "all",
+    allowedUserIds: Array.isArray(a.allowedUserIds) ? a.allowedUserIds.map(String) : [],
   }));
 }
 

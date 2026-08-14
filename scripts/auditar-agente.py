@@ -100,6 +100,10 @@ async def main(agente: str):
 
     citadas = {nu(x) for x in re.findall(r"(?:mcp__)?[\w-]+__\w+", tools)}
     reais = {nu(x) for x in ferramentas}
+    # ⚠️ Citar ferramenta que não tem não é detalhe de redação: o `atlas`
+    # escreveu dez seções de banco tendo dois conectores, com nomes de tabela
+    # adivinhados para os oito que não alcança. Contexto pago em toda sessão
+    # para afirmar o que ninguém verificou.
     inventadas = {c for c in citadas if c not in reais and "__" in c}
     a.checa(not inventadas, "não cita ferramenta que não tem", str(sorted(inventadas)))
     faltando = reais - citadas

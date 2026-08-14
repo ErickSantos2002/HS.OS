@@ -79,6 +79,25 @@ async def aplicar_patch(patch: dict, base_hash: str, conferir) -> None:
 
     try:
         await obter_cliente(c.url, c.token).chamar("config.patch", corpo)
+        # ⚠️ **Confirmar antes de devolver, mesmo quando o patch "deu certo".**
+        #
+        # O `baseHash` é lock otimista contra escritor concorrente, e não cobre
+        # ESTE caso: o patch é aceito, mas o gateway leva um instante para
+        # recarregar, e um `config.get` nesse intervalo devolve o estado ANTIGO
+        # com o hash antigo — coerente entre si. O próximo patch nasce de uma
+        # base velha e apaga o anterior sem que nada acuse.
+        #
+        # Aconteceu em 14/08/2026: publiquei dois conectores para o `atlas` e,
+        # em seguida, a ferramenta de alerta. A segunda escrita leu a config
+        # pré-reload e o agente ficou só com o alerta — os conectores sumiram
+        # em silêncio.
+        if not await _pegou(conferir):
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                "O gateway aceitou a alteração mas ela não apareceu na config. "
+                "Não encadeie outra escrita antes de conferir — a próxima "
+                "nasceria de um estado velho.",
+            )
         return
     except ErroGateway as e:
         achado = _ARRAYS_RECUSADOS.search(str(e))

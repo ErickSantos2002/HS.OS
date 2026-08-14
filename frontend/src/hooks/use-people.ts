@@ -14,6 +14,12 @@ export interface Person {
   custom_status: string | null;
   custom_status_emoji: string | null;
   custom_status_set_at: string | null;
+  /** `administrador` | `colaborador` | `sem_papel`. O mapa neural usa para
+   *  decidir quem alcança agente com acesso `admins_only`. */
+  role?: string;
+  /** Área da pessoa, do cadastro do RH. */
+  departamento?: string | null;
+  cargo?: string | null;
 }
 
 let cachedPeople: Person[] | null = null;

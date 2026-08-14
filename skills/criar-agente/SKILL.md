@@ -154,6 +154,17 @@ que a própria agente escreveu depois, com o banco aberto, saiu correto.
 ela é e deixe o resto para quem pode abrir. Nome de tabela inventado faz o
 agente consultar o que não existe e concluir que não há dados — pior que erro.
 
+⚠️ **O `TOOLS.md` lista o que o agente TEM, e só.** Não é catálogo do que existe
+na empresa. Em 14/08/2026 o `atlas` — que tem dois conectores — escreveu dez
+seções de banco, oito delas com nomes de tabela adivinhados, marcando-as como
+"fora do meu domínio". Parece cuidado e é o contrário: gasta contexto em toda
+sessão para afirmar coisas que ninguém verificou, e no dia em que ele ganhar um
+desses conectores vai partir de um mapa falso.
+
+Banco que o agente não alcança não aparece no arquivo dele. Se for útil saber
+que existe, uma linha basta: *"outros sistemas têm agentes próprios; quando
+precisar de dado deles, peça à orquestradora"*.
+
 No esqueleto entram:
 
 - que ele **não decore schema**: `information_schema.tables` e

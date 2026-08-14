@@ -50,14 +50,55 @@ function statusBadgeColor(status: string) {
   return { bg: "hsl(38, 80%, 45%)", text: "#fff" };
 }
 
-/** Find leader agent (from runtime catalog) or first active as center node */
+/**
+ * O centro é a orquestradora.
+ *
+ * ⚠️ Antes vinha de `getLeaderAgentId()`, que lê o catálogo estático de agentes
+ * — e esse catálogo filtra `isOfficial` e está **vazio** nesta instalação. Sem
+ * líder, caía no "primeiro ativo", e o mapa passou a mostrar o `atlas` no
+ * centro com a `nina` de satélite. O `isLeader` já vem do banco em cada agente;
+ * é ele que manda.
+ *
+ * O catálogo continua como segunda opção para instalação que o use.
+ */
 function findCenterAgent(agents: GatewayAgent[]): GatewayAgent | null {
-  const leaderId = getLeaderAgentId();
-  if (leaderId) {
-    const leader = agents.find((a) => a.id === leaderId);
-    if (leader) return leader;
+  const lider = agents.find((a) => a.isLeader);
+  if (lider) return lider;
+  const doCatalogo = getLeaderAgentId();
+  if (doCatalogo) {
+    const achado = agents.find((a) => a.id === doCatalogo);
+    if (achado) return achado;
   }
   return agents.find((a) => a.status === "active") ?? agents[0] ?? null;
+}
+
+/**
+ * A qual agente cada pessoa está ligada.
+ *
+ * ⚠️ Antes **toda** pessoa saía do centro, porque o mapa não sabia quem
+ * alcançava o quê — 26 linhas idênticas que escondiam a informação real: cada
+ * agente atende um grupo, e é isso que o mapa deveria mostrar.
+ *
+ * A regra é a mesma do backend (`_pode_ver`): `specific_users` vale pela lista;
+ * `admins_only` liga só a quem administra; `all` liga a todo mundo.
+ */
+function ligacaoDasPessoas(
+  agents: GatewayAgent[],
+  people: Person[],
+): Record<string, string[]> {
+  const porPessoa: Record<string, string[]> = {};
+  for (const p of people) {
+    const ehAdmin = (p as { role?: string }).role === "administrador";
+    for (const a of agents) {
+      const tipo = a.accessType ?? "all";
+      const alcanca =
+        tipo === "specific_users" ? (a.allowedUserIds ?? []).includes(p.id)
+        : tipo === "admins_only" ? ehAdmin
+        : true;
+      if (alcanca) (porPessoa[p.id] ??= []).push(a.id);
+    }
+  }
+  return porPessoa;
 }
 
 /* ── Organic layout using golden angle + jitter ────── */
@@ -169,9 +210,17 @@ export default function NeuralMap({ agents, avatars, selectedId, onSelect, peopl
 
   const cx = dims.w / 2;
   const cy = dims.h / 2;
-  const centerR = 42;
-  const satR = satellites.length > 25 ? 22 : 28;
-  const humanR = 22;
+  // A orquestradora é maior de propósito: ela coordena os demais, e o mapa
+  // deve mostrar isso sem legenda.
+  const centerR = 54;
+  const satR = satellites.length > 25 ? 26 : 34;
+  const humanR = 20;
+
+  // A quem cada pessoa está ligada. Vazio = ninguém a alcança.
+  const ligacoes = useMemo(
+    () => ligacaoDasPessoas(agents, people),
+    [agents, people],
+  );
 
   // Default computed positions for agents
   const defaultPositions = useMemo(() => {
@@ -183,13 +232,42 @@ export default function NeuralMap({ agents, avatars, selectedId, onSelect, peopl
     if (center) {
       map[center.id] = { x: cx, y: cy };
     }
-    // Human positions
-    const hPos = humanPositions(people.length, satellites.length, cx, cy, dims.w, dims.h);
-    people.forEach((p, i) => {
-      map[`human-${p.id}`] = hPos[i];
+    // ⚠️ Pessoa orbita o AGENTE que a atende, não o centro. Com todas em volta
+    // do centro o mapa mostrava 26 raios idênticos — bonito e sem informação.
+    // Agrupar por agente faz o desenho responder "quem atende quem" de relance.
+    const porAgente: Record<string, Person[]> = {};
+    const soltas: Person[] = [];
+    for (const pessoa of people) {
+      const donos = ligacoes[pessoa.id] ?? [];
+      // Quem fala com mais de um agente orbita o primeiro; a linha para os
+      // demais continua sendo desenhada.
+      if (donos.length) (porAgente[donos[0]] ??= []).push(pessoa);
+      else soltas.push(pessoa);
+    }
+
+    for (const [agentId, pessoas] of Object.entries(porAgente)) {
+      const base = agentId === center?.id ? { x: cx, y: cy } : map[agentId];
+      if (!base) continue;
+      // Leque em volta do agente, virado para fora do centro.
+      const anguloBase = Math.atan2(base.y - cy, base.x - cx) || 0;
+      const raio = 96 + Math.min(pessoas.length, 8) * 7;
+      pessoas.forEach((pessoa, i) => {
+        const espalha = (i - (pessoas.length - 1) / 2) * (Math.PI / Math.max(pessoas.length, 6));
+        const ang = anguloBase + espalha;
+        map[`human-${pessoa.id}`] = {
+          x: base.x + Math.cos(ang) * raio,
+          y: base.y + Math.sin(ang) * raio,
+        };
+      });
+    }
+    // Sem agente que as alcance: ficam na borda, longe — a distância é a
+    // informação.
+    const hPos = humanPositions(soltas.length, satellites.length, cx, cy, dims.w, dims.h);
+    soltas.forEach((pessoa, i) => {
+      map[`human-${pessoa.id}`] = hPos[i];
     });
     return map;
-  }, [satellites, center, cx, cy, dims.w, dims.h, people]);
+  }, [satellites, center, cx, cy, dims.w, dims.h, people, ligacoes]);
 
   // Custom positions from drag
   const [customPositions, setCustomPositions] = useState<SavedPositions>({});
@@ -420,26 +498,37 @@ export default function NeuralMap({ agents, avatars, selectedId, onSelect, peopl
           );
         })}
 
-        {/* Human connections — dashed cyan lines */}
-        {humanNodes.map(({ person, x, y }) => (
-          <g key={`edge-human-${person.id}`}>
+        {/* Pessoa → agente(s) que a atendem. Uma linha por agente: quem fala
+            com dois aparece ligado aos dois, que é o fato. */}
+        {humanNodes.flatMap(({ person, x, y }) => {
+          const donos = ligacoes[person.id] ?? [];
+          // Sem agente que a alcance: um traço fraco para o centro, só para a
+          // pessoa não flutuar solta e parecer erro de renderização.
+          const alvos = donos.length ? donos : [center?.id].filter(Boolean) as string[];
+          return alvos.map((agentId) => {
+            const origem = agentId === center?.id ? centerPos : getPos(agentId);
+            const orfa = donos.length === 0;
+            return (
+          <g key={`edge-human-${person.id}-${agentId}`}>
             <line
-              x1={centerPos.x} y1={centerPos.y} x2={x} y2={y}
+              x1={origem.x} y1={origem.y} x2={x} y2={y}
               stroke={HUMAN_COLOR}
               strokeWidth={1}
-              strokeOpacity={0.2}
+              strokeOpacity={orfa ? 0.06 : 0.2}
               filter="url(#line-glow)"
             />
             <line
-              x1={centerPos.x} y1={centerPos.y} x2={x} y2={y}
+              x1={origem.x} y1={origem.y} x2={x} y2={y}
               stroke={HUMAN_COLOR}
               strokeWidth={0.8}
-              strokeOpacity={0.45}
+              strokeOpacity={orfa ? 0.12 : 0.45}
               strokeDasharray="3 8"
               className="neural-edge"
             />
           </g>
-        ))}
+            );
+          });
+        })}
       </svg>
 
       {/* Save / Reset buttons */}

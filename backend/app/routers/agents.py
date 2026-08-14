@@ -57,6 +57,11 @@ class AgenteOut(BaseModel):
     specialty: str | None = None
     workspace: str | None = None
     isLeader: bool = False
+    # ⚠️ Quem alcança este agente. O mapa neural desenhava TODA pessoa ligada ao
+    # centro, porque não tinha esta informação — o que mostrava 26 linhas iguais
+    # e escondia o que interessa: cada agente atende um grupo diferente.
+    accessType: str = "all"
+    allowedUserIds: list[str] = []
     # Quem lidera este agente. Vem na lista porque a tela de liderança precisa do
     # estado de **todos** para regravá-lo em lote sem apagar o dos outros.
     leaderId: str | None = None
@@ -191,6 +196,8 @@ async def listar(
                 specialty=p.get("specialty"),
                 workspace=g.get("workspace") or p.get("workspace"),
                 isLeader=bool(p.get("is_leader")),
+                accessType=p.get("access_type") or "all",
+                allowedUserIds=[str(u) for u in (p.get("allowed_user_ids") or [])],
                 leaderId=p.get("leader_id"),
                 openclawId=p.get("openclaw_id") or aid,
                 lastActive=p.get("last_active"),
@@ -1421,15 +1428,37 @@ async def _completar_agente(agent_id: str, sessao_lider: str) -> None:
 
     # Espera o orquestrador sair de `running`. O teto existe porque sessão
     # pendurada não pode segurar a tarefa para sempre.
-    for _ in range(80):  # ~20 min
-        await asyncio.sleep(15)
+    # ⚠️ **"Não está `running`" quer dizer duas coisas opostas:** já terminou, e
+    # ainda nem começou. A primeira versão só olhava isso e disparava o pedido
+    # no primeiro ciclo — em 14/08/2026 o `atlas` recebeu o pedido de completar
+    # o TOOLS.md enquanto a orquestradora ainda escrevia os arquivos dele, e os
+    # dois trabalharam no mesmo workspace ao mesmo tempo.
+    #
+    # Por isso são dois laços: primeiro espera COMEÇAR, só então espera TERMINAR.
+    async def estado() -> str | None:
         try:
             h = await cliente.chamar("chat.history", {"sessionKey": sessao_lider, "limit": 2})
             payload = h.get("payload") if isinstance(h.get("payload"), dict) else h
-            if ((payload.get("sessionInfo") or {}).get("status")) != "running":
-                break
+            return (payload.get("sessionInfo") or {}).get("status")
         except (ErroGateway, OSError) as e:
             logger.info("Aguardando o orquestrador (%s): %s", agent_id, e)
+            return None
+
+    for _ in range(20):  # até 5 min para a sessão aparecer e começar a rodar
+        await asyncio.sleep(15)
+        if await estado() == "running":
+            break
+    else:
+        # Nunca começou: o briefing foi entregue mas o orquestrador não rodou.
+        # Pedir ao agente que complete o TOOLS.md agora seria pedir que ele
+        # remende um template em branco.
+        logger.error("Orquestrador não começou a montar %s — nada a completar.", agent_id)
+        return
+
+    for _ in range(80):  # ~20 min para terminar
+        await asyncio.sleep(15)
+        if await estado() != "running":
+            break
     else:
         logger.warning("Orquestrador não terminou a tempo; %s segue configurando.", agent_id)
         return
@@ -1478,19 +1507,28 @@ async def _publicar_conectores(agent_id: str, nomes: list[str]) -> tuple[list, l
         return publicados, falhos
 
     async with sessao(role="service_role") as conn:
+        # ⚠️ **A tela manda o `key_name`, não o `name`.** O seletor de
+        # integrações grava `HSGROWTH_DB` e `DIRETORIO_DB`; a coluna `name` tem
+        # "HSGrowth" e "Diretório HS.OS". Casar só por `name` não achava nada — e
+        # como "não achei" não é falha (conector de API cai aqui e é ignorado de
+        # propósito), o `atlas` nasceu sem ferramenta nenhuma e sem aviso.
+        #
+        # Aceitar os dois é mais barato que descobrir qual a tela manda hoje: se
+        # ela mudar amanhã, continua funcionando.
         linhas = await conn.fetch(
             "SELECT id::text AS id, name FROM public.integrations "
-            " WHERE integration_type = 'database' AND name = ANY($1::text[])",
+            " WHERE integration_type = 'database' "
+            "   AND (name = ANY($1::text[]) OR key_name = ANY($1::text[]))",
             nomes,
         )
         achados = {l["name"]: l["id"] for l in linhas}
 
-        for nome in nomes:
-            ident = achados.get(nome)
-            if not ident:
-                # Conector que não é banco (API, MCP) cai aqui e não é falha:
-                # ele simplesmente não se publica desta forma.
-                continue
+        # ⚠️ Itera o que foi ACHADO, não o que foi pedido. O dicionário é
+        # indexado por `name` ("HSGrowth") e a tela manda `key_name`
+        # ("HSGROWTH_DB") — procurar por `nomes` aqui nunca casava, o UPDATE não
+        # rodava, e o `atlas` nasceu sem ferramenta enquanto a função relatava
+        # sucesso. Conector que não é banco simplesmente não entra em `achados`.
+        for ident in achados.values():
             # `agents_using` é a fonte de quem tem acesso; o publicar lê dela.
             await conn.execute(
                 "UPDATE public.integrations "
