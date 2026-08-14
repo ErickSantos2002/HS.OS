@@ -139,6 +139,23 @@ async def main(agente: str):
     a.checa(any("alerta" in t for t in reais), "tem a ferramenta de alerta",
             "o SOUL manda avisar e ele não tem como")
 
+    # ⚠️ A checagem acima lê a CONFIG, e config não é o que o agente enxerga.
+    # Em 14/08/2026 `nina` e `iris` passaram nela e, perguntadas, disseram que
+    # `avisar_administrador` não aparece na lista delas: o servidor apontava
+    # para o IP da bridge de produção, inalcançável a partir do gateway. Um
+    # servidor MCP fora do ar simplesmente não publica ferramenta — sem erro.
+    # Enquanto não houver como listar as tools efetivas pelo gateway, isto fica
+    # como aviso explícito em vez de aprovação silenciosa.
+    alerta = [s for s in servidores if "alerta" in s]
+    if alerta:
+        alvo = ((parsed.get("mcp") or {}).get("servers") or {})
+        for s in alerta:
+            url = (alvo.get(s) or {}).get("url")
+            print(f"   ⚠️ {s} → {url}")
+        print("   ⚠️ isto é a config. Confirme com o próprio agente que a "
+              "ferramenta aparece na lista dele — servidor MCP fora do ar some "
+              "em silêncio.")
+
     usuario = arquivos["USER.md"]
     a.checa("hsos-" in usuario and "diretorio" in usuario.lower(),
             "USER.md ensina a resolver quem fala", "não menciona hsos- + diretorio")

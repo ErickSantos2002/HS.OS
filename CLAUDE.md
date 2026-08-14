@@ -453,6 +453,66 @@ Edge Function `manifest` para refletir o branding — ver `applyManifest()` em `
 Versão de build: `frontend/vite.config.ts` injeta `__APP_VERSION__` e `__APP_BUILD_DATE__` a partir do SHA do git
 no momento do build. `use-version-check` compara e avisa o usuário quando há versão nova.
 
+### Um agente falar com outro — levantado ao vivo em 14/08/2026
+
+O `agent_to_agent` **não é uma ferramenta**. Ligar `tools.agentToAgent` não faz aparecer nada com
+esse nome: quem conversa entre agentes é o **`sessions_send`** (e o `sessions_spawn`), que vêm do
+perfil `coding` e já estavam lá. O `agentToAgent` é a **política** que libera esses dois a cruzarem
+a fronteira do agente. Com ele desligado, o `sessions_send` existe e é recusado.
+
+⚠️ **`allow` lista quem PARTICIPA, não quem recebe.** Foi lido errado aqui, e o erro só apareceu
+porque as duas pontas foram testadas:
+
+| quem inicia | destino | `allow` | resultado |
+|---|---|---|---|
+| `iris` | `nina` | `[iris, atlas]` | recusado — falta `nina` |
+| `nina` | `iris` | `[iris, atlas]` | recusado — falta `nina` |
+| `nina` | `iris` | `[nina, iris, atlas]` | ✅ |
+
+Ou seja: **os dois lados têm que estar na lista.** A recusa é explícita e boa —
+`{"status":"forbidden","error":"Agent-to-agent messaging denied by tools.agentToAgent.allow."}`.
+
+**Quem *inicia* se controla por agente, com `deny`.** `agents.list[].tools.deny =
+["sessions_send","sessions_spawn"]` em `iris` e `atlas` deixa só a `nina` acionando. O `deny`
+**remove a ferramenta da lista do agente** em vez de recusá-la em runtime — a `iris` responde
+"não tenho essa ferramenta". Não existe `agentToAgent` por agente; o schema por agente tem só
+`allow`, `alsoAllow`, `deny`, `byProvider`, `codeMode`, `elevated`, `exec`, `fs`, `loopDetection`,
+`message`, `profile`, `sandbox`, `toolsBySender`.
+
+`sessions_send` aceita `timeoutSeconds`: com timeout a resposta volta **inline**, e o agente
+que delegou não precisa ficar consultando depois. E o destino recebe a mensagem marcada como
+**dado entre sessões**, não como instrução de usuário — o que é uma defesa de graça contra usar
+um agente para injetar comando noutro.
+
+⚠️ **`agents.list` é array: merge patch substitui o array inteiro.** Para mudar um agente, mande a
+lista completa e confira no `conferir` que o `alsoAllow` dos outros sobreviveu.
+
+⚠️ **Servidor MCP se pausa sozinho depois de erros seguidos** (`bundle-mcp server "X" is paused
+after repeated failures`). A `nina` chutou três nomes de coluna e derrubou o `banco-hsos` para ela
+mesma. Volta sozinho — mas é motivo de sobra para o arquivo do agente mandar consultar
+`information_schema` em vez de adivinhar.
+
+### O escopo por agente que a tela promete e a config não entrega
+
+⚠️ **Todo agente alcança todos os nove bancos.** `tools.alsoAllow` é **aditivo** — ele acrescenta
+ao que a política global já dá, e não existe `tools.allow` global restringindo. Com
+`tools.profile: "coding"`, todo servidor em `mcp.servers` fica visível para todo agente. A
+publicação por agente na tela de Conectores **organiza, mas não isola**: a `nina` lista
+`banco-chamadoshs`, `banco-talenths`, `banco-hsgrowth` e os demais sem que ninguém os tenha
+publicado para ela.
+
+Hoje o que segura isso é **disciplina escrita no `AGENTS.md`** ("enxergar não é ter direito"), não
+a configuração. Fechar de verdade exige `tools.allow` por agente (lista absoluta) ou `deny` por
+servidor — decisão em aberto.
+
+⚠️ **`mcp__hsos-alerta__avisar_administrador` não chega nos agentes.** O servidor aponta para
+`http://172.18.0.1:8002/mcp/alerta`, a bridge do Swarm em produção, enquanto o backend roda na
+máquina de desenvolvimento. `nina` e `iris` confirmaram, cada uma por conta própria, que a
+ferramenta não aparece na lista delas — enquanto o `SOUL.md` das duas manda usá-la ao detectar
+tentativa de subverter os limites. **O guardrail está decorativo.** A auditoria não pegou porque
+conferia a config, não o que o agente vê: `scripts/auditar-agente.py` valida
+`any("alerta" in t for t in reais)` lendo `alsoAllow`, que continua lá.
+
 ## A regra dos sete arquivos
 
 ⚠️ **O OpenClaw carrega exatamente sete nomes no contexto do agente**: `AGENTS.md`, `SOUL.md`,

@@ -125,6 +125,50 @@ Os papéis são **acesso ao sistema, não hierarquia da empresa**: `administrado
 manda no HS.OS, `colaborador` usa a plataforma. O CEO é `colaborador`. Tratar
 `colaborador` como "menos importante" é ler errado.
 
+## O time (no `AGENTS.md`)
+
+O roster dos agentes vai no **`AGENTS.md`**, não no `USER.md`. Os dois parecem
+candidatos e não são: `USER.md` é "com quem eu falo" e seu desenho é justamente
+**não listar** — ensina a descobrir a pessoa pela chave de sessão. Agente é o
+oposto: se descobre não, se roteia. E `AGENTS.md` já é, por definição, "como eu
+opero: memória, **o time**, regras da casa".
+
+Uma tabela com `agentId`, quem é, **o que perguntar a ele** e **o que não é
+dele**. A última coluna é a que trabalha: sem ela o agente encaminha pelo
+primeiro substantivo que reconhece. "Quanto vendemos" pode ser receita realizada
+(DataCoreHS) ou valor em negociação (GrowthHS) — nomeie o par que confunde.
+
+Liste também os sistemas **sem agente**, para o agente dizer "não há a quem
+pedir" em vez de inventar.
+
+⚠️ **A tabela é a fonte, e o arquivo tem que dizer isso.** Em 14/08/2026 a
+`nina` roteou certo para a `iris` e, em seguida, foi ao banco **confirmar que a
+iris existia** — porque uma linha mandava conferir agente citado. Quatro
+consultas erradas depois, o servidor MCP dela se pausou por falhas repetidas.
+Escreva que conferir o que já está no contexto é desperdício, não zelo.
+
+### O protocolo de delegar
+
+Quem coordena **pergunta antes de repassar**, e o arquivo precisa trazer a frase
+pronta — adjetivo ("seja colaborativa") não calibra isso:
+
+> "Faturamento não é comigo, é com a Iris. Quer que eu peça a ela e te traga a
+> resposta, ou prefere falar direto com ela?"
+
+Só chama `sessions_send` depois do sim — cada delegação é uma execução inteira
+do outro agente, e conversa direta rende mais, porque quem perguntou pode
+repreguntar. Exceção que evita irritar: se a pessoa já pediu explicitamente
+("pergunta pra ela e me traz"), não pergunte de novo.
+
+Ao devolver: **diz de quem é a resposta**, não resume a ponto de perder número, e
+se o outro agente disse que não sabe, é isso que volta — sem completar o buraco
+com estimativa.
+
+Nos **especialistas**, o mesmo roster entra encurtado: serve para encaminhar bem
+("isso é da Iris") e para saber que **eles não acionam ninguém** — quem coordena
+é a orquestradora. Vale dizer isso no arquivo, senão o agente tenta, falha e
+promete o que não pode cumprir.
+
 ## Acesso a dados (o `TOOLS.md`)
 
 ⚠️ **Credencial nunca vai no `TOOLS.md`.** Nem de leitura. Em 12/08/2026
