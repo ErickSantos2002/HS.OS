@@ -29,7 +29,7 @@ export function GlobalSearch({ compact = false }: { compact?: boolean }) {
   const [loading, setLoading] = useState(false);
   const { agents } = useAgents();
   const { channels } = useChannels();
-  const { user } = useAuthContext();
+  const { user, role } = useAuthContext();
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -142,7 +142,15 @@ export function GlobalSearch({ compact = false }: { compact?: boolean }) {
   const handleAgentSelect = (agent: GatewayAgent) => {
     setOpen(false);
     setQuery("");
-    navigate(`/agents/${encodeURIComponent(agent.id)}`);
+    // `/agents/:id` é administração e só o administrador entra. Mandar o
+    // colaborador para lá o faria bater no `ProtectedRoute` e ser devolvido ao
+    // /chat sem explicação — clicar num agente e "não acontecer nada" parece
+    // defeito. Para ele, buscar um agente é querer falar com ele.
+    navigate(
+      role === "administrador"
+        ? `/agents/${encodeURIComponent(agent.id)}`
+        : `/chat?agent=${encodeURIComponent(agent.id)}`
+    );
   };
 
   const handleResultSelect = (target: string) => {

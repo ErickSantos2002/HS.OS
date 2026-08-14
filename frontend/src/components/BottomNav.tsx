@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { BookOpen, Bot, MessageSquare, Swords, Settings, Zap } from "lucide-react";
+import { BookOpen, Bot, ListChecks, MessageSquare, Swords, Settings, Zap } from "lucide-react";
 import { useAuthContext } from "@/contexts/auth-context";
 import { useNotificationsContext } from "@/components/NotificationsProvider";
 
@@ -17,10 +17,12 @@ const adminTabs: BottomTab[] = [
   { label: "Config", icon: Settings, path: "/settings", matchPaths: ["/settings", "/users"] },
 ];
 
+// Sem "Super agentes": administrar agente é do administrador. O colaborador
+// chega aos agentes dele pelo Chat.
 const memberTabs: BottomTab[] = [
   { label: "Chat", icon: MessageSquare, path: "/chat", matchPaths: ["/chat"] },
   { label: "Arenas", icon: Swords, path: "/arenas", matchPaths: ["/arenas"] },
-  { label: "Super agentes", icon: Bot, path: "/agents", matchPaths: ["/agents"] },
+  { label: "Tasks", icon: ListChecks, path: "/tasks", matchPaths: ["/tasks"] },
   { label: "Conhecimento", icon: BookOpen, path: "/base-de-conhecimento", matchPaths: ["/base-de-conhecimento"] },
 ];
 

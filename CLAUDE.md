@@ -416,6 +416,37 @@ Uma pessoa pode ter mais de uma linha em `user_roles`; vale o papel mais forte, 
 Instalação zerada não tem usuário e não há cadastro público — a tela de login detecta isso e oferece criar
 o primeiro admin via `bootstrap-first-admin`, que cai direto no wizard de `/setup`.
 
+#### `/agents` é administração, e é só do administrador
+
+⚠️ **A página "Super agentes" ficou aberta ao `colaborador` até 14/08/2026, e com ela a leitura dos
+sete arquivos** — ou seja, o prompt de sistema do agente, que o próprio agente recusa mostrar quando
+alguém pede. O `SOUL.md` manda não revelar o contexto de sistema e a tela entregava em dois cliques.
+
+Pior que a leitura: **`POST/PATCH/DELETE /agents/{id}/crons` estavam em "só logado"** — qualquer
+pessoa autenticada criava, editava e apagava agendamento de qualquer agente. Escrita, não leitura.
+
+Hoje são `exige_papel("administrador")`: `arquivos`, `arquivos/{nome}`, `arquivos-espelhados`,
+`consumo`, `estatisticas`, `guardrails`, `log-criacao`, `agendamentos-do-gateway`, `integracoes`,
+`atividade-recente` e os quatro verbos de `crons` — além das escritas que já eram.
+
+**Continuam abertas ao colaborador, e não devem ser fechadas sem quebrar o chat:**
+
+| rota | quem usa |
+|---|---|
+| `GET /agents` | a lista, **já filtrada por `_pode_ver`** — ele só enxerga os agentes dele |
+| `GET /agents/{id}` | idem |
+| `GET /agents/{id}/contexto` | `ContextWindowIndicator`, dentro do `ChatPage` |
+| `GET /agents/{id}/atividades` | `AgentActivityCard`, dentro do `ChatPage` |
+
+No front, `/agents` e `/agents/:agentId` são `allowedRoles={["administrador"]}`, e "Super agentes"
+saiu do `memberGroups` (`AppSidebar`) e do `memberTabs` (`BottomNav`). A busca global manda o
+colaborador para `/chat?agent=<id>` em vez de `/agents/<id>`: sem isso ele clicaria num agente e
+seria devolvido ao chat pelo `ProtectedRoute`, o que parece defeito.
+
+⚠️ **Esconder no menu não é fechar.** Cada uma dessas rotas foi conferida com um token de
+`colaborador` emitido na mão (`emitir_token(...)`), batendo na API direto — a tela some para quem
+não deve ver, mas quem fecha é o `exige_papel`.
+
 #### Senha: quem define é o administrador
 
 ⚠️ **Colaborador não troca a própria senha.** `POST /auth/trocar-senha` recusa quem não é

@@ -126,7 +126,11 @@ const App = () => {
                           <Route
                             path="/agents"
                             element={
-                              <ProtectedRoute allowedRoles={["administrador", "colaborador"]}>
+                              // Administração de agente é do administrador. O
+                              // colaborador chega aos agentes dele pelo /chat,
+                              // que é o ponto: aqui se edita, se lê os sete
+                              // arquivos (o prompt de sistema) e se vê custo.
+                              <ProtectedRoute allowedRoles={["administrador"]}>
                                 <AgentsPage />
                               </ProtectedRoute>
                             }
@@ -134,7 +138,7 @@ const App = () => {
                           <Route
                             path="/agents/:agentId"
                             element={
-                              <ProtectedRoute allowedRoles={["administrador", "colaborador"]}>
+                              <ProtectedRoute allowedRoles={["administrador"]}>
                                 <AgentDetailPage />
                               </ProtectedRoute>
                             }

@@ -335,7 +335,7 @@ async def excluir_resultado(resultado_id: str, usuario: Usuario = Depends(usuari
 @router.get("/{agent_id}/atividade-recente")
 async def atividade_recente(
     agent_id: str,
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(exige_papel("administrador")),
     limite: int = Query(default=60, ge=1, le=200),
 ):
     """As últimas conversas deste agente, **com quem quer que tenha sido**.
@@ -1813,7 +1813,7 @@ class GravarArquivoIn(BaseModel):
 
 
 @router.get("/{agent_id}/arquivos", response_model=list[ArquivoWorkspaceOut])
-async def listar_arquivos(agent_id: str, _: Usuario = Depends(usuario_atual)):
+async def listar_arquivos(agent_id: str, _: Usuario = Depends(exige_papel("administrador"))):
     """Os arquivos canônicos do agente: SOUL, IDENTITY, TOOLS, AGENTS, MEMORY…"""
     c = await cfg.carregar()
     if not c.configurado:
@@ -1835,7 +1835,7 @@ async def listar_arquivos(agent_id: str, _: Usuario = Depends(usuario_atual)):
 
 
 @router.get("/{agent_id}/arquivos/{nome}", response_model=ConteudoOut)
-async def ler_arquivo(agent_id: str, nome: str, _: Usuario = Depends(usuario_atual)):
+async def ler_arquivo(agent_id: str, nome: str, _: Usuario = Depends(exige_papel("administrador"))):
     c = await cfg.carregar()
     if not c.configurado:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
@@ -1978,7 +1978,7 @@ async def definir_acesso(
 
 
 @router.get("/{agent_id}/guardrails", response_model=list)
-async def guardrails(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+async def guardrails(agent_id: str, usuario: Usuario = Depends(exige_papel("administrador"))):
     """As regras de guarda do agente, escritas pela VPS via `PUT /integracoes/guardrails`.
 
     Devolve lista vazia para agente sem regras **e** para agente inexistente. É
@@ -2020,7 +2020,7 @@ async def contexto(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
 @router.get("/{agent_id}/log-criacao")
 async def log_de_criacao(
     agent_id: str,
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(exige_papel("administrador")),
     limite: int = Query(default=20, ge=1, le=200),
 ):
     """O diário do onboarding do agente, do mais recente para o mais antigo."""
@@ -2034,7 +2034,7 @@ async def log_de_criacao(
 
 
 @router.get("/{agent_id}/arquivos-espelhados")
-async def arquivos_espelhados(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+async def arquivos_espelhados(agent_id: str, usuario: Usuario = Depends(exige_papel("administrador"))):
     """Os arquivos do agente **como estão na tabela `agent_files`**.
 
     ⚠️ Não confundir com `GET /{id}/arquivos`, que lê do gateway ao vivo. Esta
@@ -2093,7 +2093,7 @@ def _resultado(linha) -> dict:
 
 
 @router.get("/{agent_id}/crons")
-async def crons(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+async def crons(agent_id: str, usuario: Usuario = Depends(exige_papel("administrador"))):
     """Os agendamentos do agente, do mais recente para o mais antigo."""
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
@@ -2111,7 +2111,7 @@ class CronIn(BaseModel):
 
 @router.post("/{agent_id}/crons", status_code=status.HTTP_201_CREATED)
 async def criar_cron(
-    agent_id: str, dados: CronIn, usuario: Usuario = Depends(usuario_atual)
+    agent_id: str, dados: CronIn, usuario: Usuario = Depends(exige_papel("administrador"))
 ):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
@@ -2131,7 +2131,7 @@ async def alternar_cron(
     agent_id: str,
     cron_id: str,
     dados: CronPatchIn,
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(exige_papel("administrador")),
 ):
     """Liga e desliga o agendamento. Só isso — mudar a expressão é apagar e criar.
 
@@ -2151,7 +2151,7 @@ async def alternar_cron(
 
 @router.delete("/{agent_id}/crons/{cron_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def excluir_cron(
-    agent_id: str, cron_id: str, usuario: Usuario = Depends(usuario_atual)
+    agent_id: str, cron_id: str, usuario: Usuario = Depends(exige_papel("administrador"))
 ):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         marca = await conn.execute(
@@ -2192,7 +2192,7 @@ async def atividades_do_agente(
 @router.get("/{agent_id}/consumo")
 async def consumo_do_agente(
     agent_id: str,
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(exige_papel("administrador")),
     desde: str | None = Query(default=None, description="ISO-8601."),
     limite: int = Query(default=5000, ge=1, le=20_000),
 ):
@@ -2219,7 +2219,7 @@ async def consumo_do_agente(
 
 
 @router.get("/{agent_id}/estatisticas")
-async def estatisticas_do_agente(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+async def estatisticas_do_agente(agent_id: str, usuario: Usuario = Depends(exige_papel("administrador"))):
     """Atividade deste agente: do coletor quando há, do gateway quando não há.
 
     ⚠️ **Antes isto devolvia `null` e a tela concluía "OFFLINE".** A `agent_stats`
@@ -2291,7 +2291,7 @@ async def estatisticas_do_agente(agent_id: str, usuario: Usuario = Depends(usuar
 @router.get("/{agent_id}/integracoes")
 async def integracoes_do_agente(
     agent_id: str,
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(exige_papel("administrador")),
     tipo: str | None = Query(default=None),
 ):
     """As integrações vinculadas a este agente."""
@@ -2308,7 +2308,7 @@ async def integracoes_do_agente(
 
 
 @router.get("/{agent_id}/agendamentos-do-gateway")
-async def agendamentos_do_gateway(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+async def agendamentos_do_gateway(agent_id: str, usuario: Usuario = Depends(exige_papel("administrador"))):
     """Os crons que o **gateway** executa para este agente, como o coletor os viu.
 
     ⚠️ Não confundir com `GET /{id}/crons`, que é a tabela da plataforma. Esta
