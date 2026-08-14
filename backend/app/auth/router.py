@@ -133,6 +133,16 @@ class TrocaSenhaIn(BaseModel):
 async def trocar_senha(dados: TrocaSenhaIn, usuario: Usuario = Depends(usuario_atual)):
     """Troca a própria senha, conferindo a atual antes.
 
+    ⚠️ **Só `administrador` chega aqui.** Decisão do Erick em 14/08/2026: a
+    Health & Safety é empresa fechada e as pessoas entram pelo **FortiPAM**, que
+    guarda a credencial de cada uma. Quem define senha de colaborador é o
+    administrador, por `POST /profiles/{id}/senha`. Se o colaborador trocasse a
+    própria senha por aqui, o cofre passaria a guardar uma senha que não abre
+    mais nada — e quem descobre é a pessoa, no pior momento.
+
+    Não é regra de segurança genérica; é o desenho de acesso desta empresa. Numa
+    instalação sem cofre, soltar esta rota para todo mundo seria o certo.
+
     **Exigir a senha atual não é burocracia:** o token fica no navegador, e sem
     esta conferência quem sentasse numa máquina destravada trocaria a senha e
     tomaria a conta. O Supabase Auth não pedia — e essa era uma fragilidade
@@ -142,6 +152,16 @@ async def trocar_senha(dados: TrocaSenhaIn, usuario: Usuario = Depends(usuario_a
     comprimento é o que mede força, e regra de composição só empurra a pessoa
     para "Senha@123".
     """
+    # A recusa é por papel, mas com mensagem própria em vez do genérico
+    # "permissão insuficiente" do `exige_papel`: quem esbarra aqui está diante
+    # de um campo de senha, e precisa saber para onde ir, não que foi barrado.
+    if usuario.papel != "administrador":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Sua senha é gerenciada pelo TI e fica guardada no FortiPAM. "
+            "Para trocá-la, fale com o administrador.",
+        )
+
     async with sessao(role="service_role") as conn:
         atual = await conn.fetchval(
             "SELECT password_hash FROM auth.users WHERE id = $1::uuid", usuario.id

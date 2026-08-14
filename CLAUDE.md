@@ -401,12 +401,42 @@ Exceção: o IndexedDB continua `dnos-fs`, porque renomear ali órfã a pasta lo
 
 ### Autorização
 
-Três papéis: `super_admin`, `member`, `user` (`frontend/src/hooks/use-auth.ts`), guardados na tabela `user_roles`
-e checados no banco pela função `has_role` (usada nas políticas de RLS). No front, `ProtectedRoute`
-recebe `allowedRoles`. `/monitoring` e `/analytics` são só `super_admin`; `/setup` também.
+**Dois papéis: `administrador` e `colaborador`**, guardados em `user_roles` e checados no banco por
+`has_role` (usada nas policies de RLS). Eram três com os nomes herdados (`super_admin`, `member`,
+`user`); a `005_papeis_e_pessoas.sql` renomeou e fundiu — `member` e `user` não se distinguiam na
+prática. No back o guard é `exige_papel`; no front, `allowedRoles` do `ProtectedRoute`.
+
+⚠️ **Os papéis são acesso ao sistema, não hierarquia da empresa.** O CEO é `colaborador`. Ler
+`colaborador` como "menos importante" leva a decisão errada — inclusive nos arquivos dos agentes,
+onde isso está escrito de propósito.
+
+Uma pessoa pode ter mais de uma linha em `user_roles`; vale o papel mais forte, resolvido por
+`ORDER BY CASE ... LIMIT 1` em `profiles.py`.
 
 Instalação zerada não tem usuário e não há cadastro público — a tela de login detecta isso e oferece criar
 o primeiro admin via `bootstrap-first-admin`, que cai direto no wizard de `/setup`.
+
+#### Senha: quem define é o administrador
+
+⚠️ **Colaborador não troca a própria senha.** `POST /auth/trocar-senha` recusa quem não é
+`administrador`, com mensagem própria em vez do "permissão insuficiente" genérico — quem esbarra
+nisso está diante de um campo de senha e precisa saber para onde ir. Quem define senha de outra
+pessoa é o admin, por `POST /profiles/{user_id}/senha`, que **não pede a senha atual**: quem troca
+não a conhece, e exigi-la tornaria a rota inútil. O que autoriza é o papel, e por isso ele é a
+defesa inteira.
+
+Não é regra genérica de segurança, é o desenho de acesso desta empresa (decisão do Erick,
+14/08/2026): a HS é fechada e as pessoas entram pelo **FortiPAM**, que guarda a credencial. Troca
+por fora do cofre o deixa guardando uma senha que não abre mais nada. **Numa instalação sem cofre,
+soltar a rota para todo mundo seria o certo** — não copie esta restrição sem o FortiPAM junto.
+
+Na tela: o cartão "Alterar Senha" em Configurações → Perfil só aparece para admin; o colaborador vê
+no lugar uma linha dizendo onde a senha mora. Em Usuários há o botão **Senha** por pessoa.
+
+`needsPasswordSetup` em `use-auth.ts` é **sempre `false`** e o redirecionamento para
+`/reset-password` no `ProtectedRoute` nunca dispara; `profiles.status` nasce `'active'` por default
+da coluna. Ou seja, ninguém fica preso numa tela de definir senha que agora recusaria — mas se
+alguém reativar aquele fluxo, precisa reativá-lo **para admin apenas**.
 
 ### Roteamento
 

@@ -625,7 +625,27 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Password */}
+          {/* Password — só administrador. Quem entra pelo FortiPAM não troca a
+              senha por aqui: o cofre é a origem da verdade, e uma troca por
+              fora dele guardaria uma credencial que não abre mais nada.
+              Em vez de sumir com o cartão, ele explica — espaço em branco onde
+              havia um recurso vira chamado para o TI. */}
+          {!isAdmin && (
+            <div className="glass-card-glow glow-accent">
+              <div className="glass-card-glow-effect" />
+              <div className="relative z-10 p-5 space-y-2">
+                <h3 className="text-sm font-display font-semibold text-foreground flex items-center gap-2">
+                  <Lock className="h-4 w-4 text-primary" /> Senha
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Sua senha é gerenciada pelo TI e fica guardada no FortiPAM.
+                  Para trocá-la, fale com o administrador.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {isAdmin && (
           <div className="glass-card-glow glow-accent">
             <div className="glass-card-glow-effect" />
             <div className="relative z-10 p-5 space-y-3">
@@ -676,6 +696,7 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
+          )}
 
           {/* Browser Notifications */}
           <div className="glass-card-glow glow-accent">

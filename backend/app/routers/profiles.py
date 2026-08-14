@@ -296,6 +296,60 @@ async def criar_conta(
     return PerfilOut(**dict(linha))
 
 
+class SenhaAdminIn(BaseModel):
+    senha: str = Field(min_length=8, max_length=LIMITE_SENHA_BYTES)
+
+
+@router.post("/{user_id}/senha", status_code=status.HTTP_204_NO_CONTENT)
+async def definir_senha(
+    user_id: str,
+    dados: SenhaAdminIn,
+    usuario: Usuario = Depends(exige_papel("administrador")),
+):
+    """O administrador define a senha de outra pessoa.
+
+    **Não pede a senha atual, e isso é a diferença em relação a
+    `/auth/trocar-senha`.** Lá quem troca é o dono da conta, e conferir a atual
+    impede que quem senta numa máquina destravada tome a conta. Aqui quem troca
+    é o administrador, que por definição não sabe a senha do outro — exigi-la
+    tornaria a rota inútil.
+
+    O que autoriza é o papel, e por isso ele é a única defesa: `exige_papel`
+    não é detalhe de organização aqui, é o controle de acesso inteiro.
+
+    Decisão de 14/08/2026, do Erick: **a Health & Safety é empresa fechada e
+    quem define senha é o administrador.** As pessoas entram pelo FortiPAM, que
+    guarda a credencial — colaborador trocando a própria senha por fora
+    dessincronizaria o cofre, que é a origem da verdade. Por isso
+    `/auth/trocar-senha` passou a exigir `administrador` também.
+
+    Marca o perfil como `active` na mesma transação, como fazia a troca da
+    própria senha: senha definida e perfil pendente é um estado que só confunde.
+    """
+    async with sessao(role="service_role") as conn:
+        existe = await conn.fetchval(
+            "SELECT 1 FROM auth.users WHERE id = $1::uuid", user_id
+        )
+        if not existe:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuário não encontrado.")
+
+        async with conn.transaction():
+            await conn.execute(
+                "UPDATE auth.users SET password_hash = $2, updated_at = now() "
+                " WHERE id = $1::uuid",
+                user_id, gerar_hash(dados.senha),
+            )
+            await conn.execute(
+                "UPDATE public.profiles SET status = 'active', updated_at = now() "
+                " WHERE id = $1::uuid AND status IS DISTINCT FROM 'active'",
+                user_id,
+            )
+
+    # A senha nunca entra no log — nem truncada. O que importa registrar é quem
+    # mexeu em quem.
+    logger.info("Senha definida por %s para %s", usuario.id, user_id)
+
+
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def excluir_conta(
     user_id: str,

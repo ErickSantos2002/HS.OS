@@ -34,6 +34,7 @@ import {
   ShieldCheck,
   User as UserIcon,
   Ban,
+  KeyRound,
   CheckCircle2,
   Clock,
   Trash2,
@@ -224,6 +225,11 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
 
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // Quem define senha aqui é o administrador, para outra pessoa. O colaborador
+  // não troca a própria: as credenciais vivem no FortiPAM.
+  const [senhaTarget, setSenhaTarget] = useState<HumanRow | null>(null);
+  const [novaSenha, setNovaSenha] = useState("");
+  const [salvandoSenha, setSalvandoSenha] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [addAgentOpen, setAddAgentOpen] = useState(false);
   const [importAgentOpen, setImportAgentOpen] = useState(false);
@@ -482,6 +488,35 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
     }
   };
 
+  // Não pede a senha atual: quem troca é o administrador, que por definição não
+  // a conhece. O que autoriza é o papel, conferido no backend — o `isAdmin`
+  // daqui só decide o que aparece na tela.
+  const handleDefinirSenha = async () => {
+    if (!senhaTarget || novaSenha.length < 8) return;
+    setSalvandoSenha(true);
+    try {
+      await api(`/profiles/${encodeURIComponent(senhaTarget.id)}/senha`, {
+        method: "POST",
+        body: { senha: novaSenha },
+      });
+      toast({
+        title: "Senha definida",
+        description: `${senhaTarget.email} já entra com a senha nova. Guarde-a no FortiPAM.`,
+      });
+      setSenhaTarget(null);
+      setNovaSenha("");
+      fetchAll();
+    } catch (e) {
+      toast({
+        title: "Erro ao definir a senha",
+        description: (e as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setSalvandoSenha(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -687,6 +722,48 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
           </div>
         </div>
 
+        {/* Definir a senha de outra pessoa. Não pede a senha atual — quem troca
+            é o administrador, que não a conhece; é o papel que autoriza. */}
+        <Dialog
+          open={senhaTarget !== null}
+          onOpenChange={(aberto) => { if (!aberto) { setSenhaTarget(null); setNovaSenha(""); } }}
+        >
+          <DialogContent className="glass-card border-border/30 bg-card/95 backdrop-blur-xl max-w-md rounded-2xl p-0 gap-0">
+            <DialogHeader className="aurora-glow px-6 py-4 border-b border-border/30">
+              <DialogTitle className="font-display font-bold text-foreground relative z-10">
+                Definir senha
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 p-6">
+              <p className="text-sm text-muted-foreground">
+                Nova senha de <span className="text-foreground font-medium">{senhaTarget?.full_name || senhaTarget?.email}</span>.
+                A pessoa passa a entrar com ela imediatamente, e não recebe aviso —
+                combine a entrega e guarde no FortiPAM.
+              </p>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Senha (mínimo 8 caracteres)
+                </label>
+                <Input
+                  type="text"
+                  value={novaSenha}
+                  onChange={(e) => setNovaSenha(e.target.value)}
+                  placeholder="cole aqui a senha do cofre"
+                  autoComplete="off"
+                  className="font-mono"
+                />
+              </div>
+              <button
+                onClick={handleDefinirSenha}
+                disabled={salvandoSenha || novaSenha.length < 8}
+                className="w-full py-3 rounded-full bg-gradient-to-r from-primary to-[hsl(260,70%,55%)] text-primary-foreground font-display font-bold text-sm transition-all hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+              >
+                {salvandoSenha ? <Loader2 className="h-4 w-4 animate-spin" /> : "Definir senha"}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Filter toggle */}
         <div className="relative z-10 mt-4 flex items-center gap-1 p-1 rounded-full bg-secondary/40 border border-border/40 w-fit">
           {([
@@ -827,6 +904,16 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
+                              {!isSelf && (
+                                <button
+                                  onClick={() => { setSenhaTarget(r); setNovaSenha(""); }}
+                                  title="Definir a senha desta pessoa"
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border border-border/40 bg-secondary/30 text-foreground hover:bg-secondary/60 transition-colors"
+                                >
+                                  <KeyRound className="h-3.5 w-3.5" />
+                                  Senha
+                                </button>
+                              )}
                               {!isSelf && r.status !== "pending" && (
                                 <button
                                   onClick={() => handleToggleStatus(r.id, r.status)}
