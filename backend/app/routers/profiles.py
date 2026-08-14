@@ -23,7 +23,7 @@ router = APIRouter(prefix="/profiles", tags=["profiles"])
 _COLUNAS = """
     p.id::text AS id, p.email, p.full_name, p.avatar_url, p.status,
     to_char(p.last_seen_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS last_seen_at,
-    p.custom_status, p.custom_status_emoji,
+    p.custom_status, p.custom_status_emoji, p.departamento, p.cargo,
     to_char(p.custom_status_set_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS custom_status_set_at
 """
 
@@ -115,9 +115,18 @@ class PerfilAdminPatch(BaseModel):
 
     role: str | None = None
     status: str | None = None
+    # Vêm do cadastro do RH. Quem edita é o administrador, não a própria
+    # pessoa: cargo e área são fato organizacional, não preferência — quem se
+    # promove sozinho no perfil quebra a lista que o RH usa para conferir.
+    departamento: str | None = Field(default=None, max_length=120)
+    cargo: str | None = Field(default=None, max_length=120)
 
 
 _PAPEIS = {"administrador", "colaborador"}
+# Campos de texto que o administrador edita direto em `profiles`. Ficam numa
+# lista para o UPDATE ser montado a partir dela — acrescentar um campo novo
+# deixa de exigir mexer no SQL.
+_CAMPOS_TEXTO = ("departamento", "cargo")
 _STATUS_PERFIL = {"active", "inactive"}
 
 
@@ -168,6 +177,17 @@ async def atualizar_perfil(
                     {"target_user": user_id, "new_role": campos["role"]},
                 )
 
+            for campo in _CAMPOS_TEXTO:
+                if campo in campos:
+                    # `btrim` + NULLIF aqui e não só na tela: "RH " e "RH" viram
+                    # dois departamentos na hora de agrupar, e o espaço sobra
+                    # sempre que alguém cola de planilha.
+                    await conn.execute(
+                        f"UPDATE public.profiles SET {campo} = NULLIF(btrim($2), ''), "
+                        " updated_at = now() WHERE id = $1::uuid",
+                        user_id, campos[campo] or "",
+                    )
+
             if "status" in campos:
                 await conn.execute(
                     "UPDATE public.profiles SET status = $2, updated_at = now() "
@@ -211,7 +231,13 @@ class ContaNovaIn(BaseModel):
     email: EmailStr
     nome: str = Field(min_length=1, max_length=200)
     senha: str = Field(min_length=8, max_length=LIMITE_SENHA_BYTES)
-    role: str = "sem_papel"
+    # ⚠️ `colaborador`, não `sem_papel`: este valor vai direto para um
+    # `::public.app_role`, e `sem_papel` não é do enum — é o rótulo que a
+    # LEITURA usa para quem não tem linha em `user_roles`. Usá-lo aqui daria
+    # "Papel inválido" em toda criação que não escolhesse papel.
+    role: str = "colaborador"
+    departamento: str | None = Field(default=None, max_length=120)
+    cargo: str | None = Field(default=None, max_length=120)
 
 
 @router.post("", response_model=PerfilOut, status_code=status.HTTP_201_CREATED)
@@ -246,8 +272,10 @@ async def criar_conta(
                     status.HTTP_409_CONFLICT, "Já existe uma conta com este e-mail."
                 )
             await conn.execute(
-                "INSERT INTO public.profiles (id, email, full_name) VALUES ($1, $2, $3)",
+                "INSERT INTO public.profiles (id, email, full_name, departamento, cargo) "
+                "VALUES ($1, $2, $3, NULLIF(btrim($4), ''), NULLIF(btrim($5), ''))",
                 user_id, dados.email, dados.nome,
+                dados.departamento or "", dados.cargo or "",
             )
             await conn.execute(
                 "INSERT INTO public.user_roles (user_id, role) "

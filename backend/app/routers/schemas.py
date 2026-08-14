@@ -39,6 +39,11 @@ class PerfilOut(BaseModel):
     custom_status: str | None = None
     custom_status_emoji: str | None = None
     custom_status_set_at: str | None = None
+    # Cadastro do RH: área e cargo. Vão na listagem porque é onde a tela de
+    # Usuários os mostra, e porque é daqui que sai o contexto de "quem está
+    # falando" que a orquestradora recebe.
+    departamento: str | None = None
+    cargo: str | None = None
 
 
 class PerfilPatch(BaseModel):

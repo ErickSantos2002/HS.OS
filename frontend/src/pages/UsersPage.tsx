@@ -82,6 +82,8 @@ interface PerfilApi {
   avatar_url: string | null;
   status: string;
   role: string;
+  departamento: string | null;
+  cargo: string | null;
 }
 
 /** O que `GET /agents` devolve — só o que esta tela usa. */
@@ -109,6 +111,8 @@ interface HumanRow {
   avatar_url: string | null;
   status: string;
   role: AppRole;
+  departamento: string | null;
+  cargo: string | null;
 }
 
 interface AgentRow {
@@ -155,6 +159,44 @@ function presenceDot(p: AgentRow["presence"]) {
   return { dot: "bg-muted-foreground", label: "Offline" };
 }
 
+/**
+ * Campo de texto que vive dentro da linha da tabela.
+ *
+ * Salva ao sair do campo, e **só quando mudou** — sem isso, cada clique numa
+ * célula viraria um PATCH. O valor exibido volta do servidor, porque é lá que o
+ * `btrim` acontece: mostrar o que foi digitado esconderia a normalização e
+ * faria "RH " parecer que ficou com o espaço.
+ */
+function CampoLinha({
+  valor,
+  aoSalvar,
+  sugestoes,
+  placeholder,
+}: {
+  valor: string | null;
+  aoSalvar: (v: string) => void;
+  sugestoes?: string;
+  placeholder?: string;
+}) {
+  const [texto, setTexto] = useState(valor ?? "");
+  // Quando a linha recarrega (outro campo salvou, ou a lista atualizou), o
+  // valor de fora tem que vencer o estado local — senão o campo mostra o que
+  // foi digitado antes de um erro.
+  useEffect(() => { setTexto(valor ?? ""); }, [valor]);
+  return (
+    <input
+      list={sugestoes}
+      value={texto}
+      placeholder={placeholder}
+      onChange={(e) => setTexto(e.target.value)}
+      onBlur={() => { if (texto.trim() !== (valor ?? "").trim()) aoSalvar(texto); }}
+      onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+      className="w-full max-w-[190px] bg-transparent border border-transparent rounded px-2 py-1 text-xs text-foreground
+                 placeholder:text-muted-foreground/50 hover:border-border focus:border-primary/50 focus:outline-none transition-colors"
+    />
+  );
+}
+
 export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
   const { user: currentUser, role } = useAuthContext();
   const isAdmin = role === "administrador";
@@ -169,6 +211,15 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
   const [inviteName, setInviteName] = useState("");
   const [inviteRole, setInviteRole] = useState<AppRole>("colaborador");
   const [invitePassword, setInvitePassword] = useState("");
+  const [inviteDepartamento, setInviteDepartamento] = useState("");
+  const [inviteCargo, setInviteCargo] = useState("");
+  // Departamento é texto livre (são 27 pessoas e uma dúzia de áreas — tabela
+  // seria máquina demais). O risco é grafia divergente, e a mitigação é esta:
+  // sugerir o que já existe, para digitar do zero ser a exceção.
+  const departamentosConhecidos = useMemo(
+    () => [...new Set(humans.map((h) => h.departamento).filter(Boolean) as string[])].sort(),
+    [humans],
+  );
   const [inviting, setInviting] = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
@@ -252,7 +303,9 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
         full_name: p.full_name ?? "",
         avatar_url: p.avatar_url ?? null,
         status: p.status,
-        role: (p.role ?? "user") as AppRole,
+        role: (p.role ?? "sem_papel") as AppRole,
+        departamento: p.departamento ?? null,
+        cargo: p.cargo ?? null,
       })),
     );
 
@@ -333,6 +386,27 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
   // e entrega as credenciais pelo canal interno da empresa. Decisão do Erick em
   // 06/08/2026 — some a dependência de servidor de e-mail e o estado "pendente"
   // de quem foi convidado mas nunca clicou no link.
+  /** Grava um campo de texto do perfil. Sem otimismo: a linha só muda depois
+   *  que o servidor confirmou, porque o `btrim` acontece lá e o valor exibido
+   *  tem que ser o guardado, não o digitado. */
+  async function salvarCampo(id: string, campo: "departamento" | "cargo", valor: string) {
+    try {
+      const p = await api<PerfilApi>(`/profiles/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: { [campo]: valor.trim() || null },
+      });
+      setHumans((atual) =>
+        atual.map((h) => (h.id === id ? { ...h, departamento: p.departamento ?? null, cargo: p.cargo ?? null } : h)),
+      );
+    } catch (e) {
+      toast({
+        title: `Não consegui salvar ${campo}`,
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
+    }
+  }
+
   const handleInvite = async () => {
     if (!inviteEmail || !inviteName.trim() || invitePassword.length < 8) return;
     setInviting(true);
@@ -344,6 +418,8 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
           nome: inviteName.trim(),
           senha: invitePassword,
           role: inviteRole,
+          departamento: inviteDepartamento.trim() || null,
+          cargo: inviteCargo.trim() || null,
         },
       });
       toast({
@@ -353,6 +429,8 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
       setInviteEmail("");
       setInviteName("");
       setInvitePassword("");
+      setInviteDepartamento("");
+      setInviteCargo("");
       setInviteOpen(false);
       fetchAll();
     } catch (e) {
@@ -563,6 +641,27 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
                       Não há e-mail de convite.
                     </p>
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Departamento</label>
+                      <input
+                        list="lista-departamentos"
+                        value={inviteDepartamento}
+                        onChange={(e) => setInviteDepartamento(e.target.value)}
+                        placeholder="RECURSOS HUMANOS"
+                        className="w-full rounded-lg border border-border bg-transparent px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Cargo</label>
+                      <input
+                        value={inviteCargo}
+                        onChange={(e) => setInviteCargo(e.target.value)}
+                        placeholder="Coordenadora de RH Junior"
+                        className="w-full rounded-lg border border-border bg-transparent px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+                      />
+                    </div>
+                  </div>
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Perfil de acesso</label>
                     <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as AppRole)}>
@@ -572,7 +671,6 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
                       <SelectContent>
                         <SelectItem value="administrador">Administrador</SelectItem>
                         <SelectItem value="colaborador">Colaborador</SelectItem>
-                        <SelectItem value="user">Usuário</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -637,9 +735,17 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
               </div>
             ) : (
               <Table>
+                {/* Sugere os departamentos que já existem, para "RH" e "Recursos
+                    Humanos" não virarem duas áreas. Serve os campos da tabela e o
+                    do formulário de criação, por isso é um só. */}
+                <datalist id="lista-departamentos">
+                  {departamentosConhecidos.map((d) => <option key={d} value={d} />)}
+                </datalist>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Usuário</TableHead>
+                    <TableHead>Departamento</TableHead>
+                    <TableHead>Cargo</TableHead>
                     <TableHead>Perfil</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
@@ -676,6 +782,25 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
                               </div>
                             </div>
                           </TableCell>
+                          {/* Editável na própria linha: o RH cadastra dezenas de
+                              pessoas de uma vez, e abrir um diálogo por campo
+                              transformaria isso numa tarde. Salva ao sair do
+                              campo, e só quando mudou. */}
+                          <TableCell>
+                            <CampoLinha
+                              valor={r.departamento}
+                              sugestoes="lista-departamentos"
+                              placeholder="—"
+                              aoSalvar={(v) => salvarCampo(r.id, "departamento", v)}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <CampoLinha
+                              valor={r.cargo}
+                              placeholder="—"
+                              aoSalvar={(v) => salvarCampo(r.id, "cargo", v)}
+                            />
+                          </TableCell>
                           <TableCell>
                             {isSelf ? (
                               <Badge variant="outline" className="gap-1 rounded-full">
@@ -690,7 +815,6 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
                                 <SelectContent>
                                   <SelectItem value="administrador">Administrador</SelectItem>
                                   <SelectItem value="colaborador">Colaborador</SelectItem>
-                                  <SelectItem value="user">Usuário</SelectItem>
                                 </SelectContent>
                               </Select>
                             )}
@@ -784,6 +908,11 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
                             </div>
                           </div>
                         </TableCell>
+                        {/* Agente não tem departamento nem cargo. As células
+                            vazias mantêm o alinhamento — a tabela é a mesma
+                            para pessoas e agentes. */}
+                        <TableCell className="text-muted-foreground/50">—</TableCell>
+                        <TableCell className="text-muted-foreground/50">—</TableCell>
                         <TableCell>
                           <Badge className="gap-1 rounded-full border-transparent bg-violet-500/20 text-violet-300 hover:bg-violet-500/30">
                             <Bot className="h-3 w-3" />
