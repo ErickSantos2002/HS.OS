@@ -133,7 +133,28 @@ workspace de um agente — com poder de apagar tabela, circulando a cada convers
 
 Banco vira **ferramenta**, não texto: alguém cadastra o banco na tela de
 Conectores e publica para o agente, e ele passa a ter uma tool
-`mcp__banco-<nome>__query`. O `TOOLS.md` então descreve **como usar bem**:
+`mcp__banco-<nome>__query`.
+
+⚠️ **Consulte o banco antes de escrever o `TOOLS.md`. Não descreva de memória.**
+
+```sql
+SELECT table_schema, table_name FROM information_schema.tables
+ WHERE table_schema NOT IN ('pg_catalog','information_schema') ORDER BY 1,2;
+```
+
+O schema pode não ser `public` — o DataCoreHS usa `tiny` —, e nome de tabela
+inventado faz o agente consultar o que não existe e concluir que não há dados,
+que é pior que dar erro.
+
+⚠️ **Se você não tem a ferramenta do banco, PARE e diga.** Não escreva um
+`TOOLS.md` sobre uma ferramenta que não pôde abrir. Em 14/08/2026 a `iris`
+nasceu com um `TOOLS.md` citando `table_schema = 'public'` (era `tiny`) e duas
+tabelas que não existem — porque o conector não tinha sido publicado para ela e
+o procedimento foi seguido assim mesmo. Uma frase — *"não consigo escrever o
+TOOLS.md, o agente não tem o conector"* — teria evitado três defeitos
+silenciosos.
+
+Com a ferramenta em mãos, o `TOOLS.md` descreve **como usar bem**:
 
 - o que existe lá dentro — as tabelas que respondem as perguntas frequentes,
   em tabela de duas colunas ("pergunta" → "onde")
@@ -163,6 +184,33 @@ Aqui é onde você pensa, e é o que justifica ser você a criar em vez de um mo
 - **Exemplos de resposta**, no `IDENTITY.md`. Adjetivo calibra mal; exemplo
   calibra bem. Escreva pelo menos um de quando ele **não sabe** — dizendo o que
   não tem, de onde viria, e oferecendo o passo seguinte.
+
+## Ferramenta dada depois é ferramenta não documentada
+
+⚠️ **Se o agente ganhar uma ferramenta depois de o `TOOLS.md` estar escrito, o
+arquivo precisa ser atualizado.** Aconteceu duas vezes em 14/08/2026 — a `nina`
+e a `iris` receberam o conector do Diretório e a ferramenta de alerta depois dos
+arquivos prontos, e ficaram com uma capacidade que elas mesmas não sabiam ter.
+
+O agente não descobre sozinho: ele vê a ferramenta na lista, mas não sabe quando
+usá-la nem com que cuidado. É o `TOOLS.md` que diz isso.
+
+Rode `python scripts/auditar-agente.py <id>` depois de qualquer mudança de
+conector — ele compara o arquivo com as ferramentas que o agente de fato tem.
+
+## Antes de escrever qualquer coisa: confira o que você tem
+
+Dois minutos aqui evitam um agente que parece pronto e não funciona.
+
+1. **O agente tem as ferramentas que o briefing promete?** Se o briefing cita
+   integrações, elas têm que existir como tool. Não tendo, **diga e pare** —
+   quem publica é a tela de Conectores.
+2. **O modelo do agente está definido?** Agente com `model` nulo não responde
+   nada, e isso não aparece em lugar nenhum até alguém tentar conversar.
+
+Verificar o que você **não** consegue fazer é parte do trabalho, não desvio
+dele. Relatar um bloqueio na hora vale mais que entregar sete arquivos sobre
+uma realidade que você não pôde conferir.
 
 ## Ao terminar
 

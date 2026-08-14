@@ -1296,6 +1296,10 @@ class AgenteNovoOut(BaseModel):
     agent_id: str
     criado_no_gateway: bool
     orquestrador_avisado: bool
+    # O que de fato foi ligado. A tela mostrava as integrações escolhidas como
+    # se tivessem sido aplicadas; agora ela recebe o resultado, não a intenção.
+    conectores_publicados: list[str] = []
+    conectores_com_falha: list[dict] = []
 
 
 def _briefing(d: AgenteNovoIn) -> str:
@@ -1366,6 +1370,59 @@ def _briefing(d: AgenteNovoIn) -> str:
     )
 
 
+async def _publicar_conectores(agent_id: str, nomes: list[str]) -> tuple[list, list]:
+    """Dá ao agente novo os conectores marcados na tela.
+
+    Só bancos: os demais tipos de conector ainda são consumidos por segredo
+    compartilhado, não por ferramenta, e publicá-los não significaria nada.
+
+    ⚠️ **Falha aqui não desfaz a criação.** O agente existe, os arquivos foram
+    escritos, e o conector é recuperável com dois cliques na tela de Conectores.
+    Desfazer tudo por causa disso trocaria um problema pequeno e visível por um
+    grande. Mas o resultado volta na resposta, nomeado — silêncio aqui seria
+    repetir o defeito que esta função existe para corrigir.
+    """
+    from app.routers.integracoes import publicar_banco
+
+    publicados: list[str] = []
+    falhos: list[dict] = []
+    if not nomes:
+        return publicados, falhos
+
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            "SELECT id::text AS id, name FROM public.integrations "
+            " WHERE integration_type = 'database' AND name = ANY($1::text[])",
+            nomes,
+        )
+        achados = {l["name"]: l["id"] for l in linhas}
+
+        for nome in nomes:
+            ident = achados.get(nome)
+            if not ident:
+                # Conector que não é banco (API, MCP) cai aqui e não é falha:
+                # ele simplesmente não se publica desta forma.
+                continue
+            # `agents_using` é a fonte de quem tem acesso; o publicar lê dela.
+            await conn.execute(
+                "UPDATE public.integrations "
+                "   SET agents_using = array_append(agents_using, $2), updated_at = now() "
+                " WHERE id = $1::uuid AND NOT ($2 = ANY(agents_using))",
+                ident, agent_id,
+            )
+
+    for nome, ident in achados.items():
+        try:
+            await publicar_banco(ident, _=None)  # type: ignore[arg-type]
+            publicados.append(nome)
+        except Exception as e:  # noqa: BLE001
+            detalhe = getattr(e, "detail", None) or str(e)
+            logger.error("Conector %s não publicado para %s: %s", nome, agent_id, detalhe)
+            falhos.append({"conector": nome, "motivo": str(detalhe)[:300]})
+
+    return publicados, falhos
+
+
 async def _desfazer_criacao(openclaw_id: str) -> None:
     """Apaga o que a criação já tinha feito, quando ela não pôde terminar.
 
@@ -1430,8 +1487,22 @@ async def criar(
     if not c.configurado:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
     try:
+        # ⚠️ **`model` e `emoji` vão aqui, e não só para o nosso banco.** Até
+        # 14/08/2026 mandávamos apenas nome e workspace: o agente nascia com
+        # `model: null` no gateway e não respondia nada, enquanto
+        # `agent_profiles.model` dizia `anthropic/claude-sonnet-4-6`. Os dois
+        # lados discordando, e o lado que executa era o vazio.
+        #
+        # Confirmado que o schema aceita os dois — sondado em 14/08. (E sondar
+        # custou caro: `agents.create` CRIA mesmo com workspace inexistente, ao
+        # contrário do que eu supunha. Não sonde escrita neste método.)
         await obter_cliente(c.url, c.token).chamar(
-            "agents.create", {"name": dados.name, "workspace": dados.workspace}
+            "agents.create", {
+                "name": dados.name,
+                "workspace": dados.workspace,
+                "model": dados.model,
+                "emoji": dados.emoji,
+            }
         )
     except ErroGateway as e:
         raise HTTPException(
@@ -1492,9 +1563,26 @@ async def criar(
             "agente líder está de pé e tente de novo.",
         ) from e
 
+    # ⚠️ **Publicar os conectores escolhidos, e não só citá-los no briefing.**
+    #
+    # `integrations_used` virava texto no briefing ("INTEGRAÇÕES: DataCoreHS,
+    # Diretório HS.OS") e coluna no banco, e mais nada. O agente nascia SEM as
+    # ferramentas que a tela dizia ter dado — e o orquestrador, sem como
+    # consultar o banco, descrevia o schema de memória. Em 14/08/2026 a `iris`
+    # nasceu com um TOOLS.md citando `table_schema = 'public'` (é `tiny`) e
+    # tabelas que não existem.
+    #
+    # É a mesma família de "a tela afirma o envio, não o resultado" que já
+    # apareceu no gateway offline, no agente criado vazio e na fila de
+    # provedores sem executor.
+    publicados, falhos = await _publicar_conectores(
+        dados.openclaw_id, dados.integrations_used
+    )
+
     logger.info("Agente %s criado por administrador", dados.openclaw_id)
     return AgenteNovoOut(
-        agent_id=dados.openclaw_id, criado_no_gateway=True, orquestrador_avisado=True
+        agent_id=dados.openclaw_id, criado_no_gateway=True, orquestrador_avisado=True,
+        conectores_publicados=publicados, conectores_com_falha=falhos,
     )
 
 
