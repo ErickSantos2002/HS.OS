@@ -1730,6 +1730,37 @@ def _nome_mcp(nome: str) -> str:
     return f"banco-{base or 'sem-nome'}"
 
 
+# Denies que não vêm de MCP e precisam sobreviver ao recálculo — hoje é o que
+# impede especialista de acionar outro agente por conta própria.
+_DENY_NAO_MCP = ("sessions_send", "sessions_spawn")
+
+
+def _sem_prefixo(nome: str) -> str:
+    return nome[len("mcp__"):] if nome.startswith("mcp__") else nome
+
+
+def _deny_de_mcp(also_allow: list[str], deny_atual: list[str],
+                 servidores: dict) -> list[str]:
+    """As ferramentas MCP que este agente NÃO deve ter.
+
+    ⚠️ **O `deny` casa pelo nome que o agente vê, que é SEM o prefixo `mcp__`.**
+    O `alsoAllow` usa o nome com prefixo; os dois convivem no mesmo objeto e
+    aceitam formatos diferentes. Aplicar o deny com prefixo grava na config,
+    passa em qualquer conferência que releia a config — e não remove nada. Foi o
+    que aconteceu na primeira tentativa, em 14/08/2026: a `iris` seguiu
+    enxergando os dez bancos com o deny "aplicado". Quem desfez o engano foi
+    perguntar a ela, não reler o `config.get`.
+    """
+    todas = {
+        f"{s}__{t}"
+        for s, cfg in servidores.items()
+        for t in ((((cfg or {}).get("toolFilter") or {}).get("include")) or ["query"])
+    }
+    meus = {_sem_prefixo(x) for x in also_allow}
+    preservados = [x for x in deny_atual if x in _DENY_NAO_MCP]
+    return sorted(todas - meus) + preservados
+
+
 @router.post("/conectores/{conector_id}/publicar-banco")
 async def publicar_banco(
     conector_id: str,
@@ -1747,10 +1778,17 @@ async def publicar_banco(
     - `mcp.servers.<apelido>` — o servidor, com a URL de conexão
     - `agents.list[].tools.alsoAllow` — quem pode usar
 
-    ⚠️ **`mcp.servers` é global; o acesso é que é por agente.** Declarar o
-    servidor não dá acesso a ninguém: o `alsoAllow` de cada agente é que
-    concede. Um banco publicado sem agente na lista existe e não serve a
-    ninguém, que é o padrão certo — acesso a banco é concessão explícita.
+    ⚠️ **`mcp.servers` é global, e declarar o servidor JÁ DÁ ACESSO A TODOS.**
+    Este comentário afirmava o contrário até 14/08/2026, e a afirmação era falsa:
+    `alsoAllow` é *aditivo* sobre a política global, e o perfil `coding` libera
+    todo servidor MCP para todo agente. Quem publicava um banco para a `iris`
+    entregava-o também à `nina` e ao `atlas` — a tela dizia que não, e ninguém
+    conferiu com o agente. Descoberto perguntando à `nina` quais ferramentas ela
+    via: os nove bancos da empresa, tendo três publicados.
+
+    Quem exclui é o `deny`, e por isso ele é recalculado aqui a cada publicação:
+    `deny = (todas as ferramentas de mcp.servers) − (as do alsoAllow do agente)`.
+    Sem esse recálculo, publicar um banco novo o entrega a quem não deveria tê-lo.
     """
     async with sessao(role="service_role") as conn:
         linha = await conn.fetchrow(
@@ -1828,50 +1866,55 @@ async def publicar_banco(
     # fazendo outra — e é a permissão que fica sobrando, não faltando. Aconteceu
     # em 13/08/2026: um banco ficou sem agente na tela e a Nina continuou com a
     # ferramenta dele.
+    antes = (parsed.get("agents") or {}).get("list") or []
+    servidores_depois = {**(((parsed.get("mcp") or {}).get("servers")) or {}),
+                         apelido: servidor}
+
     lista_agentes = []
-    for a in (parsed.get("agents") or {}).get("list") or []:
-        atuais = list(((a.get("tools") or {}).get("alsoAllow")) or [])
-        tem = ferramenta in atuais
-        deve = a.get("id") in agentes
-        if tem == deve:
-            continue
-        if deve:
-            atuais.append(ferramenta)
+    for a in antes:
+        t = dict(a.get("tools") or {})
+        atuais = list(t.get("alsoAllow") or [])
+        if a.get("id") in agentes:
+            if ferramenta not in atuais:
+                atuais.append(ferramenta)
         else:
             atuais = [x for x in atuais if x != ferramenta]
-        lista_agentes.append({"id": a.get("id"),
-                              "tools": {**(a.get("tools") or {}), "alsoAllow": atuais}})
+        t["alsoAllow"] = atuais
+        t["deny"] = _deny_de_mcp(atuais, t.get("deny") or [], servidores_depois)
+        lista_agentes.append({**a, "tools": t})
 
-    ausentes = [a for a in agentes
-                if a not in {x.get("id") for x in (parsed.get("agents") or {}).get("list") or []}]
+    ausentes = [a for a in agentes if a not in {x.get("id") for x in antes}]
 
     patch: dict = {"mcp": {"servers": {apelido: servidor}}}
-    if lista_agentes:
+    if lista_agentes != antes:
         # ⚠️ `agents.list` é ARRAY, e array SUBSTITUI no merge patch. Mandar só os
         # agentes alterados apagaria os demais. Por isso a lista vai inteira, com
         # os não-alterados preservados como estão.
-        por_id = {x.get("id"): x for x in lista_agentes}
-        patch["agents"] = {"list": [
-            {**a, **por_id.get(a.get("id"), {})}
-            for a in (parsed.get("agents") or {}).get("list") or []
-        ]}
+        patch["agents"] = {"list": lista_agentes}
 
     # ⚠️ **Conferir a concessão, não só o servidor.** A versão anterior olhava
     # apenas se `mcp.servers.<apelido>` existia — e ele já existia de uma
     # publicação anterior para outro agente. O patch podia falhar em conceder a
     # ferramenta e mesmo assim ser dado como bem-sucedido. Foi assim que o
     # `atlas` "ganhou" dois conectores que nunca chegaram nele.
+    #
+    # ⚠️ E conferir **os dois lados**: a concessão e a exclusão. Conferir só o
+    # `alsoAllow` deixaria passar exatamente o buraco que este recálculo existe
+    # para fechar — o agente ganha a ferramenta certa e continua com as oito
+    # erradas.
+    esperado_deny = {a["id"]: set((a.get("tools") or {}).get("deny") or [])
+                     for a in lista_agentes}
+
     def _conferir(c: dict) -> bool:
         if apelido not in (((c.get("mcp") or {}).get("servers")) or {}):
             return False
-        tem = {
-            a.get("id")
-            for a in ((c.get("agents") or {}).get("list") or [])
-            if ferramenta in (((a.get("tools") or {}).get("alsoAllow")) or [])
-        }
-        return all(x in tem for x in agentes if x in {
-            a.get("id") for a in ((c.get("agents") or {}).get("list") or [])
-        })
+        vivos = {a.get("id"): (a.get("tools") or {})
+                 for a in ((c.get("agents") or {}).get("list") or [])}
+        tem = {i for i, t in vivos.items() if ferramenta in (t.get("alsoAllow") or [])}
+        if not all(x in tem for x in agentes if x in vivos):
+            return False
+        return all(set(vivos[i].get("deny") or []) == d
+                   for i, d in esperado_deny.items() if i in vivos)
 
     await patch_gw.aplicar_patch(patch, base_hash, conferir=_conferir)
 
@@ -1912,15 +1955,21 @@ async def _despublicar_banco(nome: str) -> bool:
 
     # `agents.list` é array: vai inteira, com a ferramenta tirada de quem a
     # tinha. Mandar só os alterados apagaria os demais agentes.
+    #
+    # O `deny` é recalculado junto: o servidor deixou de existir, e deixar o nome
+    # dele nas listas de recusa acumula entrada morta a cada conector excluído.
     lista = (parsed.get("agents") or {}).get("list") or []
-    if any(ferramenta in (((a.get("tools") or {}).get("alsoAllow")) or []) for a in lista):
-        patch["agents"] = {"list": [
-            {**a, "tools": {**(a.get("tools") or {}),
-                            "alsoAllow": [x for x in (((a.get("tools") or {}).get("alsoAllow")) or [])
-                                          if x != ferramenta]}}
-            if ferramenta in (((a.get("tools") or {}).get("alsoAllow")) or []) else a
-            for a in lista
-        ]}
+    restantes = {k: v for k, v in (((parsed.get("mcp") or {}).get("servers")) or {}).items()
+                 if k != apelido}
+    novos = []
+    for a in lista:
+        t = dict(a.get("tools") or {})
+        atuais = [x for x in (t.get("alsoAllow") or []) if x != ferramenta]
+        t["alsoAllow"] = atuais
+        t["deny"] = _deny_de_mcp(atuais, t.get("deny") or [], restantes)
+        novos.append({**a, "tools": t})
+    if novos != lista:
+        patch["agents"] = {"list": novos}
 
     try:
         await patch_gw.aplicar_patch(

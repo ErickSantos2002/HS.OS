@@ -492,26 +492,34 @@ after repeated failures`). A `nina` chutou três nomes de coluna e derrubou o `b
 mesma. Volta sozinho — mas é motivo de sobra para o arquivo do agente mandar consultar
 `information_schema` em vez de adivinhar.
 
-### O escopo por agente que a tela promete e a config não entrega
+### Escopo de banco por agente: `alsoAllow` concede, só o `deny` exclui
 
-⚠️ **Todo agente alcança todos os nove bancos.** `tools.alsoAllow` é **aditivo** — ele acrescenta
-ao que a política global já dá, e não existe `tools.allow` global restringindo. Com
-`tools.profile: "coding"`, todo servidor em `mcp.servers` fica visível para todo agente. A
-publicação por agente na tela de Conectores **organiza, mas não isola**: a `nina` lista
-`banco-chamadoshs`, `banco-talenths`, `banco-hsgrowth` e os demais sem que ninguém os tenha
-publicado para ela.
+⚠️ **`tools.alsoAllow` é ADITIVO — declarar um servidor em `mcp.servers` já o entrega a todos.**
+Com `tools.profile: "coding"` e sem `tools.allow` global, todo servidor MCP fica visível para todo
+agente; o `alsoAllow` não restringe nada, só acrescenta. Até 14/08/2026 a `nina` enxergava os nove
+bancos da empresa tendo dois publicados, e a tela de Conectores dizia o contrário. O comentário do
+`publicar_banco` **afirmava explicitamente** que declarar o servidor não dava acesso a ninguém —
+estava errado, e sobreviveu porque ninguém perguntou ao agente.
 
-Hoje o que segura isso é **disciplina escrita no `AGENTS.md`** ("enxergar não é ter direito"), não
-a configuração. Fechar de verdade exige `tools.allow` por agente (lista absoluta) ou `deny` por
-servidor — decisão em aberto.
+Quem exclui é o **`deny` por agente**, recalculado a cada publicação em `_deny_de_mcp`
+(`backend/app/routers/integracoes.py`): `deny = (tudo em mcp.servers) − (o alsoAllow do agente)`,
+preservando os denies que não são de MCP (`sessions_send`, `sessions_spawn`).
 
-⚠️ **`mcp__hsos-alerta__avisar_administrador` não chega nos agentes.** O servidor aponta para
-`http://172.18.0.1:8002/mcp/alerta`, a bridge do Swarm em produção, enquanto o backend roda na
-máquina de desenvolvimento. `nina` e `iris` confirmaram, cada uma por conta própria, que a
-ferramenta não aparece na lista delas — enquanto o `SOUL.md` das duas manda usá-la ao detectar
-tentativa de subverter os limites. **O guardrail está decorativo.** A auditoria não pegou porque
-conferia a config, não o que o agente vê: `scripts/auditar-agente.py` valida
-`any("alerta" in t for t in reais)` lendo `alsoAllow`, que continua lá.
+⚠️ **O `deny` casa pelo nome SEM o prefixo `mcp__`; o `alsoAllow` usa COM.** Os dois convivem no
+mesmo objeto e aceitam formatos diferentes. Aplicar `deny: ["mcp__banco-x__query"]` grava, passa em
+qualquer conferência que releia a config, e **não remove nada** — a `iris` seguiu enxergando os dez
+bancos com o deny "aplicado". O que vale é `banco-x__query`, que é o nome que o agente vê.
+
+Verificação que serve: **perguntar ao agente** quais ferramentas ele enxerga. Reler o `config.get`
+não distingue um deny que funcionou de um que não casou com nada.
+
+⚠️ **`mcp__hsos-alerta__avisar_administrador` só funciona com o backend em produção.** O servidor
+aponta para o backend pela rede, e o gateway vive noutra máquina (`2.24.85.122`) — o backend está em
+`62.72.11.28`, atrás de `hsosapi.healthsafetytech.com`. Apontar para `172.18.0.1` é o engano fácil:
+essa é a bridge do Swarm vista **de dentro do backend**, boa para o backend falar com o túnel, e
+sem sentido a partir do gateway. Enquanto a URL esteve errada, `nina` e `iris` confirmaram cada uma
+que a ferramenta não aparecia — e o `SOUL.md` das duas mandava usá-la ao detectar tentativa de
+subverter os limites. **Servidor MCP fora do ar não publica ferramenta e não dá erro.**
 
 ## A regra dos sete arquivos
 
