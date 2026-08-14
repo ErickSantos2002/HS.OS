@@ -21,7 +21,7 @@ camada de renomeação em `use-agents.ts`.
 import json
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import asyncio
 from uuid import UUID, uuid4
 
@@ -2209,6 +2209,15 @@ async def consumo_do_agente(
 
     Sem `desde`, olha os últimos dois dias — o painel de hoje/ontem. A aba de
     período manda a janela explícita.
+
+    ⚠️ **Do coletor quando há, do gateway quando não há** — igual ao
+    `/estatisticas` logo abaixo, e pelo mesmo motivo. A `usage_events` tem um
+    escritor só, o coletor da VPS, e enquanto ele não apontar para esta
+    instalação a tabela fica **zerada**. O painel lia zero e mostrava
+    "US$ 0,00 · 0 tokens" — que não é "ainda não gastamos", é "não fui olhar".
+
+    Em 14/08/2026 o gateway tinha 38 sessões, 1,01 milhão de tokens e US$ 4,77
+    de custo estimado enquanto a tela dizia zero.
     """
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
@@ -2224,7 +2233,76 @@ async def consumo_do_agente(
             """,
             agent_id, desde or "", limite,
         )
-    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+    if linhas:
+        return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+
+    return await _consumo_do_gateway(agent_id, desde, limite)
+
+
+async def _consumo_do_gateway(agent_id: str, desde: str | None, limite: int) -> list[dict]:
+    """Consumo derivado das sessões vivas do gateway, no formato da `usage_events`.
+
+    O `sessions.list` traz `totalTokens`, `inputTokens`, `outputTokens` e
+    `estimatedCostUsd` por sessão — é o mesmo número que o gateway usa para
+    cobrar, não uma estimativa nossa.
+
+    ⚠️ **É uma sessão por linha, não um turno por linha.** O consumo inteiro da
+    sessão é carimbado no instante da última atividade dela. Para o painel de
+    hoje/ontem isso é fiel, porque aqui as sessões duram uma conversa; para uma
+    sessão que atravesse a virada do dia, o gasto todo cai no dia em que ela
+    terminou. Quem resolve isso é o coletor, gravando por turno — este caminho
+    é o que faz a tela parar de mentir enquanto ele não existe.
+
+    ⚠️ **Sessão podada some com o histórico.** Por isso "quanto gastamos em
+    julho" não sai daqui, e a resposta certa a essa pergunta continua sendo o
+    coletor.
+    """
+    try:
+        c = await cfg.carregar()
+        r = await obter_cliente(c.url, c.token).chamar("sessions.list", {"limit": 500})
+    except (ErroGateway, OSError) as e:
+        logger.warning("sessions.list falhou ao medir consumo de %s: %s", agent_id, e)
+        return []
+
+    try:
+        corte = (
+            datetime.fromisoformat(desde.replace("Z", "+00:00"))
+            if desde else datetime.now(timezone.utc) - timedelta(days=2)
+        )
+    except ValueError:
+        corte = datetime.now(timezone.utc) - timedelta(days=2)
+
+    alvo = agent_id.lower()
+    saida: list[dict] = []
+    for s in r.get("sessions", []):
+        partes = (s.get("key") or "").split(":")
+        if len(partes) < 3 or partes[0] != "agent" or partes[1].lower() != alvo:
+            continue
+        # `endedAt` é o fim do último run; `updatedAt` cobre sessão ainda aberta.
+        quando = s.get("endedAt") or s.get("updatedAt")
+        if not isinstance(quando, (int, float)):
+            continue
+        ts = datetime.fromtimestamp(quando / 1000, tz=timezone.utc)
+        if ts < corte:
+            continue
+        total = s.get("totalTokens") or 0
+        if not total and not s.get("estimatedCostUsd"):
+            continue
+        saida.append({
+            "ts": ts.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "total_tokens": total,
+            "input_tokens": s.get("inputTokens") or 0,
+            "output_tokens": s.get("outputTokens") or 0,
+            "cached_tokens": None,
+            "cost_usd": s.get("estimatedCostUsd") or 0,
+            "model": s.get("model"),
+            # A tela não usa, mas quem for depurar precisa saber que este número
+            # não veio da `usage_events`.
+            "origem": "gateway",
+        })
+
+    saida.sort(key=lambda x: x["ts"])
+    return saida[-limite:]
 
 
 @router.get("/{agent_id}/estatisticas")
@@ -2303,7 +2381,15 @@ async def integracoes_do_agente(
     usuario: Usuario = Depends(exige_papel("administrador")),
     tipo: str | None = Query(default=None),
 ):
-    """As integrações vinculadas a este agente."""
+    """As integrações vinculadas a este agente: canais, ferramentas e skills.
+
+    ⚠️ **Do banco quando há, do gateway quando não há** — mesmo desenho do
+    `/consumo` e do `/estatisticas`. A `agent_integrations` nunca teve escritor:
+    em 14/08/2026 estava com **zero linhas** enquanto os três agentes tinham
+    conector de banco e ferramenta de alerta publicados por nós mesmos, naquele
+    mesmo dia. A tela dizia "Nenhuma ferramenta configurada" para um agente com
+    três.
+    """
     condicoes, args = ["agent_id = $1"], [agent_id]
     if tipo:
         args.append(tipo)
@@ -2313,7 +2399,115 @@ async def integracoes_do_agente(
             f"SELECT * FROM public.agent_integrations WHERE {' AND '.join(condicoes)} ORDER BY name",
             *args,
         )
-    return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+    if linhas:
+        return [json.loads(json.dumps(dict(l), default=str)) for l in linhas]
+
+    return await _integracoes_do_gateway(agent_id, tipo)
+
+
+def _rotulo_do_servidor(servidor: str) -> str:
+    """`banco-diretorio-hs-os` → `Diretório HS.OS`. Cosmético e sem custo."""
+    if servidor.startswith("banco-"):
+        return "Banco " + servidor[len("banco-"):].replace("-", " ").title()
+    return servidor.replace("-", " ").title()
+
+
+async def _integracoes_do_gateway(agent_id: str, tipo: str | None) -> list[dict]:
+    """Canais, ferramentas e skills deste agente, lidos do gateway.
+
+    ⚠️ **A config do servidor MCP guarda a URL de conexão COM SENHA nos `args`.**
+    Nada daqui pode devolvê-la: o `config` que sai é só transporte e nome da
+    tool. Em 12/08/2026 já encontramos senha de superusuário em texto puro num
+    workspace de agente; não vamos reintroduzi-la por um painel.
+
+    Skills: só as **não-embutidas**. As 51 do próprio OpenClaw afogariam as
+    nossas num cartão pequeno — o catálogo completo é a página de Skills, que
+    tem espaço para ele.
+    """
+    saida: list[dict] = []
+    try:
+        c = await cfg.carregar()
+        cli = obter_cliente(c.url, c.token)
+        bruto = await cli.chamar("config.get", {})
+        parsed = ((bruto.get("payload") or bruto).get("parsed")) or {}
+    except (ErroGateway, OSError) as e:
+        logger.warning("config.get falhou ao listar integrações de %s: %s", agent_id, e)
+        return []
+
+    alvo = agent_id.lower()
+    perfil = next(
+        (a for a in ((parsed.get("agents") or {}).get("list") or [])
+         if str(a.get("id", "")).lower() == alvo),
+        None,
+    )
+    servidores = ((parsed.get("mcp") or {}).get("servers")) or {}
+
+    if perfil and (not tipo or tipo == "tool"):
+        negados = {str(x) for x in ((perfil.get("tools") or {}).get("deny") or [])}
+        for ferramenta in ((perfil.get("tools") or {}).get("alsoAllow") or []):
+            nu = ferramenta[len("mcp__"):] if ferramenta.startswith("mcp__") else ferramenta
+            servidor = nu.rsplit("__", 1)[0]
+            existe = servidor in servidores
+            # ⚠️ Ferramenta concedida cujo servidor sumiu: o agente a enxerga e
+            # ela não conecta. É o defeito que o `auditar-agente.py` procura, e
+            # o painel tem que mostrá-lo em vez de fingir que está tudo certo.
+            status = "error" if not existe else ("inactive" if nu in negados else "active")
+            s = servidores.get(servidor) or {}
+            saida.append({
+                "id": f"tool:{nu}",
+                "name": _rotulo_do_servidor(servidor),
+                "type": "tool",
+                "status": status,
+                # Sem `args`: é lá que mora a URL com senha.
+                "config": {"tool": nu, "transporte": s.get("transport") or "stdio"},
+                "description": (
+                    "Servidor MCP não existe mais na configuração"
+                    if not existe else f"Ferramenta `{nu}`"
+                ),
+            })
+
+    if not tipo or tipo == "channel":
+        async with sessao(role="service_role") as conn:
+            canais = await conn.fetchval(
+                "SELECT channels FROM public.agent_profiles WHERE agent_id = $1", agent_id
+            )
+        for ch in (canais or []):
+            saida.append({
+                "id": f"channel:{ch}", "name": str(ch), "type": "channel",
+                "status": "active", "config": None, "description": None,
+            })
+
+    if not tipo or tipo == "skill":
+        try:
+            r = await cli.chamar("skills.status", {"agentId": agent_id})
+            p = r.get("payload") or r
+        except (ErroGateway, OSError) as e:
+            logger.warning("skills.status falhou para %s: %s", agent_id, e)
+            p = {}
+        for s in (p.get("skills") or []):
+            if s.get("bundled"):
+                continue
+            # ⚠️ **`eligible` é o veredito do próprio gateway — use ele.** A
+            # primeira versão somava `disabled or missing or blockedByAgentFilter`
+            # e marcava TODAS como inativas: `missing` não é booleano, é um dict
+            # (`{"bins": [], "env": [], …}`), e dict vazio é **verdadeiro** em
+            # Python. A `faturamento` aparecia inativa no painel no mesmo dia em
+            # que a `iris` a usou para acertar o faturamento.
+            saida.append({
+                "id": f"skill:{s.get('name')}",
+                "name": f"{s.get('emoji') or ''} {s.get('name')}".strip(),
+                "type": "skill",
+                "status": "active" if s.get("eligible") else "inactive",
+                "config": {
+                    "fonte": s.get("source"),
+                    "sempre": bool(s.get("always")),
+                    "invocavel_por_pessoa": bool(s.get("userInvocable")),
+                },
+                "description": s.get("description"),
+            })
+
+    saida.sort(key=lambda x: (x["type"], x["name"]))
+    return saida
 
 
 @router.get("/{agent_id}/agendamentos-do-gateway")
