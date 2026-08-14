@@ -438,10 +438,37 @@ Hoje são `exige_papel("administrador")`: `arquivos`, `arquivos/{nome}`, `arquiv
 | `GET /agents/{id}/contexto` | `ContextWindowIndicator`, dentro do `ChatPage` |
 | `GET /agents/{id}/atividades` | `AgentActivityCard`, dentro do `ChatPage` |
 
-No front, `/agents` e `/agents/:agentId` são `allowedRoles={["administrador"]}`, e "Super agentes"
-saiu do `memberGroups` (`AppSidebar`) e do `memberTabs` (`BottomNav`). A busca global manda o
-colaborador para `/chat?agent=<id>` em vez de `/agents/<id>`: sem isso ele clicaria num agente e
-seria devolvido ao chat pelo `ProtectedRoute`, o que parece defeito.
+**No front a divisão é entre a página e o painel, não entre as duas rotas.** `/agents` fica aberta
+ao colaborador — o mapa da frota é visão do time (quem existe, quem lidera, quem fala com quem) e
+foi pedido assim. `/agents/:agentId` é `allowedRoles={["administrador"]}`.
+
+O que separa é o **overlay**: clicar num agente abre o `AgentDetailPanel` para o admin e o
+`AgentResumoPanel` para o colaborador.
+
+⚠️ **O `AgentResumoPanel` existe para NÃO reusar o `AgentDetailPanel` com condicionais.** Aquele
+tem ~1700 linhas e ~15 seções soltas (custo, crons, integrações, guardrails, sessões, usuários
+recentes) — esconder seção por seção é onde se esquece uma. O painel novo só mostra o que já veio
+no `GET /agents`. Se um dia precisar de mais um dado, o dado tem que vir de endpoint aberto ao
+colaborador, não de um `exige_papel` afrouxado.
+
+No roster, o clique navega para `/agents/:id` só para o admin; para o colaborador ele seleciona no
+mapa. A busca global manda o colaborador para `/chat?agent=<id>` em vez de `/agents/<id>`, senão ele
+clicaria num agente e seria devolvido ao chat pelo `ProtectedRoute`, o que parece defeito.
+
+⚠️ `GET /agents` devolve `workspace`, `model` e `allowedUserIds` a quem pode ver o agente.
+`systemPrompt` volta **vazio** e `tokensUsed` zerado — conferido com token de colaborador. Se algum
+dia o `systemPrompt` passar a vir preenchido ali, o mapa vira vazamento.
+
+#### Configuração em `app_settings` é global
+
+⚠️ **`PUT`/`DELETE /configuracoes/{chave}` estavam em "só logado".** A tabela guarda **uma linha por
+chave para a instalação inteira**, não por pessoa: hoje a posição do mapa neural e do mapa de times,
+amanhã o que mais migrar do `localStorage`. Qualquer colaborador reescrevia qualquer chave, e o que
+ele arrastasse e salvasse mudaria a tela de todo mundo.
+
+Hoje são `administrador`; o `GET` continua aberto, porque todo mundo precisa carregar o layout. Na
+tela, os botões "Salvar layout" do `NeuralMap` e do `TeamsPage` só aparecem para admin — **arrastar
+continua livre**, porque é local e some ao recarregar.
 
 ⚠️ **Esconder no menu não é fechar.** Cada uma dessas rotas foi conferida com um token de
 `colaborador` emitido na mão (`emitir_token(...)`), batendo na API direto — a tela some para quem

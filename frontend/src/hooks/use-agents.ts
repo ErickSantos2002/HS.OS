@@ -20,6 +20,8 @@ interface RespostaAgentes {
     emoji?: string | null;
     avatarUrl?: string | null;
     department?: string | null;
+    specialty?: string | null;
+    description?: string | null;
     openclawId?: string | null;
     isLeader?: boolean;
     accessType?: string;
@@ -66,6 +68,10 @@ export interface GatewayAgent {
   openclawId?: string | null;
   emoji?: string | null;
   department?: string | null;
+  /** Uma linha sobre o papel dele. Vem de `agent_profiles.specialty`. */
+  specialty?: string | null;
+  /** O texto longo do que ele faz. Vem de `agent_profiles.description`. */
+  description?: string | null;
   isLeader?: boolean;
   /** Quem alcança este agente: `all` | `admins_only` | `specific_users`. */
   accessType?: string;
@@ -221,6 +227,11 @@ async function fetchAgents(_userId?: string, _isAdmin?: boolean): Promise<Gatewa
     openclawId: a.openclawId ?? null,
     emoji: a.emoji ?? null,
     department: a.department ?? null,
+    // Mesma história dos quatro acima: a API devolve os dois desde sempre e
+    // ninguém os copiava. É o que o colaborador lê ao clicar num agente no
+    // mapa — sem eles o painel dele nasceria vazio.
+    specialty: a.specialty ?? null,
+    description: a.description ?? null,
     isLeader: !!a.isLeader,
     accessType: a.accessType ?? "all",
     allowedUserIds: Array.isArray(a.allowedUserIds) ? a.allowedUserIds.map(String) : [],

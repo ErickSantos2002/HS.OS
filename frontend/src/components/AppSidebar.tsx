@@ -70,9 +70,9 @@ const memberGroups: NavGroup[] = [
     items: [
       { title: "Chat", url: "/chat", icon: MessageSquare },
       { title: "Arenas", url: "/arenas", icon: Swords },
-      // "Super agentes" saiu daqui: a página administra o agente — editar,
-      // ler os sete arquivos, ver custo — e isso é do administrador. O
-      // colaborador fala com os agentes dele pelo Chat.
+      // Para o colaborador esta página é o mapa da frota, em leitura: clicar
+      // num agente abre o `AgentResumoPanel`, não o `AgentDetailPanel`.
+      { title: "Super agentes", url: "/agents", icon: Bot },
       { title: "Tasks", url: "/tasks", icon: ListChecks },
       { title: "Artefatos Vivos", url: "/artefatos", icon: Radio },
       { title: "Conhecimento", url: "/base-de-conhecimento", icon: BookOpen },

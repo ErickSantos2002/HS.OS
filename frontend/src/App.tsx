@@ -126,11 +126,13 @@ const App = () => {
                           <Route
                             path="/agents"
                             element={
-                              // Administração de agente é do administrador. O
-                              // colaborador chega aos agentes dele pelo /chat,
-                              // que é o ponto: aqui se edita, se lê os sete
-                              // arquivos (o prompt de sistema) e se vê custo.
-                              <ProtectedRoute allowedRoles={["administrador"]}>
+                              // O mapa da frota é visão do time — quem existe,
+                              // quem lidera, quem fala com quem — e fica aberto.
+                              // O que é administração mora em `/agents/:id` e no
+                              // `AgentDetailPanel`, e esses são do administrador:
+                              // ali estão custo, crons e os sete arquivos, que
+                              // são o prompt de sistema do agente.
+                              <ProtectedRoute allowedRoles={["administrador", "colaborador"]}>
                                 <AgentsPage />
                               </ProtectedRoute>
                             }

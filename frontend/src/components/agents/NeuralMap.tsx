@@ -5,6 +5,7 @@ import type { GatewayAgent } from "@/hooks/use-agents";
 import type { Person } from "@/hooks/use-people";
 import { getSetting, setSetting } from "@/lib/app-settings";
 import { getLeaderAgentId } from "@/lib/active-agents";
+import { useAuthContext } from "@/contexts/auth-context";
 
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 2.5;
@@ -164,6 +165,8 @@ const HEXAGON_CLIP = "polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%
 
 export default function NeuralMap({ agents, avatars, selectedId, onSelect, people = [] }: Props) {
   const { resolvedTheme } = useTheme();
+  const { role } = useAuthContext();
+  const podeSalvarLayout = role === "administrador";
   const isLight = resolvedTheme === "light";
   const canvasBg = isLight ? "hsl(0 0% 98%)" : "hsl(0 0% 5%)";
   const nodeBg = isLight ? "hsl(0 0% 100%)" : "hsl(0 0% 8%)";
@@ -558,8 +561,12 @@ export default function NeuralMap({ agents, avatars, selectedId, onSelect, peopl
         })}
       </svg>
 
-      {/* Save / Reset buttons */}
-      {loaded && (
+      {/* Save / Reset buttons — só administrador.
+          ⚠️ O layout é **global**: fica em `app_settings`, uma linha para a
+          instalação inteira. O que o colaborador arrastasse e salvasse mudaria
+          o mapa de todo mundo, inclusive o do CEO. Arrastar continua livre
+          (é local, some ao recarregar); gravar é que não. */}
+      {loaded && podeSalvarLayout && (
         <div className="absolute top-3 right-3 z-20 flex items-center gap-1.5">
           {dirty && (
             <button

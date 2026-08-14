@@ -10,11 +10,18 @@ import GridView from "@/components/agents/GridView";
 import ListView from "@/components/agents/ListView";
 import FleetRoster from "@/components/agents/FleetRoster";
 import AgentDetailPanel from "@/components/agents/AgentDetailPanel";
+import AgentResumoPanel from "@/components/agents/AgentResumoPanel";
+import { useAuthContext } from "@/contexts/auth-context";
 
 export default function AgentsPage() {
   const { agents, loading, error, connected, refetch } = useAgents();
   const avatars = useAllAvatars();
   const { people } = usePeople();
+  // O mapa da frota é visão do time e fica aberto ao colaborador. O que é
+  // administração — custo, crons, integrações, os sete arquivos — não: para ele
+  // o clique abre um resumo de leitura, e `/agents/:id` continua fechada.
+  const { role } = useAuthContext();
+  const isAdmin = role === "administrador";
 
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -23,7 +30,11 @@ export default function AgentsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   
 
-  const goToAgent = (id: string) => navigate(`/agents/${encodeURIComponent(id)}`);
+  // No roster, o administrador vai para a página de administração do agente. O
+  // colaborador não tem essa página: para ele o clique seleciona no mapa e abre
+  // o resumo, que é o mesmo gesto do clique no nó.
+  const goToAgent = (id: string) =>
+    isAdmin ? navigate(`/agents/${encodeURIComponent(id)}`) : setSelectedId(id);
 
 
   const filtered = useMemo(() => {
@@ -97,13 +108,20 @@ export default function AgentsPage() {
           </div>
 
           {/* Detail Panel (overlay) */}
-          {selectedAgent && (
-            <AgentDetailPanel
-              agent={selectedAgent}
-              avatar={avatars[selectedAgent.id] ?? null}
-              onClose={() => setSelectedId(null)}
-            />
-          )}
+          {selectedAgent &&
+            (isAdmin ? (
+              <AgentDetailPanel
+                agent={selectedAgent}
+                avatar={avatars[selectedAgent.id] ?? null}
+                onClose={() => setSelectedId(null)}
+              />
+            ) : (
+              <AgentResumoPanel
+                agent={selectedAgent}
+                avatar={avatars[selectedAgent.id] ?? null}
+                onClose={() => setSelectedId(null)}
+              />
+            ))}
         </div>
       )}
 

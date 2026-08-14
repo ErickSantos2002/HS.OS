@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, usuario_atual
+from app.dependencies import Usuario, exige_papel, usuario_atual
 
 logger = logging.getLogger(__name__)
 
@@ -153,9 +153,19 @@ class ConfiguracaoIn(BaseModel):
 
 @router.put("/configuracoes/{chave}", status_code=status.HTTP_204_NO_CONTENT)
 async def gravar_configuracao(
-    chave: str, dados: ConfiguracaoIn, usuario: Usuario = Depends(usuario_atual)
+    chave: str,
+    dados: ConfiguracaoIn,
+    usuario: Usuario = Depends(exige_papel("administrador")),
 ):
     """Grava a configuração, criando ou substituindo.
+
+    ⚠️ **Configuração aqui é GLOBAL** — uma linha por chave para a instalação
+    inteira, não por pessoa. Ficou em "só logado" até 14/08/2026, e isso queria
+    dizer que qualquer colaborador reescrevia qualquer chave: hoje a posição do
+    mapa neural e do mapa de times, amanhã o que mais migrar do `localStorage`
+    para cá. O que uma pessoa arrastasse e salvasse mudaria a tela de todo mundo.
+
+    A leitura (`GET`) continua aberta: todo mundo precisa carregar o layout.
 
     O `updated_at` é `now()` do servidor. A tela mandava o horário do navegador,
     e é o mesmo problema de sempre: relógio adiantado faz "alterado há 5 minutos"
@@ -171,6 +181,9 @@ async def gravar_configuracao(
 
 
 @router.delete("/configuracoes/{chave}", status_code=status.HTTP_204_NO_CONTENT)
-async def apagar_configuracao(chave: str, usuario: Usuario = Depends(usuario_atual)):
+async def apagar_configuracao(
+    chave: str, usuario: Usuario = Depends(exige_papel("administrador"))
+):
+    """Apaga a configuração. Admin pelo mesmo motivo do `PUT`: a chave é global."""
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         await conn.execute("DELETE FROM public.app_settings WHERE key = $1", chave)

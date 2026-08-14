@@ -22,6 +22,7 @@ import { Plus, Users, Save, Trash2, UserPlus, UserMinus, Bot, LayoutGrid } from 
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import TeamIcon from "@/components/TeamIcon";
+import { useAuthContext } from "@/contexts/auth-context";
 
 /* ── Constants ── */
 const COLORS = ["#3D61FF", "#E41A11", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#06B6D4", "#F97316"];
@@ -195,6 +196,10 @@ export default function TeamsPage() {
   const { teams, createTeam, deleteTeam, addAgentToTeam, removeAgentFromTeam } = useTeams();
   const { agents } = useAgents();
   const navigate = useNavigate();
+  // Salvar layout grava em `app_settings`, que é global: uma linha para a
+  // instalação inteira. Arrastar é local e continua livre; gravar é de admin.
+  const { role } = useAuthContext();
+  const podeSalvarLayout = role === "administrador";
 
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -324,7 +329,7 @@ export default function TeamsPage() {
           >
             <LayoutGrid className="h-4 w-4" /> Reorganizar
           </button>
-          {isDirty && (
+          {isDirty && podeSalvarLayout && (
             <button
               onClick={handleSaveLayout}
               className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-full bg-gradient-to-r from-primary to-[hsl(260,70%,55%)] text-primary-foreground shadow-lg shadow-primary/20 hover:opacity-90 transition-all animate-pulse"
