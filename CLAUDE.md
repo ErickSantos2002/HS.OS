@@ -657,7 +657,22 @@ Não existe meio-termo. Duas tentativas de contornar isso já falharam aqui:
   marcadores, sem passar por LLM.
 
 Para instrução que o agente usa **de vez em quando**, o mecanismo certo é uma **skill** — o
-OpenClaw as carrega sob demanda (as 53 do gateway são todas `always: false`).
+OpenClaw as carrega sob demanda (as 53 do gateway são todas `always: false`). Publicar é
+`skills/<slug>/SKILL.md` no repositório + `bash scripts/publicar-skills.sh --enviar`.
+
+⚠️ **Skill publicada não é skill usada, e essa distinção custa o número errado.** Em 14/08/2026 a
+skill `faturamento` foi publicada, o gateway a listou, a `iris` confirmou que a enxerga **e leu o
+título dela quando perguntei** — e, na pergunta real sobre faturamento, respondeu do jeito antigo
+sem abri-la: R$ 654.645,95 em vez de R$ 441.712,80, 48% a mais.
+
+Carregar sob demanda depende de o agente **lembrar** que a skill existe, e isso varia com o modelo
+(a troca para DeepSeek aconteceu no mesmo dia). O que resolve é um **ponteiro curto num dos sete**:
+"pergunta sobre X começa abrindo a skill Y". O procedimento longo continua na skill, que só custa
+contexto quando é aberta; nos sete entra só o gatilho. Com o ponteiro no `AGENTS.md`, a mesma
+pergunta passou a devolver o número certo.
+
+**A conferência de uma skill é a resposta do agente, não a listagem do gateway.** `skills.status`
+mostrando o nome só diz que o arquivo chegou.
 
 ## Rebrand — o que é dado e o que é hardcoded
 

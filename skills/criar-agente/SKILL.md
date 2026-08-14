@@ -238,6 +238,20 @@ Aqui é onde você pensa, e é o que justifica ser você a criar em vez de um mo
   calibra bem. Escreva pelo menos um de quando ele **não sabe** — dizendo o que
   não tem, de onde viria, e oferecendo o passo seguinte.
 
+## Skill precisa de gatilho nos sete arquivos
+
+⚠️ **Publicar a skill não faz o agente usá-la.** Em 14/08/2026 a `iris` recebeu a
+skill `faturamento`, confirmou que a enxergava e até leu o título dela quando
+perguntei — e, na pergunta real, respondeu de memória com um número 48% inflado.
+
+Carregar sob demanda depende de o agente lembrar que a skill existe, e isso varia
+com o modelo. Para toda skill que cobre uma pergunta **previsível**, escreva um
+ponteiro curto num dos sete: *"pergunta sobre X começa abrindo a skill Y"*.
+
+O procedimento longo fica na skill — ela só custa contexto quando aberta. Nos
+sete entra o gatilho e o motivo, em poucas linhas. E a conferência é fazer a
+pergunta ao agente: skill listada pelo gateway não é skill usada.
+
 ## Ferramenta dada depois é ferramenta não documentada
 
 ⚠️ **Se o agente ganhar uma ferramenta depois de o `TOOLS.md` estar escrito, o
