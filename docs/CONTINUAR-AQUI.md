@@ -1,7 +1,10 @@
 # Continuar aqui
 
-Ponto de retomada da portagem. Atualizado em **13/08/2026**. Leia isto, depois
+Ponto de retomada da portagem. Atualizado em **14/08/2026**. Leia isto, depois
 `CLAUDE.md` e `docs/ROADMAP.md`.
+
+👉 **Voltando na segunda (17/08)?** Pule para
+[*Segunda-feira — por onde pegar*](#segunda-feira--por-onde-pegar).
 
 🎉 **O front saiu do Supabase.** Nenhuma chamada `.from()`, nenhum
 `functions.invoke`, nenhum `supabase.channel`. O único arquivo que ainda
@@ -10,9 +13,87 @@ para lançar caso alguém o use. **Zero** edge functions por portar.
 
 👉 **Arena, War room e voz pausadas em 10/08** — ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md).
 
-👉 **Vai testar o sistema?** Comece por [`TESTAR-SEGUNDA.md`](TESTAR-SEGUNDA.md)
-— roteiro em ordem, o que já se sabe que não funciona, e o que precisa ser
-testado junto porque tem efeito real.
+👉 **Vai testar o sistema?** [`TESTAR-SEGUNDA.md`](TESTAR-SEGUNDA.md) é o roteiro
+da **fase da migração** (escrito em 07–10/08), e essa fase fechou. Continua útil
+para o básico — túnel, subida, login. Para o que mudou depois, veja
+[*Conferir no navegador*](#conferir-no-navegador) logo abaixo.
+
+---
+
+## O que aconteceu em 14/08/2026
+
+Dia longo e de tema único: **quase tudo que parecia funcionar estava conferindo a
+configuração em vez do efeito.** Sete frentes, e o mesmo defeito de método em
+todas.
+
+**A Nina foi liberada para o CEO** (Nicholson, `np@`, `colaborador`). O acesso já
+estava certo; o que faltava era o resto desta lista.
+
+**Um agente falar com outro.** O `agent_to_agent` **não é uma ferramenta** — quem
+conversa é o `sessions_send`, e `tools.agentToAgent` é a política que o deixa
+cruzar a fronteira. E o `allow` lista **quem participa, não quem recebe**: com
+`[iris, atlas]`, tanto `iris→nina` quanto `nina→iris` foram recusados. Só com os
+três na lista funcionou. Quem *inicia* se controla por agente, com `deny`, que
+**remove a ferramenta da lista** em vez de recusá-la em runtime.
+
+**O roster do time foi para o `AGENTS.md`** dos três, não para o `USER.md` —
+pessoa se descobre pela chave de sessão, agente se roteia por tabela. Com o
+protocolo de perguntar antes de delegar. Testado ponta a ponta: a Nina reconhece
+que faturamento é da Iris, oferece as duas saídas, e traz a resposta atribuindo.
+
+**Todo agente alcançava os nove bancos.** `alsoAllow` é **aditivo** sobre o perfil
+`coding`, que já libera todo servidor MCP; a publicação por agente organizava sem
+isolar. Quem exclui é o `deny`, agora recalculado a cada publicação em
+`_deny_de_mcp`. ⚠️ **O `deny` casa pelo nome SEM o prefixo `mcp__`**; a primeira
+tentativa gravou com prefixo, passou na conferência e não removeu nada.
+
+**O `avisar_administrador` nunca chegou em ninguém.** Apontava para `172.18.0.1`,
+que é a bridge vista de dentro do backend — sem sentido a partir do gateway, que
+vive noutra máquina. Corrigido para o domínio público. Hoje ele recusa jailbreak
+e dispara de verdade: a linha está em `conversations` e `notifications`.
+
+**Senha virou responsabilidade do administrador.** A HS é fechada e as pessoas
+entram pelo **FortiPAM**; colaborador trocando a própria senha dessincronizaria o
+cofre. `POST /profiles/{id}/senha` para o admin, `/auth/trocar-senha` restrito.
+⚠️ **Não copie esta restrição para outra instalação sem o cofre junto.**
+
+**O colaborador via administração de agente.** `GET /agents/{id}/arquivos` estava
+em "só logado" — são os sete arquivos, ou seja, o prompt de sistema que o próprio
+agente recusa mostrar. E os `crons` estavam abertos para **escrita**. Treze rotas
+passaram a exigir admin; `/agents` continua aberta porque o mapa da frota é visão
+do time, com o `AgentResumoPanel` no lugar do painel completo.
+
+**DeepSeek entrou no lugar do Claude.** Provedor não-embutido precisa ser
+**declarado** (`baseUrl` + `api` + lista de modelos), não só ter chave. Os três
+agentes rodam nele, com delegação e guardrail **reverificados** — tinham sido
+testados só em Claude, e trocar o modelo invalida o teste.
+
+**A skill de faturamento tirou um erro de 48% do caminho da diretoria.** A Iris
+somava toda nota "emitida" e devolvia R$ 654.645,95 para agosto; o certo é
+R$ 441.712,80. A régua veio de `~/projetos/extracao-consultoria`, já conferida
+contra a página Financeiro do DataCore.
+
+⚠️ **E a descoberta que mais vale: skill publicada não é skill usada.** Publicada,
+listada pelo gateway, e a Iris confirmando que a enxergava — ela respondeu errado
+assim mesmo. Carregar sob demanda depende de o agente **lembrar**, e isso varia
+com o modelo. O que resolveu foi um **ponteiro curto no `AGENTS.md`**: "pergunta
+sobre X começa abrindo a skill Y".
+
+**O painel do agente parou de mostrar zero.** `usage_events` e
+`agent_integrations` têm zero linhas e nunca tiveram escritor, enquanto o gateway
+tinha 38 sessões, 1,01 milhão de tokens e US$ 4,77. Os dois passam a cair para o
+gateway quando a tabela está vazia — o coletor retoma a precedência sozinho
+quando existir.
+
+### O fio que costura o dia
+
+Cada uma dessas frentes falhou do mesmo jeito: **alguém conferiu a configuração e
+chamou de verificado.** O `deny` gravado que não removia nada; a auditoria
+aprovando o alerta pelo `alsoAllow`; a skill listada e não usada; a tela dizendo
+US$ 0,00 por ler tabela vazia.
+
+O que funcionou, sempre, foi **perguntar ao agente** ou **olhar o efeito final**.
+Deixe isso valer para o que vier na segunda.
 
 ---
 
@@ -85,67 +166,117 @@ isso publicar banco marcado como leitura-e-escrita responde 501 hoje.
 
 ---
 
-## Retomando — nesta ordem
+## Segunda-feira — por onde pegar
 
-Os quatro agentes especializados foram apagados em 12/08, por decisão: cada um
-tinha sido montado enquanto se aprendia a ferramenta, sem padrão. Só a `nina`
-restou. Os workspaces completos estão em `~/backups/agentes-hsos-2026-08-12/`
-— é o único registro deles.
+O que estava aqui era a ordem de 12–13/08, e ela **fechou**: a aba Empresa, os
+sete arquivos da `nina`, a skill `criar-agente` e a criação do primeiro agente
+pela orquestradora. A `iris` (DataCoreHS) e o `atlas` (GrowthHS) existem, e os
+três passam no `python scripts/auditar-agente.py <id>`.
 
-A ordem combinada, e o porquê dela:
+A frente aberta agora é **a tela de Skills e o painel de dentro de Super
+agentes** (`/agents/:id`). Ordem combinada com o Erick em 14/08:
 
-1. ~~**Preencher a aba Empresa**~~ ✅ **feito em 13/08.** O bloco da empresa é
-   escrito pelo backend direto no `AGENTS.md` de cada agente, entre marcadores
-   `hsos:empresa:inicio/fim`, iterando o `agents.list`. Sem LLM no caminho: a
-   primeira versão mandava a orquestradora fazer, custou 34 mil tokens, e ela
-   escreveu em quatro workspaces que não existiam mais.
+1. **Skills — a página.** Hoje `/skills` lê `public.skills`, que tem **zero
+   linhas**, enquanto `/skills/catalogo` já lê o gateway e devolve **55**. A
+   página mostra a tabela vazia. O dado está a uma chamada de distância; é o
+   mesmo conserto do consumo e das integrações, já feito em `agents.py`.
 
-2. **Reescrever o `USER.md` da `nina`** — é o último dos sete que ainda está
-   como veio. Diz "SO-HS" e não conhece o HS.OS. É também onde entra a
-   informação de sessão que a plataforma de origem manda (nome, id e papel de
-   quem está falando), confirmado com quem a opera.
+   ⚠️ Distinga **nossas** de **embutidas**: `skills.status` traz `bundled` e
+   `source` (`openclaw-managed` são as nossas — hoje `criar-agente` e
+   `faturamento`). Das 55, 51 são do próprio OpenClaw.
 
-   Os outros seis foram reescritos em 12–13/08 e estão em ordem: `SOUL.md`,
-   `IDENTITY.md`, `AGENTS.md`, `MEMORY.md`, `HEARTBEAT.md` e `TOOLS.md` — este
-   último no dia em que ela ganhou o banco. Backups em
-   `~/backups/agentes-hsos-2026-08-12/`.
+2. **Guardrails no painel.** `GET /agents/{id}/guardrails` lê `agent_profiles` e
+   devolve `[]`. É a área que mais mexemos esta semana e a tela não mostra nada
+   do que foi configurado. Ver onde a configuração real mora antes de escrever:
+   parte está no `SOUL.md`, parte em `tools.*` do gateway.
 
-3. **Converter o [`AGENT_CREATION.md`](AGENT_CREATION.md) em skill.** O
-   procedimento não pode virar arquivo no workspace: o gateway só escreve os
-   sete canônicos, e arquivo fora deles não carrega sozinho. A skill é
-   carregada sob demanda; no contexto dela fica só *"para criar agente, use a
-   skill X"*. Confirmado com quem opera a plataforma de origem.
-   ⚠️ Até isso existir, o briefing aponta para um arquivo que não está no
-   workspace dela.
+3. **Sessões recentes.** O gateway tem **38 sessões** com modelo, duração,
+   status, tokens e custo. É a base do diagnóstico quando alguém disser "o
+   agente não respondeu" — e hoje não aparece.
 
-4. **A orquestradora cria o primeiro agente**, de ponta a ponta. É o teste que
-   fecha o ciclo.
+4. **O coletor de histórico.** Decisão do Erick: consumo ao vivo **primeiro**
+   (feito), coletor **depois**. Enquanto ele não existir, "quanto gastamos em
+   julho" não tem resposta — sessão podada leva o histórico junto. Quando
+   entrar, ele enche `usage_events` e o `/consumo` volta a preferi-la sozinho,
+   sem mexer na tela.
 
-Dois consertos de 12/08 que tornam isso possível: o aviso ao líder ia num
-formato que o gateway recusava (todos os avisos estavam quebrados, não só o de
-criação), e a falha era engolida — a tela dizia "criado" para um agente vazio.
-Hoje, briefing não entregue **desfaz** a criação.
+   ⚠️ O `docs/DEPLOY.md` diz que o serviço `worker` **ainda não está no deploy**.
 
-⚠️ **Pendência de segurança que não pode esperar:** a senha de superusuário dos
-bancos DataCore (`administrador`/`administrador`) esteve em texto puro no
-workspace de um agente por três meses, indo para a LLM a cada sessão. O agente
-foi apagado, mas **a senha precisa ser trocada** — e o sanitizador da exportação
-não a remove, o que é bug nosso.
+**Cron jobs saiu da lista de consertar.** Nem a nossa tabela nem o gateway têm
+agendamento nenhum: a tela está certa ao não mostrar nada. Ela só ganha utilidade
+quando existir o primeiro cron de verdade.
+
+### Conferir no navegador
+
+⚠️ **Tudo de 14/08 foi verificado por API e perguntando aos agentes — nada foi
+aberto na tela.** É uma lacuna real, e é o tipo de lacuna que o próprio dia
+ensinou a não ignorar. Dez minutos resolvem:
+
+| Onde | O que tem que aparecer |
+|---|---|
+| `/agents/nina` → painel | custo **≠ US$ 0,00** e tokens ≠ 0 · ferramentas, canais e skills preenchidos |
+| `/agents` como colaborador | mapa abre · clique num agente abre o **resumo**, não o painel completo |
+| `/agents` como colaborador | **sem** botão "Salvar layout" no grafo |
+| `/settings` → Perfil, como colaborador | **sem** "Alterar Senha"; no lugar, a linha do FortiPAM |
+| `/settings` → Usuários, como admin | botão **Senha** por pessoa, e ele funciona |
+| Conectores → provedores LLM | DeepSeek aparece conectado, com V3 e R1 |
+| Chat com a Nina | pergunta de faturamento → ela oferece perguntar à Iris |
+
+Entre como **colaborador** para metade disso. Use a conta do Nicholson (a senha
+está no arquivo de credenciais, e você a trocou em 14/08 — o arquivo está
+desatualizado para ele) ou crie uma conta de teste em Usuários.
+
+⚠️ **O deploy dos dois serviços é obrigatório antes de conferir.** Backend e
+frontend mudaram em 14/08, e o EasyPanel só constrói quando alguém manda.
+
+### Pendências curtas, que cabem em qualquer intervalo
+
+- **`agentToAgent.allow` é manual.** Agente novo criado pela tela **não** entra
+  na lista: nasce sem falar com a Nina e sem ser alcançável por ela, em silêncio.
+  É o mesmo tipo de buraco que o `_deny_de_mcp` fechou. A hora certa de resolver
+  é ao criar o quarto agente.
+- **A `nina` está com `channels` vazio** em `agent_profiles`, e `iris`/`atlas`
+  com `{webchat}`. Ela conversa normalmente — é o registro que está incompleto.
+  Mesma família do `model` vazio que apareceu no mesmo dia. Testar
+  `POST /agents/sync` e ver se realinha.
+- **Marcador na skill `faturamento`**: uso `LIKE '%texto%'` e a régua oficial do
+  `tiny-integrador` usa **igualdade exata**. Deu no mesmo em janeiro e agosto,
+  mas são critérios diferentes — o meu excluiria uma nota cujo marcador apenas
+  *contenha* "cancelar". Trocar e revalidar contra os dois números de referência.
+- **O fluxo de criação de agente nunca rodou inteiro com o código corrigido.**
+  O `atlas` nasceu antes de quatro dos cinco consertos e foi remendado à mão. O
+  próximo agente é o teste — e ele exercita, de quebra, o reparo automático de
+  provedor LLM em `llm.py`, que também não foi exercitado.
+
+### Segurança, ainda em aberto
+
+Nada disso é novo de 14/08, e nada disso bloqueia o trabalho acima:
+
+- **Senha `administrador`/`administrador`** no superusuário do Postgres.
+- **`integrations.credentials` em texto puro** — nove senhas de banco.
+- **`sandbox` por agente**: um agente ainda alcança o SQLite do outro via `exec`.
+  A tentativa com `tools.fs.workspaceOnly` foi revertida por não fechar isso e
+  quebrar o trabalho da `nina`.
+- **O sanitizador da exportação** não remove `usuario:senha@` de URL.
 
 ---
 
 ## Placar — medido, não mantido à mão
 
-O contador deste arquivo já mentiu uma vez: eu vinha incrementando a cada port
-sem conferir, e ele chegou a dizer "72 de 73 resolvidas" com 13 functions ainda
-na pasta. **Todo número aqui vem de um comando**, e o comando está ao lado.
+O contador deste arquivo já mentiu **duas** vezes. Na primeira, eu vinha
+incrementando a cada port sem conferir e ele chegou a dizer "72 de 73
+resolvidas" com 13 functions ainda na pasta. Na segunda — 14/08/2026 — dizia
+**240 rotas** enquanto o comando ao lado devolvia **186**.
+
+**Todo número aqui vem de um comando**, e o comando está ao lado. Rode-os ao
+retomar; a tabela envelhece sozinha e ninguém percebe.
 
 | | Hoje | Total | Como medir |
 |---|---|---|---|
 | Edge functions **por portar** | — | **0** | `ls backend/supabase/functions \| grep -vE "_shared\|_pausado\|_portado" \| wc -l` |
 | Portadas | 65 | 73 | as outras 8 estão em `_pausado/` — ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md) |
 | Arquivos do front com Supabase | **1** | 278 | `grep -rl "integrations/supabase/client" frontend/src \| grep -v _legado \| wc -l` |
-| Rotas na API própria | **240** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
+| Rotas na API própria | **186** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
 | Chamadas `.from("…")` vivas | **0** | — | `grep -rln '\.from(\s*"' frontend/src \| grep -v _legado \| wc -l` |
 
 **Duas linhas têm que andar juntas.** "Tem substituto no backend" e "a tela usa o
