@@ -510,9 +510,13 @@ export function AgentEditDrawer({ agent, onOpenChange, onSaved, onDeleted }: Pro
                     )}
                   </SelectContent>
                 </Select>
+                {/* Com a lista de referência agora vazia, este aviso é o único
+                    sinal de que o seletor não tem opção — sem ele o campo
+                    pareceria simplesmente quebrado. */}
                 {modelsAreFallback && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Não foi possível confirmar os modelos com o Gateway — lista de referência.
+                  <p className="text-xs text-amber-500/90 mt-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                    Ainda não confirmei quais modelos o gateway serve. O modelo
+                    atual do agente continua valendo; trocar exige a lista.
                   </p>
                 )}
 

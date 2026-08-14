@@ -31,14 +31,18 @@ export type GatewayModel = {
  * no openclaw.json da HS.OS — pode não valer para um remix, por isso a UI deve
  * sinalizar que é fallback.
  */
-const FALLBACK_MODELS: GatewayModel[] = [
-  { id: "deepseek-v4-pro", qualifiedId: "deepseek/deepseek-v4-pro", provider: "deepseek", label: "DeepSeek V4 Pro", contextWindow: 1_000_000 },
-  { id: "deepseek-v4-flash", qualifiedId: "deepseek/deepseek-v4-flash", provider: "deepseek", label: "DeepSeek V4 Flash", contextWindow: 1_000_000 },
-];
-// deepseek-chat saiu daqui de propósito: o models.list do Gateway (conferido em
-// 2026-07-24) não serve mais esse modelo. Mantê-lo no fallback ofereceria um
-// modelo inexistente. Agente que ainda tenha ele salvo continua aparecendo no
-// seletor pela opção "não confirmado no Gateway".
+// ⚠️ **Vazio de propósito.** Aqui havia DeepSeek V4 Pro e Flash, com o
+// comentário de que "reflete o que está configurado hoje no openclaw.json" — e
+// deixou de refletir quando a instalação passou a servir só Anthropic. Como
+// esta lista é `placeholderData`, ela aparecia em TODA carga, não só com o
+// gateway fora: em 14/08/2026 o formulário de criar agente ofereceu DeepSeek a
+// quem não usa DeepSeek, e teria gravado esse modelo se a pessoa avançasse
+// antes da resposta chegar.
+//
+// Lista de referência que envelhece é pior que lista vazia: a vazia mostra que
+// não sabe, a velha afirma o que não é. Quem consome deve tratar
+// `isFallback: true` como "ainda não sei", e não como "use estes".
+const FALLBACK_MODELS: GatewayModel[] = [];
 
 async function fetchGatewayModels(): Promise<{
   models: GatewayModel[];

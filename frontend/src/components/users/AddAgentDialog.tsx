@@ -782,9 +782,16 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
                     ))}
                   </SelectContent>
                 </Select>
+                {/* ⚠️ Sem lista confirmada não dá para criar agente: o modelo
+                    vai direto para o `agents.create`, e um valor inventado
+                    produz agente que não responde. O aviso era discreto e ficava
+                    ATRÁS do seletor aberto — daí ser tarja, e não nota de
+                    rodapé. */}
                 {modelsAreFallback && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Não foi possível confirmar os modelos com o Gateway — lista de referência.
+                  <p className="text-xs text-amber-500/90 mt-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+                    Ainda não confirmei quais modelos o gateway serve. Espere um
+                    instante — se não carregar, o gateway está fora e a criação
+                    não vai funcionar de qualquer forma.
                   </p>
                 )}
               </Field>
@@ -1345,7 +1352,12 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
                 <button
                   type="button"
                   onClick={next}
-                  className="inline-flex items-center gap-1 px-5 py-2.5 text-sm rounded-full bg-gradient-to-r from-primary to-[hsl(260,70%,55%)] text-white hover:opacity-90 transition-opacity shadow-lg shadow-primary/20"
+                  // Trava só o passo do modelo: os demais não dependem do gateway.
+                  disabled={step === 2 && modelsAreFallback}
+                  title={step === 2 && modelsAreFallback
+                    ? "Esperando o gateway confirmar os modelos disponíveis"
+                    : undefined}
+                  className="inline-flex items-center gap-1 px-5 py-2.5 text-sm rounded-full bg-gradient-to-r from-primary to-[hsl(260,70%,55%)] text-white hover:opacity-90 transition-opacity shadow-lg shadow-primary/20 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Próximo
                   <ChevronRight className="h-4 w-4" />
