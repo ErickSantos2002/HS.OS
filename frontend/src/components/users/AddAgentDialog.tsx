@@ -1038,7 +1038,7 @@ export function AddAgentDialog({ open, onOpenChange, onCreated }: Props) {
               <div className="space-y-2">
                 {([
                   { v: "all", title: "Todos da plataforma", desc: "Qualquer membro autenticado pode acessar este agente." },
-                  { v: "admins_only", title: "Apenas administradores", desc: "Somente usuários com perfil Super Admin têm acesso." },
+                  { v: "admins_only", title: "Apenas administradores", desc: "Somente usuários com perfil Administrador têm acesso." },
                   { v: "specific_users", title: "Usuários específicos", desc: "Selecione quais membros podem acessar este agente." },
                 ] as const).map((opt) => {
                   const selected = accessType === opt.v;

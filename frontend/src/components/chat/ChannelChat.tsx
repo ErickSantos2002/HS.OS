@@ -1116,7 +1116,7 @@ export default function ChannelChat({
 
   useEffect(() => { setMentionIndex(0); }, [mentionQuery]);
   const isDm = channel.type === "dm";
-  const canEdit = !isDm && (role === "super_admin" || user?.id === channel.created_by);
+  const canEdit = !isDm && (role === "administrador" || user?.id === channel.created_by);
   const displayName = isDm && dmPeerName ? dmPeerName : channel.name;
 
   const agentMembers = useMemo(

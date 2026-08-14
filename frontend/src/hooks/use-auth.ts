@@ -3,7 +3,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ErroApi, EVENTO_SESSAO_ENCERRADA, gravarToken, lerToken } from "@/lib/api";
 import type { AuthSession, AuthUser } from "@/contexts/auth-context";
 
-export type AppRole = "super_admin" | "member" | "user";
+/** Dois papéis, e só. O `sem_papel` não é um deles: é o que o backend
+ *  devolve para quem não tem linha em `user_roles`, e existe para essa pessoa
+ *  falhar nas checagens em vez de virar colaborador por omissão.
+ *
+ *  ⚠️ Antes havia `member` E `user`, e o segundo nunca foi papel — era o
+ *  `COALESCE(role, 'user')` do backend, ou seja, "sem papel" com nome de papel.
+ *  Ter os dois fazia parecer que existiam três níveis quando sempre houve dois. */
+export type AppRole = "administrador" | "colaborador" | "sem_papel";
 
 interface RespostaMe {
   id: string;

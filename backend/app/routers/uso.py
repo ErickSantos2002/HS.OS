@@ -164,7 +164,7 @@ class VarreduraOut(BaseModel):
 
 
 @router.post("/varrer-contexto", response_model=VarreduraOut)
-async def varrer_contexto(_: Usuario = Depends(exige_papel("super_admin"))):
+async def varrer_contexto(_: Usuario = Depends(exige_papel("administrador"))):
     """Atualiza quanto da janela de contexto cada sessão está ocupando.
 
     ⚠️ **Esta varredura não registra mais consumo**, e o comentário da edge

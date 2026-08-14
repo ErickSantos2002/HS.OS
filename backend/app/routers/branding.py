@@ -3,7 +3,7 @@
 
 A leitura é anônima de propósito: a tela de login precisa da marca antes de
 existir sessão. Era assim no Supabase também (policy "Public read branding",
-`USING (true)` para anon). A escrita é restrita a super_admin.
+`USING (true)` para anon). A escrita é restrita a administrador.
 """
 
 from fastapi import APIRouter, Depends
@@ -50,7 +50,7 @@ async def ler_branding():
 @router.put("", response_model=BrandingOut)
 async def gravar_branding(
     dados: BrandingIn,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     """Uma linha só por instalação: atualiza a existente ou cria a primeira."""
     async with sessao(role="service_role") as conn:

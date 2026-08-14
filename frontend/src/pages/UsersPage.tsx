@@ -128,15 +128,18 @@ type Row = HumanRow | AgentRow;
 type FilterKind = "all" | "human" | "agent";
 
 const roleLabels: Record<AppRole, string> = {
-  super_admin: "Super Admin",
-  member: "Membro",
-  user: "Usuário",
+  administrador: "Administrador",
+  colaborador: "Colaborador",
+  // Não é papel: é o que o backend devolve para quem não tem linha em
+  // `user_roles`. Aparece na tela para a pessoa saber que falta atribuir,
+  // em vez de a coluna ficar vazia e parecer erro de carregamento.
+  sem_papel: "Sem papel",
 };
 
 const roleIcons: Record<AppRole, React.ReactNode> = {
-  super_admin: <ShieldCheck className="h-3.5 w-3.5" />,
-  member: <Shield className="h-3.5 w-3.5" />,
-  user: <UserIcon className="h-3.5 w-3.5" />,
+  administrador: <ShieldCheck className="h-3.5 w-3.5" />,
+  colaborador: <Shield className="h-3.5 w-3.5" />,
+  sem_papel: <UserIcon className="h-3.5 w-3.5" />,
 };
 
 const statusConfig: Record<string, { label: string; icon: React.ReactNode; variant: "default" | "secondary" | "destructive" }> = {
@@ -154,7 +157,7 @@ function presenceDot(p: AgentRow["presence"]) {
 
 export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
   const { user: currentUser, role } = useAuthContext();
-  const isAdmin = role === "super_admin";
+  const isAdmin = role === "administrador";
   const navigate = useNavigate();
   const [humans, setHumans] = useState<HumanRow[]>([]);
   const [agents, setAgents] = useState<AgentRow[]>([]);
@@ -164,7 +167,7 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteName, setInviteName] = useState("");
-  const [inviteRole, setInviteRole] = useState<AppRole>("member");
+  const [inviteRole, setInviteRole] = useState<AppRole>("colaborador");
   const [invitePassword, setInvitePassword] = useState("");
   const [inviting, setInviting] = useState(false);
 
@@ -213,7 +216,7 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
 
     // Duas chamadas à nossa API no lugar de quatro consultas ao Supabase.
     // `user_roles` sumiu do cliente: o papel já vem em /profiles, resolvido pela
-    // mesma regra de prioridade que estava aqui (super_admin > member > user).
+    // mesma regra de prioridade que estava aqui (administrador > member > user).
     // `agent_stats` também: a última atividade vem em `lastActive`.
     //
     // `incluir_inativos` é obrigatório aqui — esta é a tela onde se reativa um
@@ -567,8 +570,8 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="super_admin">Super Admin</SelectItem>
-                        <SelectItem value="member">Membro</SelectItem>
+                        <SelectItem value="administrador">Administrador</SelectItem>
+                        <SelectItem value="colaborador">Colaborador</SelectItem>
                         <SelectItem value="user">Usuário</SelectItem>
                       </SelectContent>
                     </Select>
@@ -685,8 +688,8 @@ export default function UsersPage({ embedded }: { embedded?: boolean } = {}) {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="super_admin">Super Admin</SelectItem>
-                                  <SelectItem value="member">Membro</SelectItem>
+                                  <SelectItem value="administrador">Administrador</SelectItem>
+                                  <SelectItem value="colaborador">Colaborador</SelectItem>
                                   <SelectItem value="user">Usuário</SelectItem>
                                 </SelectContent>
                               </Select>

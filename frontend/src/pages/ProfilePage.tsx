@@ -6,10 +6,13 @@ import { Loader2, User, Lock, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import type { AppRole } from "@/hooks/use-auth";
 
+// ⚠️ Este arquivo NÃO está roteado — a aba "Meu Perfil" da SettingsPage é que
+// serve `/profile`. Mantido em dia porque compila, e porque em 07/08/2026
+// alguém o religou por engano e a tela viva ficou com "trocar senha" quebrado.
 const roleLabels: Record<AppRole, string> = {
-  super_admin: "Super Admin",
-  member: "Membro",
-  user: "Usuário",
+  administrador: "Administrador",
+  colaborador: "Colaborador",
+  sem_papel: "Sem papel",
 };
 
 export default function ProfilePage() {

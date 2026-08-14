@@ -769,8 +769,8 @@ Body:
                 <tr><Td>process-email-queue</Td><Td>Processamento de fila de e-mails transacionais com retry e DLQ.</Td></tr>
                 <tr><Td>artifact-query</Td><Td>Backend da bridge <code className="text-xs bg-secondary px-1 rounded">window.dnos.query()</code> dos artefatos vivos. Consulta tabelas internas usando o JWT do usuário (RLS aplicada) com suporte a select, filters, order e limit.</Td></tr>
                 <tr><Td>invoke-integration</Td><Td>Backend da bridge <code className="text-xs bg-secondary px-1 rounded">window.dnos.invoke()</code>. Autentica o usuário, lê a credencial da integração no servidor (texto puro, nunca criptografada — nunca chega ao browser), resolve o endpoint pelo <code className="text-xs bg-secondary px-1 rounded">data_endpoints</code> do playbook e chama a API externa.</Td></tr>
-                <tr><Td>agent-task</Td><Td>CRUD do Loop Architecture. Ações: create, checkpoint, resume, complete, fail, pause, delete, list, get. Super agentes (secret compartilhado) têm autonomia total entre si; humanos abaixo do papel "member" não conseguem mexer em tarefa alheia.</Td></tr>
-                <tr><Td>configure-llm-provider</Td><Td>Escreve a api_key de um conector LLM no cofre do Gateway do cliente (config.patch via admin-http-rpc) e confirma a gravação. Fecha a ponte entre a área de Conectores e o Gateway num remix novo. Só super_admin.</Td></tr>
+                <tr><Td>agent-task</Td><Td>CRUD do Loop Architecture. Ações: create, checkpoint, resume, complete, fail, pause, delete, list, get. Super agentes (secret compartilhado) têm autonomia total entre si; humanos sem papel de colaborador não conseguem mexer em tarefa alheia.</Td></tr>
+                <tr><Td>configure-llm-provider</Td><Td>Escreve a api_key de um conector LLM no cofre do Gateway do cliente (config.patch via admin-http-rpc) e confirma a gravação. Fecha a ponte entre a área de Conectores e o Gateway num remix novo. Só administrador.</Td></tr>
               </tbody>
             </TableWrapper>
 
@@ -783,7 +783,7 @@ Body:
               </thead>
               <tbody>
                 <tr><Td>profiles</Td><Td>Perfis de usuários (nome, email, avatar, status)</Td></tr>
-                <tr><Td>user_roles</Td><Td>Papéis dos usuários (super_admin, member, user)</Td></tr>
+                <tr><Td>user_roles</Td><Td>Papéis dos usuários (administrador, member, user)</Td></tr>
                 <tr><Td>channels</Td><Td>Canais de comunicação (public, private, dm)</Td></tr>
                 <tr><Td>channel_messages</Td><Td>Mensagens em canais com suporte a threads e anexos</Td></tr>
                 <tr><Td>channel_members</Td><Td>Associação de usuários/agentes a canais</Td></tr>
@@ -822,7 +822,7 @@ Body:
                 <tr><Th>Enum</Th><Th>Valores</Th></tr>
               </thead>
               <tbody>
-                <tr><Td>app_role</Td><Td>super_admin, member, user</Td></tr>
+                <tr><Td>app_role</Td><Td>administrador, member, user</Td></tr>
                 <tr><Td>author_type</Td><Td>human, agent</Td></tr>
                 <tr><Td>channel_type</Td><Td>public, private, dm</Td></tr>
               </tbody>
@@ -839,7 +839,7 @@ Body:
                 <tr><Th>Role</Th><Th>Acesso</Th></tr>
               </thead>
               <tbody>
-                <tr><Td>super_admin</Td><Td>Acesso total: todos os módulos, monitoramento, gestão de usuários, settings</Td></tr>
+                <tr><Td>administrador</Td><Td>Acesso total: todos os módulos, monitoramento, gestão de usuários, settings</Td></tr>
                 <tr><Td>member</Td><Td>Acesso operacional: agentes, chat, arenas, files, sessions, skills, teams</Td></tr>
                 <tr><Td>user</Td><Td>Acesso básico: chat, perfil, resultados</Td></tr>
               </tbody>
@@ -847,7 +847,7 @@ Body:
             <SubHeading>Rotas Protegidas</SubHeading>
             <P>
               O componente <code className="text-xs bg-secondary px-1 rounded">ProtectedRoute</code> verifica autenticação e roles antes de renderizar cada página.
-              Rotas como <code className="text-xs bg-secondary px-1 rounded">/monitoring</code> e <code className="text-xs bg-secondary px-1 rounded">/users</code> são restritas a super_admin.
+              Rotas como <code className="text-xs bg-secondary px-1 rounded">/monitoring</code> e <code className="text-xs bg-secondary px-1 rounded">/users</code> são restritas a administrador.
               A sidebar filtra dinamicamente os itens de navegação com base no role do usuário.
             </P>
             <SubHeading>Segurança</SubHeading>
@@ -956,7 +956,7 @@ curl -X POST \\
             <SectionHeading id="monitoramento" title="13. Monitoramento" />
             <SubHeading>Painéis Disponíveis</SubHeading>
             <P>
-              O módulo de monitoramento (<code className="text-xs bg-secondary px-1 rounded">/monitoring</code>, restrito a super_admin) oferece visão completa
+              O módulo de monitoramento (<code className="text-xs bg-secondary px-1 rounded">/monitoring</code>, restrito a administrador) oferece visão completa
               do estado operacional da plataforma através de abas especializadas:
             </P>
             <TableWrapper>
@@ -1099,7 +1099,7 @@ curl -X POST \\
               <tbody>
                 <tr><Td>Tabela</Td><Td><code className="text-xs bg-secondary px-1 rounded">branding</code> — company_name, logo_url, primary_color</Td></tr>
                 <tr><Td>Hook</Td><Td><code className="text-xs bg-secondary px-1 rounded">useBranding()</code></Td></tr>
-                <tr><Td>Configuração</Td><Td>Aba "Identidade" em <code className="text-xs bg-secondary px-1 rounded">/settings</code> (restrita a super_admin)</Td></tr>
+                <tr><Td>Configuração</Td><Td>Aba "Identidade" em <code className="text-xs bg-secondary px-1 rounded">/settings</code> (restrita a administrador)</Td></tr>
               </tbody>
             </TableWrapper>
 
@@ -1140,7 +1140,7 @@ curl -X POST \\
             {/* 19. INTEGRAÇÕES EXTERNAS (CONECTORES) */}
             <SectionHeading id="integracoes" title="19. Integrações Externas (Conectores)" />
             <P>
-              A aba <strong>Integrações</strong> em <code className="text-xs bg-secondary px-1 rounded">/settings</code> (restrita a super_admin) permite
+              A aba <strong>Integrações</strong> em <code className="text-xs bg-secondary px-1 rounded">/settings</code> (restrita a administrador) permite
               cadastrar credenciais de serviços externos consumidos pelos agentes via gateway e edge functions.
               As chaves são armazenadas de forma segura na tabela <code className="text-xs bg-secondary px-1 rounded">integrations</code> e nunca expostas no frontend.
             </P>
@@ -1189,15 +1189,15 @@ curl -X POST \\
               </thead>
               <tbody>
                 <tr><Td>profile</Td><Td>Dados pessoais, avatar, e-mail, senha</Td><Td>Todos</Td></tr>
-                <tr><Td>identity</Td><Td>Identidade visual (branding white-label: logo, cor, nome)</Td><Td>super_admin</Td></tr>
-                <tr><Td>gateway</Td><Td>URL e token do OpenClaw Gateway, health check</Td><Td>super_admin</Td></tr>
+                <tr><Td>identity</Td><Td>Identidade visual (branding white-label: logo, cor, nome)</Td><Td>administrador</Td></tr>
+                <tr><Td>gateway</Td><Td>URL e token do OpenClaw Gateway, health check</Td><Td>administrador</Td></tr>
                 <tr><Td>artifacts</Td><Td>Artefatos criados (preview iframe srcDoc) e publicados</Td><Td>member, admin</Td></tr>
                 <tr><Td>dnos</Td><Td>Mission Control / configurações da operação</Td><Td>member, admin</Td></tr>
-                <tr><Td>users</Td><Td>Gestão de usuários, convites, atribuição de roles</Td><Td>super_admin</Td></tr>
+                <tr><Td>users</Td><Td>Gestão de usuários, convites, atribuição de roles</Td><Td>administrador</Td></tr>
                 <tr><Td>documentation</Td><Td>Esta documentação (HTML navegável + export PDF/YAML)</Td><Td>member, admin</Td></tr>
-                <tr><Td>integrations</Td><Td>Conectores externos (api_key, multi_key, MCP)</Td><Td>super_admin</Td></tr>
-                <tr><Td>tts</Td><Td>ElevenLabs e vozes por agente</Td><Td>super_admin</Td></tr>
-                <tr><Td>empresa</Td><Td>Perfil da empresa (nome, segmento, fundador, descrição, público, oferta, tom, faturamento, equipe) + upload de docs (PDF/DOCX/TXT/MD) e gravação de voz para preenchimento por IA</Td><Td>super_admin</Td></tr>
+                <tr><Td>integrations</Td><Td>Conectores externos (api_key, multi_key, MCP)</Td><Td>administrador</Td></tr>
+                <tr><Td>tts</Td><Td>ElevenLabs e vozes por agente</Td><Td>administrador</Td></tr>
+                <tr><Td>empresa</Td><Td>Perfil da empresa (nome, segmento, fundador, descrição, público, oferta, tom, faturamento, equipe) + upload de docs (PDF/DOCX/TXT/MD) e gravação de voz para preenchimento por IA</Td><Td>administrador</Td></tr>
               </tbody>
             </TableWrapper>
 
@@ -1284,7 +1284,7 @@ curl -X POST \\
             <SectionHeading id="onboarding-empresa" title="25. Onboarding da Empresa" />
             <P>
               Fluxo de cadastro do contexto do negócio para que todos os agentes conheçam a empresa.
-              Singleton armazenado em <code className="text-xs bg-secondary px-1 rounded">public.company_profile</code> (RLS restrita a <code className="text-xs bg-secondary px-1 rounded">super_admin</code>),
+              Singleton armazenado em <code className="text-xs bg-secondary px-1 rounded">public.company_profile</code> (RLS restrita a <code className="text-xs bg-secondary px-1 rounded">administrador</code>),
               com bucket privado <code className="text-xs bg-secondary px-1 rounded">company-docs</code> para anexos.
             </P>
             <SubHeading>Interface (Settings → Empresa)</SubHeading>
@@ -1313,7 +1313,7 @@ curl -X POST \\
             <P>
               • Soft trigger — agentes nunca bloqueados esperando onboarding.<br />
               • Orquestrador sempre via <code className="text-xs bg-secondary px-1 rounded">is_leader = true</code> em <code className="text-xs bg-secondary px-1 rounded">agent_profiles</code> — nunca string literal.<br />
-              • Apenas <code className="text-xs bg-secondary px-1 rounded">super_admin</code> cria/edita perfil e anexos da empresa.<br />
+              • Apenas <code className="text-xs bg-secondary px-1 rounded">administrador</code> cria/edita perfil e anexos da empresa.<br />
               • Sem emojis — sempre ícones Lucide.
             </P>
 

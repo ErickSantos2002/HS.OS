@@ -324,7 +324,7 @@ export function useAgents() {
   const queryClient = useQueryClient();
   const { user, role } = useAuthContext();
   const currentUserId = user?.id;
-  const isAdmin = role === "super_admin";
+  const isAdmin = role === "administrador";
 
   const { data: agents = [], isLoading: loading, error: queryError, refetch } = useQuery({
     queryKey: ["gateway-agents", currentUserId, isAdmin],

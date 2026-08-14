@@ -55,7 +55,7 @@ function ProviderLogo({ provider, size = 14 }: { provider: string; size?: number
  * Seletor de LLM da CONVERSA.
  *
  * Escopo: troca o modelo só nesta conversa, via header x-openclaw-model. Não
- * altera o modelo padrão do agente (isso é Settings, super_admin) nem afeta as
+ * altera o modelo padrão do agente (isso é Settings, administrador) nem afeta as
  * conversas de outras pessoas com o mesmo agente.
  *
  * A lista vem do Gateway (useGatewayModels), nunca de constante local — duas

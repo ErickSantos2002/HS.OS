@@ -58,7 +58,7 @@ async def _cliente():
 
 
 @router.get("/config", response_model=ConfigOut)
-async def ler_config(_: Usuario = Depends(exige_papel("super_admin"))):
+async def ler_config(_: Usuario = Depends(exige_papel("administrador"))):
     c = await cfg.carregar()
     return ConfigOut(url=c.url, tem_token=bool(c.token), configurado=c.configurado,
                      fixado_por_env=c.fixado_por_env)
@@ -67,7 +67,7 @@ async def ler_config(_: Usuario = Depends(exige_papel("super_admin"))):
 @router.put("/config", response_model=ConfigOut)
 async def gravar_config(
     dados: ConfigIn,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     await cfg.gravar(dados.url, dados.token)
     c = await cfg.carregar()
@@ -76,7 +76,7 @@ async def gravar_config(
 
 
 @router.get("/status", response_model=StatusOut)
-async def status_gateway(_: Usuario = Depends(exige_papel("super_admin"))):
+async def status_gateway(_: Usuario = Depends(exige_papel("administrador"))):
     """Não levanta erro quando o gateway está fora: a tela precisa mostrar
     'desconectado' com o motivo, não uma página de erro."""
     c = await cfg.carregar()
@@ -166,7 +166,7 @@ async def listar_agentes(_: Usuario = Depends(usuario_atual)):
 @router.get("/sessions")
 async def listar_sessoes(
     limit: int = 50,
-    _: Usuario = Depends(exige_papel("super_admin", "member")),
+    _: Usuario = Depends(exige_papel("administrador", "colaborador")),
 ):
     cliente = await _cliente()
     try:
@@ -188,7 +188,7 @@ class MonitoramentoOut(BaseModel):
 
 
 @router.get("/monitoramento", response_model=MonitoramentoOut)
-async def monitoramento(usuario: Usuario = Depends(exige_papel("super_admin"))):
+async def monitoramento(usuario: Usuario = Depends(exige_papel("administrador"))):
     """As quatro coleções que a tela de monitoramento desenha.
 
     Vêm das tabelas, não do gateway: quem fala com ele é o coletor, e a tela lê
@@ -230,8 +230,8 @@ _MANUTENCAO = {
 
 
 @router.post("/manutencao/{acao}")
-async def manutencao(acao: str, _: Usuario = Depends(exige_papel("super_admin"))):
-    """Reinicia o gateway ou limpa os Chrome órfãos. Só `super_admin`.
+async def manutencao(acao: str, _: Usuario = Depends(exige_papel("administrador"))):
+    """Reinicia o gateway ou limpa os Chrome órfãos. Só `administrador`.
 
     Rota REST, não JSON-RPC: é manutenção do processo do gateway, fora do
     protocolo que os agentes usam.
@@ -276,7 +276,7 @@ async def manutencao(acao: str, _: Usuario = Depends(exige_papel("super_admin"))
 
 @router.get("/monitoramento/historico")
 async def historico_de_saude(
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
     limite: int = 100,
 ):
     """As últimas coletas de saúde do gateway, para o gráfico da aba Gateway."""

@@ -190,8 +190,8 @@ async def registrar_consumo(
 
 
 @router.get("/guardrails/token")
-async def revelar_token_guardrails(_: Usuario = Depends(exige_papel("super_admin"))):
-    """Mostra o token que a VPS usa para escrever guardrails. Só `super_admin`.
+async def revelar_token_guardrails(_: Usuario = Depends(exige_papel("administrador"))):
+    """Mostra o token que a VPS usa para escrever guardrails. Só `administrador`.
 
     Existe porque quem configura a VPS precisa **conferir** o token, não
     adivinhá-lo: sem isto o caminho era cadastrar um valor lá e descobrir que
@@ -206,7 +206,7 @@ async def revelar_token_guardrails(_: Usuario = Depends(exige_papel("super_admin
             status.HTTP_404_NOT_FOUND,
             "GUARDRAILS_API_TOKEN não está configurado neste backend.",
         )
-    logger.info("Token de guardrails revelado para um super_admin")
+    logger.info("Token de guardrails revelado para um administrador")
     return {"token": token}
 
 
@@ -543,7 +543,7 @@ async def credenciais_do_agente(
 @router.get("/segredo/{nome}")
 async def revelar_segredo(
     nome: str,
-    usuario: Usuario = Depends(exige_papel("super_admin")),
+    usuario: Usuario = Depends(exige_papel("administrador")),
 ):
     """Mostra um segredo de integração ao administrador.
 
@@ -552,7 +552,7 @@ async def revelar_segredo(
     só do ambiente, mostraria um valor diferente do que de fato autentica
     quando o segredo vier do banco, e alguém cadastraria o token errado na VPS.
 
-    Só `super_admin`, e o valor não vai para log.
+    Só `administrador`, e o valor não vai para log.
     """
     if nome not in _SEGREDOS_REVELAVEIS:
         raise HTTPException(
@@ -615,7 +615,7 @@ def _escolher_token(credenciais: list) -> str:
 @router.post("/validar-token", response_model=ValidacaoOut)
 async def validar_token(
     dados: ValidacaoIn,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     """Chama o provedor para confirmar que a credencial vale.
 
@@ -719,11 +719,11 @@ _SUFIXOS_COMUNS = [
 @router.get("/conectores/{integration_id}/credenciais")
 async def revelar_credenciais_conector(
     integration_id: str,
-    usuario: Usuario = Depends(exige_papel("super_admin")),
+    usuario: Usuario = Depends(exige_papel("administrador")),
 ):
     """Mostra ao admin as credenciais que o **ambiente** tem para este conector.
 
-    ⚠️ Devolve valor em claro, e por isso é `super_admin`. É o único ponto do
+    ⚠️ Devolve valor em claro, e por isso é `administrador`. É o único ponto do
     sistema que devolve credencial ao navegador.
 
     ⚠️ **Só lê variável de ambiente do backend, nunca o `credentials` do banco**
@@ -847,7 +847,7 @@ async def _distribuir_contexto(bloco: str) -> list[dict]:
 
 
 @router.post("/onboarding-empresa", status_code=status.HTTP_202_ACCEPTED)
-async def onboarding_empresa(usuario: Usuario = Depends(exige_papel("super_admin"))):
+async def onboarding_empresa(usuario: Usuario = Depends(exige_papel("administrador"))):
     """Escreve o contexto da empresa no `AGENTS.md` de cada agente.
 
     É o que faz o time saber para qual empresa trabalha. Sem isso, cada agente
@@ -1222,7 +1222,7 @@ class PerfilEmpresaIn(BaseModel):
 @router.put("/empresa/perfil")
 async def gravar_perfil_da_empresa(
     dados: PerfilEmpresaIn,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     """Grava o perfil da empresa. Cria a linha se ainda não existir.
 
@@ -1395,7 +1395,7 @@ def _mesclar_credenciais(guardadas, recebidas):
 
 @router.post("/conectores", status_code=status.HTTP_201_CREATED)
 async def criar_conector(
-    dados: ConectorIn, _: Usuario = Depends(exige_papel("super_admin"))
+    dados: ConectorIn, _: Usuario = Depends(exige_papel("administrador"))
 ):
     """Cria um conector. **Nunca sobrescreve um existente.**
 
@@ -1446,7 +1446,7 @@ async def criar_conector(
 async def editar_conector(
     conector_id: str,
     dados: ConectorIn,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     """Edita o conector. **Credencial ausente mantém a que está lá.**
 
@@ -1508,7 +1508,7 @@ async def editar_conector(
 
 @router.delete("/conectores/{conector_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def excluir_conector(
-    conector_id: str, _: Usuario = Depends(exige_papel("super_admin"))
+    conector_id: str, _: Usuario = Depends(exige_papel("administrador"))
 ):
     """Exclui o conector — e, se for banco, tira o MCP do gateway junto.
 
@@ -1586,7 +1586,7 @@ def _url_do_banco(linha, credenciais, somente_leitura: bool) -> str:
 async def testar_banco(
     conector_id: str,
     somente_leitura: bool = True,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     """Conecta de verdade e conta o que encontrou. **Nunca escreve.**
 
@@ -1724,7 +1724,7 @@ def _nome_mcp(nome: str) -> str:
 @router.post("/conectores/{conector_id}/publicar-banco")
 async def publicar_banco(
     conector_id: str,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     """Declara o banco como ferramenta no gateway, e libera para os agentes.
 

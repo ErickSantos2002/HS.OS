@@ -87,7 +87,7 @@ class ListaAgentesOut(BaseModel):
 def _pode_ver(perfil: dict, user_id: str, is_admin: bool) -> bool:
     """Controle de acesso herdado de `agent_profiles.access_type`.
 
-    `all` libera; `admins_only` restringe a super_admin; `specific_users` exige
+    `all` libera; `admins_only` restringe a administrador; `specific_users` exige
     estar em `allowed_user_ids`. Admin passa por cima de tudo — era assim no
     código herdado e mudar isso aqui seria mudança de produto, não de portagem.
     """
@@ -113,7 +113,7 @@ async def listar(
     precisa enxergar o agente desativado — é de lá que se reativa. As telas de
     uso normal (chat, lista de agentes) continuam sem ver inativo, que era o
     comportamento herdado."""
-    is_admin = usuario.papel == "super_admin"
+    is_admin = usuario.papel == "administrador"
 
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
@@ -387,7 +387,7 @@ async def obter(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
 
     d = dict(linha)
-    if not _pode_ver(d, usuario.id, usuario.papel == "super_admin"):
+    if not _pode_ver(d, usuario.id, usuario.papel == "administrador"):
         # 404 e não 403: quem não pode ver o agente também não deveria descobrir
         # que ele existe.
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
@@ -427,7 +427,7 @@ class SincronizacaoOut(BaseModel):
 
 
 @router.post("/sync", response_model=SincronizacaoOut)
-async def sincronizar(_: Usuario = Depends(exige_papel("super_admin"))):
+async def sincronizar(_: Usuario = Depends(exige_papel("administrador"))):
     """Cria em `agent_profiles` os agentes que existem no gateway.
 
     Sem isto a tabela nasce vazia e não há o que editar: os agentes aparecem com
@@ -779,7 +779,7 @@ async def _mensagem_de_acesso(
 async def atualizar(
     agent_id: str,
     dados: PerfilAgentePatch,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     campos = dados.model_dump(exclude_unset=True)
     if not campos:
@@ -1001,11 +1001,11 @@ def _perfis_do_provedor(auth: dict, provedor: str) -> list[dict]:
 @router.post("/test-model", response_model=TesteModeloOut)
 async def testar_modelo(
     dados: TesteModeloIn,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     """Confere se um modelo está registrado, disponível e com credencial válida.
 
-    `super_admin` porque configuração de LLM é superfície de admin.
+    `administrador` porque configuração de LLM é superfície de admin.
     """
     requisitado = dados.model.strip()
 
@@ -1133,7 +1133,7 @@ class LiderancaOut(BaseModel):
 @router.post("/leadership/sync", response_model=LiderancaOut)
 async def sincronizar_lideranca(
     dados: LiderancaIn,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     """Grava `is_leader`/`leader_id` de vários agentes de uma vez.
 
@@ -1146,7 +1146,7 @@ async def sincronizar_lideranca(
     o produto é outra tarefa, registrada em `docs/ROADMAP.md`. Pelo caminho da
     VPS, que manda um payload de verdade, o endpoint funciona.
 
-    A autorização aqui é só `super_admin`. A edge function também aceitava um
+    A autorização aqui é só `administrador`. A edge function também aceitava um
     `GUARDRAILS_API_TOKEN` para o caminho automatizado; esse segundo caminho
     entra quando a autenticação máquina-a-máquina for portada, e não antes —
     aceitar um token que ainda não tem dono seria abrir uma porta sem tranca.
@@ -1190,7 +1190,7 @@ class ExclusaoAgenteOut(BaseModel):
 @router.delete("/{agent_id}", response_model=ExclusaoAgenteOut)
 async def excluir(
     agent_id: str,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     """Apaga o agente no gateway e no banco. Portado de `delete-agent`.
 
@@ -1395,7 +1395,7 @@ async def _desfazer_criacao(openclaw_id: str) -> None:
 @router.post("", response_model=AgenteNovoOut, status_code=status.HTTP_201_CREATED)
 async def criar(
     dados: AgenteNovoIn,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     """Registra o agente no gateway, grava o perfil e manda o orquestrador montá-lo.
 
@@ -1492,7 +1492,7 @@ async def criar(
             "agente líder está de pé e tente de novo.",
         ) from e
 
-    logger.info("Agente %s criado por super_admin", dados.openclaw_id)
+    logger.info("Agente %s criado por administrador", dados.openclaw_id)
     return AgenteNovoOut(
         agent_id=dados.openclaw_id, criado_no_gateway=True, orquestrador_avisado=True
     )
@@ -1506,7 +1506,7 @@ async def criar(
 @router.post("/{agent_id}/briefing", status_code=status.HTTP_202_ACCEPTED)
 async def reenviar_briefing(
     agent_id: str,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     """Manda o orquestrador refazer os arquivos do agente no VPS.
 
@@ -1649,11 +1649,11 @@ async def gravar_arquivo(
     agent_id: str,
     nome: str,
     dados: GravarArquivoIn,
-    usuario: Usuario = Depends(exige_papel("super_admin")),
+    usuario: Usuario = Depends(exige_papel("administrador")),
 ):
     """Escreve o arquivo no workspace do agente.
 
-    Só `super_admin`: estes arquivos são a identidade e as instruções do agente
+    Só `administrador`: estes arquivos são a identidade e as instruções do agente
     — quem os edita muda como ele se comporta com todo mundo.
     """
     c = await cfg.carregar()
@@ -1691,7 +1691,7 @@ class AcessoOut(BaseModel):
 async def definir_acesso(
     agent_id: str,
     dados: AcessoIn,
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     """Define quem enxerga e conversa com o agente.
 
@@ -2118,7 +2118,7 @@ class ArquivoEspelhadoIn(BaseModel):
 async def gravar_arquivos_espelhados(
     agent_id: str,
     arquivos: list[ArquivoEspelhadoIn],
-    _: Usuario = Depends(exige_papel("super_admin")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
     """Grava os arquivos do agente na tabela, para a ponte levá-los ao disco.
 

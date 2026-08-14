@@ -209,7 +209,7 @@ function durationLabel(start: string, end: string | null): string {
 
 export default function AutomacoesPage() {
   const { user, role } = useAuthContext();
-  const isAdmin = role === "super_admin";
+  const isAdmin = role === "administrador";
 
   const [items, setItems] = useState<Automation[]>([]);
   const [agents, setAgents] = useState<AgentOption[]>([]);

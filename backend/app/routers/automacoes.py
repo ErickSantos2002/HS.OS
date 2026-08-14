@@ -328,7 +328,7 @@ async def sincronizar_status(_: Usuario = Depends(usuario_atual)):
 
 
 @router.post("/importar-crons")
-async def importar_crons(_: Usuario = Depends(exige_papel("super_admin"))):
+async def importar_crons(_: Usuario = Depends(exige_papel("administrador"))):
     """Traz para `automations` os crons que já existem no gateway.
 
     Serve para instalação que herdou crons configurados à mão: eles passam a

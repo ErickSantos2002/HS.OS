@@ -61,7 +61,7 @@ export default function SettingsPage() {
   // Profile state
   const { user, profile, role } = useAuthContext();
   const { resolvedTheme, setTheme } = useTheme();
-  const isAdmin = role === "super_admin";
+  const isAdmin = role === "administrador";
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? "");
   const [profileSaving, setProfileSaving] = useState(false);
@@ -423,7 +423,7 @@ export default function SettingsPage() {
     setPrimaryColor(DEFAULT_BRANDING.primaryColor);
   };
 
-  const isMemberOrAdmin = role === "super_admin" || role === "member";
+  const isMemberOrAdmin = role === "administrador" || role === "colaborador";
 
   const tabs: { id: TabId; label: string; icon: React.ElementType }[] = [
     { id: "profile", label: "Meu Perfil", icon: User },

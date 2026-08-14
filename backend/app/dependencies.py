@@ -5,7 +5,7 @@ defesa, não a primeira: as policies dependem de `auth.uid()`, que só é
 preenchido porque `database.sessao()` emite o `SET LOCAL`. Endpoint que não
 depender de `usuario_atual` roda como `anon` e não enxerga dado de ninguém.
 
-Papéis (tabela `public.user_roles`, enum `app_role`): super_admin, member, user.
+Papéis (tabela `public.user_roles`, enum `app_role`): administrador, member, user.
 """
 
 import jwt
@@ -52,12 +52,12 @@ async def usuario_atual(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token sem identificação de usuário.")
 
     # O papel é relido do banco a cada request, não confiado ao token: revogar
-    # um super_admin precisa valer na hora, sem esperar o token expirar.
+    # um administrador precisa valer na hora, sem esperar o token expirar.
     async with sessao(role="service_role") as conn:
         linha = await conn.fetchrow(
             """
             SELECT u.id::text AS id, u.email, u.is_active, p.full_name,
-                   COALESCE(r.role::text, 'user') AS papel
+                   COALESCE(r.role::text, 'sem_papel') AS papel
             FROM auth.users u
             LEFT JOIN public.profiles   p ON p.id = u.id
             LEFT JOIN public.user_roles r ON r.user_id = u.id

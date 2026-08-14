@@ -7,7 +7,7 @@ import { lerToken } from "@/lib/api";
 import { loadGatewayConfig } from "@/lib/gateway";
 
 // Fire-and-forget: não bloqueia o render. Só com sessão — a rota é de
-// `super_admin` e sem token responde 401, o que colocava um erro no console
+// `administrador` e sem token responde 401, o que colocava um erro no console
 // da tela de login antes mesmo de a pessoa digitar a senha. Quem entra
 // recarrega a config em Configurações, que é onde ela é usada.
 if (lerToken()) loadGatewayConfig();

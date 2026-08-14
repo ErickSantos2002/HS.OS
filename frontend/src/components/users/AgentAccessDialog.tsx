@@ -111,7 +111,7 @@ export function AgentAccessDialog({ open, onOpenChange, agentId, agentName, onSa
               <div className="space-y-2">
                 {([
                   { v: "all", title: "Todos da plataforma", desc: "Qualquer membro autenticado pode acessar este agente." },
-                  { v: "admins_only", title: "Apenas administradores", desc: "Somente Super Admins têm acesso." },
+                  { v: "admins_only", title: "Apenas administradores", desc: "Somente administradores têm acesso." },
                   { v: "specific_users", title: "Usuários específicos", desc: "Selecione quem pode acessar." },
                 ] as const).map((opt) => {
                   const selected = accessType === opt.v;

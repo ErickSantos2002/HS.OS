@@ -409,7 +409,7 @@ async def desatribuir(skill_id: str, agent_id: str,
 
 @router.delete("/{skill_id}")
 async def excluir(skill_id: str,
-                  usuario: Usuario = Depends(exige_papel("super_admin"))) -> dict:
+                  usuario: Usuario = Depends(exige_papel("administrador"))) -> dict:
     """Apagar é ato de administrador, pela interface.
 
     A regra vem da edge e o comentário de lá explica: nem membro comum, nem

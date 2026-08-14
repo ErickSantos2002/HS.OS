@@ -43,7 +43,7 @@ export default function GuardrailsTokenCard() {
         <Shield className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-display font-bold">Guardrails API</h3>
         <span className="ml-auto text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
-          super_admin
+          administrador
         </span>
       </div>
 

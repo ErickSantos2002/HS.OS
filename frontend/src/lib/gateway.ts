@@ -35,7 +35,7 @@ export function getGatewayConfig(): GatewayConfig {
   return cachedConfig ?? VAZIO;
 }
 
-/** Carrega a configuração do backend. Só `super_admin` recebe. */
+/** Carrega a configuração do backend. Só `administrador` recebe. */
 export async function loadGatewayConfig(): Promise<GatewayConfig> {
   try {
     const d = await api<ConfigApi>("/gateway/config");

@@ -213,7 +213,7 @@ async def _saude_auth() -> dict:
 
 
 @router.get("/provedores")
-async def listar(_: Usuario = Depends(exige_papel("super_admin"))):
+async def listar(_: Usuario = Depends(exige_papel("administrador"))):
     """Estado dos provedores no gateway, mais a fila de operações pendentes.
 
     Quando o gateway não responde, devolve `indisponivel` com as operações da
@@ -355,7 +355,7 @@ async def _descobrir(tipo: str, chave: str, base_url: str | None) -> dict:
 
 
 @router.post("/descobrir")
-async def descobrir(dados: DescobertaIn, _: Usuario = Depends(exige_papel("super_admin"))):
+async def descobrir(dados: DescobertaIn, _: Usuario = Depends(exige_papel("administrador"))):
     """Lista os modelos que uma chave enxerga.
 
     Com `api_key` no corpo, pergunta na hora. **Sem** ela, enfileira: a chave já
@@ -392,7 +392,7 @@ async def descobrir(dados: DescobertaIn, _: Usuario = Depends(exige_papel("super
 
 
 @router.get("/descobrir/{op_id}")
-async def descoberta_status(op_id: str, _: Usuario = Depends(exige_papel("super_admin"))):
+async def descoberta_status(op_id: str, _: Usuario = Depends(exige_papel("administrador"))):
     """Resultado de uma descoberta enfileirada. Consome a linha ao entregar."""
     async with sessao(role="service_role") as conn:
         linha = await conn.fetchrow(
@@ -451,7 +451,7 @@ def _identificador(tipo: str, provider_id: str | None) -> str:
 
 
 @router.post("/provedores")
-async def salvar(dados: SalvarIn, _: Usuario = Depends(exige_papel("super_admin"))):
+async def salvar(dados: SalvarIn, _: Usuario = Depends(exige_papel("administrador"))):
     """Grava o provedor no gateway: a credencial **e** o catálogo de modelos.
 
     Duas coisas, em lugares diferentes da config:
@@ -607,7 +607,7 @@ class RemocaoIn(BaseModel):
 
 
 @router.post("/provedores/remover")
-async def remover(dados: RemocaoIn, _: Usuario = Depends(exige_papel("super_admin"))):
+async def remover(dados: RemocaoIn, _: Usuario = Depends(exige_papel("administrador"))):
     """Tira os modelos do provedor do seletor. **A credencial fica.**
 
     A checagem de uso vem antes de tudo: remover um provedor que é o padrão da

@@ -4,7 +4,7 @@
  * Escopo: é um override LOCAL do usuário, não configuração do agente. Trocar
  * aqui NÃO altera o modelo padrão do agente nem afeta as conversas de outras
  * pessoas — isso é de propósito. O padrão do agente é config global (Settings →
- * agents.update, super_admin); se o seletor do chat escrevesse de volta lá, um
+ * agents.update, administrador); se o seletor do chat escrevesse de volta lá, um
  * usuário escolher Claude na conversa dele mudaria o agente para todo mundo.
  *
  * Mecanismo: header `x-openclaw-model` por requisição, que o Gateway aceita sem

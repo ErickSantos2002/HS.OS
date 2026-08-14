@@ -540,7 +540,7 @@ class FaxinaOut(BaseModel):
 
 
 @router.post("/faxina", response_model=FaxinaOut)
-async def faxina(_: Usuario = Depends(exige_papel("super_admin"))):
+async def faxina(_: Usuario = Depends(exige_papel("administrador"))):
     """Apaga anexos com mais de 30 dias do bucket `agent-files`.
 
     Só `agent-files`: avatar de agente vive nele também, mas em `avatars/`, e

@@ -28,7 +28,7 @@ export default function OnboardingDoLiderLog({ agentId }: { agentId: string }) {
   const [resending, setResending] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const isAdmin = role === "super_admin";
+  const isAdmin = role === "administrador";
 
   async function load() {
     setLoading(true);

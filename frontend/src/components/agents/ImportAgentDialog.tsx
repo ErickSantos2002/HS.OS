@@ -165,7 +165,7 @@ export default function ImportAgentDialog({ open, onOpenChange, onImported }: Pr
         throw new Error(createRes.error || "Falha ao criar agente");
       }
 
-      // 3. Persist files via sync-agent-files (super_admin JWT). Antes disso,
+      // 3. Persist files via sync-agent-files (administrador JWT). Antes disso,
       // preenche os {{PLACEHOLDER}} com os dados reais da empresa que está
       // importando — sem isso o agente nascia com o SOUL.md/IDENTITY.md cheio
       // de placeholder cru (a exportação só faz o caminho contrário, nunca

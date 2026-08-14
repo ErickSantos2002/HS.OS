@@ -8,7 +8,7 @@ Duas naturezas de chamador, e a autorização difere:
 
 - **Agentes**, por segredo compartilhado: autonomia total sobre qualquer tarefa.
   É intencional — é assim que o orquestrador coordena os demais.
-- **Pessoas**, por JWT: exige papel `member` ou `super_admin`.
+- **Pessoas**, por JWT: exige papel `member` ou `administrador`.
 
 ⚠️ **A checagem de papel não é de dono, e isso é deliberado.** A tela de Tarefas
 é um painel compartilhado de equipe, e tarefa criada por agente fica com
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tarefas", tags=["tarefas"])
 
 _STATUS = {"running", "checkpoint", "done", "failed"}
-_PAPEIS_QUE_MUTAM = {"member", "super_admin"}
+_PAPEIS_QUE_MUTAM = {"colaborador", "administrador"}
 
 _COLUNAS = """
     id::text AS id, agent_id, title, status, chunks, checkpoint_data,
@@ -110,7 +110,7 @@ async def chamador(request: Request) -> Chamador:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token sem usuário.")
     return Chamador(
         agente=False,
-        usuario=Usuario(id=user_id, email=dados.get("email", ""), papel=dados.get("papel", "user")),
+        usuario=Usuario(id=user_id, email=dados.get("email", ""), papel=dados.get("papel", "sem_papel")),
     )
 
 

@@ -39,7 +39,7 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, open,
   const { agents } = useAgents();
   const agentAvatars = useAllAvatars();
 
-  const canManage = role === "super_admin" || user?.id === channelCreatedBy;
+  const canManage = role === "administrador" || user?.id === channelCreatedBy;
 
   useEffect(() => {
     if (!open) return;

@@ -29,18 +29,18 @@ _COLUNAS = """
 
 # Um usuário pode ter mais de uma linha em `user_roles`; vale o papel mais forte.
 # O front fazia exatamente isto com um mapa e uma tabela de prioridade —
-# `{ super_admin: 1, member: 2, user: 3 }`, menor ganha. Aqui é ORDER BY + LIMIT 1.
+# `{ administrador: 1, member: 2, user: 3 }`, menor ganha. Aqui é ORDER BY + LIMIT 1.
 _PAPEL = """
     COALESCE((
         SELECT r.role::text FROM public.user_roles r
          WHERE r.user_id = p.id
          ORDER BY CASE r.role::text
-                    WHEN 'super_admin' THEN 1
-                    WHEN 'member'      THEN 2
+                    WHEN 'administrador' THEN 1
+                    WHEN 'colaborador' THEN 2
                     ELSE 3
                   END
          LIMIT 1
-    ), 'user') AS role
+    ), 'sem_papel') AS role
 """
 
 
@@ -106,7 +106,7 @@ async def atualizar_meu_perfil(
 
 
 class PerfilAdminPatch(BaseModel):
-    """O que um `super_admin` muda no perfil de outra pessoa.
+    """O que um `administrador` muda no perfil de outra pessoa.
 
     Portado das escritas que a tela de usuários fazia direto no Supabase — não
     havia edge function para isto, o RLS é que segurava. A regra de quem pode
@@ -117,7 +117,7 @@ class PerfilAdminPatch(BaseModel):
     status: str | None = None
 
 
-_PAPEIS = {"super_admin", "member", "user"}
+_PAPEIS = {"administrador", "colaborador"}
 _STATUS_PERFIL = {"active", "inactive"}
 
 
@@ -125,7 +125,7 @@ _STATUS_PERFIL = {"active", "inactive"}
 async def atualizar_perfil(
     user_id: str,
     dados: PerfilAdminPatch,
-    usuario: Usuario = Depends(exige_papel("super_admin")),
+    usuario: Usuario = Depends(exige_papel("administrador")),
 ):
     campos = dados.model_dump(exclude_unset=True)
     if not campos:
@@ -211,13 +211,13 @@ class ContaNovaIn(BaseModel):
     email: EmailStr
     nome: str = Field(min_length=1, max_length=200)
     senha: str = Field(min_length=8, max_length=LIMITE_SENHA_BYTES)
-    role: str = "user"
+    role: str = "sem_papel"
 
 
 @router.post("", response_model=PerfilOut, status_code=status.HTTP_201_CREATED)
 async def criar_conta(
     dados: ContaNovaIn,
-    usuario: Usuario = Depends(exige_papel("super_admin")),
+    usuario: Usuario = Depends(exige_papel("administrador")),
 ):
     if dados.role not in _PAPEIS:
         raise HTTPException(
@@ -271,7 +271,7 @@ async def criar_conta(
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def excluir_conta(
     user_id: str,
-    usuario: Usuario = Depends(exige_papel("super_admin")),
+    usuario: Usuario = Depends(exige_papel("administrador")),
 ):
     """Apaga a conta e o que depende dela.
 
@@ -284,7 +284,7 @@ async def excluir_conta(
     se alguma outra FK barrar, o erro sobe em vez de a conta sumir pela metade.
     """
     if user_id == usuario.id:
-        # Vinha da edge. Sem isto, um super_admin sozinho apaga a si mesmo e a
+        # Vinha da edge. Sem isto, um administrador sozinho apaga a si mesmo e a
         # instalação fica sem administrador nenhum.
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "Você não pode excluir a própria conta."

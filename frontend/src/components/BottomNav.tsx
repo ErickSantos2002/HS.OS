@@ -30,7 +30,7 @@ export function BottomNav() {
   const { role } = useAuthContext();
   const { unreadCount } = useNotificationsContext();
 
-  const tabs = role === "super_admin" ? adminTabs : memberTabs;
+  const tabs = role === "administrador" ? adminTabs : memberTabs;
 
   const isActive = (tab: BottomTab) =>
     tab.matchPaths.some((p) =>

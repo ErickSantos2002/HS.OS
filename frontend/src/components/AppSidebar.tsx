@@ -131,7 +131,7 @@ export function AppSidebar() {
 
   const navigate = useNavigate();
 
-  const groups: NavGroup[] = role === "super_admin" ? adminGroups : memberGroups;
+  const groups: NavGroup[] = role === "administrador" ? adminGroups : memberGroups;
 
   const handleSignOut = async () => {
     await signOut();

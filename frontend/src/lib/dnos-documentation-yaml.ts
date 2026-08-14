@@ -634,7 +634,7 @@ edge_functions:
     - nome: send-push
       descricao: Envio de notificações Web Push (VAPID) para subscriptions registradas.
     - nome: admin-reset-password
-      descricao: Reset de senha administrativo (super_admin) para usuários da plataforma.
+      descricao: Reset de senha administrativo (administrador) para usuários da plataforma.
     - nome: artifact-query
       descricao: >
         Backend da bridge window.dnos.query() dos artefatos vivos. Consulta tabelas
@@ -651,7 +651,7 @@ edge_functions:
         CRUD do Loop Architecture (tarefas autônomas de longa duração dos agentes).
         Aceita JWT do usuário OU o secret compartilhado dos agentes para chamadas
         do gateway (autonomia total entre agentes — é assim que o orquestrador
-        coordena os demais). Humanos com papel abaixo de "member" não conseguem
+        coordena os demais). Humanos sem papel de colaborador não conseguem
         mais retomar/concluir/falhar/pausar/apagar tarefa alheia (checagem de role).
         Ações: create, checkpoint, resume, complete, fail, pause, delete, list, get.
         Persiste chunks + checkpoint_data (qualquer campo extra é preservado e
@@ -663,7 +663,7 @@ edge_functions:
         confirma que a chave ficou gravada. Fecha a ponte que faltava para um
         remix novo: a área de Conectores só gravava a chave no Supabase, nunca
         no Gateway — "configurar a LLM" não fazia a plataforma funcionar. Só
-        super_admin. Aditiva até ser ligada a um botão na UI.
+        administrador. Aditiva até ser ligada a um botão na UI.
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 10. BANCO DE DADOS
@@ -699,7 +699,7 @@ banco_de_dados:
     Edge Functions utilizam SUPABASE_SERVICE_ROLE_KEY para bypass de RLS quando necessário.
   enums:
     - nome: app_role
-      valores: [super_admin, member, user]
+      valores: [administrador, member, user]
     - nome: author_type
       valores: [human, agent]
     - nome: channel_type
@@ -708,7 +708,7 @@ banco_de_dados:
     - nome: profiles
       descricao: Perfis de usuários (nome, email, avatar, status)
     - nome: user_roles
-      descricao: Papéis dos usuários (super_admin, member, user) — tabela separada do perfil
+      descricao: Papéis dos usuários (administrador, member, user) — tabela separada do perfil
     - nome: channels
       descricao: Canais de comunicação (public, private, dm)
     - nome: channel_messages
@@ -789,7 +789,7 @@ banco_de_dados:
 autenticacao:
   metodo: Supabase Auth com JWT
   roles:
-    - nome: super_admin
+    - nome: administrador
       acesso: >
         Acesso total: todos os módulos, monitoramento, gestão de usuários, settings
     - nome: member
@@ -905,7 +905,7 @@ broadcast_api:
 # ═══════════════════════════════════════════════════════════════════════════
 monitoramento:
   pagina: /monitoring
-  acesso: Restrito a super_admin
+  acesso: Restrito a administrador
   abas:
     - nome: Super agentes
       descricao: Status em tempo real de cada agente (online/idle/offline/error), última atividade, modelo em uso
@@ -1063,7 +1063,7 @@ branding:
   tabela: branding
   campos: [company_name, logo_url, primary_color]
   hook: useBranding()
-  configuracao: Aba "Branding" em /settings (super_admin)
+  configuracao: Aba "Branding" em /settings (administrador)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 17. TTS ELEVENLABS (GLOBAL)
@@ -1095,7 +1095,7 @@ push_notifications:
 # ═══════════════════════════════════════════════════════════════════════════
 integracoes_conectores:
   descricao: >
-    Aba "Integrações" em /settings (restrita a super_admin) para cadastrar credenciais
+    Aba "Integrações" em /settings (restrita a administrador) para cadastrar credenciais
     de serviços externos consumidos pelos agentes via gateway e edge functions.
     As chaves são armazenadas de forma segura na tabela integrations e nunca expostas no frontend.
   tipos:
@@ -1135,7 +1135,7 @@ settings:
     para abas específicas.
   abas:
     - profile — Dados pessoais, avatar, e-mail
-    - users — Gestão de usuários (super_admin), convites, roles
+    - users — Gestão de usuários (administrador), convites, roles
     - dnos — Mission Control / configurações da operação
     - documentation — Documentação técnica (YAML gerado por dnos-documentation-yaml.ts)
     - integrations — Conectores externos
@@ -1227,7 +1227,7 @@ api_publica:
 onboarding_empresa:
   descricao: >
     Fluxo de cadastro do contexto do negócio para que todos os agentes conheçam a empresa.
-    Singleton armazenado em public.company_profile (RLS restrita a super_admin), com bucket
+    Singleton armazenado em public.company_profile (RLS restrita a administrador), com bucket
     privado company-docs para anexos.
   interface:
     rota: /settings?tab=empresa
@@ -1253,7 +1253,7 @@ onboarding_empresa:
   regras:
     - Soft trigger — agentes nunca bloqueados esperando onboarding
     - Orquestrador sempre via is_leader = true (nunca string literal)
-    - Apenas super_admin cria/edita perfil e anexos da empresa
+    - Apenas administrador cria/edita perfil e anexos da empresa
     - Sem emojis — sempre ícones Lucide
 
 # ═══════════════════════════════════════════════════════════════════════════

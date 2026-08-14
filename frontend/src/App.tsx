@@ -126,7 +126,7 @@ const App = () => {
                           <Route
                             path="/agents"
                             element={
-                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                              <ProtectedRoute allowedRoles={["administrador", "colaborador"]}>
                                 <AgentsPage />
                               </ProtectedRoute>
                             }
@@ -134,7 +134,7 @@ const App = () => {
                           <Route
                             path="/agents/:agentId"
                             element={
-                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                              <ProtectedRoute allowedRoles={["administrador", "colaborador"]}>
                                 <AgentDetailPage />
                               </ProtectedRoute>
                             }
@@ -142,7 +142,7 @@ const App = () => {
                           <Route
                             path="/teams"
                             element={
-                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                              <ProtectedRoute allowedRoles={["administrador", "colaborador"]}>
                                 <TeamsPage />
                               </ProtectedRoute>
                             }
@@ -151,7 +151,7 @@ const App = () => {
                           <Route
                             path="/sessions"
                             element={
-                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                              <ProtectedRoute allowedRoles={["administrador", "colaborador"]}>
                                 <SessionsPage />
                               </ProtectedRoute>
                             }
@@ -159,7 +159,7 @@ const App = () => {
                           <Route
                             path="/skills"
                             element={
-                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                              <ProtectedRoute allowedRoles={["administrador", "colaborador"]}>
                                 <SkillsPage />
                               </ProtectedRoute>
                             }
@@ -167,7 +167,7 @@ const App = () => {
                           <Route
                             path="/skills/clawhub"
                             element={
-                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                              <ProtectedRoute allowedRoles={["administrador", "colaborador"]}>
                                 <ClawHubPage />
                               </ProtectedRoute>
                             }
@@ -175,7 +175,7 @@ const App = () => {
                           <Route
                             path="/arenas"
                             element={
-                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                              <ProtectedRoute allowedRoles={["administrador", "colaborador"]}>
                                 <ArenaPausada />
                               </ProtectedRoute>
                             }
@@ -183,7 +183,7 @@ const App = () => {
                           <Route
                             path="/arenas/new"
                             element={
-                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                              <ProtectedRoute allowedRoles={["administrador", "colaborador"]}>
                                 <ArenaPausada />
                               </ProtectedRoute>
                             }
@@ -191,7 +191,7 @@ const App = () => {
                           <Route
                             path="/arenas/:arenaId"
                             element={
-                              <ProtectedRoute allowedRoles={["super_admin", "member"]}>
+                              <ProtectedRoute allowedRoles={["administrador", "colaborador"]}>
                                 <ArenaPausada />
                               </ProtectedRoute>
                             }
@@ -249,7 +249,7 @@ const App = () => {
                           <Route
                             path="/monitoring"
                             element={
-                              <ProtectedRoute allowedRoles={["super_admin"]}>
+                              <ProtectedRoute allowedRoles={["administrador"]}>
                                 <MonitoringPage />
                               </ProtectedRoute>
                             }
@@ -257,7 +257,7 @@ const App = () => {
                           <Route
                             path="/analytics"
                             element={
-                              <ProtectedRoute allowedRoles={["super_admin"]}>
+                              <ProtectedRoute allowedRoles={["administrador"]}>
                                 <AnalyticsPage />
                               </ProtectedRoute>
                             }

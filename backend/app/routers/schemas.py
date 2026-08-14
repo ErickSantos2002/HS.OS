@@ -32,7 +32,7 @@ class PerfilOut(BaseModel):
     # O papel vem junto porque a tela de usuários montava isso com uma segunda
     # consulta a `user_roles` e um mapa no cliente. Quando alguém tem mais de uma
     # linha lá, vale o mais alto — a regra de prioridade que o front aplicava.
-    role: str = "user"
+    role: str = "sem_papel"
     # Presença e status personalizado: a lista de pessoas do chat deriva o
     # pontinho de online/ausente a partir de last_seen_at.
     last_seen_at: str | None = None

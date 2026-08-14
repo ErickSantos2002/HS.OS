@@ -3,7 +3,7 @@
 Uma conta é composta por três linhas, em três tabelas:
   auth.users        identidade (e-mail, hash da senha) — alvo de 11 FKs
   public.profiles   perfil (nome, avatar, status)
-  public.user_roles papel (super_admin | member | user)
+  public.user_roles papel (administrador | member | user)
 Elas são criadas juntas, na mesma transação.
 """
 
@@ -41,7 +41,7 @@ async def status_instalacao():
 
 @router.post("/bootstrap-admin", response_model=TokenOut, status_code=status.HTTP_201_CREATED)
 async def bootstrap_admin(dados: BootstrapIn):
-    """Cria o primeiro super_admin. Só funciona com o banco sem nenhum usuário."""
+    """Cria o primeiro administrador. Só funciona com o banco sem nenhum usuário."""
     senha_hash = gerar_hash(dados.senha)
 
     async with sessao(role="service_role") as conn:
@@ -71,12 +71,12 @@ async def bootstrap_admin(dados: BootstrapIn):
             dados.nome,
         )
         await conn.execute(
-            "INSERT INTO public.user_roles (user_id, role) VALUES ($1, 'super_admin')",
+            "INSERT INTO public.user_roles (user_id, role) VALUES ($1, 'administrador')",
             user_id,
         )
 
     logger.info("Primeiro administrador criado: %s", dados.email)
-    token, expira = emitir_token(str(user_id), "super_admin", dados.email)
+    token, expira = emitir_token(str(user_id), "administrador", dados.email)
     return TokenOut(access_token=token, expires_in=expira)
 
 
@@ -86,7 +86,7 @@ async def login(dados: LoginIn):
         linha = await conn.fetchrow(
             """
             SELECT u.id::text AS id, u.email, u.password_hash, u.is_active,
-                   COALESCE(r.role::text, 'user') AS papel
+                   COALESCE(r.role::text, 'sem_papel') AS papel
             FROM auth.users u
             LEFT JOIN public.user_roles r ON r.user_id = u.id
             WHERE lower(u.email) = lower($1)

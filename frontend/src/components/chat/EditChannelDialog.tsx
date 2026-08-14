@@ -20,7 +20,7 @@ interface Props {
 
 export default function EditChannelDialog({ channel, open, onClose, onUpdated, onDeleted }: Props) {
   const { user, role } = useAuthContext();
-  const canManage = role === "super_admin" || user?.id === channel.created_by;
+  const canManage = role === "administrador" || user?.id === channel.created_by;
   const [name, setName] = useState(channel.name);
   const [description, setDescription] = useState(channel.description ?? "");
   const [isPrivate, setIsPrivate] = useState(channel.type === "private");
