@@ -278,15 +278,37 @@ export default function NeuralMap({ agents, avatars, selectedId, onSelect, peopl
     let cancelled = false;
     getSetting<SavedPositions>(SETTINGS_KEY).then((saved) => {
       if (cancelled) return;
-      if (saved) setCustomPositions(saved);
+      // Layout salvo antes de 14/08/2026 pode conter posição de pessoa. Elas
+      // deixaram de ser fixadas — descartar na leitura evita que um mapa antigo
+      // continue prendendo gente ao lado do agente errado.
+      if (saved) {
+        setCustomPositions(
+          Object.fromEntries(
+            Object.entries(saved).filter(([id]) => !id.startsWith("human-")),
+          ),
+        );
+      }
       setLoaded(true);
     });
     return () => { cancelled = true; };
   }, []);
 
+  /**
+   * Posição de um nó: a salva, quando existe, senão a calculada.
+   *
+   * ⚠️ **Pessoa não usa posição salva.** Ela orbita o agente que a atende, e
+   * isso muda quando alguém ganha ou perde acesso. Posição fixada venceria o
+   * cálculo e deixaria a pessoa parada ao lado do agente antigo — o mapa
+   * afirmando uma ligação que não existe mais, sem nada indicando o
+   * desencontro. É o mesmo defeito que passamos o dia caçando, e aqui teria a
+   * agravante de parecer certo.
+   *
+   * Arrastar uma pessoa continua funcionando na sessão; só não sobrevive ao
+   * recarregar. O layout que vale a pena guardar é o dos agentes.
+   */
   const getPos = useCallback(
     (nodeId: string) => {
-      const pct = customPositions[nodeId];
+      const pct = nodeId.startsWith("human-") ? undefined : customPositions[nodeId];
       if (pct) return { x: pct.x * dims.w, y: pct.y * dims.h };
       return defaultPositions[nodeId] ?? { x: cx, y: cy };
     },
@@ -371,7 +393,12 @@ export default function NeuralMap({ agents, avatars, selectedId, onSelect, peopl
   );
 
   const handleSave = useCallback(async () => {
-    await setSetting(SETTINGS_KEY, customPositions);
+    // Só agentes vão para o disco — ver `getPos`. Guardar posição de pessoa
+    // seria guardar um dado que o próximo acesso invalida.
+    const soAgentes = Object.fromEntries(
+      Object.entries(customPositions).filter(([id]) => !id.startsWith("human-")),
+    );
+    await setSetting(SETTINGS_KEY, soAgentes);
     setDirty(false);
   }, [customPositions]);
 
