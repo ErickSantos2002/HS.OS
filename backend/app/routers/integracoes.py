@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import unicodedata
 
 import httpx
 from datetime import UTC, datetime, timedelta
@@ -1716,8 +1717,16 @@ _MCP_PACOTE_LEITURA = "@modelcontextprotocol/server-postgres"
 
 
 def _nome_mcp(nome: str) -> str:
-    """Apelido curto e estável para o servidor no `mcp.servers`."""
-    base = re.sub(r"[^a-z0-9]+", "-", nome.strip().lower()).strip("-")
+    """Apelido curto e estável para o servidor no `mcp.servers`.
+
+    ⚠️ Acento vira a letra sem acento, não hífen. A primeira versão jogava fora
+    tudo que não fosse `[a-z0-9]`, e "Diretório HS.OS" virava
+    `banco-diret-rio-hs-os` — ilegível, e o nome aparece na ferramenta que o
+    agente vê (`mcp__<apelido>__query`). Com departamentos como LABORATÓRIO e
+    EXPEDIÇÃO isso se repetiria sempre.
+    """
+    sem_acento = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode()
+    base = re.sub(r"[^a-z0-9]+", "-", sem_acento.strip().lower()).strip("-")
     return f"banco-{base or 'sem-nome'}"
 
 
