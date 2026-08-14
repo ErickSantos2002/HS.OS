@@ -22,6 +22,7 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
+import asyncio
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -614,7 +615,7 @@ async def _avisar_agente(openclaw_id: str, assunto: str, mensagem: str) -> None:
         logger.warning("Aviso '%s' a %s falhou: %s", assunto, openclaw_id, e)
 
 
-async def _avisar_lider_ou_falhar(assunto: str, mensagem: str) -> None:
+async def _avisar_lider_ou_falhar(assunto: str, mensagem: str) -> str:
     """Como `_avisar_lider`, mas **levanta** quando não consegue entregar.
 
     Existe porque há um caso em que o aviso não é consequência da mudança —
@@ -638,16 +639,21 @@ async def _avisar_lider_ou_falhar(assunto: str, mensagem: str) -> None:
     c = await cfg.carregar()
     if not c.configurado:
         raise ErroGateway("Gateway não configurado.")
+    chave = f"agent:{lider['oid']}:sistema-{assunto}"
     await obter_cliente(c.url, c.token).chamar(
         "chat.send",
         {
             "agentId": lider["oid"],
-            "sessionKey": f"agent:{lider['oid']}:sistema-{assunto}",
+            "sessionKey": chave,
             "message": mensagem,
             "idempotencyKey": f"{assunto}:{uuid4()}",
         },
     )
     logger.info("Aviso '%s' entregue a %s.", assunto, lider["oid"])
+    # Devolve a chave para quem precisa acompanhar a sessão depois. Remontá-la
+    # do lado de fora duplicaria a regra do formato composto — e foi um formato
+    # errado de chave que derrubou todos os avisos em 12/08/2026.
+    return chave
 
 
 async def _avisar_lider(assunto: str, mensagem: str) -> None:
@@ -1370,6 +1376,88 @@ def _briefing(d: AgenteNovoIn) -> str:
     )
 
 
+_PEDIDO_AO_AGENTE = """Você acabou de ser criado, e a orquestradora escreveu os seus sete arquivos. Falta a parte que só você pode fazer.
+
+Ela não tem as suas ferramentas — quem tem é você. Então o TOOLS.md dela foi escrito sem poder abrir o que você abre.
+
+Sua tarefa, agora:
+
+1. Veja quais ferramentas você de fato tem.
+2. Se alguma for banco de dados, CONSULTE o schema real antes de descrevê-lo:
+   SELECT table_schema, table_name FROM information_schema.tables
+    WHERE table_schema NOT IN ('pg_catalog','information_schema') ORDER BY 1,2;
+3. Reescreva o seu TOOLS.md com o que existe de verdade: o schema certo, uma
+   tabela de "pergunta -> onde" com tabelas que existem, e as regras de
+   consultar sem desperdiçar contexto (LIMIT sempre, count(*) para "quantos",
+   só as colunas que importam).
+4. Documente TODAS as suas ferramentas, inclusive a de avisar o administrador.
+5. Releia o arquivo depois de escrever e confirme o que ficou.
+
+Se você não tem ferramenta nenhuma, diga isso — não descreva o que não pode abrir."""
+
+
+async def _completar_agente(agent_id: str, sessao_lider: str) -> None:
+    """Espera o orquestrador terminar e manda o agente completar o próprio TOOLS.md.
+
+    ⚠️ **Só o agente pode escrever o próprio `TOOLS.md` com honestidade**, porque
+    só ele tem as ferramentas. Fazer o orquestrador documentar o banco de outro
+    exigiria dar a ele acesso a TODOS os bancos da empresa — o oposto do que o
+    diretório de pessoas resolveu, e um alvo bem maior.
+
+    Foi o que aconteceu por acidente com a `iris` em 14/08/2026: o arquivo
+    escrito pela orquestradora citava schema errado e tabelas inexistentes; o
+    que a própria agente escreveu, com o banco aberto, saiu correto.
+
+    ⚠️ Roda em segundo plano de propósito. O orquestrador leva minutos, e
+    segurar a requisição HTTP até lá deixaria a tela pendurada. Falhar aqui não
+    quebra nada: o agente existe, os arquivos estão escritos, e o pedido pode
+    ser refeito à mão.
+    """
+    c = await cfg.carregar()
+    if not c.configurado:
+        logger.error("Sem gateway: %s não foi completado.", agent_id)
+        return
+    cliente = obter_cliente(c.url, c.token)
+
+    # Espera o orquestrador sair de `running`. O teto existe porque sessão
+    # pendurada não pode segurar a tarefa para sempre.
+    for _ in range(80):  # ~20 min
+        await asyncio.sleep(15)
+        try:
+            h = await cliente.chamar("chat.history", {"sessionKey": sessao_lider, "limit": 2})
+            payload = h.get("payload") if isinstance(h.get("payload"), dict) else h
+            if ((payload.get("sessionInfo") or {}).get("status")) != "running":
+                break
+        except (ErroGateway, OSError) as e:
+            logger.info("Aguardando o orquestrador (%s): %s", agent_id, e)
+    else:
+        logger.warning("Orquestrador não terminou a tempo; %s segue configurando.", agent_id)
+        return
+
+    try:
+        await cliente.chamar("chat.send", {
+            "agentId": agent_id,
+            "sessionKey": f"agent:{agent_id}:sistema-completar-setup",
+            "message": _PEDIDO_AO_AGENTE,
+            "idempotencyKey": f"hsos-{uuid4()}",
+        })
+    except ErroGateway as e:
+        logger.error("Não consegui pedir a %s que complete o setup: %s", agent_id, e)
+        return
+
+    # ⚠️ **Alguém tem que fechar o `configuring`.** Até aqui ninguém fechava: a
+    # `iris` ficou pronta, funcionando, e o banco dizia "configurando" para
+    # sempre. Estado que nunca muda é pior que estado errado — ninguém
+    # desconfia dele.
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            "UPDATE public.agent_profiles SET status = 'active', updated_at = now() "
+            " WHERE openclaw_id = $1 AND status = 'configuring'",
+            agent_id,
+        )
+    logger.info("Agente %s completou o setup e está ativo.", agent_id)
+
+
 async def _publicar_conectores(agent_id: str, nomes: list[str]) -> tuple[list, list]:
     """Dá ao agente novo os conectores marcados na tela.
 
@@ -1530,6 +1618,21 @@ async def criar(
         )
 
     briefing = _briefing(dados)
+    # ⚠️ **Conectores ANTES do briefing, e a ordem é o conserto.**
+    #
+    # Até 14/08/2026 `integrations_used` virava texto no briefing e coluna no
+    # banco, e mais nada — o agente nascia sem as ferramentas que a tela dizia
+    # ter dado. Pior: o orquestrador, sem poder abrir o banco, descrevia o
+    # schema de memória. A `iris` nasceu com um TOOLS.md citando
+    # `table_schema = 'public'` (é `tiny`) e duas tabelas inexistentes.
+    #
+    # Publicar depois de avisar não resolvia: a skill manda consultar o banco
+    # antes de descrever, e essa instrução era impossível de cumprir enquanto a
+    # ferramenta chegava só no fim. Aqui a ordem passa a permitir a regra.
+    publicados, falhos = await _publicar_conectores(
+        dados.openclaw_id, dados.integrations_used
+    )
+
     async with sessao(role="service_role") as conn:
         # Trilha do que foi pedido ao orquestrador. Sem isto não há como saber
         # depois por que um agente nasceu diferente do que se esperava.
@@ -1552,7 +1655,9 @@ async def criar(
     # entrega desfaz o que já foi feito — no gateway e no banco — e devolve
     # 502 dizendo o que houve.
     try:
-        await _avisar_lider_ou_falhar(f"create-agent:{dados.openclaw_id}", briefing)
+        sessao_lider = await _avisar_lider_ou_falhar(
+            f"create-agent:{dados.openclaw_id}", briefing
+        )
     except ErroGateway as e:
         logger.error("Briefing de %s não entregue — desfazendo: %s", dados.openclaw_id, e)
         await _desfazer_criacao(dados.openclaw_id)
@@ -1563,21 +1668,9 @@ async def criar(
             "agente líder está de pé e tente de novo.",
         ) from e
 
-    # ⚠️ **Publicar os conectores escolhidos, e não só citá-los no briefing.**
-    #
-    # `integrations_used` virava texto no briefing ("INTEGRAÇÕES: DataCoreHS,
-    # Diretório HS.OS") e coluna no banco, e mais nada. O agente nascia SEM as
-    # ferramentas que a tela dizia ter dado — e o orquestrador, sem como
-    # consultar o banco, descrevia o schema de memória. Em 14/08/2026 a `iris`
-    # nasceu com um TOOLS.md citando `table_schema = 'public'` (é `tiny`) e
-    # tabelas que não existem.
-    #
-    # É a mesma família de "a tela afirma o envio, não o resultado" que já
-    # apareceu no gateway offline, no agente criado vazio e na fila de
-    # provedores sem executor.
-    publicados, falhos = await _publicar_conectores(
-        dados.openclaw_id, dados.integrations_used
-    )
+    # A segunda etapa vai para segundo plano: o orquestrador demora minutos e a
+    # tela não pode esperar por ele.
+    asyncio.create_task(_completar_agente(dados.openclaw_id, sessao_lider))
 
     logger.info("Agente %s criado por administrador", dados.openclaw_id)
     return AgenteNovoOut(

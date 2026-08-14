@@ -135,29 +135,27 @@ Banco vira **ferramenta**, não texto: alguém cadastra o banco na tela de
 Conectores e publica para o agente, e ele passa a ter uma tool
 `mcp__banco-<nome>__query`.
 
-⚠️ **Consulte o banco antes de escrever o `TOOLS.md`. Não descreva de memória.**
+⚠️ **O `TOOLS.md` é o único dos sete que você NÃO termina.**
 
-```sql
-SELECT table_schema, table_name FROM information_schema.tables
- WHERE table_schema NOT IN ('pg_catalog','information_schema') ORDER BY 1,2;
-```
+Você escreve o esqueleto — quais ferramentas o agente tem, para que serve cada
+uma, e as regras de consultar sem desperdiçar contexto. Mas **quem descreve o
+schema é o próprio agente**, logo depois, porque só ele tem as ferramentas
+dele. O backend manda esse pedido sozinho assim que você termina.
 
-O schema pode não ser `public` — o DataCoreHS usa `tiny` —, e nome de tabela
-inventado faz o agente consultar o que não existe e concluir que não há dados,
-que é pior que dar erro.
+Isso não é divisão burocrática: para você documentar o banco de outro agente,
+precisaria ter acesso a **todos** os bancos da empresa — o oposto do que o
+diretório de pessoas resolveu, e um alvo muito maior.
 
-⚠️ **Se você não tem a ferramenta do banco, PARE e diga.** Não escreva um
-`TOOLS.md` sobre uma ferramenta que não pôde abrir. Em 14/08/2026 a `iris`
-nasceu com um `TOOLS.md` citando `table_schema = 'public'` (era `tiny`) e duas
-tabelas que não existem — porque o conector não tinha sido publicado para ela e
-o procedimento foi seguido assim mesmo. Uma frase — *"não consigo escrever o
-TOOLS.md, o agente não tem o conector"* — teria evitado três defeitos
-silenciosos.
+Em 14/08/2026 a `iris` nasceu com um `TOOLS.md` citando `table_schema =
+'public'` (era `tiny`) e duas tabelas que não existem, escrito de memória. O
+que a própria agente escreveu depois, com o banco aberto, saiu correto.
 
-Com a ferramenta em mãos, o `TOOLS.md` descreve **como usar bem**:
+**Se você não tem a ferramenta, não descreva o que ela alcança.** Diga o que
+ela é e deixe o resto para quem pode abrir. Nome de tabela inventado faz o
+agente consultar o que não existe e concluir que não há dados — pior que erro.
 
-- o que existe lá dentro — as tabelas que respondem as perguntas frequentes,
-  em tabela de duas colunas ("pergunta" → "onde")
+No esqueleto entram:
+
 - que ele **não decore schema**: `information_schema.tables` e
   `information_schema.columns` respondem, e não envelhecem
 - `LIMIT` sempre; `count(*)` para "quantos"; só as colunas que importam —
@@ -214,7 +212,10 @@ uma realidade que você não pôde conferir.
 
 ## Ao terminar
 
-1. **Releia os sete arquivos pelo gateway.** Não confie no que você acha que
+⚠️ O `TOOLS.md` ainda vai ser completado pelo próprio agente, com o banco na
+mão. Não é pendência sua; é o desenho.
+
+1. **Releia os arquivos pelo gateway.** Não confie no que você acha que
    escreveu — leia de volta.
 2. Confirme que não sobrou inglês do template, e que o `SOUL.md` não começa mais
    com `# SOUL.md - Who You Are`.
