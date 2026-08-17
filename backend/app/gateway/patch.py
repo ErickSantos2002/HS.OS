@@ -54,6 +54,23 @@ _ARRAYS_RECUSADOS = re.compile(
     r"array path\(s\):\s*(.+?)\.?\s*(?:Pass\s+replacePaths|$)", re.I | re.S
 )
 
+# ⚠️ **O gateway limita `config.patch` por janela**, e diz quantos segundos
+# esperar: "rate limit exceeded for config.patch; retry after 55s".
+#
+# Descoberto em 17/08/2026 criando o agente `flow`. A criação faz uma RAJADA de
+# escritas — registrar o agente, publicar um conector por vez, ajustar liderança
+# — e a partir da quarta o gateway recusa. O `flow` nasceu com **2 conectores de
+# 4**: sem o Diretório, não sabia quem falava com ele; sem o TaskHS, não
+# respondia um terço do que o briefing prometia.
+#
+# Nada mentiu — as falhas foram para o log e para a resposta da API, nomeadas.
+# Mas nascer capenga é caro, e o gateway está literalmente dizendo como evitar.
+_LIMITE_DE_TAXA = re.compile(r"rate limit exceeded.*?retry after\s+(\d+)\s*s", re.I | re.S)
+
+# Teto do que aceitamos esperar dentro de uma requisição. Acima disso é melhor
+# falhar e deixar o chamador tratar do que pendurar a tela.
+_ESPERA_MAXIMA = 75
+
 
 async def aplicar_patch(patch: dict, base_hash: str, conferir) -> None:
     """Manda um `config.patch`, contornando as duas armadilhas do gateway.
@@ -78,7 +95,7 @@ async def aplicar_patch(patch: dict, base_hash: str, conferir) -> None:
     corpo: dict = {"raw": json.dumps(patch), "baseHash": base_hash}
 
     try:
-        await obter_cliente(c.url, c.token).chamar("config.patch", corpo)
+        await _patch_com_espera(c, corpo)
         # ⚠️ **Confirmar antes de devolver, mesmo quando o patch "deu certo".**
         #
         # O `baseHash` é lock otimista contra escritor concorrente, e não cobre
@@ -116,13 +133,43 @@ async def aplicar_patch(patch: dict, base_hash: str, conferir) -> None:
 
     corpo["replacePaths"] = caminhos
     try:
-        await obter_cliente(c.url, c.token).chamar("config.patch", corpo)
+        await _patch_com_espera(c, corpo)
     except ErroGateway as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"O gateway recusou a alteração: {e}")
     except OSError as e:
         if await _pegou(conferir):
             return
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Falha ao falar com o gateway: {e}")
+
+
+async def _patch_com_espera(c, corpo: dict) -> None:
+    """Manda o `config.patch`, esperando quando o gateway pede.
+
+    ⚠️ **Espera uma vez só, e no tempo que o próprio gateway informou.** Repetir
+    em laço transformaria uma requisição em minutos; e chutar o intervalo daria
+    ou espera curta demais (recusa de novo) ou longa demais (tela pendurada).
+    A mensagem traz o número — usá-lo é mais barato que adivinhar.
+
+    Acima de `_ESPERA_MAXIMA` não vale a pena segurar a requisição: o erro sobe
+    e quem chamou decide. Nascer com aviso é melhor que pendurar.
+    """
+    cli = obter_cliente(c.url, c.token)
+    try:
+        await cli.chamar("config.patch", corpo)
+        return
+    except ErroGateway as e:
+        achado = _LIMITE_DE_TAXA.search(str(e))
+        if not achado:
+            raise
+        segundos = int(achado.group(1))
+        if segundos > _ESPERA_MAXIMA:
+            raise
+        logger.info("Gateway pediu %ds antes de aceitar outro config.patch; esperando.",
+                    segundos)
+        # +1 para não bater na borda exata da janela.
+        await asyncio.sleep(segundos + 1)
+
+    await cli.chamar("config.patch", corpo)
 
 
 async def _pegou(conferir) -> bool:

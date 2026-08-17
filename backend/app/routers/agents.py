@@ -622,6 +622,93 @@ async def _avisar_agente(openclaw_id: str, assunto: str, mensagem: str) -> None:
         logger.warning("Aviso '%s' a %s falhou: %s", assunto, openclaw_id, e)
 
 
+# O modelo que a orquestradora usa **enquanto cria um agente**. Escrever os sete
+# arquivos de alguém é a tarefa mais difícil que ela faz, e a diferença de
+# qualidade paga — decisão do Erick em 17/08/2026.
+#
+# ⚠️ **Não existe "modelo por tarefa" no gateway.** Foram sondados três
+# caminhos: `chat.send` recusa `model`, `modelId` e `overrides` no schema; o
+# `utilityModel` por agente é declaradamente para "short internal tasks"; e o
+# `models` por agente é catálogo, não seletor. O que resta é trocar o modelo do
+# agente em volta da operação e devolver depois.
+#
+# ⚠️ **A troca é global enquanto dura.** Quem conversar com a orquestradora
+# durante a criação também será atendido por este modelo. É mais caro, não é
+# errado, e a criação leva minutos — com três pessoas na instalação, o risco de
+# cruzar é pequeno e o ganho é grande. Se um dia isso incomodar, o caminho é
+# `sessions_spawn`, que aceita `model` por sessão-filha.
+_MODELO_PARA_CRIAR = "anthropic/claude-sonnet-5"
+
+
+async def _trocar_modelo(agent_id: str, modelo: str | None) -> str | None:
+    """Troca o modelo do agente no gateway. Devolve o que estava lá antes.
+
+    `modelo=None` não faz nada e devolve `None` — deixa o chamador escrever o
+    caminho feliz sem `if`.
+    """
+    if not modelo:
+        return None
+    from app.gateway import patch as patch_gw
+
+    parsed, base_hash = await patch_gw.config_do_gateway()
+    lista = [dict(a) for a in (parsed.get("agents") or {}).get("list") or []]
+    atual = next((a for a in lista if str(a.get("id")) == agent_id), None)
+    if atual is None:
+        raise ErroGateway(f"Agente {agent_id} não está no gateway.")
+
+    anterior = atual.get("model")
+    # `model` aceita string ou `{primary, fallbacks}`; normalizamos para
+    # comparar e para devolver depois exatamente o que estava.
+    def primario(m):
+        return m.get("primary") if isinstance(m, dict) else m
+
+    if primario(anterior) == modelo:
+        return None  # já está nele: nada a desfazer
+
+    for a in lista:
+        if str(a.get("id")) == agent_id:
+            a["model"] = modelo
+
+    await patch_gw.aplicar_patch(
+        {"agents": {"list": lista}}, base_hash,
+        conferir=lambda c: any(
+            str(x.get("id")) == agent_id and primario(x.get("model")) == modelo
+            for x in ((c.get("agents") or {}).get("list") or [])
+        ),
+    )
+    return anterior
+
+
+async def _devolver_modelo(agent_id: str, anterior) -> None:
+    """Volta o modelo de antes. Best effort: falhar aqui não desfaz a criação.
+
+    ⚠️ Se falhar, o agente **fica** no modelo caro. Por isso vai para o log com
+    o que era, para dar como restaurar à mão.
+    """
+    if anterior is None:
+        return
+    try:
+        from app.gateway import patch as patch_gw
+
+        parsed, base_hash = await patch_gw.config_do_gateway()
+        lista = [dict(a) for a in (parsed.get("agents") or {}).get("list") or []]
+        for a in lista:
+            if str(a.get("id")) == agent_id:
+                a["model"] = anterior
+        await patch_gw.aplicar_patch(
+            {"agents": {"list": lista}}, base_hash,
+            conferir=lambda c: any(
+                str(x.get("id")) == agent_id and x.get("model") == anterior
+                for x in ((c.get("agents") or {}).get("list") or [])
+            ),
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.error(
+            "NÃO devolvi o modelo de %s: ele ficou em %s e o anterior era %r. (%s)",
+            agent_id, _MODELO_PARA_CRIAR, anterior, e,
+        )
+
+
 async def _avisar_lider_ou_falhar(assunto: str, mensagem: str) -> str:
     """Como `_avisar_lider`, mas **levanta** quando não consegue entregar.
 
@@ -1412,7 +1499,10 @@ Sua tarefa, agora:
 Se você não tem ferramenta nenhuma, diga isso — não descreva o que não pode abrir."""
 
 
-async def _completar_agente(agent_id: str, sessao_lider: str) -> None:
+async def _completar_agente(
+    agent_id: str, sessao_lider: str,
+    lider_id: str | None = None, modelo_anterior=None,
+) -> None:
     """Espera o orquestrador terminar e manda o agente completar o próprio TOOLS.md.
 
     ⚠️ **Só o agente pode escrever o próprio `TOOLS.md` com honestidade**, porque
@@ -1432,6 +1522,8 @@ async def _completar_agente(agent_id: str, sessao_lider: str) -> None:
     c = await cfg.carregar()
     if not c.configurado:
         logger.error("Sem gateway: %s não foi completado.", agent_id)
+        if lider_id:
+            await _devolver_modelo(lider_id, modelo_anterior)
         return
     cliente = obter_cliente(c.url, c.token)
 
@@ -1470,7 +1562,16 @@ async def _completar_agente(agent_id: str, sessao_lider: str) -> None:
             break
     else:
         logger.warning("Orquestrador não terminou a tempo; %s segue configurando.", agent_id)
+        if lider_id:
+            await _devolver_modelo(lider_id, modelo_anterior)
         return
+
+    # ⚠️ **Devolve o modelo AQUI, não no fim.** A orquestradora acabou; o que
+    # vem a seguir é o agente novo escrevendo o próprio TOOLS.md, e isso é
+    # trabalho dele, no modelo dele. Devolver só no fim manteria a
+    # orquestradora no modelo caro por mais alguns minutos, à toa.
+    if lider_id:
+        await _devolver_modelo(lider_id, modelo_anterior)
 
     try:
         await cliente.chamar("chat.send", {
@@ -1701,11 +1802,30 @@ async def criar(
     # o agente vazio fica na lista parecendo pronto. Por isso, aqui, falha na
     # entrega desfaz o que já foi feito — no gateway e no banco — e devolve
     # 502 dizendo o que houve.
+    # A orquestradora escreve os sete arquivos do agente novo, que é a tarefa
+    # mais difícil que ela faz — vai num modelo melhor e volta ao dela depois.
+    lider_id, modelo_anterior = None, None
+    try:
+        async with sessao(role="service_role") as conn:
+            lider_id = await conn.fetchval(
+                "SELECT COALESCE(NULLIF(openclaw_id,''), agent_id) FROM public.agent_profiles "
+                " WHERE is_leader = true LIMIT 1"
+            )
+        if lider_id:
+            modelo_anterior = await _trocar_modelo(lider_id, _MODELO_PARA_CRIAR)
+    except Exception as e:  # noqa: BLE001
+        # Não conseguir trocar o modelo não impede criar o agente: ele nasce no
+        # modelo de sempre, que é o comportamento de antes desta melhoria.
+        logger.warning("Segui no modelo atual da orquestradora: %s", e)
+        modelo_anterior = None
+
     try:
         sessao_lider = await _avisar_lider_ou_falhar(
             f"create-agent:{dados.openclaw_id}", briefing
         )
     except ErroGateway as e:
+        if lider_id:
+            await _devolver_modelo(lider_id, modelo_anterior)
         logger.error("Briefing de %s não entregue — desfazendo: %s", dados.openclaw_id, e)
         await _desfazer_criacao(dados.openclaw_id)
         raise HTTPException(
@@ -1717,7 +1837,9 @@ async def criar(
 
     # A segunda etapa vai para segundo plano: o orquestrador demora minutos e a
     # tela não pode esperar por ele.
-    asyncio.create_task(_completar_agente(dados.openclaw_id, sessao_lider))
+    asyncio.create_task(
+        _completar_agente(dados.openclaw_id, sessao_lider, lider_id, modelo_anterior)
+    )
 
     logger.info("Agente %s criado por administrador", dados.openclaw_id)
     return AgenteNovoOut(
