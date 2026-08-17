@@ -314,6 +314,29 @@ desatualizado para ele) ou crie uma conta de teste em Usuários.
 ⚠️ **O deploy dos dois serviços é obrigatório antes de conferir.** Backend e
 frontend mudaram em 14/08, e o EasyPanel só constrói quando alguém manda.
 
+### A regra dos três erros do fim de semana
+
+Os três achados do primeiro uso real eram do mesmo tipo — **número certo, régua
+errada** — e nenhum foi bug de código. Em todos, o agente aplicou uma régua
+plausível que ninguém tinha escrito:
+
+| | o agente disse | era |
+|---|---|---|
+| faturamento | R$ 654.645,95 | R$ 441.712,80 — faltava CFOP e marcador |
+| cards parados | 369 "sem dono", risco | 82 na Aquisição — faltava separar board |
+| contas antigas | "não achei" | "esta base começa em 2026" |
+
+Os três se resolveram igual: **régua escrita, número de conferência dentro dela,
+e gatilho num dos sete arquivos**. A última parte é a que não é óbvia — sem o
+gatilho a régua existe e não é aberta, que foi o que aconteceu com a
+`faturamento` em 14/08.
+
+⚠️ O terceiro virou regra nos **três** agentes em vez de skill: "não achei" não
+é "não existe" vale para qualquer pergunta com corte de tempo. E o horizonte é
+**por tabela**, não por banco — no DataCoreHS as notas vão a 2015 e o contas a
+receber começa em 2026; no GrowthHS os cards vêm de 2024 e a tabela de clientes
+começa em 2026. Decorar a data de uma tabela não protege da próxima.
+
 ### Pendências que 17/08 criou
 
 - ⚠️ **Deploy pendente.** Backend e frontend mudaram bastante hoje e nada foi
