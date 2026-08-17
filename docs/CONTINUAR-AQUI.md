@@ -1,6 +1,6 @@
 # Continuar aqui
 
-Ponto de retomada da portagem. Atualizado em **14/08/2026**. Leia isto, depois
+Ponto de retomada da portagem. Atualizado em **17/08/2026**. Leia isto, depois
 `CLAUDE.md` e `docs/ROADMAP.md`.
 
 👉 **Voltando na segunda (17/08)?** Pule para
@@ -173,10 +173,18 @@ sete arquivos da `nina`, a skill `criar-agente` e a criação do primeiro agente
 pela orquestradora. A `iris` (DataCoreHS) e o `atlas` (GrowthHS) existem, e os
 três passam no `python scripts/auditar-agente.py <id>`.
 
-A frente aberta agora é **a tela de Skills e o painel de dentro de Super
-agentes** (`/agents/:id`). Ordem combinada com o Erick em 14/08:
+✅ **A lista de 17/08 fechou** — Skills, guardrails, sessões recentes e o
+coletor. O que cada um virou está abaixo, riscado, porque o **porquê** de cada
+decisão ainda vale na hora de mexer.
 
-1. **Skills — a página.** Hoje `/skills` lê `public.skills`, que tem **zero
+A frente seguinte ainda não foi escolhida. Os candidatos naturais são o
+[backlog do primeiro uso real](#-backlog-do-primeiro-uso-real-1508--não-é-a-frente-atual)
+— a skill do CRM para o Atlas e o preço do DeepSeek são os dois que produzem
+número errado — e as pendências de produção logo abaixo.
+
+Ordem que foi combinada e cumprida em 17/08:
+
+1. ~~**Skills — a página.**~~ ✅ Hoje `/skills` lê `public.skills`, que tem **zero
    linhas**, enquanto `/skills/catalogo` já lê o gateway e devolve **55**. A
    página mostra a tabela vazia. O dado está a uma chamada de distância; é o
    mesmo conserto do consumo e das integrações, já feito em `agents.py`.
@@ -185,16 +193,16 @@ agentes** (`/agents/:id`). Ordem combinada com o Erick em 14/08:
    `source` (`openclaw-managed` são as nossas — hoje `criar-agente` e
    `faturamento`). Das 55, 51 são do próprio OpenClaw.
 
-2. **Guardrails no painel.** `GET /agents/{id}/guardrails` lê `agent_profiles` e
+2. ~~**Guardrails no painel.**~~ ✅ `GET /agents/{id}/guardrails` lê `agent_profiles` e
    devolve `[]`. É a área que mais mexemos esta semana e a tela não mostra nada
    do que foi configurado. Ver onde a configuração real mora antes de escrever:
    parte está no `SOUL.md`, parte em `tools.*` do gateway.
 
-3. **Sessões recentes.** O gateway tem **38 sessões** com modelo, duração,
+3. ~~**Sessões recentes.**~~ ✅ O gateway tem **38 sessões** com modelo, duração,
    status, tokens e custo. É a base do diagnóstico quando alguém disser "o
    agente não respondeu" — e hoje não aparece.
 
-4. **O coletor de histórico.** Decisão do Erick: consumo ao vivo **primeiro**
+4. ~~**O coletor de histórico.**~~ ✅ Decisão do Erick: consumo ao vivo **primeiro**
    (feito), coletor **depois**. Enquanto ele não existir, "quanto gastamos em
    julho" não tem resposta — sessão podada leva o histórico junto. Quando
    entrar, ele enche `usage_events` e o `/consumo` volta a preferi-la sozinho,
@@ -292,6 +300,24 @@ desatualizado para ele) ou crie uma conta de teste em Usuários.
 
 ⚠️ **O deploy dos dois serviços é obrigatório antes de conferir.** Backend e
 frontend mudaram em 14/08, e o EasyPanel só constrói quando alguém manda.
+
+### Pendências que 17/08 criou
+
+- ⚠️ **Deploy pendente.** Backend e frontend mudaram bastante hoje e nada foi
+  reconstruído no EasyPanel. Tudo foi verificado em `localhost`.
+- ⚠️ **`GET /skills/{slug}/conteudo` dá 404 em produção.** O `Dockerfile` do
+  backend faz `COPY . .` com contexto `backend/`, e as skills estão em `skills/`
+  na raiz — não entram na imagem. Em desenvolvimento lê o repositório direto. O
+  404 já explica o motivo; resolver é mudar o contexto do build ou montar
+  volume, e mexe no deploy.
+- **Custo do DeepSeek é zero.** O coletor já grava a série e ela mostra 314 mil
+  tokens a US$ 0,00 nos dias em DeepSeek. Os tokens estão certos; falta declarar
+  `cost` (`input`/`output`) por modelo em `models.providers.deepseek.models[]`.
+  ⚠️ Pedir o preço vigente ao Erick — não inventar.
+- **Os três agentes estão com lista fixa de skills** desde a separação de
+  `criar-agente` (só nina) e `faturamento` (só iris). O painel de guardrails
+  mostra isso como o único ponto de atenção dos três. Skill nova do OpenClaw não
+  chega neles até a lista ser refeita — religar pela tela refaz.
 
 ### Pendências curtas, que cabem em qualquer intervalo
 

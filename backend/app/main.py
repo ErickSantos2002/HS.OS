@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth.router import router as auth_router
 from app.config import settings
 from app.escuta_banco import escutar
+from app.coletor_uso import rodar as rodar_coletor
 from app.database import close_db, init_db
 from app.gateway.client import encerrar_cliente
 from app.routers.agent_export import router as agent_export_router
@@ -54,10 +55,18 @@ async def lifespan(app: FastAPI):
     parar_escuta = asyncio.Event()
     escuta = asyncio.create_task(escutar(parar_escuta))
 
+    # O consumo do gateway é estado vivo: sessão podada leva o histórico junto.
+    # Este laço copia para `usage_events`, e a partir daí o `/consumo` prefere a
+    # tabela sozinho. Desligar: `COLETOR_USO_SEGUNDOS=0`.
+    parar_coletor = asyncio.Event()
+    coletor = asyncio.create_task(rodar_coletor(parar_coletor))
+
     yield
 
     parar_escuta.set()
+    parar_coletor.set()
     escuta.cancel()
+    coletor.cancel()
     # A conexão com o gateway é persistente; fechar no shutdown evita deixar
     # socket pendurado no OpenClaw a cada reinício.
     # Antes de tudo: solta os WebSockets abertos, senão o shutdown

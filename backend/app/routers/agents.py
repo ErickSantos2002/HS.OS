@@ -2455,7 +2455,12 @@ async def consumo_do_agente(
         linhas = await conn.fetch(
             """
             SELECT total_tokens, input_tokens, output_tokens, cached_tokens,
-                   cost_usd, model,
+                   -- ⚠️ `numeric` vira Decimal no asyncpg e **string** no JSON.
+                   -- Pelo gateway este campo volta número; o mesmo campo mudar
+                   -- de tipo conforme a fonte é armadilha para quem somar sem
+                   -- converter. A tela usa `Number()` e sobrevive; quem vier
+                   -- depois pode não usar.
+                   cost_usd::float8 AS cost_usd, model,
                    to_char(ts AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS ts
               FROM public.usage_events
              WHERE agent_id = $1
