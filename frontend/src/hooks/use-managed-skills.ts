@@ -14,12 +14,27 @@ export interface ManagedSkillAgentLink {
   agent: { name: string; avatar_url?: string | null };
 }
 
+/**
+ * De onde a skill vem — e, por consequência, o que a tela pode oferecer.
+ *
+ * ⚠️ Só `plataforma` tem linha em `public.skills`. As outras vêm do gateway e
+ * **não têm CRUD**: oferecer editar ou excluir nelas produz 404.
+ */
+export type SkillOrigem = "plataforma" | "repositorio" | "vps" | "openclaw";
+
 export interface ManagedSkill {
   id: string;
   slug: string;
   name: string;
   description: string | null;
   content: string;
+  /** `plataforma`: o que a tela criou. O resto vem do gateway. */
+  origem: SkillOrigem;
+  somente_leitura: boolean;
+  /** Emoji do frontmatter, quando a skill vem do gateway. */
+  emoji?: string | null;
+  /** Caminho do `SKILL.md` na VPS — é o que se mostra no lugar de "editar". */
+  arquivo?: string | null;
   source: SkillSource;
   source_url: string | null;
   version: string;
@@ -74,7 +89,7 @@ function isGatewayNotConfigured(payload: unknown): boolean {
  * configurado, não ter skills é o normal, não é falha.
  */
 async function chamar<T = any>(
-  metodo: "GET" | "POST" | "PATCH" | "DELETE",
+  metodo: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   rota: string,
   corpo?: unknown,
 ): Promise<T> {
@@ -203,5 +218,38 @@ export function useManagedSkills() {
     notifySkillsChanged();
   }, [refetch]);
 
-  return { skills, loading, error, refetch, create, update, assign, retry, remove };
+  /**
+   * O markdown inteiro da skill.
+   *
+   * ⚠️ Só existe para as do **repositório**. O gateway não tem método de
+   * leitura (`skills.read`/`get`/`show`/`content` não existem) e o leitor de
+   * workspace recusa o caminho — então as embutidas do OpenClaw não têm
+   * conteúdo recuperável e o backend responde 404 explicando.
+   */
+  const lerConteudo = useCallback(
+    (slug: string) => chamar<{ slug: string; arquivo: string; conteudo: string }>(
+      "GET", `/skills/${encodeURIComponent(slug)}/conteudo`,
+    ),
+    [],
+  );
+
+  /**
+   * Quais agentes podem usar a skill. Lista vazia desativa para todos.
+   *
+   * ⚠️ Mande sempre a lista **completa** de quem pode: o backend converte isso
+   * para a allowlist por agente do gateway, onde lista explícita substitui tudo.
+   */
+  const definirAgentes = useCallback(
+    async (slug: string, agentIds: string[]) => {
+      const r = await chamar<{ ok: boolean; restritos: string[] }>(
+        "PUT", `/skills/${encodeURIComponent(slug)}/agentes`, { agent_ids: agentIds },
+      );
+      await refetch();
+      return r;
+    },
+    [refetch],
+  );
+
+  return { skills, loading, error, refetch, create, update, assign, retry, remove,
+           lerConteudo, definirAgentes };
 }

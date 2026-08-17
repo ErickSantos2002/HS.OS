@@ -38,10 +38,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useManagedSkills, type ManagedSkill, type SkillSource, type SkillSyncStatus } from "@/hooks/use-managed-skills";
+import { useManagedSkills, type ManagedSkill, type SkillOrigem, type SkillSource, type SkillSyncStatus } from "@/hooks/use-managed-skills";
 import { useAgents } from "@/hooks/use-agents";
 import { toast } from "@/hooks/use-toast";
 import { useNomeDoLider } from "@/hooks/use-agente-lider";
+import SkillDetalheDialog from "@/components/skills/SkillDetalheDialog";
 
 /* ── Source badges ────────────────────────────────────── */
 const SOURCE_META: Record<SkillSource, { label: string; icon: React.ElementType; cls: string }> = {
@@ -49,6 +50,37 @@ const SOURCE_META: Record<SkillSource, { label: string; icon: React.ElementType;
   git: { label: "Git", icon: Github, cls: "bg-info/15 text-info border-info/30" },
   manual: { label: "Manual", icon: FileText, cls: "bg-muted text-muted-foreground border-border" },
   agent: { label: "Agente", icon: Bot, cls: "bg-success/15 text-success border-success/30" },
+};
+
+/**
+ * A etiqueta do card vem da **origem**, não do `source`.
+ *
+ * ⚠️ Skill vinda do gateway traz `source` como `openclaw-bundled` /
+ * `openclaw-managed` / `openclaw-extra`, que **não estão** no `SOURCE_META`.
+ * Indexar por `source` devolvia `undefined` e a página quebrava no
+ * `meta.icon` — a listagem passou a trazer 55 skills em 17/08/2026 e o
+ * `SOURCE_META` só conhece as 4 fontes que a própria tela cria.
+ */
+const ORIGEM_META: Record<
+  SkillOrigem,
+  { label: string; icon: React.ElementType; cls: string; ajuda: string }
+> = {
+  plataforma: {
+    label: "Plataforma", icon: FileText, cls: "bg-muted text-muted-foreground border-border",
+    ajuda: "Criada aqui nesta tela. É a única que dá para editar e excluir por aqui.",
+  },
+  repositorio: {
+    label: "Repositório", icon: Github, cls: "bg-info/15 text-info border-info/30",
+    ajuda: "Mora em skills/<slug>/SKILL.md, no git, e vai para a VPS por scripts/publicar-skills.sh --enviar.",
+  },
+  vps: {
+    label: "Plugin da VPS", icon: Puzzle, cls: "bg-primary/15 text-primary border-primary/30",
+    ajuda: "Plugin instalado na VPS, fora do nosso repositório.",
+  },
+  openclaw: {
+    label: "OpenClaw", icon: Bot, cls: "bg-secondary text-muted-foreground border-border",
+    ajuda: "Embutida no próprio OpenClaw. Vem com a instalação.",
+  },
 };
 
 function SyncDot({ status }: { status: SkillSyncStatus | "unassigned" }) {
@@ -592,7 +624,7 @@ function ManageSkillDialog({
     }
   }
 
-  const sourceMeta = SOURCE_META[skill.source];
+  const sourceMeta = ORIGEM_META[skill.origem] ?? ORIGEM_META.plataforma;
   const SourceIcon = sourceMeta.icon;
 
   return (
@@ -840,7 +872,7 @@ function ManageSkillDialog({
 }
 
 /* ── Main page ────────────────────────────────────────── */
-type SourceFilter = "all" | SkillSource;
+type OrigemFilter = "all" | SkillOrigem;
 
 export default function SkillsPage() {
   const { skills, loading, error } = useManagedSkills();
@@ -854,13 +886,24 @@ export default function SkillsPage() {
     () => skills.find((sk) => sk.id === manageSkillId) ?? null,
     [skills, manageSkillId],
   );
-  const [filter, setFilter] = useState<SourceFilter>("all");
+  const [filter, setFilter] = useState<OrigemFilter>("all");
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
 
+  // As 51 embutidas do OpenClaw afogariam as nossas numa lista só. Ficam em
+  // aba própria: a informação "o que meus agentes conseguem fazer" é real e
+  // hoje só se descobre perguntando ao agente, mas não é o que se gerencia aqui.
+  const [aba, setAba] = useState<"nossas" | "openclaw">("nossas");
+  const [detalhe, setDetalhe] = useState<ManagedSkill | null>(null);
+
+  const daAba = useMemo(
+    () => skills.filter((s) => (aba === "openclaw" ? s.origem === "openclaw" : s.origem !== "openclaw")),
+    [skills, aba],
+  );
+
   const filtered = useMemo(() => {
-    let list = skills;
-    if (filter !== "all") list = list.filter((s) => s.source === filter);
+    let list = daAba;
+    if (filter !== "all") list = list.filter((s) => s.origem === filter);
     if (agentFilter !== "all") {
       list = list.filter((s) => s.agent_skills.some((as) => as.agent_id === agentFilter));
     }
@@ -874,14 +917,17 @@ export default function SkillsPage() {
       );
     }
     return list;
-  }, [skills, filter, agentFilter, search]);
+  }, [daAba, filter, agentFilter, search]);
 
-  const filters: { key: SourceFilter; label: string }[] = [
+  // ⚠️ Filtrava por `source` e por isso **só "Todas" mostrava algo**: as
+  // skills do gateway trazem `openclaw-managed`/`-extra`/`-bundled`, e o
+  // `source` da tela só conhece clawhub/git/manual/agent. O filtro útil é o de
+  // origem, que é o que distingue o que dá para gerenciar.
+  const filters: { key: OrigemFilter; label: string }[] = [
     { key: "all", label: "Todas" },
-    { key: "clawhub", label: "ClawHub" },
-    { key: "git", label: "Git" },
-    { key: "manual", label: "Manual" },
-    { key: "agent", label: "Agente" },
+    { key: "repositorio", label: "Repositório" },
+    { key: "vps", label: "Plugin da VPS" },
+    { key: "plataforma", label: "Plataforma" },
   ];
 
   return (
@@ -904,6 +950,31 @@ export default function SkillsPage() {
             <Plus className="h-4 w-4" /> Instalar skill
           </Button>
         </div>
+
+        {/* Aba: o que a gente gerencia × o que já vem com o OpenClaw */}
+        <div className="flex items-center gap-0.5 bg-secondary/40 border border-border/30 rounded-full p-1 w-fit">
+          {([
+            { k: "nossas" as const, r: "Da instalação", n: skills.filter((s) => s.origem !== "openclaw").length },
+            { k: "openclaw" as const, r: "Do OpenClaw", n: skills.filter((s) => s.origem === "openclaw").length },
+          ]).map((t) => (
+            <button
+              key={t.k}
+              onClick={() => setAba(t.k)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                aba === t.k ? "bg-primary/20 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.r} <span className="font-mono opacity-70">{t.n}</span>
+            </button>
+          ))}
+        </div>
+
+        {aba === "openclaw" && (
+          <p className="text-[11px] text-muted-foreground">
+            Skills que vêm com o OpenClaw. São só leitura — servem para saber o que os
+            agentes conseguem fazer, não para gerenciar aqui.
+          </p>
+        )}
 
         {/* Filters + search */}
         <div className="flex items-center gap-3 flex-wrap">
@@ -992,7 +1063,8 @@ export default function SkillsPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             {filtered.map((skill) => {
-              const meta = SOURCE_META[skill.source];
+              // Pela origem, não pelo `source` — ver o comentário do ORIGEM_META.
+              const meta = ORIGEM_META[skill.origem] ?? ORIGEM_META.plataforma;
               const Icon = meta.icon;
               const agents = skill.agent_skills;
               const visibleAgents = agents.slice(0, 4);
@@ -1000,7 +1072,11 @@ export default function SkillsPage() {
               return (
                 <div
                   key={skill.id}
-                  className="glass-card rounded-2xl p-4 space-y-3 hover:bg-secondary/20 transition-colors flex flex-col"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setDetalhe(skill)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDetalhe(skill); } }}
+                  className="glass-card rounded-2xl p-4 space-y-3 hover:bg-secondary/20 transition-colors flex flex-col cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
@@ -1099,14 +1175,28 @@ export default function SkillsPage() {
                     })()}
                   </div>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full h-8 text-xs"
-                    onClick={() => setManageSkillId(skill.id)}
-                  >
-                    Gerenciar
-                  </Button>
+                  {/* Só a origem `plataforma` tem linha em `public.skills`; nas
+                      outras, "Gerenciar" abriria um diálogo cujo salvar e
+                      excluir dão 404. O caminho de edição delas é o arquivo. */}
+                  {skill.somente_leitura ? (
+                    <div className="rounded-lg border border-border/40 bg-secondary/20 px-2.5 py-2 space-y-1">
+                      <p className="text-[10px] text-muted-foreground leading-snug">{meta.ajuda}</p>
+                      {skill.arquivo && (
+                        <p className="text-[10px] font-mono text-muted-foreground/80 break-all">
+                          {skill.arquivo}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full h-8 text-xs"
+                      onClick={(e) => { e.stopPropagation(); setManageSkillId(skill.id); }}
+                    >
+                      Gerenciar
+                    </Button>
+                  )}
                 </div>
               );
             })}
@@ -1122,6 +1212,12 @@ export default function SkillsPage() {
           skill={manageSkill}
           open={!!manageSkill}
           onOpenChange={(v) => { if (!v) setManageSkillId(null); }}
+        />
+        {/* Lê o objeto da lista, não o do clique: os toggles de agente
+            refazem o fetch, e um objeto congelado mostraria o estado anterior. */}
+        <SkillDetalheDialog
+          skill={detalhe ? (skills.find((s) => s.id === detalhe.id) ?? detalhe) : null}
+          onOpenChange={(v) => { if (!v) setDetalhe(null); }}
         />
       </div>
     </TooltipProvider>

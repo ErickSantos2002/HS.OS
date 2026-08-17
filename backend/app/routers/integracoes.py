@@ -1730,9 +1730,17 @@ def _nome_mcp(nome: str) -> str:
     return f"banco-{base or 'sem-nome'}"
 
 
-# Denies que não vêm de MCP e precisam sobreviver ao recálculo — hoje é o que
-# impede especialista de acionar outro agente por conta própria.
-_DENY_NAO_MCP = ("sessions_send", "sessions_spawn")
+# Denies que não vêm de MCP e precisam sobreviver ao recálculo.
+#
+# ⚠️ **Esquecer um nome aqui o apaga na próxima publicação de conector**, sem
+# erro e sem aviso: o `deny` é reescrito do zero, e o que não estiver nesta
+# tupla some. Vale para toda trava que não seja de servidor MCP.
+#
+# - `sessions_send`/`sessions_spawn`: só a orquestradora aciona outro agente.
+# - `skill_workshop`: criar, editar e instalar skill é do Erick ou da `nina`.
+#   Um especialista que possa escrever a própria skill pode reescrever a régua
+#   que o governa — e a `faturamento` é exatamente uma régua dessas.
+_DENY_NAO_MCP = ("sessions_send", "sessions_spawn", "skill_workshop")
 
 
 def _sem_prefixo(nome: str) -> str:

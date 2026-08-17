@@ -2487,17 +2487,17 @@ async def _integracoes_do_gateway(agent_id: str, tipo: str | None) -> list[dict]
         for s in (p.get("skills") or []):
             if s.get("bundled"):
                 continue
-            # ⚠️ **`eligible` é o veredito do próprio gateway — use ele.** A
-            # primeira versão somava `disabled or missing or blockedByAgentFilter`
-            # e marcava TODAS como inativas: `missing` não é booleano, é um dict
-            # (`{"bins": [], "env": [], …}`), e dict vazio é **verdadeiro** em
-            # Python. A `faturamento` aparecia inativa no painel no mesmo dia em
-            # que a `iris` a usou para acertar o faturamento.
+            # ⚠️ **`modelVisible`, não `eligible`.** Duas armadilhas seguidas no
+            # mesmo campo: `missing` parece flag e é um dict (dict vazio é
+            # verdadeiro em Python, e isso marcava tudo como inativo); e
+            # `eligible` continua **true** quando a skill está bloqueada pela
+            # allowlist do agente — quem muda é `blockedByAgentFilter`.
+            # `modelVisible` responde a pergunta certa: este agente vê a skill?
             saida.append({
                 "id": f"skill:{s.get('name')}",
                 "name": f"{s.get('emoji') or ''} {s.get('name')}".strip(),
                 "type": "skill",
-                "status": "active" if s.get("eligible") else "inactive",
+                "status": "active" if s.get("modelVisible") else "inactive",
                 "config": {
                     "fonte": s.get("source"),
                     "sempre": bool(s.get("always")),
