@@ -314,6 +314,28 @@ desatualizado para ele) ou crie uma conta de teste em Usuários.
 ⚠️ **O deploy dos dois serviços é obrigatório antes de conferir.** Backend e
 frontend mudaram em 14/08, e o EasyPanel só constrói quando alguém manda.
 
+### A base de conhecimento chegou nos agentes (17/08/2026)
+
+`hsos-documentos` está declarado em `mcp.servers` apontando para
+`https://hsosapi.healthsafetytech.com/mcp/wiki`, com as quatro ferramentas
+(`documento_listar`, `ler`, `criar`, `editar`) concedidas aos cinco agentes. Eles
+leem todos os espaços e escrevem só em **"Documentos dos agentes"**.
+
+⚠️ **Declarar não bastou, e isso já era esperado.** O ponteiro entra no
+`TOOLS.md` de cada um, entre `<!-- base-de-conhecimento:inicio -->` e `:fim`, e é
+ele que faz o agente lembrar da ferramenta na hora certa — a mesma lição que a
+skill `faturamento` custou. Sem o bloco, o agente tem a ferramenta e responde do
+zero.
+
+Conferido pelos dois lados: o `atlas` listou os 3 documentos de produção, e a
+`iris`, perguntada sobre fechamento mensal **sem menção a ferramenta nenhuma**,
+abriu o documento sozinha, disse que estava só esboçado e devolveu a parte de
+Pipeline para o `atlas`.
+
+**Ao escrever nos sete arquivos por script, escreva em bloco marcado e faça
+backup.** Uma geração automática já apagou conteúdo editorial do roster da
+`nina` neste mesmo dia. Os backups vão para `.backups-agentes/`, ignorada.
+
 ### A frota, e o que a criação de agente aprendeu em 17/08
 
 São **cinco agentes**. `nina` orquestra; os outros quatro são especialistas com

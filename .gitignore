@@ -42,3 +42,6 @@ __pycache__/
 # Artefatos do Playwright MCP
 .playwright-mcp/
 backend/.uploads/
+
+# Backups dos sete arquivos antes de escrita automática (ver scripts de ponteiro).
+.backups-agentes/
