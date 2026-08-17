@@ -359,15 +359,37 @@ async def listar_vivos(
 
 @router.get("/vivos/{artefato_id}")
 async def obter_vivo(artefato_id: str, usuario: Usuario = Depends(usuario_atual)):
-    """Um artefato pelo id, com o HTML. Conta a visualização."""
+    """Um artefato pelo id, com o HTML. Conta a visualização.
+
+    ⚠️ **Ler e contar são separados de propósito.** Isto era um
+    `UPDATE … RETURNING`, e num único comando: quem não podia **escrever** não
+    conseguia **ler**, porque o RLS de UPDATE é só do dono. Em 17/08/2026 a
+    leitura de artefato alheio foi liberada e o detalhe continuou devolvendo
+    404 — a lista mostrava o artefato e clicar nele dizia que não existia.
+
+    Contar visualização é efeito colateral de conveniência; falhar nele não pode
+    impedir a leitura. Por isso o incremento vem depois, como `service_role`, e
+    é engolido se der errado.
+    """
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
-            f"UPDATE public.live_artifacts SET view_count = COALESCE(view_count,0) + 1 "
-            f" WHERE id = $1::uuid AND deleted_at IS NULL RETURNING {_COLUNAS_VIVO}",
+            f"SELECT {_COLUNAS_VIVO} FROM public.live_artifacts "
+            f" WHERE id = $1::uuid AND deleted_at IS NULL",
             artefato_id,
         )
     if linha is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Artefato não encontrado.")
+
+    try:
+        async with sessao(role="service_role") as conn:
+            await conn.execute(
+                "UPDATE public.live_artifacts SET view_count = COALESCE(view_count,0) + 1 "
+                " WHERE id = $1::uuid",
+                artefato_id,
+            )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Não contei a visualização do artefato %s: %s", artefato_id, e)
+
     return _vivo(linha)
 
 

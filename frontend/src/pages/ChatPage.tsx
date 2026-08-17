@@ -2418,12 +2418,14 @@ export default function ChatPage() {
       const ts = lastMsg ? new Date(lastMsg.created_at).getTime() : 0;
       items.push({ kind: "agent", agent, lastActivity: ts });
     }
-    for (const person of people) {
-      if (person.id === user?.id) continue; // hide the logged-in user from the DM list
-      const chId = peerIdToChannelId[person.id];
-      const ts = chId && dmLastActivity[chId] ? new Date(dmLastActivity[chId]).getTime() : 0;
-      items.push({ kind: "person", person, lastActivity: ts });
-    }
+    // ⚠️ **Pessoa não entra mais nesta lista.** O HS.OS deixou de ser lugar de
+    // gente conversar com gente: o foco é a pessoa falando com o agente
+    // (decisão do Erick com o Nicholson, 17/08/2026). Nada foi perdido — os
+    // dois canais de DM que existiam tinham ZERO mensagens.
+    //
+    // O ramo `kind: "person"` continua nos dois pontos de render como código
+    // morto; removê-lo é ~100 linhas de JSX em dois lugares e fica para uma
+    // limpeza própria. Quem chegar aqui antes disso: ele não é alcançável.
     items.sort((a, b) => {
       if (a.lastActivity && b.lastActivity) return b.lastActivity - a.lastActivity;
       if (a.lastActivity && !b.lastActivity) return -1;

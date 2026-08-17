@@ -2054,11 +2054,22 @@ async def _guardrails_do_gateway(agent_id: str) -> list[dict]:
 
     async with sessao(role="service_role") as conn:
         acesso = await conn.fetchrow(
-            "SELECT access_type, allowed_user_ids FROM public.agent_profiles WHERE agent_id = $1",
+            """
+            SELECT a.access_type,
+                   -- ⚠️ **Conta quem EXISTE, não o tamanho da lista.** Excluir
+                   -- uma pessoa não a tira de `allowed_user_ids`, e em
+                   -- 17/08/2026 o Atlas tinha 11 ids com 2 pessoas vivas — o
+                   -- painel anunciava "só 11 autorizadas" para um agente que
+                   -- 9 daquelas pessoas não podiam mais nem abrir.
+                   (SELECT count(*) FROM unnest(a.allowed_user_ids) u
+                     WHERE EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = u))
+                     AS pessoas
+              FROM public.agent_profiles a WHERE a.agent_id = $1
+            """,
             agent_id,
         )
     tipo_acesso = (acesso or {}).get("access_type") or "all"
-    quantos = len((acesso or {}).get("allowed_user_ids") or [])
+    quantos = (acesso or {}).get("pessoas") or 0
 
     lista_skills = perfil.get("skills")
 
