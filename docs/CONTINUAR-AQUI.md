@@ -237,7 +237,12 @@ Erick é ajustar tudo antes de liberar para as demais pessoas.
 
 **O que consertar, em ordem de dano:**
 
-1. **O Atlas precisa da skill do CRM.** Ele apresentou ao CEO **369 cards sem
+1. ~~**O Atlas precisa da skill do CRM.**~~ ✅ **feito em 17/08.** Skill
+   `pipeline-crm` publicada, concedida só ao atlas, com ponteiro no AGENTS.md
+   dele. A mesma pergunta que gerou o erro passou a responder **82 cards
+   parados de 141 abertos na Aquisição**, dizendo o board e explicando por que
+   não somou a Prospecção. ⚠️ Ela nasceu bloqueada nos três — lista fixa não
+   recebe skill nova — e precisou de concessão explícita. Contexto original: Ele apresentou ao CEO **369 cards sem
    vendedor** como "risco de ninguém responsável". Conferido no banco: dos 696
    parados >3 dias, **593 estão na Prospecção**, e é lá que estão 484 dos 488
    sem vendedor — board de SDR, onde **não ter vendedor é o normal**. As regras

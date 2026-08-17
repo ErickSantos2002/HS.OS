@@ -252,6 +252,18 @@ O procedimento longo fica na skill — ela só custa contexto quando aberta. Nos
 sete entra o gatilho e o motivo, em poucas linhas. E a conferência é fazer a
 pergunta ao agente: skill listada pelo gateway não é skill usada.
 
+⚠️ **Skill nova nasce BLOQUEADA em quem tem lista fixa.** Assim que um agente
+recebe uma allowlist de skills (`agents.list[].skills`, que é o que a tela de
+Skills grava ao restringir), ele passa a enxergar **só** o que está nela — e
+skill publicada depois não entra sozinha. Em 17/08/2026 a `pipeline-crm` foi
+publicada, o gateway a listou, e ela chegou aos três agentes com
+`modelVisible: false`.
+
+Então publicar virou **dois** passos: enviar pelo script **e** conceder na tela
+de Skills a quem deve usá-la. Pular o segundo produz o pior sintoma possível —
+a skill existe, aparece no painel, e o agente responde como se ela não
+existisse.
+
 ## Ferramenta dada depois é ferramenta não documentada
 
 ⚠️ **Se o agente ganhar uma ferramenta depois de o `TOOLS.md` estar escrito, o
