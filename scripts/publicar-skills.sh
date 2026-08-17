@@ -22,7 +22,9 @@ set -uo pipefail
 VPS="${VPS_OPENCLAW:-root@2.24.85.122}"
 DESTINO="${SKILLS_DIR:-/root/.openclaw/skills}"
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ORIGEM="$RAIZ/skills"
+# ⚠️ `backend/skills/`, não `skills/`: a pasta precisa estar dentro do
+# contexto de build do backend para entrar na imagem. Ver backend/Dockerfile.
+ORIGEM="$RAIZ/backend/skills"
 ENVIAR=0
 [ "${1:-}" = "--enviar" ] && ENVIAR=1
 

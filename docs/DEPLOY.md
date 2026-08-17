@@ -88,20 +88,13 @@ aplicação; **não** cobrem perder a máquina. Cópia para fora é o passo segu
 
 ## Backend
 
-**Build:** contexto **`.` (raiz do repositório)**, Dockerfile `backend/Dockerfile`.
-Sem build args.
+**Build:** contexto `backend/`, Dockerfile padrão. Sem build args.
 
-⚠️ **O contexto mudou em 17/08/2026 e o EasyPanel precisa acompanhar.** Era
-`backend/`, e com ele a pasta `skills/` — que fica na raiz — não entrava na
-imagem: a tela de Skills listava tudo e só a leitura do conteúdo respondia 404.
-Como em desenvolvimento o caminho existe, o defeito não aparecia aqui. Se o
-build quebrar em `COPY backend/requirements.txt: not found`, é isto: o contexto
-no painel ainda está em `backend/`.
-
-O `.dockerignore` que vale agora é o da **raiz** (o de `backend/` foi removido —
-Docker lê o do diretório de contexto, e deixar um arquivo morto com cara de
-oficial é armadilha). Ele lista por permissão em vez de exclusão, porque a raiz
-carrega `frontend/node_modules` com ~749 MB.
+⚠️ **Não mova o contexto para a raiz do repositório.** Tentado em 17/08/2026
+para levar a pasta `skills/` junto, e o deploy quebrou na hora: o EasyPanel
+monta o comando com o caminho fixo `code/backend/`, então `COPY backend/…`
+falha com `"/backend": not found`. O conserto foi o inverso — a pasta passou a
+morar em `backend/skills/`, dentro do contexto.
 
 **Variáveis de ambiente** (ver `backend/.env.example`):
 

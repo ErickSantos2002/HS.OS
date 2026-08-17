@@ -1,9 +1,7 @@
 services:
   backend:
     build:
-      # Raiz, não `backend/`: a imagem precisa levar `skills/` junto.
-      context: .
-      dockerfile: backend/Dockerfile
+      context: ./backend
       dockerfile: Dockerfile
     container_name: hsos-backend
     # 8002 no host: 8000 é do taskhs-backend e 8001 do gestorhs-backend.

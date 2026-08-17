@@ -1,0 +1,27 @@
+.env
+.env.*
+!.env.example
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+dist/
+build/
+.git
+.gitignore
+tests/
+uploads/
+
+# As 73 edge functions são material de referência da portagem, não código que
+# roda — ficam fora da imagem para não carregar peso morto.
+supabase/
+
+# migrations/ ENTRA na imagem: o postgresql-client está instalado justamente
+# para permitir aplicá-las de dentro do container. Só o material de origem fica
+# de fora — são ~740 KB de dump binário e CSV que não servem em produção.
+migrations/_origem/

@@ -1,15 +1,16 @@
 # Backend HS.OS — FastAPI + asyncpg
 # Deploy: EasyPanel, domínio hsosapi.healthsafetytech.com
 #
-# ⚠️ **O contexto de build é a RAIZ do repositório, não `backend/`.** Mudou em
-# 17/08/2026 e por isso os `COPY` daqui são todos prefixados. O motivo é a pasta
-# `skills/`, que fica na raiz: com o contexto antigo ela não entrava na imagem,
-# e `GET /skills/{slug}/conteudo` respondia 404 em produção enquanto os
-# metadados apareciam normalmente na tela — defeito que passou despercebido
-# porque em desenvolvimento o caminho existe.
+# ⚠️ **Contexto de build: `backend/`.** Não mude — o EasyPanel tem o caminho
+# fixo em `code/backend/` e um Dockerfile que espere a raiz do repositório
+# quebra o deploy com `"/backend": not found`. Tentado em 17/08/2026 e desfeito
+# no mesmo dia.
 #
-# Se o build falhar em `COPY backend/requirements.txt`, é o contexto: o
-# EasyPanel ainda está apontando para `backend/`.
+# É por isso que `skills/` mora em `backend/skills/` e não na raiz, que seria o
+# lugar natural dela: precisa estar dentro do contexto para entrar na imagem.
+# Antes disso, `GET /skills/{slug}/conteudo` respondia 404 em produção enquanto
+# a lista aparecia normal na tela — e em desenvolvimento funcionava, porque lá o
+# caminho existe de qualquer jeito.
 FROM python:3.13-slim
 
 WORKDIR /app
@@ -26,17 +27,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-COPY backend/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY backend/ .
+COPY . .
 
-# As skills do repositório: a tela lê o markdown delas por
-# `GET /skills/{slug}/conteudo`, e o gateway não tem como entregar esse conteúdo
-# (`skills.read`/`get`/`show`/`content` não existem). SKILLS_DIR é a saída que o
-# router já previa — sem ela o código procuraria em `/skills`, que não é onde
-# elas caem.
-COPY skills/ ./skills
+# A tela lê o markdown das skills por `GET /skills/{slug}/conteudo`, e o gateway
+# não tem como entregar esse conteúdo (`skills.read`/`get`/`show`/`content` não
+# existem). Elas vêm no `COPY . .` acima, já que vivem em `backend/skills/`;
+# SKILLS_DIR — saída que o router já previa — deixa o caminho explícito em vez
+# de depender de contagem de `parents[]`.
 ENV SKILLS_DIR=/app/skills
 
 # uploads/ é volume persistente em produção; criado aqui para o caso de não
