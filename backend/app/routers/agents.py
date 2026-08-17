@@ -1601,6 +1601,97 @@ async def _completar_agente(
 # o time e escrever skill é o trabalho dela.
 _TRAVAS_DE_ESPECIALISTA = ("sessions_send", "sessions_spawn", "skill_workshop")
 
+# O roster do time no `AGENTS.md` da orquestradora, entre marcadores. Mesmo
+# padrão do bloco da empresa, e pelo mesmo motivo: é dado, não redação.
+_ROSTER_INICIO = "<!-- hsos:roster:inicio -->"
+_ROSTER_FIM = "<!-- hsos:roster:fim -->"
+
+
+async def _liberar_entre_agentes(agent_id: str) -> None:
+    """Põe o agente no `tools.agentToAgent.allow`.
+
+    ⚠️ **`allow` lista quem PARTICIPA, não quem recebe** — os dois lados
+    precisam estar nela. Agente fora da lista não é alcançável **nem alcança**,
+    e a recusa não chega a quem perguntou: em 17/08/2026 o `flow` nasceu de fora
+    e a orquestradora simplesmente não conseguia acioná-lo.
+    """
+    from app.gateway import patch as patch_gw
+
+    parsed, base_hash = await patch_gw.config_do_gateway()
+    a2a = dict(((parsed.get("tools") or {}).get("agentToAgent")) or {})
+    atual = list(a2a.get("allow") or [])
+    if agent_id in atual:
+        return
+    novo = sorted(set(atual) | {agent_id})
+    await patch_gw.aplicar_patch(
+        {"tools": {"agentToAgent": {"enabled": True, "allow": novo}}}, base_hash,
+        conferir=lambda c: agent_id in (
+            (((c.get("tools") or {}).get("agentToAgent")) or {}).get("allow") or []
+        ),
+    )
+    logger.info("Agente %s liberado no agentToAgent", agent_id)
+
+
+async def _atualizar_roster_do_lider(lider_id: str | None) -> None:
+    """Reescreve, no `AGENTS.md` da orquestradora, a tabela de quem é quem.
+
+    ⚠️ **Ninguém atualizava o roster DELA.** A orquestradora escreve os sete
+    arquivos do agente novo — inclusive o roster que ele recebe — e o próprio
+    fica velho. Em 17/08/2026 o `flow` nasceu e a `nina` não sabia que ele
+    existia: pergunta de operação ficava sem dono, ou ela tentava responder
+    sozinha.
+
+    ⚠️ **Isto NÃO substitui a tabela de roteamento dela, e a primeira versão
+    substituía.** A tabela escrita à mão tem a coluna "Não é dele", que é a que
+    de fato evita roteamento errado — "faturamento é da Iris, pipeline é do
+    Atlas". Gerada a partir de `specialty`, ela virou *"Gerente do comercial."*
+    e a coluna sumiu: automação que piorou o conteúdo.
+
+    Roteamento é **editorial**; presença é **dado**. O que se automatiza aqui é
+    só a presença — a lista de quem existe, para que agente novo nunca fique
+    invisível para quem coordena. A tabela com a nuance continua sendo dela, e
+    fica fora dos marcadores.
+    """
+    if not lider_id:
+        return
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            "SELECT COALESCE(NULLIF(openclaw_id,''), agent_id) AS oid, name, specialty, "
+            "       description, is_leader "
+            "  FROM public.agent_profiles "
+            " WHERE status IS DISTINCT FROM 'inactive' ORDER BY is_leader DESC, name"
+        )
+    if not linhas:
+        return
+
+    nomes = [f"`{l['oid']}` ({l['name']})" for l in linhas if not l["is_leader"]]
+    if not nomes:
+        return
+    corpo = (
+        "**Agentes vivos hoje:** " + ", ".join(nomes) + ".\n\n"
+        "Esta linha é gerada pelo sistema a cada agente criado — serve só para "
+        "nenhum ficar invisível para você. Quem faz o quê, e o que **não** é de "
+        "cada um, está na tabela acima, que é escrita à mão."
+    )
+    bloco = f"{_ROSTER_INICIO}\n{corpo}\n{_ROSTER_FIM}"
+
+    c = await cfg.carregar()
+    cli = obter_cliente(c.url, c.token)
+    r = await cli.chamar("agents.files.get", {"agentId": lider_id, "name": "AGENTS.md"})
+    atual = ((r.get("payload") or r).get("file") or {}).get("content") or ""
+
+    i, f = atual.find(_ROSTER_INICIO), atual.find(_ROSTER_FIM)
+    if i != -1 and f != -1 and f > i:
+        novo = atual[:i] + bloco + atual[f + len(_ROSTER_FIM):]
+    else:
+        # Primeira vez: entra no fim, sem tocar no que a orquestradora escreveu.
+        novo = atual.rstrip() + "\n\n## O time, atualizado automaticamente\n\n" + bloco + "\n"
+    if novo == atual:
+        return
+    await cli.chamar("agents.files.set",
+                     {"agentId": lider_id, "name": "AGENTS.md", "content": novo})
+    logger.info("Roster da orquestradora %s atualizado", lider_id)
+
 
 async def _travar_especialista(agent_id: str) -> None:
     """Tira do agente o que só a orquestradora deve ter."""
@@ -1854,6 +1945,14 @@ async def criar(
     # Publicar depois de avisar não resolvia: a skill manda consultar o banco
     # antes de descrever, e essa instrução era impossível de cumprir enquanto a
     # ferramenta chegava só no fim. Aqui a ordem passa a permitir a regra.
+    # Quem é a orquestradora. Vale para as travas (ela não recebe), para a troca
+    # de modelo e para o roster — por isso é buscado uma vez só.
+    async with sessao(role="service_role") as conn:
+        lider_id = await conn.fetchval(
+            "SELECT COALESCE(NULLIF(openclaw_id,''), agent_id) FROM public.agent_profiles "
+            " WHERE is_leader = true LIMIT 1"
+        )
+
     publicados, falhos = await _publicar_conectores(
         dados.openclaw_id, dados.integrations_used
     )
@@ -1889,6 +1988,21 @@ async def criar(
             logger.error("Travas de especialista não aplicadas a %s: %s", dados.openclaw_id, e)
             falhos.append({"conector": "Travas de especialista", "motivo": str(e)[:300]})
 
+    # Sem isto o agente nasce inalcançável pela orquestradora, e a recusa não
+    # chega a quem perguntou.
+    try:
+        await _liberar_entre_agentes(dados.openclaw_id)
+    except Exception as e:  # noqa: BLE001
+        logger.error("Agente %s não entrou no agentToAgent: %s", dados.openclaw_id, e)
+        falhos.append({"conector": "Conversa entre agentes", "motivo": str(e)[:300]})
+
+    # E sem isto a orquestradora não sabe que ele existe.
+    try:
+        await _atualizar_roster_do_lider(lider_id)
+    except Exception as e:  # noqa: BLE001
+        logger.error("Roster da orquestradora não atualizado: %s", e)
+        falhos.append({"conector": "Roster da orquestradora", "motivo": str(e)[:300]})
+
     async with sessao(role="service_role") as conn:
         # Trilha do que foi pedido ao orquestrador. Sem isto não há como saber
         # depois por que um agente nasceu diferente do que se esperava.
@@ -1912,13 +2026,8 @@ async def criar(
     # 502 dizendo o que houve.
     # A orquestradora escreve os sete arquivos do agente novo, que é a tarefa
     # mais difícil que ela faz — vai num modelo melhor e volta ao dela depois.
-    lider_id, modelo_anterior = None, None
+    modelo_anterior = None
     try:
-        async with sessao(role="service_role") as conn:
-            lider_id = await conn.fetchval(
-                "SELECT COALESCE(NULLIF(openclaw_id,''), agent_id) FROM public.agent_profiles "
-                " WHERE is_leader = true LIMIT 1"
-            )
         if lider_id:
             modelo_anterior = await _trocar_modelo(lider_id, _MODELO_PARA_CRIAR)
     except Exception as e:  # noqa: BLE001

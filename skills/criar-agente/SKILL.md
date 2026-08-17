@@ -198,6 +198,20 @@ que a própria agente escreveu depois, com o banco aberto, saiu correto.
 ela é e deixe o resto para quem pode abrir. Nome de tabela inventado faz o
 agente consultar o que não existe e concluir que não há dados — pior que erro.
 
+⚠️ **Nome de ferramenta não se deduz do nome do conector: ele se lê.** Em
+17/08/2026 o conector chamado "Diretório HS.OS" virou, no `TOOLS.md` do `flow`,
+`banco-diretorio__query` — parecia óbvio. O nome real é
+`banco-diretorio-hs-os__query`, e o agente ficou com uma ferramenta inexistente
+documentada enquanto a de verdade não aparecia em lugar nenhum.
+
+O que estava por trás: um conector demorou a chegar (limite de escrita no
+gateway), e o arquivo foi escrito **enquanto ele ainda não existia**. Escrever
+sobre o que não se vê é sempre um chute, por mais razoável que pareça.
+
+**A regra:** liste as ferramentas e copie o nome exato que aparece. Se o
+briefing promete um conector que ainda não está lá, **diga e pare** — quem
+publica é a tela de Conectores, e o arquivo pode ser refeito depois em minutos.
+
 ⚠️ **O `TOOLS.md` lista o que o agente TEM, e só.** Não é catálogo do que existe
 na empresa. Em 14/08/2026 o `atlas` — que tem dois conectores — escreveu dez
 seções de banco, oito delas com nomes de tabela adivinhados, marcando-as como
