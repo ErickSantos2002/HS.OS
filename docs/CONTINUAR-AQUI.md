@@ -247,7 +247,15 @@ Erick é ajustar tudo antes de liberar para as demais pessoas.
    história da skill `faturamento` — e vai precisar do mesmo **ponteiro no
    `AGENTS.md`**, senão ele não abre.
 
-2. **Custo aparece US$ 0,00 para DeepSeek.** O gateway não tem tabela de preço
+2. ~~**Custo aparece US$ 0,00 para DeepSeek.**~~ ✅ **resolvido em 17/08.**
+   `deepseek-chat` é alias de `deepseek-v4-flash` — confirmado no painel do
+   DeepSeek, que atribuiu a ele os 86 requests e 2,31M de tokens. O `cost` por
+   modelo está declarado com os preços **fora de pico** (input 0.22, output 0.66,
+   cacheRead 0.007), e a unidade é **US$ por 1M de tokens** — medido, não
+   suposto: a conta fechou no centavo em duas execuções. O gateway aplica o
+   `cacheRead` separado, e é isso que explica a fatura real ser tão baixa (de
+   ~22 mil tokens por mensagem, ~13 mil vêm do cache). ⚠️ Cron noturno cai em
+   pico e apareceria pela metade. Detalhe antigo, mantido para contexto: O gateway não tem tabela de preço
    para provedor customizado; as sessões em `claude-sonnet-4-6` têm custo e as
    em `deepseek-chat` vêm zeradas. O painel de custo entregue em 14/08 mostra
    zero **justamente para o modelo que passou a rodar tudo**. O schema aceita
@@ -310,10 +318,9 @@ frontend mudaram em 14/08, e o EasyPanel só constrói quando alguém manda.
   na raiz — não entram na imagem. Em desenvolvimento lê o repositório direto. O
   404 já explica o motivo; resolver é mudar o contexto do build ou montar
   volume, e mexe no deploy.
-- **Custo do DeepSeek é zero.** O coletor já grava a série e ela mostra 314 mil
-  tokens a US$ 0,00 nos dias em DeepSeek. Os tokens estão certos; falta declarar
-  `cost` (`input`/`output`) por modelo em `models.providers.deepseek.models[]`.
-  ⚠️ Pedir o preço vigente ao Erick — não inventar.
+- **Os dias 15 e 17/08 seguem zerados na série de custo.** O preço é carimbado
+  quando a sessão roda, e recalcular retroativamente exigiria inventar a
+  repartição entre cache e não-cache. De 17/08 em diante o valor é real.
 - **Os três agentes estão com lista fixa de skills** desde a separação de
   `criar-agente` (só nina) e `faturamento` (só iris). O painel de guardrails
   mostra isso como o único ponto de atenção dos três. Skill nova do OpenClaw não
