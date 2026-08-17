@@ -316,7 +316,7 @@ frontend mudaram em 14/08, e o EasyPanel só constrói quando alguém manda.
 
 ### A frota, e o que a criação de agente aprendeu em 17/08
 
-São **quatro agentes**. `nina` orquestra; os outros três são especialistas com
+São **cinco agentes**. `nina` orquestra; os outros quatro são especialistas com
 lista fixa de skills, sem `sessions_send` e sem `skill_workshop`.
 
 | agente | domínio | conectores |
