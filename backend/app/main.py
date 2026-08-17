@@ -27,6 +27,7 @@ from app.routers.conversations import router as conversations_router
 from app.routers.gateway import router as gateway_router
 from app.routers.llm import router as llm_router
 from app.routers.mcp_alerta import router as mcp_alerta_router
+from app.routers.mcp_wiki import router as mcp_wiki_router
 from app.routers.integracoes import router as integracoes_router
 from app.routers.ia import router as ia_router
 from app.routers.push import router as push_router
@@ -152,6 +153,7 @@ app.include_router(ia_router)
 app.include_router(integracoes_router)
 app.include_router(llm_router)
 app.include_router(mcp_alerta_router)
+app.include_router(mcp_wiki_router)
 app.include_router(profiles_router)
 app.include_router(push_router)
 app.include_router(skills_router)
