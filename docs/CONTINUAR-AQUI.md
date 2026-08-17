@@ -206,6 +206,70 @@ agentes** (`/agents/:id`). Ordem combinada com o Erick em 14/08:
 agendamento nenhum: a tela está certa ao não mostrar nada. Ela só ganha utilidade
 quando existir o primeiro cron de verdade.
 
+### 📋 Backlog do primeiro uso real (15/08) — **não é a frente atual**
+
+O Nicholson (CEO, `colaborador`) usou os três agentes no sábado: Atlas 06:20,
+Nina 09:10, Iris 18:43. Três sessões, três `done`, nenhuma falha. Analisado em
+17/08. **Nada disto entra antes do que está na lista acima** — a decisão do
+Erick é ajustar tudo antes de liberar para as demais pessoas.
+
+**O que funcionou, e vale preservar ao mexer:**
+
+- **A identidade resolveu sozinha.** O Atlas consultou o Diretório e abriu com
+  "Nicholson, bom dia", sabendo o cargo. O desenho de chave de sessão +
+  `USER.md` funcionou com alguém que não somos nós.
+- **A Iris recusou premissa errada.** Ele pediu "painel com todas as 106
+  empresas"; ela respondeu que no banco dela são **91** e perguntou de onde veio
+  o 106 antes de montar qualquer coisa.
+- **Roteamento fora de escopo correto:** "oportunidades é do GrowthHS, quem
+  trata é o Atlas".
+- **O Atlas desconfiou do próprio número** (186 por vendedor contra 555 no
+  total) e foi investigar em vez de entregar. Não estava escrito em lugar
+  nenhum.
+
+**O que consertar, em ordem de dano:**
+
+1. **O Atlas precisa da skill do CRM.** Ele apresentou ao CEO **369 cards sem
+   vendedor** como "risco de ninguém responsável". Conferido no banco: dos 696
+   parados >3 dias, **593 estão na Prospecção**, e é lá que estão 484 dos 488
+   sem vendedor — board de SDR, onde **não ter vendedor é o normal**. As regras
+   já estão escritas em `~/projetos/extracao-consultoria/DESIGN.md`: `is_won = 0`
+   é card **aberto** (não perdido), "Negócio Perdido" na Prospecção é descarte
+   de lead, e o denominador do indicador de SDR é o outbound. É a mesma
+   história da skill `faturamento` — e vai precisar do mesmo **ponteiro no
+   `AGENTS.md`**, senão ele não abre.
+
+2. **Custo aparece US$ 0,00 para DeepSeek.** O gateway não tem tabela de preço
+   para provedor customizado; as sessões em `claude-sonnet-4-6` têm custo e as
+   em `deepseek-chat` vêm zeradas. O painel de custo entregue em 14/08 mostra
+   zero **justamente para o modelo que passou a rodar tudo**. O schema aceita
+   `cost` (`input`/`output`/`cacheRead`/`cacheWrite`) por modelo dentro de
+   `models.providers.<id>.models[]`. ⚠️ Confirmar o preço vigente do DeepSeek
+   com o Erick — não inventar número.
+
+3. **"pergunta a eles" — e a Iris não pôde.** O CEO pediu que ela acionasse o
+   Atlas; ela explicou que não tem a ferramenta e ele respondeu *"serio mesmo
+   iris?"*. A decisão de 14/08 (só a Nina inicia, via `deny` de `sessions_send`)
+   colidiu com a expectativa de quem usa. Reabrir: o `agentToAgent.allow` é
+   global e não tem lista de destino por agente, então "a Iris fala só com a
+   Nina" **não** é configurável hoje — a saída seria soltar o `deny` dela e
+   aceitar que alcance o Atlas também.
+
+4. **`/new to start a fresh session` foi enviado como mensagem.** Ele digitou
+   uma dica da interface e ela virou pergunta para a Iris. Defeito de tela.
+
+5. **A Iris ofereceu "arquivo/planilha exportável (CSV/HTML)".** As ferramentas
+   dela são três consultas e o alerta. Conferir se ela entrega arquivo ao
+   usuário de fato; se não, é promessa que não se cumpre e sai do `IDENTITY.md`.
+
+6. **A Nina foi a mais fraca.** Recebeu "bom dia" e respondeu "Bom dia! Em que
+   posso ajudar?", sem identificar quem era — enquanto o Atlas identificou. É a
+   primeira impressão da orquestradora com o CEO.
+
+**Dado de custo que vale ter em mente:** cada sessão nova custa **~22 mil
+tokens** antes da primeira palavra — são os sete arquivos entrando no contexto.
+Com DeepSeek é barato; foi por isso que a troca importou.
+
 ### Conferir no navegador
 
 ⚠️ **Tudo de 14/08 foi verificado por API e perguntando aos agentes — nada foi
