@@ -1597,6 +1597,83 @@ async def _completar_agente(
     logger.info("Agente %s completou o setup e está ativo.", agent_id)
 
 
+# As travas que todo especialista carrega. A orquestradora não recebe: coordenar
+# o time e escrever skill é o trabalho dela.
+_TRAVAS_DE_ESPECIALISTA = ("sessions_send", "sessions_spawn", "skill_workshop")
+
+
+async def _travar_especialista(agent_id: str) -> None:
+    """Tira do agente o que só a orquestradora deve ter."""
+    from app.gateway import patch as patch_gw
+
+    parsed, base_hash = await patch_gw.config_do_gateway()
+    lista = [dict(a) for a in (parsed.get("agents") or {}).get("list") or []]
+    alvo = next((a for a in lista if str(a.get("id")) == agent_id), None)
+    if alvo is None:
+        raise ErroGateway(f"Agente {agent_id} não está no gateway.")
+
+    tools = dict(alvo.get("tools") or {})
+    deny = list(tools.get("deny") or [])
+    faltando = [t for t in _TRAVAS_DE_ESPECIALISTA if t not in deny]
+    if not faltando:
+        return
+    tools["deny"] = sorted(deny + faltando)
+    alvo["tools"] = tools
+
+    await patch_gw.aplicar_patch(
+        {"agents": {"list": lista}}, base_hash,
+        conferir=lambda c: all(
+            t in ((x.get("tools") or {}).get("deny") or [])
+            for x in ((c.get("agents") or {}).get("list") or [])
+            if str(x.get("id")) == agent_id
+            for t in _TRAVAS_DE_ESPECIALISTA
+        ),
+    )
+    logger.info("Travas de especialista aplicadas a %s: %s", agent_id, faltando)
+
+
+async def _conceder_alerta(agent_id: str) -> None:
+    """Dá ao agente a ferramenta de avisar o administrador.
+
+    Não é conector da tela: é infraestrutura de guardrail, e todo agente tem.
+    O `SOUL.md` de todos manda usá-la ao detectar tentativa de subverter os
+    limites — sem ela, a regra é uma frase.
+    """
+    from app.gateway import patch as patch_gw
+
+    parsed, base_hash = await patch_gw.config_do_gateway()
+    servidores = ((parsed.get("mcp") or {}).get("servers")) or {}
+    servidor = next((s for s in servidores if "alerta" in s), None)
+    if not servidor:
+        raise ErroGateway(
+            "O servidor MCP de alerta não está no gateway — nenhum agente "
+            "consegue avisar o administrador."
+        )
+    ferramenta = f"mcp__{servidor}__avisar_administrador"
+
+    lista = [dict(a) for a in (parsed.get("agents") or {}).get("list") or []]
+    alvo = next((a for a in lista if str(a.get("id")) == agent_id), None)
+    if alvo is None:
+        raise ErroGateway(f"Agente {agent_id} não está no gateway.")
+
+    tools = dict(alvo.get("tools") or {})
+    atuais = list(tools.get("alsoAllow") or [])
+    if ferramenta in atuais:
+        return
+    tools["alsoAllow"] = atuais + [ferramenta]
+    alvo["tools"] = tools
+
+    await patch_gw.aplicar_patch(
+        {"agents": {"list": lista}}, base_hash,
+        conferir=lambda c: any(
+            str(x.get("id")) == agent_id
+            and ferramenta in ((x.get("tools") or {}).get("alsoAllow") or [])
+            for x in ((c.get("agents") or {}).get("list") or [])
+        ),
+    )
+    logger.info("Ferramenta de alerta concedida a %s", agent_id)
+
+
 async def _publicar_conectores(agent_id: str, nomes: list[str]) -> tuple[list, list]:
     """Dá ao agente novo os conectores marcados na tela.
 
@@ -1780,6 +1857,37 @@ async def criar(
     publicados, falhos = await _publicar_conectores(
         dados.openclaw_id, dados.integrations_used
     )
+
+    # ⚠️ **A ferramenta de alerta não é opcional, e a criação nunca a concedia.**
+    # Descoberto auditando o `flow` em 17/08/2026: ele nasceu com o `SOUL.md`
+    # mandando avisar o administrador ao detectar tentativa de subverter os
+    # limites — e sem nenhuma forma de fazer isso. `nina`, `iris` e `atlas` só a
+    # tinham porque foram concedidas à mão em 14/08; todo agente criado pela
+    # tela nascia com o guardrail decorativo.
+    #
+    # Vem depois dos conectores de propósito: se o rate limit do `config.patch`
+    # atrapalhar, é melhor perder o alerta (recuperável em dois cliques) do que
+    # o banco que o agente precisa para trabalhar.
+    try:
+        await _conceder_alerta(dados.openclaw_id)
+    except Exception as e:  # noqa: BLE001
+        logger.error("Alerta não concedido a %s: %s", dados.openclaw_id, e)
+        falhos.append({"conector": "Alerta ao administrador", "motivo": str(e)[:300]})
+
+    # ⚠️ **Agente novo nasce com as travas de especialista.** Também descoberto
+    # auditando o `flow`: ele nasceu podendo acionar outros agentes e editar as
+    # próprias skills — as duas coisas que foram tiradas da `iris` e do `atlas`
+    # em 17/08/2026, à mão, e que nenhuma linha de código conhecia.
+    #
+    # Quem coordena é a orquestradora, e quem escreve skill é ela ou o
+    # administrador: um especialista capaz de reescrever a régua que o governa
+    # deixa de ser governado por ela.
+    if dados.openclaw_id != (lider_id or ''):
+        try:
+            await _travar_especialista(dados.openclaw_id)
+        except Exception as e:  # noqa: BLE001
+            logger.error("Travas de especialista não aplicadas a %s: %s", dados.openclaw_id, e)
+            falhos.append({"conector": "Travas de especialista", "motivo": str(e)[:300]})
 
     async with sessao(role="service_role") as conn:
         # Trilha do que foi pedido ao orquestrador. Sem isto não há como saber

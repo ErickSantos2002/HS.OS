@@ -1759,9 +1759,22 @@ def _deny_de_mcp(also_allow: list[str], deny_atual: list[str],
     enxergando os dez bancos com o deny "aplicado". Quem desfez o engano foi
     perguntar a ela, não reler o `config.get`.
     """
+    # ⚠️ **O alerta é infraestrutura, não conector por agente — nunca é negado.**
+    #
+    # Este cálculo é "tudo que existe menos o que é meu", e roda a cada
+    # publicação. Se naquele instante o agente ainda não tiver o alerta no
+    # `alsoAllow`, ele entra na lista de negados — e depois, mesmo concedido,
+    # continua bloqueado, porque `deny` ganha de `alsoAllow`.
+    #
+    # Foi o que aconteceu com o `flow` em 17/08/2026: alerta concedido, alerta
+    # negado, e o agente respondendo "NÃO" quando perguntado se o tinha. O
+    # `SOUL.md` de todo agente manda avisar o administrador; deixar essa
+    # ferramenta depender da ordem das operações é frágil demais para uma regra
+    # de segurança.
     todas = {
         f"{s}__{t}"
         for s, cfg in servidores.items()
+        if "alerta" not in s
         for t in ((((cfg or {}).get("toolFilter") or {}).get("include")) or ["query"])
     }
     meus = {_sem_prefixo(x) for x in also_allow}

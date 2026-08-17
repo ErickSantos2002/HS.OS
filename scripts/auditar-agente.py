@@ -106,6 +106,13 @@ async def main(agente: str):
     # para afirmar o que ninguém verificou.
     inventadas = {c for c in citadas if c not in reais and "__" in c}
     a.checa(not inventadas, "não cita ferramenta que não tem", str(sorted(inventadas)))
+    if inventadas:
+        # ⚠️ Isto não distingue "eu uso esta ferramenta" de "esta ferramenta
+        # estava errada e eu corrigi". O `flow` refez o TOOLS.md em 17/08/2026 e
+        # deixou no topo um changelog citando o nome antigo — informação útil,
+        # apontada aqui como defeito. Antes de consertar o arquivo, leia a linha:
+        # apagar o registro do erro para agradar a checagem seria pior.
+        print("   ⚠️ leia o contexto: menção num changelog não é uso.")
     faltando = reais - citadas
     a.checa(not faltando, "documenta as ferramentas que tem", str(sorted(faltando)))
 
