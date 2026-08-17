@@ -255,11 +255,15 @@ _SLUG_OK = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 def _dir_das_skills() -> Path:
     """Onde estão os `SKILL.md` do repositório.
 
-    ⚠️ **A imagem do backend não os carrega hoje.** O Dockerfile faz `COPY . .`
-    com contexto `backend/`, e `skills/` está na raiz do repositório — então em
-    produção este diretório não existe e a leitura devolve 404 explicando. Em
-    desenvolvimento funciona direto. Resolver isso é mudar o contexto do build
-    ou montar um volume; está anotado em `docs/CONTINUAR-AQUI.md`.
+    Em produção quem manda é `SKILLS_DIR=/app/skills`, definido no Dockerfile.
+    O fallback abaixo é o caminho de desenvolvimento, rodando fora de container.
+
+    ⚠️ **Isto já esteve quebrado em produção de um jeito silencioso.** Até
+    17/08/2026 o build usava contexto `backend/` e a pasta `skills/`, que fica na
+    raiz do repositório, simplesmente não entrava na imagem: a lista de skills
+    aparecia normal na tela e só o botão de ler o conteúdo dava 404. Em
+    desenvolvimento o caminho existe, então nada denunciava. Se voltar a dar 404,
+    confira o contexto do build antes de mexer aqui.
     """
     if env := os.environ.get("SKILLS_DIR"):
         return Path(env)
