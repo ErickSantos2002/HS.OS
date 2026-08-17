@@ -314,6 +314,49 @@ desatualizado para ele) ou crie uma conta de teste em Usuários.
 ⚠️ **O deploy dos dois serviços é obrigatório antes de conferir.** Backend e
 frontend mudaram em 14/08, e o EasyPanel só constrói quando alguém manda.
 
+### A frota, e o que a criação de agente aprendeu em 17/08
+
+São **quatro agentes**. `nina` orquestra; os outros três são especialistas com
+lista fixa de skills, sem `sessions_send` e sem `skill_workshop`.
+
+| agente | domínio | conectores |
+|---|---|---|
+| `nina` | orquestradora | HS.OS, Diretório |
+| `iris` | DataCoreHS — faturamento, notas, contas | DataCoreHS, Diretório |
+| `atlas` | GrowthHS — pipeline comercial | HSGrowth, Diretório |
+| `flow` | operações — fluxos, calibração, chamados TI | TaskHS, GestorHS, ChamadosHS, Diretório |
+| `bruce` | TalentHS — cadastro de pessoas | TalentHS, Diretório |
+
+⚠️ **`bruce` é o único com acesso a dado de remuneração**, e por isso é
+`specific_users` com duas pessoas. Hoje `profiles.current_salary` tem **1 de 28**
+preenchido; no dia em que o RH preencher o resto, isso vira a folha inteira ao
+alcance de quem conversar com ele. A restrição é o que segura.
+
+**A `help` (HelpHS) foi adiada**: o sistema tem 14 chamados e não está no ar. O
+schema é bom para SLA, mas com N=14 qualquer percentual é ruído — e soaria
+analítico, que é o defeito que este repositório passou o dia corrigindo. Também
+**não existe campo de satisfação** ali; se for pedido, precisa ser criado antes.
+
+**A criação de agente foi provada nesta sequência.** O `flow` nasceu com 3
+defeitos e o `bruce`, criado depois dos consertos, passou na auditoria **de
+primeira** — o primeiro que não precisou de conserto nenhum:
+
+| | iris | atlas | flow | bruce |
+|---|---|---|---|---|
+| consertos manuais | 3 | 4 | 3 | **0** |
+
+Os quatro consertos que fizeram a diferença estão no commit `f724866` e
+`9ccd3ce`: espera do `retry after` do `config.patch`, concessão automática do
+alerta, travas de especialista, e entrada no `agentToAgent.allow` + roster.
+
+⚠️ **A troca para Sonnet 5 na escrita dos sete arquivos estreou e funcionou**:
+16:07 trocou, 16:10 devolveu. É global enquanto dura — quem falar com a
+orquestradora nesses minutos é atendido por ela.
+
+⚠️ **`bruce` recusa listar as próprias ferramentas**, por guardrail — os outros
+três respondem. É comportamento correto e mais rígido, e **tira um método de
+verificação**: com ele, confira pelo efeito, não pela auto-listagem.
+
 ### A regra dos três erros do fim de semana
 
 Os três achados do primeiro uso real eram do mesmo tipo — **número certo, régua
