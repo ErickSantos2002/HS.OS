@@ -2000,7 +2000,148 @@ async def guardrails(agent_id: str, usuario: Usuario = Depends(exige_papel("admi
         )
     if isinstance(bruto, str):
         bruto = json.loads(bruto)
-    return bruto if isinstance(bruto, list) else []
+    if isinstance(bruto, list) and bruto:
+        return bruto
+
+    return await _guardrails_do_gateway(agent_id)
+
+
+async def _guardrails_do_gateway(agent_id: str) -> list[dict]:
+    """Os limites que de fato valem para este agente, lidos da config.
+
+    ⚠️ **A coluna `agent_profiles.guardrails` nunca teve escritor.** Quem
+    escreveria é o coletor da VPS, por `PUT /integracoes/guardrails`, e ele não
+    aponta para esta instalação — a tela dizia "nenhum guardrail cadastrado"
+    para agentes cujos limites a gente configurou à mão a semana inteira.
+
+    ⚠️ **Isto NÃO cobre os limites de comportamento.** As regras de não assumir
+    outra identidade, não revelar o contexto de sistema e não sair do escopo
+    moram no `SOUL.md`, em prosa, e não há como enumerá-las mecanicamente.
+    O que sai daqui é o que a **configuração** impõe — o que o agente não
+    consegue fazer nem querendo. São coisas diferentes e a tela não deve
+    sugerir que uma cobre a outra.
+    """
+    try:
+        c = await cfg.carregar()
+        r = await obter_cliente(c.url, c.token).chamar("config.get", {})
+        parsed = ((r.get("payload") or r).get("parsed")) or {}
+    except (ErroGateway, OSError) as e:
+        logger.warning("config.get falhou ao montar guardrails de %s: %s", agent_id, e)
+        return []
+
+    alvo = agent_id.lower()
+    perfil = next((a for a in ((parsed.get("agents") or {}).get("list") or [])
+                   if str(a.get("id", "")).lower() == alvo), None)
+    if perfil is None:
+        return []
+
+    t = perfil.get("tools") or {}
+    deny = {str(x) for x in (t.get("deny") or [])}
+    tambem = {str(x) for x in (t.get("alsoAllow") or [])}
+    global_t = parsed.get("tools") or {}
+    servidores = ((parsed.get("mcp") or {}).get("servers")) or {}
+
+    def nu(x: str) -> str:
+        return x[len("mcp__"):] if x.startswith("mcp__") else x
+
+    bancos_dele = sorted(nu(x).rsplit("__", 1)[0] for x in tambem if nu(x).startswith("banco-"))
+    bancos_todos = [s for s in servidores if s.startswith("banco-")]
+
+    web = global_t.get("web") or {}
+    tem_web = bool((web.get("search") or {}).get("enabled") or (web.get("fetch") or {}).get("enabled"))
+    a2a = global_t.get("agentToAgent") or {}
+    pode_acionar = a2a.get("enabled") and "sessions_send" not in deny
+
+    async with sessao(role="service_role") as conn:
+        acesso = await conn.fetchrow(
+            "SELECT access_type, allowed_user_ids FROM public.agent_profiles WHERE agent_id = $1",
+            agent_id,
+        )
+    tipo_acesso = (acesso or {}).get("access_type") or "all"
+    quantos = len((acesso or {}).get("allowed_user_ids") or [])
+
+    lista_skills = perfil.get("skills")
+
+    # ⚠️ **Nome FIXO, e `active` = a proteção está em vigor.** Duas tentativas
+    # antes desta, e as duas erradas por motivos opostos:
+    #
+    # 1. Nome fixo de restrição + descrição alarmada: a `nina`, que **deve**
+    #    acionar agentes e **deve** ter o `skill_workshop`, aparecia com dois
+    #    ⚠️ como se estivesse quebrada.
+    # 2. Nome variável ("Aciona" para a nina, "Não aciona" para a iris): sumiu
+    #    o defeito, e sumiu junto a comparação — não dá para bater um agente
+    #    contra o outro se as linhas mudam de nome, e `active` passa a
+    #    significar coisas opostas conforme a linha.
+    #
+    # A saída é nome fixo, `active` quando a proteção vale, e a **descrição**
+    # dizendo que o desligamento é deliberado quando for. Num painel chamado
+    # Guardrails, verde tem que ser "protegido" — e a orquestradora ter duas
+    # proteções a menos é fato relevante, que deve saltar aos olhos em vez de
+    # ser dissolvido numa mudança de rótulo.
+    def regra(nome, desc, categoria, ok):
+        return {"name": nome, "description": desc, "category": categoria,
+                "status": "active" if ok else "inactive"}
+
+    orquestra = bool(perfil.get("is_leader")) or alvo == "nina"
+
+    return [
+        regra("Sem acesso à internet",
+              "Busca e leitura de páginas estão desligadas no gateway, para todos."
+              if not tem_web else
+              "A busca ou a leitura de páginas está LIGADA para todos os agentes.",
+              "internet", not tem_web),
+
+        regra("Não aciona outros agentes",
+              "Responde quando a orquestradora chama, mas não inicia — a ferramenta "
+              "sessions_send foi removida deste agente."
+              if not pode_acionar else
+              ("Desligado de propósito: é a orquestradora, e coordenar o time é o "
+               "trabalho dela." if orquestra else
+               "Este agente inicia conversa com outros. Fora da orquestradora, isso "
+               "vira grafo de chamadas sem dono."),
+              "agentes", not pode_acionar),
+
+        regra("Não cria nem edita skills",
+              "O skill_workshop foi removido: este agente usa skill, não escreve."
+              if "skill_workshop" in deny else
+              ("Desligado de propósito: é a orquestradora, e escrever skill é parte "
+               "do trabalho dela." if orquestra else
+               "Tem o skill_workshop: consegue reescrever a régua que o governa."),
+              "skills", "skill_workshop" in deny),
+
+        regra("Bancos restritos",
+              f"Alcança {len(bancos_dele)} de {len(bancos_todos)}: "
+              + (", ".join(b[len("banco-"):] for b in bancos_dele) or "nenhum")
+              if len(bancos_dele) < len(bancos_todos) else
+              f"Sem isolamento: os {len(bancos_todos)} bancos da empresa estão ao alcance.",
+              "dados", len(bancos_dele) < len(bancos_todos)),
+
+        # ⚠️ Esta linha esteve com `True` fixo e **nunca poderia alertar** —
+        # justo a que carrega o custo do mecanismo. Lista explícita congela o
+        # agente: skill nova que o OpenClaw trouxer não chega nele. É
+        # deliberado, e ainda assim é o que alguém precisa reencontrar daqui a
+        # três meses, quando estranhar que um agente não ganhou uma skill nova.
+        regra("Skills restritas",
+              f"Lista fixa de {len(lista_skills)} skills, para separar o que é de cada "
+              "agente. O preço: skill nova do OpenClaw não chega aqui até a lista ser "
+              "refeita — religar a skill nesta tela refaz."
+              if isinstance(lista_skills, list) else
+              "Usa todas as skills do gateway, e recebe as novas automaticamente.",
+              "skills", not isinstance(lista_skills, list)),
+
+        regra("Conversa limitada",
+              {"admins_only": "Só administradores falam com ele.",
+               "specific_users": f"Só {quantos} pessoa(s) autorizada(s) falam com ele."}
+              .get(tipo_acesso, "Qualquer pessoa da instalação fala com ele."),
+              "acesso", tipo_acesso != "all"),
+
+        regra("Avisa o administrador",
+              "Tem a ferramenta de alerta, e o SOUL manda usá-la ao detectar tentativa "
+              "de subverter os limites."
+              if any("alerta" in nu(x) for x in tambem) else
+              "O SOUL manda avisar e o agente não tem a ferramenta para isso.",
+              "alerta", any("alerta" in nu(x) for x in tambem)),
+    ]
 
 
 @router.get("/{agent_id}/contexto")
