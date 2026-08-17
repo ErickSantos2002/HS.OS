@@ -1101,8 +1101,11 @@ interface SessionItem {
   key: string;
   kind: "dm" | "channel";
   label: string;
+  /** Modelo, tokens e duração — o que serve para diagnosticar. */
   preview: string;
   created_at: string;
+  /** `done`, `failed`, `running`… É o que responde "o agente não respondeu". */
+  status?: string | null;
 }
 
 function useRecentSessions(agentId: string) {
@@ -1112,49 +1115,10 @@ function useRecentSessions(agentId: string) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    (async () => {
-      try {
-        const data = await api<any[]>(
-          `/agents/${encodeURIComponent(agentId)}/atividade-recente`,
-        ).catch(() => null);
-        if (cancelled) return;
-        if (!data) {
-          setItems([]);
-          setLoading(false);
-          return;
-        }
-        const seen = new Set<string>();
-        const distinct: any[] = [];
-        for (const r of data) {
-          if (!r.user_id || seen.has(r.user_id)) continue;
-          seen.add(r.user_id);
-          distinct.push(r);
-          if (distinct.length >= 3) break;
-        }
-        const userIds = distinct.map((d) => d.user_id);
-        const profiles: Record<string, string> = {};
-        if (userIds.length > 0) {
-          const { data: ppl } = await api<any[]>("/profiles").then((d) => ({ data: d })).catch(() => ({ data: [] as any[] }));
-          (ppl ?? []).forEach((p: any) => {
-            profiles[p.id] = p.full_name || (p.email ?? "").split("@")[0] || "Usuário";
-          });
-        }
-        if (cancelled) return;
-        setItems(
-          distinct.map((r) => ({
-            key: r.user_id,
-            kind: "dm",
-            label: profiles[r.user_id] ?? "Usuário",
-            preview: (r.content ?? "").slice(0, 60),
-            created_at: r.created_at,
-          }))
-        );
-      } catch {
-        if (!cancelled) setItems([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
+    api<SessionItem[]>(`/agents/${encodeURIComponent(agentId)}/sessoes?limite=8`)
+      .then((d) => { if (!cancelled) setItems(Array.isArray(d) ? d : []); })
+      .catch(() => { if (!cancelled) setItems([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [agentId]);
 
@@ -1181,7 +1145,7 @@ function SessionsCard({ agent }: { agent: GatewayAgent }) {
       <div className="flex items-center gap-1.5 mb-2">
         <MessageSquare className="h-3 w-3 text-primary" />
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex-1">Sessões recentes</p>
-        <span className="text-[9px] font-mono text-muted-foreground">{agent.sessions}</span>
+        <span className="text-[9px] font-mono text-muted-foreground">{items.length}</span>
       </div>
 
       {showCtx && (
@@ -1224,11 +1188,15 @@ function SessionsCard({ agent }: { agent: GatewayAgent }) {
                   </div>
                   <p className="text-[10px] text-muted-foreground truncate">{s.preview || "—"}</p>
                 </div>
-                {idle && (
+                {s.status && s.status !== "done" && s.status !== "running" ? (
+                  <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-destructive/15 text-destructive border border-destructive/30 shrink-0 uppercase">
+                    {s.status}
+                  </span>
+                ) : idle ? (
                   <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-md bg-warning/15 text-warning border border-warning/30 shrink-0">
                     IDLE
                   </span>
-                )}
+                ) : null}
               </div>
             );
           })}

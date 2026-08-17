@@ -2144,6 +2144,97 @@ async def _guardrails_do_gateway(agent_id: str) -> list[dict]:
     ]
 
 
+@router.get("/{agent_id}/sessoes")
+async def sessoes_do_agente(
+    agent_id: str,
+    usuario: Usuario = Depends(exige_papel("administrador")),
+    limite: int = Query(default=12, ge=1, le=100),
+):
+    """As conversas recentes deste agente, com o que serve para diagnosticar.
+
+    ⚠️ **O cartão "Sessões recentes" mostrava PESSOAS, não sessões.** Ele lia
+    `/atividade-recente`, agrupava por `user_id` e desenhava os três últimos que
+    escreveram. Para a `nina` em 17/08/2026 isso dava **uma** linha — e o texto
+    dela era o alerta de jailbreak gravado pela ferramenta, não uma conversa.
+
+    O gateway tem o que falta: 41 sessões com modelo, duração, tokens, custo e
+    **status**. É esse `status` que responde "o agente não respondeu" — sessão
+    `failed` aparece aqui e em lugar nenhum mais.
+
+    ⚠️ Só o gateway sabe disto, e sessão podada some. Para histórico que
+    sobreviva, é o coletor — ver `docs/CONTINUAR-AQUI.md`.
+    """
+    try:
+        c = await cfg.carregar()
+        r = await obter_cliente(c.url, c.token).chamar("sessions.list", {"limit": 500})
+    except (ErroGateway, OSError) as e:
+        logger.warning("sessions.list falhou para %s: %s", agent_id, e)
+        return []
+
+    alvo = agent_id.lower()
+    minhas = []
+    for s in r.get("sessions", []):
+        partes = (s.get("key") or "").split(":")
+        if len(partes) < 3 or partes[0] != "agent" or partes[1].lower() != alvo:
+            continue
+        minhas.append((s, ":".join(partes[2:])))
+
+    # Resolve o nome de quem conversou. O sufixo `hsos-<uuid>` é o id da pessoa
+    # — é a mesma convenção que o agente usa para se situar, no `USER.md`.
+    ids = {suf[len("hsos-"):] for _, suf in minhas if suf.startswith("hsos-")}
+    nomes: dict[str, str] = {}
+    if ids:
+        async with sessao(role="service_role") as conn:
+            for x in await conn.fetch(
+                "SELECT id::text AS id, full_name, email FROM public.profiles "
+                " WHERE id = ANY($1::uuid[])",
+                list(ids),
+            ):
+                nomes[x["id"]] = x["full_name"] or (x["email"] or "").split("@")[0] or "Pessoa"
+
+    saida = []
+    for s, sufixo in minhas:
+        quando = s.get("endedAt") or s.get("updatedAt")
+        if not isinstance(quando, (int, float)):
+            continue
+        if sufixo.startswith("hsos-"):
+            uid = sufixo[len("hsos-"):]
+            rotulo, tipo = nomes.get(uid, "Pessoa desconhecida"), "dm"
+        elif sufixo == "main":
+            rotulo, tipo = "Sessão principal", "channel"
+        else:
+            # `sistema-…`, `teste-…`, disparo automático: não há pessoa do outro
+            # lado, e inventar um nome aqui seria pior que mostrar a chave.
+            rotulo, tipo = sufixo, "channel"
+
+        tokens = s.get("totalTokens") or 0
+        segundos = round((s.get("runtimeMs") or 0) / 1000)
+        status = s.get("status")
+        partes = [str(s.get("model") or "—")]
+        if tokens:
+            partes.append(f"{tokens // 1000}k tokens" if tokens >= 1000 else f"{tokens} tokens")
+        if segundos:
+            partes.append(f"{segundos}s")
+        if status and status != "done":
+            partes.append(status)
+
+        saida.append({
+            "key": s.get("key"),
+            "kind": tipo,
+            "label": rotulo,
+            "preview": " · ".join(partes),
+            "created_at": datetime.fromtimestamp(quando / 1000, tz=timezone.utc)
+            .strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "status": status,
+            "total_tokens": tokens,
+            "cost_usd": s.get("estimatedCostUsd") or 0,
+            "model": s.get("model"),
+        })
+
+    saida.sort(key=lambda x: x["created_at"], reverse=True)
+    return saida[:limite]
+
+
 @router.get("/{agent_id}/contexto")
 async def contexto(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
     """Quanto da janela de contexto o agente está usando, na última medição.
