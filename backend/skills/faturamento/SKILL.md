@@ -94,6 +94,58 @@ Categoria, quando pedirem a abertura, sai da `discriminação_dos_serviços`:
 `Desenvolvimento de Plataforma` → anuidade de software; `Calibração e
 Manutenção` → calibração (a grafia varia, com e sem acento); o resto → Outros.
 
+## Meta — existe, é anual, e o acompanhamento é trimestral
+
+⚠️ **"Quanto falta para a meta" tem resposta.** Ela mora na mesma tabela das
+outras réguas, em `tiny.configuracoes`:
+
+| chave | o que é |
+|---|---|
+| `META` | a meta **anual** da empresa |
+| `MESES_ANALISE` | os meses do trimestre em acompanhamento (hoje `6,7,8`) |
+
+⚠️ **A meta cadastrada é ANUAL, mas ninguém acompanha por ano.** O DataCoreHS
+divide por 4 e mede o trimestre corrente — os meses de `MESES_ANALISE`. Comparar
+o realizado do trimestre com a meta anual inteira dá um percentual três vezes
+menor que o real e assusta à toa.
+
+```sql
+WITH cfg AS (SELECT string_to_array(lower(replace(valor,' ','')),',') cfops
+               FROM tiny.configuracoes WHERE chave='CFOP_VALIDOS'),
+     mk  AS (SELECT string_to_array(lower(valor),',') ruins
+               FROM tiny.configuracoes WHERE chave='MARCADORES_INVALIDOS'),
+     meses AS (SELECT string_to_array(replace(valor,' ',''),',')::int[] m
+                 FROM tiny.configuracoes WHERE chave='MESES_ANALISE'),
+     meta AS (SELECT valor::numeric/4 m FROM tiny.configuracoes WHERE chave='META'),
+     v AS (SELECT coalesce(sum(nf.valor_nota),0)::numeric t
+             FROM tiny.notas_fiscais nf, cfg, mk, meses
+            WHERE extract(year from nf.data_emissao) = extract(year from current_date)
+              AND extract(month from nf.data_emissao)::int = ANY(meses.m)
+              AND lower(btrim(nf.descricao_situacao))='emitida danfe' AND nf.valor_nota>0
+              AND lower(substring(nf.natureza_operacao FROM '\d{4}')) = ANY(cfg.cfops)
+              AND NOT EXISTS (SELECT 1 FROM tiny.marcadores mm, unnest(mk.ruins) r(txt)
+                               WHERE mm.id_nota=nf.id
+                                 AND lower(mm.descricao) LIKE '%'||btrim(r.txt)||'%')),
+     s AS (SELECT coalesce(sum(replace("valor_dos_serviços",',','.')::numeric),0)::numeric t
+             FROM tiny.servicos, meses WHERE cancelada=false
+              AND extract(year from "data_da_emissão_nfs_e_dsr_e") = extract(year from current_date)
+              AND extract(month from "data_da_emissão_nfs_e_dsr_e")::int = ANY(meses.m))
+SELECT meta.m AS meta_trimestre, v.t+s.t AS realizado,
+       round((v.t+s.t)/meta.m*100,1) AS pct,
+       greatest(meta.m-(v.t+s.t),0) AS falta
+  FROM meta, v, s;
+```
+
+Em 19/08/2026 isto devolve: meta do trimestre **R$ 3.166.666,68**, realizado
+**R$ 2.438.461,71**, **77,0%**, faltando **R$ 728.204,97**.
+
+⚠️ **Existem faixas de bônus e elas NÃO são o percentual de atingimento.** O
+DataCoreHS tem uma aba de Meta onde se escolhe uma faixa de 55% a 100% e ela
+multiplica a meta trimestral (55%→0,9 · 85%→1,2 · 100%→1,4, interpolado). É
+mecanismo de remuneração, não de acompanhamento. **Não calcule bônus** — se
+perguntarem, diga que a régua está na aba Meta do DataCoreHS e que quem responde
+por ela é o Erick.
+
 ## Confira antes de responder
 
 **Janeiro/2026 fecha em R$ 409.592,52 de vendas e R$ 147.333,40 de serviços.**
