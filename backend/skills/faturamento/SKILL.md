@@ -146,6 +146,61 @@ mecanismo de remuneração, não de acompanhamento. **Não calcule bônus** — 
 perguntarem, diga que a régua está na aba Meta do DataCoreHS e que quem responde
 por ela é o Erick.
 
+## Por vendedor, e por produto — as duas perguntas que ficaram sem resposta
+
+Em 17/08/2026 o CEO perguntou **"qual o faturamento por vendedor?"** e no dia
+seguinte **"quais clientes compraram o Phoebus?"**. As duas voltaram como "não é
+comigo" e nunca foram respondidas. As duas são respondíveis aqui.
+
+### Por vendedor
+
+`tiny.notas_fiscais` tem **`nome_vendedor`** (e `id_vendedor`). Basta agrupar a
+mesma consulta de vendas:
+
+```sql
+-- … a CTE de vendas da seção acima, e então:
+SELECT coalesce(nullif(btrim(nome_vendedor),''),'(sem vendedor)') AS vendedor,
+       count(*) AS notas, sum(valor_nota)::numeric(14,2) AS total
+  FROM v GROUP BY 1 ORDER BY 3 DESC;
+```
+
+⚠️ **Só vale para VENDAS. `tiny.servicos` não tem vendedor.** Se eu somar os dois
+e apresentar como "faturamento por vendedor", o total por vendedor não fecha com
+o faturamento total — e a diferença é justamente a receita de serviços, que não
+tem a quem atribuir. **Diga isso ao responder**: "por vendedor cobre só as
+vendas; os serviços do mês (R$ X) não têm vendedor no cadastro".
+
+Agosto/2026 devolve: Adriana Oliveira R$ 109.501,60 · Gislayne Nunes
+R$ 100.030,20 · Eduardo Luna R$ 85.791,00 · Sandra Silva R$ 66.672,50.
+
+### Quem comprou um produto
+
+O produto está na **descrição do item** (`tiny.itens_nota.descricao`), e o nome do
+cliente vem de `tiny.clientes` — a nota guarda só o `id_cliente`.
+
+```sql
+SELECT c.nome AS cliente, count(DISTINCT nf.id) AS notas,
+       sum(i.valor_total)::numeric(14,2) AS total
+  FROM tiny.notas_fiscais nf
+  JOIN tiny.itens_nota i ON i.id_nota = nf.id
+  LEFT JOIN tiny.clientes c ON c.id = nf.id_cliente, cfg, mk
+ WHERE i.descricao ILIKE '%' || :produto || '%'
+   AND nf.data_emissao >= DATE :inicio
+   AND lower(btrim(nf.descricao_situacao)) = 'emitida danfe'
+   AND lower(substring(nf.natureza_operacao FROM '\d{4}')) = ANY(cfg.cfops)
+   AND NOT EXISTS (SELECT 1 FROM tiny.marcadores m, unnest(mk.ruins) r(txt)
+                    WHERE m.id_nota = nf.id
+                      AND lower(m.descricao) LIKE '%' || btrim(r.txt) || '%')
+ GROUP BY 1 ORDER BY 3 DESC;
+```
+
+⚠️ **Mantenha os quatro filtros da régua também aqui.** Sem eles a lista traz
+remessa e comodato, e o cliente aparece como comprador de algo que não comprou.
+
+⚠️ **A soma dos itens não é o `valor_nota`.** Para "quanto esse cliente comprou
+do produto X" o certo é `itens_nota.valor_total`; para faturamento é o
+`valor_nota`. São perguntas diferentes e números diferentes — não misture.
+
 ## Confira antes de responder
 
 **Janeiro/2026 fecha em R$ 409.592,52 de vendas e R$ 147.333,40 de serviços.**
