@@ -253,9 +253,21 @@ export async function appendToConversations(userId: string, agentId: string, msg
   return persistedMessage;
 }
 
-export async function clearConversationHistory(userId: string, agentId: string) {
+/**
+ * Encerra a conversa atual e começa outra. **Não apaga nada.**
+ *
+ * ⚠️ Até 19/08/2026 isto chamava `DELETE`, que apagava o histórico para sempre e
+ * deixava a sessão do agente intacta — o oposto do que "limpar" quer dizer: a
+ * pessoa perdia o registro e continuava conversando com um agente que lembrava
+ * de tudo. Agora o backend marca o ponto de recomeço e derruba a sessão no
+ * gateway; `conversations` permanece inteira para auditoria.
+ */
+export async function clearConversationHistory(
+  userId: string,
+  agentId: string,
+): Promise<{ mensagens_arquivadas: number; sessao_zerada: boolean; detalhe?: string }> {
   delete historyCache[cacheKey(userId, agentId)];
-  await api(`/conversations/${encodeURIComponent(agentId)}`, { method: "DELETE" });
+  return api(`/conversations/${encodeURIComponent(agentId)}/limpar`, { method: "POST" });
 }
 
 /**

@@ -1559,13 +1559,30 @@ export default function ChatPage() {
     [upsertAgentMessage]
   );
 
-  const handleConfirmClearConversation = useCallback(() => {
+  const handleConfirmClearConversation = useCallback(async () => {
     if (!effectiveAgentId || !user?.id) return;
     setMessagesByAgent((prev) => ({ ...prev, [effectiveAgentId]: [] }));
     setArtifactMessages([]);
-    clearConversationHistory(user.id, effectiveAgentId);
     setClearConfirmOpen(false);
-    toast.success("Conversa limpa com sucesso!");
+    try {
+      const r = await clearConversationHistory(user.id, effectiveAgentId);
+      // ⚠️ O aviso distingue os dois casos. Se a sessão do gateway não caiu, o
+      // agente continua lembrando da conversa mesmo com a tela vazia — e dizer
+      // "pronto!" nessa hora é o que transformaria isso em mistério depois.
+      if (r.sessao_zerada) {
+        toast.success("Nova conversa iniciada", {
+          description: `O agente começa do zero. ${r.mensagens_arquivadas} mensagem(ns) continuam guardadas para consulta.`,
+        });
+      } else {
+        toast.warning("Tela limpa, mas o agente ainda lembra", {
+          description: r.detalhe ?? "Não foi possível encerrar a sessão no gateway.",
+        });
+      }
+    } catch (e) {
+      toast.error("Não consegui iniciar uma nova conversa", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    }
   }, [effectiveAgentId, user?.id]);
 
   /* ── Copy entire conversation ── */
@@ -2483,9 +2500,11 @@ export default function ChatPage() {
               <button onClick={handleCopyConversation} disabled={agentMessages.length === 0} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors disabled:opacity-40" title="Copiar conversa">
                 {conversationCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               </button>
-               <button onClick={() => setClearConfirmOpen(true)} disabled={!effectiveAgentId || isAgentWorking} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-40" title="Limpar conversa">
-                <Trash2 className="h-3 w-3" />
-                <span>Limpar</span>
+               <button onClick={() => setClearConfirmOpen(true)} disabled={!effectiveAgentId || isAgentWorking} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-40" title="Começar uma nova conversa — o agente esquece o contexto, as mensagens ficam guardadas">
+                {/* Lixeira vermelha era promessa errada: isto não apaga nada,
+                    encerra a sessão e começa outra. Ver POST /conversations/{id}/limpar. */}
+                <RotateCcw className="h-3 w-3" />
+                <span>Nova conversa</span>
               </button>
             </div>
           </div>
@@ -3019,20 +3038,18 @@ export default function ChatPage() {
         <AlertDialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>⚠️ Atenção: ação irreversível</AlertDialogTitle>
+              <AlertDialogTitle>Começar uma nova conversa?</AlertDialogTitle>
               <AlertDialogDescription className="space-y-2">
-                <span className="block font-semibold text-destructive">Todo o histórico desta conversa será apagado permanentemente.</span>
-                <span className="block">As mensagens não poderão ser recuperadas após a exclusão. O agente começará uma nova conversa do zero.</span>
-                <span className="block">Tem certeza que deseja continuar?</span>
+                <span className="block">O agente <strong>esquece o que foi conversado</strong> e recomeça do zero — útil quando o assunto mudou ou ele ficou preso num contexto antigo.</span>
+                <span className="block">As mensagens <strong>não são apagadas</strong>: elas saem desta tela, mas continuam guardadas e podem ser consultadas depois.</span>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleConfirmClearConversation}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Sim, limpar conversa
+                Começar nova conversa
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

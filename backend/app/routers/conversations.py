@@ -92,6 +92,20 @@ def _instante(valor: str | None, campo: str) -> datetime | None:
         )
 
 
+async def _ultimo_reset(conn, user_id: str, agent_id: str):
+    """Quando esta pessoa pediu para recomeçar a conversa com este agente.
+
+    ⚠️ **É filtro de tela, não exclusão.** `conversations` guarda tudo; o que a
+    marca faz é dizer a partir de onde mostrar. Auditar é consultar a tabela sem
+    este filtro — ver `009_limpar_sessao.sql`.
+    """
+    return await conn.fetchval(
+        "SELECT max(created_at) FROM public.conversation_resets "
+        " WHERE user_id = $1::uuid AND agent_id = $2",
+        user_id, agent_id,
+    )
+
+
 def _para_saida(linha) -> MensagemOut:
     d = dict(linha)
     bruto = d.get("media")
@@ -185,6 +199,11 @@ async def respostas_do_agente(
     """
     condicoes = ["user_id = $1::uuid", "agent_id = $2", "role = 'agent'"]
     args: list = [usuario.id, agent_id]
+    async with sessao(role="authenticated", user_id=usuario.id) as _c:
+        _reset = await _ultimo_reset(_c, usuario.id, agent_id)
+    if _reset is not None:
+        args.append(_reset)
+        condicoes.append(f"created_at > ${len(args)}")
     if depois:
         args.append(depois)
         condicoes.append(f"created_at > ${len(args)}::text::timestamptz")
@@ -241,6 +260,13 @@ async def historico(
     """
     condicoes = ["agent_id = $1", "user_id = $2::uuid"]
     args: list = [agent_id, usuario.id]
+    # ⚠️ A tela mostra só o que veio depois do último "Limpar". As mensagens
+    # anteriores continuam na tabela — ver `_ultimo_reset`.
+    async with sessao(role="authenticated", user_id=usuario.id) as _c:
+        _reset = await _ultimo_reset(_c, usuario.id, agent_id)
+    if _reset is not None:
+        args.append(_reset)
+        condicoes.append(f"created_at > ${len(args)}")
     corte = _instante(antes_de, "antes_de")
     if corte is not None:
         condicoes.append(f"created_at < ${len(args) + 1}")
@@ -294,20 +320,86 @@ async def anexar(
     return _para_saida(linha)
 
 
-@router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def limpar(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
-    """Apaga a conversa deste usuário com este agente.
+class LimpezaOut(BaseModel):
+    mensagens_arquivadas: int
+    sessao_zerada: bool
+    detalhe: str | None = None
 
-    Não toca na sessão do gateway: são históricos separados, e limpar a tela não
-    deveria fazer o agente esquecer o que conversaram. Era assim no código
-    herdado — `clearConversationHistory` só mexia na tabela.
+
+@router.post("/{agent_id}/limpar", response_model=LimpezaOut)
+async def limpar_sessao(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """Encerra a conversa atual e começa outra — **sem apagar nada**.
+
+    ⚠️ **Este endpoint faz o oposto do que o antigo fazia, e é essa a correção.**
+    Até 19/08/2026 o botão "Limpar" apagava `conversations` para sempre e
+    **não** tocava na sessão do gateway. O comentário de lá dizia que limpar a
+    tela não deveria fazer o agente esquecer. Na prática: sumia o que interessa
+    guardar (o histórico, para auditoria) e mantinha o que a pessoa quer zerar
+    (a memória do agente). Quem clicava para recomeçar continuava conversando
+    com alguém que lembrava de tudo.
+
+    Agora são dois movimentos:
+
+    1. **Marca o ponto de recomeço** em `conversation_resets`. A tela passa a
+       mostrar só o que vier depois; a tabela `conversations` continua inteira.
+    2. **Derruba a sessão no gateway** (`sessions.delete`), que é o que faz o
+       agente de fato começar do zero. O gateway ainda arquiva a sessão do lado
+       dele antes de remover.
+
+    ⚠️ **Falha no gateway não impede o recomeço, mas é registrada.** Sem isso,
+    "limpei e ele continua lembrando" viraria mistério; com o `sessao_zerada`
+    em `false` a resposta já diz o que houve.
     """
+    chave = _chave_sessao(agent_id, usuario.id)
+
+    zerada, detalhe = False, None
+    try:
+        c = await cfg.carregar()
+        if c.configurado:
+            await obter_cliente(c.url, c.token).chamar("sessions.delete", {"key": chave})
+            zerada = True
+        else:
+            detalhe = "Gateway não configurado — o agente não esqueceu a conversa."
+    except (ErroGateway, OSError) as e:
+        detalhe = f"A sessão do agente não pôde ser encerrada: {e}"
+        logger.warning("sessions.delete falhou em %s: %s", chave, e)
+
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        quantas = await conn.fetchval(
+            "SELECT count(*) FROM public.conversations "
+            " WHERE agent_id = $1 AND user_id = $2::uuid",
+            agent_id, usuario.id,
+        ) or 0
+        await conn.execute(
+            "INSERT INTO public.conversation_resets "
+            "  (user_id, agent_id, mensagens, sessao_zerada) VALUES ($1::uuid,$2,$3,$4)",
+            usuario.id, agent_id, quantas, zerada,
+        )
+
+    logger.info("Conversa %s/%s recomeçada — %d mensagem(ns) arquivada(s), sessão zerada=%s",
+                usuario.id, agent_id, quantas, zerada)
+    return LimpezaOut(mensagens_arquivadas=quantas, sessao_zerada=zerada, detalhe=detalhe)
+
+
+@router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def apagar_de_vez(
+    agent_id: str,
+    user_id: str = Query(description="De quem é a conversa a apagar."),
+    _: Usuario = Depends(exige_papel("administrador")),
+):
+    """Apaga a conversa **de verdade**, e por isso é do administrador.
+
+    ⚠️ **Não é o que o botão "Limpar" faz** — aquele agora usa `POST /limpar`, que
+    preserva tudo. Esta rota existe para exclusão real (pedido de remoção de
+    dado, limpeza de teste) e destrói o histórico sem recuperação: o gateway
+    também já não tem a sessão se ela foi encerrada antes.
+    """
+    async with sessao(role="service_role") as conn:
         marca = await conn.execute(
             "DELETE FROM public.conversations WHERE agent_id = $1 AND user_id = $2::uuid",
-            agent_id, usuario.id,
+            agent_id, user_id,
         )
-    logger.info("Conversa %s/%s limpa (%s)", usuario.id, agent_id, marca)
+    logger.warning("Conversa %s/%s APAGADA definitivamente (%s)", user_id, agent_id, marca)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -521,6 +613,12 @@ async def recuperar(
         return []
 
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        # ⚠️ **Nada anterior ao último "Limpar" volta.** Sem esta trava, abrir a
+        # conversa depois de recomeçar reimportaria do gateway justamente o que a
+        # pessoa acabou de encerrar. Hoje o `sessions.delete` já esvazia o
+        # histórico de lá, mas isso é coincidência de implementação, não garantia.
+        reset = await _ultimo_reset(conn, usuario.id, agent_id)
+        corte_ms = int(reset.timestamp() * 1000) if reset else 0
         # Só o que já existe do lado de cá, para não regravar.
         existentes = [
             r["content"] for r in await conn.fetch(
@@ -533,6 +631,8 @@ async def recuperar(
 
         recuperadas = []
         for fim_ms, msgs in janelas:
+            if fim_ms and fim_ms <= corte_ms:
+                continue
             texto = _texto_da_resposta(msgs, 0)
             if not texto or _ja_esta_la(texto, existentes):
                 continue
