@@ -776,10 +776,22 @@ inexistente, que o gateway valida o schema e falha antes de resolver o agente" �
 no mesmo minuto porque a checagem seguinte era um `cron.list`; sem ela, teria
 ficado um agendamento fantasma apontando para um agente que não existe.
 
-⚠️ **`POST /agents/{id}/crons` não agenda nada.** Ele grava só na tabela
-`public.agent_crons`, do nosso lado, e nunca chama `cron.add`. Quem fala com o
-gateway é `app/routers/automacoes.py`. A tabela está vazia; os agendamentos que
-existem de verdade foram criados direto pelo RPC.
+⚠️ **Existem TRÊS coisas chamadas "cron" e nenhuma concordava com as outras.**
+Levantado em 19/08/2026 porque o painel do `flow` dizia "nenhum agendamento" com
+dois crons rodando:
+
+| onde | quem escreve | linhas |
+|---|---|---|
+| `public.agent_crons` | `POST /agents/{id}/crons` — grava e **nunca** chama o gateway | 0 |
+| `public.cron_jobs` | `POST /coletor/estatisticas`, que um coletor da VPS deveria empurrar e **não empurra** | 0 |
+| `cron.list` do gateway | o próprio gateway | **os reais** |
+
+O painel lia o espelho vazio. Hoje `GET /agents/{id}/agendamentos-do-gateway`
+pergunta ao `cron.list`, com recuo para a tabela se o gateway estiver fora —
+mostrar o que se sabia é melhor que trocar vazio silencioso por erro.
+
+⚠️ **`POST /agents/{id}/crons` continua não agendando nada**, e a tela sugere o
+contrário. Quem fala com o gateway é `app/routers/automacoes.py`.
 
 **Os briefings da manhã** (19/08/2026) são dois jobs recorrentes: o `flow` às
 07h30 escreve "Operação — briefing de DD/MM/AAAA" na base de conhecimento, e a

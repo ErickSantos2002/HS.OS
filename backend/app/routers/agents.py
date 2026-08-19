@@ -3099,15 +3099,50 @@ async def _integracoes_do_gateway(agent_id: str, tipo: str | None) -> list[dict]
 
 @router.get("/{agent_id}/agendamentos-do-gateway")
 async def agendamentos_do_gateway(agent_id: str, usuario: Usuario = Depends(exige_papel("administrador"))):
-    """Os crons que o **gateway** executa para este agente, como o coletor os viu.
+    """Os crons que o **gateway** executa para este agente — perguntando a ele.
 
-    ⚠️ Não confundir com `GET /{id}/crons`, que é a tabela da plataforma. Esta
-    aqui é `cron_jobs`, espelho do que está rodando lá — pode divergir, e é
-    exatamente por isso que existe o `POST /automacoes/sincronizar-status`.
+    ⚠️ **Isto lia a tabela `cron_jobs`, e ela está vazia desde sempre.** Aquele
+    espelho é preenchido por `POST /coletor/estatisticas`, que um coletor na VPS
+    deveria empurrar — e não empurra, igual à ponte de arquivos que saiu do
+    caminho em 11/08/2026. O resultado: o gateway com dois crons rodando e o
+    painel do agente dizendo "nenhum agendamento", que é pior que não ter a
+    seção. Levantado em 19/08/2026 clicando no `flow`.
 
-    O `agent <> 'system'` exclui os jobs da instalação, que não pertencem a
-    agente nenhum e apareceriam em todos.
+    Agora a resposta vem de `cron.list`, que é a fonte. **Com recuo para o
+    espelho** se o gateway estiver fora: melhor mostrar o que se sabia do que
+    trocar um vazio silencioso por um erro.
+
+    ⚠️ Não confundir com `GET /{id}/crons`, que é a tabela `agent_crons` da
+    plataforma — e que também não agenda nada, porque ninguém a envia ao
+    gateway. São três coisas com o mesmo nome.
     """
+    c = await cfg.carregar()
+    if c.configurado:
+        try:
+            r = await obter_cliente(c.url, c.token).chamar("cron.list", {})
+            jobs = ((r.get("payload") or r).get("jobs")) or []
+            saida = []
+            for j in jobs:
+                if j.get("agentId") != agent_id:
+                    continue
+                ms = j.get("nextRunAtMs") or (j.get("state") or {}).get("nextRunAtMs")
+                sched = j.get("schedule") or {}
+                saida.append({
+                    "id": j.get("id"),
+                    "name": j.get("name"),
+                    # `expr` para o recorrente, `at` para o de tiro único.
+                    "cron_expression": sched.get("expr") or sched.get("at"),
+                    "last_run": None,
+                    "next_run": (datetime.fromtimestamp(ms / 1000, timezone.utc).isoformat()
+                                 if ms else None),
+                    "status": "active" if j.get("enabled") else "disabled",
+                    "enabled": bool(j.get("enabled")),
+                    "agent": agent_id,
+                })
+            return sorted(saida, key=lambda x: x["next_run"] or "9999")
+        except (ErroGateway, OSError) as e:
+            logger.warning("cron.list falhou para %s, caindo no espelho: %s", agent_id, e)
+
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             "SELECT id, name, cron_expression, last_run, next_run, status, enabled, agent "
