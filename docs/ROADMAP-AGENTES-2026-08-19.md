@@ -175,7 +175,40 @@ mas a instrução tem que estar escrita.
 
 ---
 
-## Bloco 3 — Defeitos
+## Bloco 3 — Defeitos ✅ feito em 19/08
+
+⚠️ **Os três eram nossos, e nenhum era o que parecia.**
+
+**O item 6 estava com o diagnóstico errado desde segunda.** As respostas não
+eram vazias: o `chat.history` do gateway mostra que os agentes responderam —
+*"Bom dia! Sou a Nina, orquestradora…"* para o "ola", e 1.023 caracteres de
+faturamento na `iris`. **Nós é que não gravamos.** A escrita em `conversations`
+só acontece enquanto o navegador está perguntando em `/reply`; o Nicholson
+mandou outra mensagem antes de a primeira voltar, e a resposta ficou órfã.
+
+[`DECISAO-RECONCILIADOR.md`](DECISAO-RECONCILIADOR.md) previu este buraco com
+precisão, prescreveu o conserto — "comparar o `chat.history` do gateway com o
+que há em `conversations` ao abrir a conversa" — e definiu o sinal que reabriria
+a decisão: *"resposta que some depois de fechar a aba, com uso real"*. É
+exatamente o que aconteceu. Foi feito o que estava escrito:
+`POST /conversations/{agente}/recuperar`, chamado pela tela ao abrir o chat.
+Sem agendador, sem tabela nova, idempotente.
+
+**Item 7 tinha uma causa que ninguém teria adivinhado.** `chat.history` com
+`limit=1` **não devolve a mensagem mais nova**: na sessão do `atlas`, 52
+mensagens numeradas de 1 a 52 sem buracos, e `limit=1` respondeu a de `seq=41`.
+Com `limit=3` vieram 50, 51 e 52. Nas sessões curtas de `nina`, `iris` e `flow`
+o `limit=1` acertava — por isso passou despercebido: **só aparece com histórico
+longo**. O `_ultimo_seq` dizia 41, o `/reply` gravava tudo com `seq > 41`, e a
+resposta saía com onze mensagens do turno anterior coladas na frente. A janela
+passou para 5.
+
+**Item 8 feito e conferido.** O `bruce` foi para `deepseek/deepseek-chat` e a
+pergunta que ele existe para responder foi refeita: mesmos números de antes
+(26 sem CPF, 27 sem senioridade, 3 sem cargo, 2 sem setor), em resposta mais
+curta.
+
+### Detalhe original
 
 ### 6. A `nina` responde vazio em mensagem curta ⚠️ o mais grave
 

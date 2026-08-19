@@ -413,14 +413,146 @@ def _texto_da_resposta(mensagens: list, desde_seq: int) -> str:
     return _juntar([m for m in assistentes if (_seq(m) or 0) > corte]) or _juntar(assistentes)
 
 
+# ⚠️ **`chat.history` com `limit=1` NÃO devolve a mensagem mais nova.** Medido em
+# 19/08/2026 na sessão do `atlas`: 52 mensagens numeradas de 1 a 52, sem buracos,
+# e `limit=1` respondeu a de `seq=41`. Com `limit=3` vieram 50, 51 e 52,
+# corretas. Nas sessões curtas de `nina`, `iris` e `flow` o `limit=1` acertava —
+# por isso o defeito passou despercebido: ele só aparece com histórico longo.
+#
+# A consequência era grave e visível. `_ultimo_seq` dizia 41, o `/reply` gravava
+# tudo com `seq > 41`, e a resposta saía com **onze mensagens do turno anterior
+# coladas na frente**. Foi o que o CEO leu em 17/08/2026 às 13h59: a resposta
+# das 13h57 repetida palavra por palavra antes do conteúdo novo.
+_JANELA_ULTIMO_SEQ = 5
+
+
 async def _ultimo_seq(cliente, chave_completa: str) -> int:
     """Maior `seq` já presente na sessão, para saber o que é novo depois."""
     try:
-        r = await cliente.chamar("chat.history", {"sessionKey": chave_completa, "limit": 1})
+        r = await cliente.chamar(
+            "chat.history", {"sessionKey": chave_completa, "limit": _JANELA_ULTIMO_SEQ}
+        )
     except ErroGateway:
         return 0
     msgs = r.get("messages") or []
     return max((m.get("__openclaw") or {}).get("seq") or 0 for m in msgs) if msgs else 0
+
+
+def _janelas_por_pergunta(mensagens: list) -> list[tuple[int, list]]:
+    """Fatia o histórico do gateway em (fim_ms, mensagens) por pergunta.
+
+    Cada janela vai de uma mensagem `user` até a próxima. É a unidade que vira
+    uma linha em `conversations`, e é a mesma que o `/reply` grava no caminho
+    normal — só que aqui reconstruída depois do fato.
+    """
+    grupos: list[list] = []
+    atual: list = []
+    for m in mensagens:
+        if m.get("role") == "user":
+            if atual:
+                grupos.append(atual)
+            atual = []
+            continue
+        atual.append(m)
+    if atual:
+        grupos.append(atual)
+
+    return [
+        (max(((m.get("__openclaw") or {}).get("recordTimestampMs") or 0) for m in g), g)
+        for g in grupos
+    ]
+
+
+def _ja_esta_la(texto: str, existentes: list[str]) -> bool:
+    """A resposta já foi gravada?
+
+    ⚠️ **Comparação por conteúdo, e por CONTENÇÃO nos dois sentidos.** Igualdade
+    exata não serve: as linhas gravadas antes de 19/08/2026 trazem também a
+    narração de bastidor que o `_texto_da_resposta` passou a cortar, então o
+    mesmo turno tem texto diferente de cada lado. Sem a contenção, cada abertura
+    da conversa duplicaria as respostas antigas.
+    """
+    alvo = " ".join(texto.split())
+    if not alvo:
+        return True
+    for e in existentes:
+        outro = " ".join((e or "").split())
+        if alvo in outro or outro in alvo:
+            return True
+    return False
+
+
+@router.post("/{agent_id}/recuperar", response_model=list[MensagemOut])
+async def recuperar(
+    agent_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+):
+    """Traz para `conversations` a resposta que ficou só no gateway.
+
+    ⚠️ **Isto conserta perda de resposta observada em produção, não hipótese.**
+    Em 17 e 18/08/2026 o CEO fez cinco perguntas que "não foram respondidas". O
+    `usage_events` dizia que o agente rodou; o `chat.history` do gateway mostrou
+    que ele **respondeu** — "Bom dia! Sou a Nina, orquestradora…" para o "ola", e
+    1.023 caracteres de faturamento na `iris`. Nada disso chegou à tela, porque a
+    gravação só acontece enquanto o navegador está perguntando em `/reply`. Ele
+    mandou outra mensagem antes de a primeira voltar, e a resposta ficou órfã.
+
+    `docs/DECISAO-RECONCILIADOR.md` previu exatamente este buraco, disse que o
+    conserto certo era este — comparar o histórico do gateway com o nosso ao
+    abrir a conversa — e definiu o sinal que reabriria a decisão: "resposta que
+    some depois de fechar a aba, com uso real". O sinal chegou.
+
+    **Não é a `turn-reconciler`**: sem agendador, sem tabela nova, sem escrever
+    no gateway. Roda quando a tela abre a conversa, e é idempotente.
+    """
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
+
+    try:
+        hist = await obter_cliente(c.url, c.token).chamar(
+            "chat.history", {"sessionKey": _chave_sessao(agent_id, usuario.id), "limit": 60}
+        )
+    except ErroGateway as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Não consegui ler o histórico: {e}")
+
+    janelas = _janelas_por_pergunta(hist.get("messages") or [])
+    if not janelas:
+        return []
+
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        # Só o que já existe do lado de cá, para não regravar.
+        existentes = [
+            r["content"] for r in await conn.fetch(
+                "SELECT content FROM public.conversations "
+                " WHERE user_id = $1::uuid AND agent_id = $2 AND role = 'agent' "
+                " ORDER BY created_at DESC LIMIT 60",
+                usuario.id, agent_id,
+            )
+        ]
+
+        recuperadas = []
+        for fim_ms, msgs in janelas:
+            texto = _texto_da_resposta(msgs, 0)
+            if not texto or _ja_esta_la(texto, existentes):
+                continue
+            linha = await conn.fetchrow(
+                f"""
+                INSERT INTO public.conversations (agent_id, user_id, role, content, created_at)
+                VALUES ($1, $2::uuid, 'agent', $3, to_timestamp($4::bigint / 1000.0))
+                RETURNING {_COLUNAS}
+                """,
+                agent_id, usuario.id, texto, fim_ms or 0,
+            )
+            existentes.append(texto)
+            recuperadas.append(_para_saida(linha))
+
+    if recuperadas:
+        logger.info(
+            "Recuperadas %d resposta(s) órfã(s) de %s para %s",
+            len(recuperadas), agent_id, usuario.id,
+        )
+    return recuperadas
 
 
 @router.post("/{agent_id}/send", response_model=EnvioOut, status_code=status.HTTP_201_CREATED)

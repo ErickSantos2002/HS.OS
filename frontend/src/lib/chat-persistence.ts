@@ -124,8 +124,32 @@ export function removeMessageFromHistoryCache(userId: string, agentId: string, m
 
 /* ── Load / paginate ────────────────────────────────── */
 
+/**
+ * Traz de volta a resposta que ficou só no gateway.
+ *
+ * ⚠️ **Não é zelo: houve perda observada em produção.** Em 17 e 18/08/2026 o
+ * CEO fez perguntas que pareceram não respondidas. Os agentes tinham respondido
+ * — "Bom dia! Sou a Nina…", 1.023 caracteres de faturamento na Iris — mas a
+ * gravação só acontece enquanto esta tela está perguntando em `/reply`. Ele
+ * mandou outra mensagem antes de a primeira voltar, e a resposta ficou órfã.
+ *
+ * Falha aqui é silenciosa de propósito: recuperar é melhoria, e não abrir a
+ * conversa por causa dela seria trocar um defeito por outro pior.
+ */
+async function recuperarOrfas(agentId: string): Promise<void> {
+  try {
+    await api(`/conversations/${encodeURIComponent(agentId)}/recuperar`, { method: "POST" });
+  } catch (error) {
+    console.warn("[chat-persistence] recuperação de respostas órfãs falhou:", error);
+  }
+}
+
 export async function loadPersistedHistory(userId: string, agentId: string): Promise<PaginatedHistory> {
   const key = cacheKey(userId, agentId);
+
+  // Antes de ler: importa o que o gateway tem e nós não. Sequencial de
+  // propósito — em paralelo a leitura sairia sem o que acabou de ser gravado.
+  await recuperarOrfas(agentId);
 
   let data: ConversationRow[];
   try {
