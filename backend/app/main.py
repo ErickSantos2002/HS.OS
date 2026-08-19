@@ -33,6 +33,7 @@ from app.routers.mcp_wiki import router as mcp_wiki_router
 from app.routers.integracoes import router as integracoes_router
 from app.routers.ia import router as ia_router
 from app.routers.push import router as push_router
+from app.routers.relatorios import router as relatorios_router
 from app.routers.profiles import router as profiles_router
 from app.routers.tarefas import router as tarefas_router
 from app.routers.uso import router as uso_router
@@ -192,6 +193,7 @@ app.include_router(mcp_alerta_router)
 app.include_router(mcp_wiki_router)
 app.include_router(profiles_router)
 app.include_router(push_router)
+app.include_router(relatorios_router)
 app.include_router(skills_router)
 app.include_router(storage_router)
 app.include_router(uso_router)

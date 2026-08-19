@@ -13,3 +13,9 @@ pywebpush>=2.0.0
 uvicorn[standard]>=0.30.0
 websockets>=12.0
 reportlab>=4.0.0
+
+# Planilha do relatório de vendedores (app/relatorios/vendedores.py).
+openpyxl==3.1.5
+# O relatório lê o HSGrowth com psycopg síncrono — é a conexão do script
+# original do Erick, copiado fiel. O resto do backend usa asyncpg.
+psycopg[binary]==3.2.3
