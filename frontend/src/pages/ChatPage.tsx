@@ -62,7 +62,7 @@ import {
 import {
   Send, User, Loader2, WifiOff,
   Mic, Paperclip, Image as ImageIcon,
-  X, ZoomIn, Trash2, Info, Volume2, Square,
+  X, ZoomIn, Info, Volume2, Square,
   RefreshCw, Hash, Lock, MessageCircle, Plus, Star, Bell, RotateCcw,
 } from "lucide-react";
 import { usePendingAgentTask } from "@/hooks/use-pending-agent-task";
@@ -2500,7 +2500,12 @@ export default function ChatPage() {
               <button onClick={handleCopyConversation} disabled={agentMessages.length === 0} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors disabled:opacity-40" title="Copiar conversa">
                 {conversationCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               </button>
-               <button onClick={() => setClearConfirmOpen(true)} disabled={!effectiveAgentId || isAgentWorking} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-40" title="Começar uma nova conversa — o agente esquece o contexto, as mensagens ficam guardadas">
+               {/* ⚠️ **Não desabilitar enquanto o agente trabalha.** Era assim, e é
+                    justamente quando mais se precisa: agente preso num contexto
+                    velho ou numa execução que não volta é o motivo número um
+                    para começar outra conversa. Com o botão cinza, clicar não
+                    fazia nada e não explicava por quê. */}
+               <button onClick={() => setClearConfirmOpen(true)} disabled={!effectiveAgentId} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-40" title="Começar uma nova conversa — o agente esquece o contexto, as mensagens ficam guardadas">
                 {/* Lixeira vermelha era promessa errada: isto não apaga nada,
                     encerra a sessão e começa outra. Ver POST /conversations/{id}/limpar. */}
                 <RotateCcw className="h-3 w-3" />
@@ -2539,8 +2544,8 @@ export default function ChatPage() {
               <button onClick={handleCopyConversation} disabled={agentMessages.length === 0} className="p-2 rounded-full text-muted-foreground hover:bg-secondary/50 transition-colors disabled:opacity-40 touch-target" title="Copiar conversa">
                 {conversationCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               </button>
-               <button onClick={() => setClearConfirmOpen(true)} disabled={!effectiveAgentId || isAgentWorking} className="p-2 rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-40 touch-target">
-                <Trash2 className="h-4 w-4" />
+               <button onClick={() => setClearConfirmOpen(true)} disabled={!effectiveAgentId} className="p-2 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-40 touch-target" title="Começar uma nova conversa">
+                <RotateCcw className="h-4 w-4" />
               </button>
             </div>
           </div>
