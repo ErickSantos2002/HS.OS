@@ -1,0 +1,170 @@
+# Roadmap dos agentes — 19/08/2026
+
+O que fazer hoje, juntando duas fontes: as **23 mensagens** que o Nicholson trocou
+com os agentes em 17 e 18/08, e o **documento de visão** que ele mandou por
+WhatsApp em 17/08 às 17h (dez imagens, em `docs/fotos_doc/`).
+
+## O princípio que amarra tudo
+
+> Em vez de deixar cada agente explorar o sistema dele toda vez que for buscar
+> informação, dar o caminho das pedras — ele já sabe exatamente onde ir.
+> Traz dado mais preciso e economiza token. *(Erick, 19/08/2026)*
+
+O custo de não fazer isso é mensurável. A sessão em que o `flow` respondeu **uma**
+pergunta ("o que está parado mais de 48h no Task") consumiu **396.418 tokens** —
+ele varreu o schema, testou seis hipóteses, errou uma query, corrigiu, e só então
+respondeu. A resposta ficou boa; o caminho foi caro. E, pior, ele **concluiu que
+o dado não existia** quando existia (ver Bloco 1, item 2).
+
+## Como ler o documento do Nicholson
+
+⚠️ **Os papéis que ele descreve não são os nossos.** No documento, `atlas` é o
+orquestrador no topo, `bruce` é "Diretor Comercial Digital" e `iris` é um radar
+que cruza todos os sistemas. Só o `flow` bate com a nossa frota.
+
+Isso é conhecido e não é pedido de reatribuição: ele passa informação parcial
+para o Claude ou o Manus e volta com divergência. **Mantemos a frota como está e
+ajustamos aos poucos na direção do que ele quer.**
+
+⚠️ **Os números do documento são ilustrativos.** "R$ 1,8 milhão em propostas",
+"187 processos em 30 dias", "31% de aumento" — nenhum saiu dos nossos bancos. São
+exemplos de formato, não diagnóstico.
+
+---
+
+## Bloco 1 — Caminho das pedras
+
+O que muda resposta de agente hoje ainda.
+
+### 1. O "Diretório" aponta para a tabela errada
+
+O conector `banco-diretorio-hs-os` aponta para `hsos.profiles`, que são as **3
+contas de login do sistema** — não as pessoas da empresa. O cadastro real está no
+TalentHS, com 28 pessoas e setor:
+
+```
+COMERCIAL-VENDAS 4 · COMERCIAL-SERVIÇOS 3 · TI 3 · COMERCIAL-SDR 3
+EXPEDIÇÃO 3 · QUALIDADE 2 · LABORATÓRIO 2 · SUPORTE 2 · MARKETING 1 · …
+```
+
+Em 17/08 o `atlas` respondeu ao Nicholson: *"o diretório só tem TI, Financeiro e
+Diretoria — não há departamento COMERCIAL nem papéis de SDR, então não posso
+rotular ninguém como SDR"*. **A pergunta era respondível** — `COMERCIAL-SDR`
+existe, com três pessoas. Ele olhou a tabela errada e ninguém percebeu.
+
+Isso trava a classe de pergunta que o Nicholson mais faz: duas das três perguntas
+de negócio dele em 17/08 foram "quebra isso por vendedor / por SDR".
+
+### 2. O `flow` não conhece a `audit_log` do TaskHS
+
+Ele descobriu sozinho que `updated_at` está congelado em 18/07 (data da
+importação em massa) e concluiu que "parado por tempo" não era mensurável. Estava
+certo sobre o `updated_at` e **errado sobre a conclusão**:
+
+```
+public.audit_log — 10.243 registros, 13/07 a 18/08
+2.589 movimentações de card, com list_id  de → para  e horário
+agosto: 1.133 movimentos · 279 cards · 16 pessoas
+```
+
+Testado com dado real: *CX 881 · Distribuidora de Bebidas São Rafael — 12 saltos,
+0,7 dia por etapa*. Ou seja, **tempo por etapa, gargalo por lista e ciclo completo
+são computáveis hoje** — é exatamente o que o documento pede nos itens 3 e 5.
+
+### 3. A `iris` não conhece a meta nem o custo por produto
+
+Os dois existem no DataCore e ela não sabe:
+
+| onde | o quê |
+|---|---|
+| `tiny.configuracoes` chave `META` | **R$ 12.666.666,72** (anual) |
+| `tiny.centro_custo_config` | CMV, frete e custo unitário por produto, com detalhamento em `config_json` |
+
+A skill `faturamento` já lê `CFOP_VALIDOS` e `MARCADORES_INVALIDOS` dessa mesma
+tabela — mas ignora a `META`, que está na linha ao lado. Com ela, "quanto falta
+para a meta" deixa de ser pergunta sem resposta.
+
+---
+
+## Bloco 2 — Como o agente responde
+
+### 4. Adotar o formato que ele pediu
+
+> **fato → causa → impacto → recomendação → confiança → ação proposta**
+
+É redação nos sete arquivos, não engenharia. E é metade do que o documento pede:
+o que ele chama de "deixar de ser relatório e virar previsão".
+
+### 5. Cortar o raciocínio interno da resposta
+
+O que o CEO leu em 17/08:
+
+> *"Deixa eu checar o schema"* · *"o operador `~~*` não funciona com enum"* ·
+> *"minha query estava invertida"* · *"quem está falando comigo provavelmente não
+> é do time comercial cadastrado"*
+
+A resposta do `atlas` das 13:54 tem 2.363 caracteres e é quase toda monólogo
+interno. O Bloco 1 reduz isso na origem — menos exploração, menos narração dela —
+mas a instrução tem que estar escrita.
+
+---
+
+## Bloco 3 — Defeitos
+
+### 6. A `nina` responde vazio em mensagem curta ⚠️ o mais grave
+
+Cinco de quinze mensagens do Nicholson não foram respondidas: "Qual o faturamento
+deste mês", "O que você pode fazer", "ola", "Sin", "Stop".
+
+Não é fila travada: o `usage_events` mostra que ela **rodou** e devolveu **2
+tokens**. E o pior caso é encadeado — ela ofereceu acionar a `iris`, ele
+respondeu **"Sin"**, e a ponte nunca aconteceu. A conversa entre agentes, feita
+em 14/08, falhou no primeiro uso real.
+
+### 7. O `atlas` repetiu a resposta anterior inteira
+
+A mensagem das 13:59 começa com a resposta das 13:57 copiada palavra por palavra
+e só depois continua. Metade dos 3.782 caracteres é repetição.
+
+### 8. O `bruce` está num modelo 100× mais caro
+
+| agente | modelo | execuções | tokens | custo |
+|---|---|---|---|---|
+| `bruce` | `anthropic/claude-sonnet-4-6` | 5 | 132.879 | **US$ 0,60** |
+| `flow` | `deepseek/deepseek-chat` | 11 | 1.077.370 | US$ 0,077 |
+
+Os outros quatro estão no DeepSeek. Decisão do Erick.
+
+---
+
+## Bloco 4 — O proativo (se o dia render)
+
+### 9. Briefing por cron
+
+O gateway já tem agendamento. Um agente rodando de manhã e escrevendo na base de
+conhecimento entrega a primeira camada do documento — *"identifiquei N situações
+que merecem atenção hoje"* — sem depender de tela nova.
+
+⚠️ **Não fazer agora:** a Central de Comando e a cadeia de cinco agentes
+(Iris → Bruce → Flow → Nina → Atlas). As duas dependem de os agentes acertarem
+sozinhos e encadearem sem supervisão, e o item 6 mostra que ainda não é o caso.
+
+---
+
+## Bloco 5 — O que não temos, para não esquecer
+
+O Nicholson pede coisas que dependem de dado que não existe em lugar nenhum. Não
+é bloqueio do roadmap; é lista de compras.
+
+| o que ele quer | por que não dá hoje |
+|---|---|
+| Custo por lead | Nenhuma base de marketing conectada |
+| Como estão as campanhas | idem |
+| Pipeline ponderado | O HSGrowth não tem probabilidade por etapa — precisa de régua definida por alguém |
+| Chamados por lote/firmware do Phoebus | Exige rastreio de lote ligado ao cliente; não verificado |
+| SLA e satisfação do cliente | HelpHS não está no ar, e não existe campo de satisfação |
+
+## Notas relacionadas
+
+- [`CONTINUAR-AQUI.md`](CONTINUAR-AQUI.md) — estado atual e armadilhas
+- [`fotos_doc/`](fotos_doc/) — as dez imagens do documento de visão
