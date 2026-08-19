@@ -32,9 +32,30 @@ exemplos de formato, não diagnóstico.
 
 ---
 
-## Bloco 1 — Caminho das pedras
+## Bloco 1 — Caminho das pedras ✅ feito em 19/08
 
 O que muda resposta de agente hoje ainda.
+
+**Resultado, conferido perguntando aos agentes** (config não é o que o agente
+enxerga — a única verificação que vale é a resposta dele):
+
+| pergunta | antes (17/08) | depois (19/08) |
+|---|---|---|
+| "o que está parado >48h no Task" *(flow)* | régua improvisada pelo último comentário, com ressalva; 396 mil tokens de exploração | abriu a skill, mediu pelo `audit_log`: 104 cards em Correios, 16,2 dias de média, pior 29,9 |
+| "quanto falta para a meta" *(iris)* | não tinha resposta | meta do trimestre R$ 3.166.666,68 · realizado R$ 2.438.461,71 · **77,0%** · faltam R$ 728.204,97 |
+| "quantas reuniões os SDR marcaram" *(atlas)* | *"não há departamento COMERCIAL nem papéis de SDR"* | Miguel Luiz 9 · Claudia 8 · Karolaine 5 |
+
+⚠️ **O `atlas` resolveu por um caminho melhor que o desenhado.** O bloco novo no
+`USER.md` manda não dizer "não temos esse cadastro", porque temos — e em vez de
+pedir ao `bruce`, ele foi procurar os papéis **dentro do próprio GrowthHS** e
+achou `role_id=4`. As três pessoas batem com as do `COMERCIAL-SDR` do TalentHS:
+duas fontes independentes concordando.
+
+⚠️ **Item 1 está pela metade e o resto depende de superusuário.** O que já vale:
+os cinco agentes aprenderam que Diretório ≠ quadro de pessoal. O que falta: o
+conector `banco-pessoas-hs`, que precisa da
+[`008_pessoas_talenths.sql`](../backend/migrations/008_pessoas_talenths.sql)
+aplicada no banco do TalentHS.
 
 ### 1. O "Diretório" aponta para a tabela errada
 
