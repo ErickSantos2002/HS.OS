@@ -729,3 +729,37 @@ dinâmica (via `agent_templates.is_leader_template`) em vez de assumir "lia" —
   prefira **kebab-case**, que é a maioria
 - Toasts: `sonner` (`toast` de `sonner`) é o padrão nos arquivos novos; ainda existe o `use-toast`
   do shadcn em uso legado
+
+### Agendamento (`cron.*`) — contrato levantado em 19/08/2026
+
+```
+cron.add    { name, schedule, sessionTarget, agentId, payload }  → { job: {...} }
+cron.list   {}                                                   → { jobs: [...] }
+cron.remove { id }        ⚠️ por `id`, não por `name`
+```
+
+`schedule` é uma união de três formas, e a mensagem de erro nomeia todas:
+`{kind:"at", at:"<ISO>"}` (tiro único, recusa horário no passado),
+`{kind:"cron", expr:"30 10 * * 1-5"}` e uma terceira com `everyMs`.
+
+⚠️ **É `expr`, não `expression`** — e não há campo de fuso: **o `expr` é em UTC**.
+Confirmado criando um job e lendo o `nextRunAtMs` de volta: `30 10 * * 1-5` cai às
+07h30 de Brasília.
+
+⚠️ **`cron.add` NÃO valida o `agentId`, e isso quebra o truque de sondagem.** A
+regra de ouro daqui — "para descobrir formato sem escrever, use um `agentId`
+inexistente, que o gateway valida o schema e falha antes de resolver o agente" —
+**não vale para o `cron.add`**. Em 19/08/2026 uma sondagem com
+`agentId: "agente-que-nao-existe-xyz"` foi **aceita** e criou o job. Foi removida
+no mesmo minuto porque a checagem seguinte era um `cron.list`; sem ela, teria
+ficado um agendamento fantasma apontando para um agente que não existe.
+
+⚠️ **`POST /agents/{id}/crons` não agenda nada.** Ele grava só na tabela
+`public.agent_crons`, do nosso lado, e nunca chama `cron.add`. Quem fala com o
+gateway é `app/routers/automacoes.py`. A tabela está vazia; os agendamentos que
+existem de verdade foram criados direto pelo RPC.
+
+**Os briefings da manhã** (19/08/2026) são dois jobs recorrentes: o `flow` às
+07h30 escreve "Operação — briefing de DD/MM/AAAA" na base de conhecimento, e a
+`iris` às 07h35 escreve "Faturamento — briefing de DD/MM/AAAA". Cada um roda em
+`sessionTarget: "isolated"` e usa a skill do seu domínio.
