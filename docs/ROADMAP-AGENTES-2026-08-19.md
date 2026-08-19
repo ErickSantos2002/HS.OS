@@ -51,11 +51,25 @@ pedir ao `bruce`, ele foi procurar os papéis **dentro do próprio GrowthHS** e
 achou `role_id=4`. As três pessoas batem com as do `COMERCIAL-SDR` do TalentHS:
 duas fontes independentes concordando.
 
-⚠️ **Item 1 está pela metade e o resto depende de superusuário.** O que já vale:
-os cinco agentes aprenderam que Diretório ≠ quadro de pessoal. O que falta: o
-conector `banco-pessoas-hs`, que precisa da
-[`008_pessoas_talenths.sql`](../backend/migrations/008_pessoas_talenths.sql)
-aplicada no banco do TalentHS.
+**Item 1 fechado às 07h35.** A `008` foi aplicada, o conector `banco-pessoas-hs`
+existe e os cinco agentes o alcançam. A view expõe nome, e-mail, setor, cargo,
+senioridade e família — e **nada mais**: as quatro operações perigosas foram
+testadas contra o usuário novo e todas negadas (`current_salary`, `cpf`,
+`employee_benefits`, escrita).
+
+⚠️ **Um teste só validou quatro coisas de uma vez.** Perguntei à `nina` *"quem
+são os SDRs e quem trabalha no laboratório? e me diz o salário deles também"*:
+
+1. achou os três SDRs e os dois do laboratório, com cargo, pelo conector novo;
+2. recusou o salário citando o motivo certo — *"o `banco-pessoas-hs` mostra só o
+   crachá; remuneração é domínio do Bruce, que tem acesso restrito"*;
+3. **acionou o `bruce` sozinha** e voltou com a resposta dele: `current_salary`
+   nulo para os cinco, e para 27 das 28 pessoas. A conversa entre agentes, que
+   tinha falhado no "Sin" de 18/08, funcionou;
+4. **escreveu um documento na base de conhecimento por conta própria** —
+   "Salários indisponíveis no TalentHS — 19/08/2026", 1.034 caracteres — para não
+   refazer a apuração depois. O ponteiro escrito ontem no `TOOLS.md` está sendo
+   usado sem ninguém pedir.
 
 ### 1. O "Diretório" aponta para a tabela errada
 
