@@ -361,26 +361,56 @@ class RespostaOut(BaseModel):
 
 
 def _texto_da_resposta(mensagens: list, desde_seq: int) -> str:
-    """Junta o texto do que o agente disse depois do nosso envio.
+    """O texto do agente depois do nosso envio — **só o turno final**.
 
-    O histórico do gateway traz também `toolCall` e `toolResult` — o raciocínio
-    e as ferramentas. Nada disso vai para a tela: a conversa que o usuário vê é
-    só o texto final. Por isso filtra por `role == assistant` e pega apenas os
-    blocos de tipo `text`.
+    O histórico do gateway traz `toolCall` e `toolResult` junto, e nada disso vai
+    para a tela. Mas filtrar por `role == assistant` não bastava, e essa era a
+    diferença entre o que este docstring prometia e o que o código fazia.
+
+    ⚠️ **O agente escreve entre uma ferramenta e outra, e tudo isso era gravado
+    como se fosse a resposta.** Em 17/08/2026 o CEO leu, dentro das respostas,
+    "deixa eu checar o schema das propostas", "o operador `~~*` não funciona com
+    enum" e "minha query estava invertida". Não é o agente sendo indiscreto: são
+    mensagens `assistant` legítimas, uma por rodada de ferramenta, que este
+    juntador concatenava.
+
+    Tentei consertar pelos arquivos do agente **duas vezes** — instrução no
+    `AGENTS.md` e depois no `SOUL.md`, com as frases proibidas listadas. Segurou
+    no caminho curto e vazou de novo assim que uma consulta falhou no meio: o
+    modelo trata "explicar o tropeço" como transparência. Instrução não alcança
+    esse instante; a costura, sim.
+
+    O corte é o `seq` da última mensagem de ferramenta: o que veio depois dela é
+    a resposta, o que veio antes é bastidor. Num caso real do `flow`, isso
+    descartou 4 das 5 narrações (as de seq 2, 5, 8 e 11) e manteve a resposta.
+
+    ⚠️ **Com recuo para o comportamento antigo se o turno final não tiver
+    texto.** Agente que responde e só depois chama uma ferramenta é raro, mas
+    engolir a resposta dele seria pior que mostrar bastidor.
     """
-    partes: list[str] = []
-    for m in mensagens:
-        seq = (m.get("__openclaw") or {}).get("seq")
-        if seq is None or seq <= desde_seq or m.get("role") != "assistant":
-            continue
+    def _texto(m) -> list[str]:
         conteudo = m.get("content")
         if isinstance(conteudo, str):
-            partes.append(conteudo)
-            continue
-        for bloco in conteudo or []:
-            if isinstance(bloco, dict) and bloco.get("type") == "text" and bloco.get("text"):
-                partes.append(bloco["text"])
-    return "\n\n".join(p.strip() for p in partes if p.strip())
+            return [conteudo]
+        return [b["text"] for b in (conteudo or [])
+                if isinstance(b, dict) and b.get("type") == "text" and b.get("text")]
+
+    def _seq(m) -> int | None:
+        return (m.get("__openclaw") or {}).get("seq")
+
+    novas = [m for m in mensagens
+             if (s := _seq(m)) is not None and s > desde_seq]
+
+    # `toolCall` e `toolResult` marcam onde o agente ainda estava trabalhando.
+    corte = max(((_seq(m) or 0) for m in novas
+                 if m.get("role") in ("toolCall", "toolResult")), default=0)
+
+    def _juntar(msgs) -> str:
+        partes = [t for m in msgs for t in _texto(m)]
+        return "\n\n".join(p.strip() for p in partes if p.strip())
+
+    assistentes = [m for m in novas if m.get("role") == "assistant"]
+    return _juntar([m for m in assistentes if (_seq(m) or 0) > corte]) or _juntar(assistentes)
 
 
 async def _ultimo_seq(cliente, chave_completa: str) -> int:

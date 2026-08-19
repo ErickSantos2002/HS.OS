@@ -121,7 +121,38 @@ para a meta" deixa de ser pergunta sem resposta.
 
 ---
 
-## Bloco 2 — Como o agente responde
+## Bloco 2 — Como o agente responde ✅ feito em 19/08
+
+⚠️ **O item 5 não se resolveu por instrução, e a tentativa está registrada
+porque foi ela que achou a causa.** Escrevi a regra no `AGENTS.md` dos cinco;
+segurou na `iris` (caminho curto) e vazou no `flow` assim que uma consulta falhou
+no meio. Reforcei no `SOUL.md` listando as frases proibidas literalmente; **vazou
+de novo** — *"A consulta de OS não retornou, deixa eu ajustar o filtro"*.
+
+O modelo trata "explicar o tropeço" como transparência, e nenhuma instrução
+alcança esse instante. A causa era estrutural: `_texto_da_resposta` juntava
+**todas** as mensagens `assistant` do turno, e o agente escreve uma a cada rodada
+de ferramenta. O docstring dizia "a conversa que o usuário vê é só o texto final"
+e o código fazia outra coisa.
+
+O corte agora é o `seq` da última mensagem de ferramenta. Medido em três
+conversas reais: **18% a 35% do texto era bastidor**. O que sobra é narração
+dentro do turno final, e essa as instruções pegam.
+
+| conversa | antes | depois |
+|---|---|---|
+| `flow` — "algo preocupante hoje?" | 1.830 chars | 1.293 (−29%) |
+| `iris` — "faturamento de agosto" | 838 | 689 (−18%) |
+| `nina` — "quem são os SDRs" | 1.600 | 1.035 (−35%) |
+
+**Item 4 funcionou de primeira, e a parte difícil dele também.** Perguntei à
+`iris` um dado simples e ela respondeu como consulta — número, fonte, período,
+sem forçar os seis campos. Perguntei ao `flow` algo aberto e ele trouxe um achado
+de verdade (222 ordens em Pós-Vendas no GestorHS, 85 paradas há mais de 30 dias,
+a mais antiga desde 31/03) **sem inventar causa**: disse que não dá para saber de
+quem é a fila porque o sistema não guarda responsável nessas ordens.
+
+### Detalhe original
 
 ### 4. Adotar o formato que ele pediu
 
