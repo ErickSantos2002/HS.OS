@@ -46,6 +46,16 @@ RUN mkdir -p /app/uploads \
     && chown -R appuser:appuser /app
 USER appuser
 
+# ⚠️ **Depois do COPY, de propósito.** O `GIT_SHA` muda a cada commit; se o ARG
+# viesse antes do `pip install`, toda build refaria a instalação das
+# dependências do zero. Aqui ele invalida só as duas últimas camadas.
+#
+# O EasyPanel já mandava `--build-arg GIT_SHA=...` desde sempre e o Dockerfile
+# simplesmente não o lia — o `/health` respondia igual em qualquer versão, e em
+# 17/08/2026 isso escondeu que um deploy tinha construído o commit anterior.
+ARG GIT_SHA=""
+ENV APP_VERSION=${GIT_SHA}
+
 EXPOSE 8000
 
 # urllib em vez de requests: é da stdlib e não precisa entrar no requirements

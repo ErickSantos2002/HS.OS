@@ -40,5 +40,19 @@ class Settings(BaseSettings):
     OPENCLAW_GATEWAY_URL: str = ""
     OPENCLAW_ADMIN_TOKEN: str = ""
 
+    # Segredo compartilhado com os servidores MCP que o gateway consome
+    # (`/mcp/alerta` e `/mcp/wiki`), conferido no header `X-Bridge-Token`.
+    #
+    # ⚠️ **Declarada aqui pelo mesmo motivo da OPENAI_API_KEY acima, e a
+    # armadilha pegou de novo.** Em 17/08/2026 pedi que ela fosse posta no `.env`
+    # para o `/mcp/*` funcionar em desenvolvimento, sem declará-la — e o backend
+    # local parou de subir. O sintoma engana: em produção não há arquivo `.env`
+    # (o EasyPanel injeta variáveis de ambiente), então lá nada quebrou, e a
+    # única máquina afetada foi a de desenvolvimento.
+    #
+    # O erro do pydantic nomeia a chave, mas **imprime o valor junto** — se for
+    # colado em algum lugar, é o segredo indo com ele.
+    GUARDRAILS_API_TOKEN: str = ""
+
 
 settings = Settings()

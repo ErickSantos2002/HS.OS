@@ -1,6 +1,8 @@
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -79,6 +81,18 @@ async def lifespan(app: FastAPI):
 
 logger = logging.getLogger(__name__)
 
+# ⚠️ **Lido uma vez, no import.** `APP_VERSION` vem do build arg `GIT_SHA` que o
+# EasyPanel já mandava e o Dockerfile ignorava. Fora de container não existe, e
+# `"dev"` é a resposta honesta — melhor que fingir uma versão.
+#
+# Sete caracteres porque é o que se digita: bate com o `git log --oneline` e com
+# o que o painel mostra, sem obrigar ninguém a comparar quarenta hexadecimais.
+_VERSAO = (os.environ.get("APP_VERSION") or "dev")[:7]
+
+# Distingue "acabou de subir" de "está de pé há dias" — a segunda pergunta que
+# se faz depois de um deploy, logo depois de "qual versão".
+_INICIADO_EM = datetime.now(timezone.utc)
+
 app = FastAPI(
     title="HS.OS API",
     description="API da plataforma de agentes de IA HS.OS",
@@ -108,7 +122,29 @@ app.add_middleware(
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "hsos-api"}
+    """Vivo, e **qual versão**.
+
+    ⚠️ **Sem a versão aqui não há como saber de fora qual commit está rodando**,
+    e isso já custou tempo: em 17/08/2026 um deploy do EasyPanel construiu o
+    commit anterior (o push não tinha saído), falhou pelo mesmo erro de antes, e
+    a única pista foi o `GIT_SHA` no log do build — que só quem está no painel
+    enxerga. Do lado de fora, backend novo e backend velho respondiam idênticos.
+
+    O `GIT_SHA` já era mandado pelo EasyPanel como build arg e o Dockerfile o
+    ignorava; agora ele vira `APP_VERSION` na imagem. Rodando fora de container
+    o valor não existe e vem `"dev"` — o que é informação, não falha.
+
+    Expor o SHA num endpoint aberto é deliberado e conversado (19/08/2026): o
+    repositório é privado, o hash não abre nada, e o custo de não saber o que
+    está no ar é maior. `iniciado_em` entra junto porque distingue "subiu agora"
+    de "está de pé há dias" — as duas perguntas que se faz depois de um deploy.
+    """
+    return {
+        "status": "ok",
+        "service": "hsos-api",
+        "versao": _VERSAO,
+        "iniciado_em": _INICIADO_EM.isoformat(),
+    }
 
 
 @app.exception_handler(RequestValidationError)
