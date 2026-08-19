@@ -236,7 +236,26 @@ Os outros quatro estão no DeepSeek. Decisão do Erick.
 
 ---
 
-## Bloco 4 — O proativo (se o dia render)
+## Bloco 4 — O proativo ✅ feito em 19/08
+
+Dois agendamentos recorrentes em dias úteis, testados com disparo único antes de
+entrar: `flow` às **07h30** escreve *"Operação — briefing de DD/MM/AAAA"* e
+`iris` às **07h35** escreve *"Faturamento — briefing de DD/MM/AAAA"*, os dois na
+base de conhecimento.
+
+⚠️ **A base de conhecimento é o ponto de encontro, não a conversa entre agentes.**
+Cada um escreve o seu sem depender do outro responder — é o que permite ter a
+primeira camada do documento do Nicholson sem a cadeia de cinco agentes, que
+ainda não é confiável.
+
+O briefing de teste saiu com a régua da skill, número e tempo por item, e a seção
+"perguntas em aberto (não apurei a causa)" que o Bloco 2 mandou.
+
+⚠️ **Falta o último passo para o Nicholson ver isso:** hoje o briefing vive na
+página de Base de Conhecimento, e ele teria que ir lá. Fazê-lo aparecer ao abrir
+o sistema é mudança de tela, não de agente.
+
+### Detalhe original
 
 ### 9. Briefing por cron
 
@@ -250,7 +269,12 @@ sozinhos e encadearem sem supervisão, e o item 6 mostra que ainda não é o cas
 
 ---
 
-## Bloco 5 — O que não temos, para não esquecer
+## Bloco 5 — O que não temos, para não esquecer ✅ registrado
+
+Nada a construir: é a lista de compras. Duas correções ao que estava aqui —
+a **meta existe** (`tiny.configuracoes`, chave `META`, e já está com a `iris`) e
+o **custo por produto existe** (`tiny.centro_custo_config`). O que falta mesmo
+é marketing, custo por lead e campanhas.
 
 O Nicholson pede coisas que dependem de dado que não existe em lugar nenhum. Não
 é bloqueio do roadmap; é lista de compras.
