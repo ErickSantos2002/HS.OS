@@ -730,6 +730,28 @@ dinâmica (via `agent_templates.is_leader_template`) em vez de assumir "lia" —
 - Toasts: `sonner` (`toast` de `sonner`) é o padrão nos arquivos novos; ainda existe o `use-toast`
   do shadcn em uso legado
 
+### Relatório gerado por agente
+
+`hsos-relatorios` é o terceiro servidor MCP nosso, ao lado do `hsos-alerta` e do
+`hsos-documentos`, e serve **só ao `atlas`**: `relatorio_vendedores` monta a
+planilha de vendedores do HSGrowth e a guarda em Documentos, no nome de quem
+pediu.
+
+⚠️ **A régua é cópia fiel de `~/projetos/relatorios-hsgrowth/vendedores.py`.**
+`backend/app/relatorios/vendedores.py` mudou duas coisas e só: a conexão sai do
+conector cadastrado em `integrations` (o módulo `bancos` só existe na máquina do
+Erick) e `gerar()` devolve bytes. **Régua muda lá primeiro** — senão o número do
+agente e o do Erick divergem em silêncio.
+
+⚠️ **O arquivo vai para bucket PRIVADO** (`generated-documents/<usuário>/`), com
+registro em `generated_documents` — o mesmo caminho de PDF e DOCX. Não há link
+público de propósito: a planilha traz card a card com nome de cliente, valor e
+link do CRM.
+
+⚠️ **O período era `sys.argv`.** Virou parâmetro, e os SQL de módulo carregam um
+marcador `__DIAS__` trocado em tempo de execução — as f-strings deles já foram
+avaliadas com as outras constantes, e trocar por `%s` exigiria mexer na régua.
+
 ### Agendamento (`cron.*`) — contrato levantado em 19/08/2026
 
 ```
