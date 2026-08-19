@@ -2844,6 +2844,36 @@ export default function ChatPage() {
 
 
   /* ── MOBILE LAYOUT ── */
+  /* ⚠️ **Este diálogo vivia SÓ dentro do `if (isMobile)`.**
+     O botão que o abre está em `renderAgentChat`, que os dois layouts usam —
+     então no desktop o clique setava o estado e nada aparecia, desde sempre.
+     Não é defeito da mudança de 19/08: o botão antigo, que apagava a conversa,
+     também nunca abriu confirmação no desktop. Reproduzido com o navegador, e
+     o que denunciou foi a sonda no clique: `clearConfirmOpen` já vinha `true`.
+     Fica numa variável usada pelos dois returns — duplicar o JSX é como o
+     original se perdeu. */
+  const dialogoNovaConversa = (
+        <AlertDialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Começar uma nova conversa?</AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2">
+                <span className="block">O agente <strong>esquece o que foi conversado</strong> e recomeça do zero — útil quando o assunto mudou ou ele ficou preso num contexto antigo.</span>
+                <span className="block">As mensagens <strong>não são apagadas</strong>: elas saem desta tela, mas continuam guardadas e podem ser consultadas depois.</span>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleConfirmClearConversation}
+              >
+                Começar nova conversa
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+  );
+
   if (isMobile) {
     const showList = !selection;
 
@@ -3040,25 +3070,7 @@ export default function ChatPage() {
         )}
 
         <CreateChannelDialog open={createOpen} onOpenChange={setCreateOpen} onCreate={handleCreateChannel} />
-        <AlertDialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Começar uma nova conversa?</AlertDialogTitle>
-              <AlertDialogDescription className="space-y-2">
-                <span className="block">O agente <strong>esquece o que foi conversado</strong> e recomeça do zero — útil quando o assunto mudou ou ele ficou preso num contexto antigo.</span>
-                <span className="block">As mensagens <strong>não são apagadas</strong>: elas saem desta tela, mas continuam guardadas e podem ser consultadas depois.</span>
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={handleConfirmClearConversation}
-              >
-                Começar nova conversa
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {dialogoNovaConversa}
         <Dialog open={!!lightboxSrc} onOpenChange={() => setLightboxSrc(null)}>
           <DialogContent className="max-w-3xl p-2 bg-transparent border-none shadow-none">
             {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80vh] object-contain" />}
@@ -3288,6 +3300,7 @@ export default function ChatPage() {
       )}
 
       <CreateChannelDialog open={createOpen} onOpenChange={setCreateOpen} onCreate={handleCreateChannel} />
+        {dialogoNovaConversa}
       <Dialog open={!!lightboxSrc} onOpenChange={() => setLightboxSrc(null)}>
         <DialogContent className="max-w-3xl p-2 bg-transparent border-none shadow-none">
           {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80vh] object-contain" />}
