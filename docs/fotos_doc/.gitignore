@@ -1,0 +1,9 @@
+# Caixa de entrada de imagem: print de conversa, foto de tela, documento fotografado.
+#
+# ⚠️ Nada aqui é versionado, de propósito. Em 19/08/2026 dez prints da conversa
+# do Nicholson com os agentes entraram no commit 42cd534 e ficaram no histórico
+# do repositório — 1,4 MB de binário que não sai mais de lá, com conversa dele
+# dentro. A pasta continua existindo para receber imagem nova; o que a gente
+# aprende dela vira texto em docs/, e a imagem se apaga.
+*
+!.gitignore
