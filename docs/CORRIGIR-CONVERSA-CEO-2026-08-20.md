@@ -55,7 +55,7 @@ existe nem que é para usar quando isso aparece.
 
 ## B. Entrega de arquivo — ele pediu três vezes e não recebeu
 
-### 4. ⚠️ O agente entrega num caminho que ninguém alcança, e acha que anexou
+### 4. ✅ O agente entrega num caminho que ninguém alcança, e acha que anexou
 
 ```
 **MEDIA:/root/.openclaw/workspace-atlas/relatorio_oportunidades_paradas.html**
@@ -67,7 +67,7 @@ anexo"*, o que é falso.
 
 Repetiu com o PDF às 10h58 e de novo às 10h59.
 
-### 5. Falta a ferramenta genérica de salvar documento
+### 5. ✅ Falta a ferramenta genérica de salvar documento
 
 O caminho certo **existe desde 19/08** — `generated-documents`, bucket privado,
 aparece em Documentos. O Atlas só tem `relatorio_vendedores`, que gera **uma**
@@ -76,7 +76,32 @@ planilha específica.
 Ele chegou a oferecer: *"Registrar em Documentos no HS.OS — posso fazer agora, é
 só confirmar."* **Não pode.** Prometeu o que não tem.
 
-### 6. Tentou instalar pacote na VPS do gateway
+✅ **Resolvido em 20/08 — mas não por Documentos.** O objetivo do Nicholson é
+mandar o relatório **para os próprios vendedores** trabalharem os cards parados,
+e eles **não têm login no HS.OS**: só três pessoas têm. Documentos não os
+alcançaria.
+
+O destino certo já existia: `artifacts_published` mais a rota pública
+`/artifact/:id`, que responde sem autenticação. A ferramenta `publicar_pagina`
+publica o HTML e devolve o link. **Concedida aos cinco agentes** — publicar
+página é capacidade genérica, decisão do Erick; o `relatorio_vendedores` continua
+só do Atlas.
+
+Republicar o mesmo HTML devolve o link que já existe, para não deixar órfão um
+endereço que já pode ter sido enviado.
+
+⚠️ **Sem validade, por decisão do Erick**: a empresa é pequena e o link vai só
+para os vendedores. O parâmetro `dias_de_validade` existe se mudar. A ferramenta
+avisa em toda publicação que o link é público para quem o receber.
+
+O ponteiro no `TOOLS.md` dos cinco fecha junto o item 6 — proíbe instalar pacote
+para converter formato — e explica que o workspace do agente não é alcançável.
+
+**Conferido com o `flow`**, de propósito: para provar que a concessão pegou nos
+cinco, e não só no Atlas. Ele montou a página, publicou e entregou o link
+avisando sozinho que é público e não expira.
+
+### 6. ✅ Tentou instalar pacote na VPS do gateway
 
 > *"Não tenho permissão para instalar pacotes no sistema."*
 
