@@ -672,9 +672,36 @@ acioná-los em paralelo" e o CEO viu "Envio desconhecido". Hoje quem cuida é
 já passou.
 
 ⚠️ **O piso do prompt de um agente nosso é ~23 mil tokens numa janela de 65 mil.**
-Medido com sessão nova respondendo "oi". São os sete arquivos mais **12
-servidores MCP que todos os cinco agentes enxergam** — `tools.deny` está vazio em
-todos, ou seja o escopo de banco por agente descrito acima **não está aplicado**.
+Medido com sessão nova respondendo "oi". Com `reserveTokens: 24000` de buffer de
+compactação, sobram **~18 mil para conversa de verdade** — meia dúzia de
+resultados de consulta. É por isso que a compactação entra tão cedo.
+
+⚠️ **E servidor MCP quase não pesa nesse piso — eu chutei e errei por 600x.**
+Afirmei em 20/08/2026 que os 12 servidores eram ~15.300 dos 23.416, e que fechar
+o escopo devolveria contexto. Fechei: a `iris` passou de 12 servidores para 2, e
+o piso foi de 23.416 para **23.391**. Vinte e cinco tokens. O schema de um
+`banco-x__query` é minúsculo; o peso está nos sete arquivos (~8.100 na `iris`),
+nas ferramentas embutidas do perfil `coding` e na lista de skills.
+
+**Fechar o escopo continua certo — só que por outro motivo.** É acesso a dado:
+até 20/08 a `iris` enxergava o banco de gente e o `atlas` o financeiro. Hoje cada
+um vê o seu, mais `banco-diretorio-hs-os` (identidade de quem fala), a base de
+conhecimento, `publicar_pagina` e o alerta — cortar qualquer um desses faz o
+agente contradizer os próprios arquivos, que os citam nominalmente.
+
+| agente | banco |
+|---|---|
+| `nina` | só `banco-hsos` — orquestra e delega o domínio |
+| `iris` | `banco-datacorehs` |
+| `atlas` | `banco-hsgrowth` + `relatorio_vendedores` |
+| `flow` | `banco-gestorhs`, `banco-taskhs`, `banco-chamadoshs` |
+| `bruce` | `banco-talenths`, `banco-pessoas-hs` |
+
+⚠️ **`agents.list` (RPC) NÃO devolve o `tools` declarado na config.** Ele veio com
+`deny: []` para os cinco enquanto a config tinha `sessions_send`, `sessions_spawn`
+e `skill_workshop` negados — foi o que me fez concluir que o escopo nunca tinha
+sido aplicado. Para ler o que está declarado, use `config.get`; para saber o que
+o agente **enxerga**, pergunte a ele.
 
 ## A regra dos sete arquivos
 
