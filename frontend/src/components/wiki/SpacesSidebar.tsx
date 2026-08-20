@@ -445,12 +445,12 @@ function SpaceItem({
                   />
                 </div>
               ) : (
+                /* O `title` no botão não é enfeite: documento recorrente tem o
+                   que o distingue no FIM do nome, e é ali que o `truncate`
+                   corta. O hover mostra o nome inteiro. */
                 <button
                   onClick={() => onSelectDoc(space.id, d.id)}
                   onDoubleClick={() => startRename(d)}
-                  {/* Documento recorrente tem o que o distingue no FIM do nome,
-                      e é ali que o `truncate` corta. O hover salva enquanto
-                      houver título longo. */}
                   title={d.title || "Sem título"}
                   className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left"
                 >
