@@ -9,6 +9,8 @@ export interface WikiDocument {
   content: string | null;
   created_by: string;
   updated_by: string | null;
+  /** Agente que redigiu (`flow`, `iris`…). Nulo = escrito por gente na tela. */
+  agent_id?: string | null;
   created_at: string;
   updated_at: string;
   is_pinned: boolean;

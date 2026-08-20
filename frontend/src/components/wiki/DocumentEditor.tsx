@@ -11,7 +11,8 @@ import { TableHeader } from "@tiptap/extension-table-header";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { LineHeight } from "./LineHeight";
 import { useEffect, useRef, useState } from "react";
-import { formatDistanceToNow } from "date-fns";
+import { useAgents } from "@/hooks/use-agents";
+import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Pin, Trash2, Columns, Rows, Trash, Link2 } from "lucide-react";
 import { toast } from "sonner";
@@ -55,9 +56,22 @@ export function DocumentEditor({ document, space, onDeleted }: Props) {
     setStatus("saved");
   }, [document.id, document.title]);
 
+  // Nome do agente que redigiu. `useAgents` já está carregado noutras telas e
+  // vem do cache do React Query; se não vier, o id serve — "flow" é legível.
+  const { agents } = useAgents();
+  const nomeDoAgente =
+    agents?.find((a) => a.id === document.agent_id || a.openclaw_id === document.agent_id)?.name ??
+    document.agent_id;
+
   // Resolve last editor display name
+  //
+  // ⚠️ **Só vale quando quem escreveu foi gente.** Documento de agente traz
+  // `agent_id`, e aí o nome da pessoa é o dono do espaço, não o autor — foi o
+  // que fez o briefing da manhã aparecer como "Editado por Erick Santos"
+  // quando quem o escreveu foi o `flow`, por cron, sem ninguém pedindo.
   useEffect(() => {
     let cancelled = false;
+    if (document.agent_id) return;
     const uid = document.updated_by || document.created_by;
     if (!uid) return;
     api<{ full_name?: string; email?: string }>(`/profiles/${uid}`)

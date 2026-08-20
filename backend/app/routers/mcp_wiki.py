@@ -340,11 +340,11 @@ async def mcp_wiki(
             novo = await conn.fetchval(
                 """
                 INSERT INTO public.wiki_documents
-                       (space_id, title, content, created_by, updated_by)
-                VALUES ($1::uuid, $2, $3, $4::uuid, $4::uuid)
+                       (space_id, title, content, created_by, updated_by, agent_id)
+                VALUES ($1::uuid, $2, $3, $4::uuid, $4::uuid, $5)
                 RETURNING id::text
                 """,
-                espaco, titulo, conteudo, dono,
+                espaco, titulo, conteudo, dono, agente or None,
             )
             logger.info("Documento %s criado por %s para %s%s", novo, agente, dono,
                         " (recaiu no admin)" if recaiu else "")
@@ -383,10 +383,10 @@ async def mcp_wiki(
                     erro=True,
                 ))
             await conn.execute(
-                "UPDATE public.wiki_documents SET content = $2, "
+                "UPDATE public.wiki_documents SET agent_id = $4, content = $2, "
                 "       title = COALESCE(NULLIF($3,''), title), updated_at = now() "
                 " WHERE id = $1::uuid",
-                str(args.get("id")), conteudo, titulo,
+                str(args.get("id")), conteudo, titulo, agente or None,
             )
             return _resposta(ident, _texto(
                 f'Documento "{titulo or atual["title"]}" atualizado.'))
