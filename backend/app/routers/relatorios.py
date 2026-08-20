@@ -16,11 +16,13 @@ link; não é coisa para URL que qualquer um abre.
 
 import json
 import logging
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 
+from app.config import settings
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
 from app.integracoes import exige_segredo
@@ -132,6 +134,30 @@ async def vendedores(
 # ─────────────────────────────────────────────────────────────────────────────
 
 _FERRAMENTAS = [{
+    "name": "publicar_pagina",
+    "description": (
+        "Publica uma página HTML e devolve um LINK que qualquer pessoa abre, sem "
+        "login. Use quando pedirem um relatório para MANDAR a alguém — vendedor, "
+        "SDR, time de serviços — que não usa o HS.OS. NÃO escreva o arquivo no "
+        "seu workspace: o caminho do seu disco não é alcançável por ninguém."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "titulo": {"type": "string", "description": "Nome da página, curto."},
+            "html": {"type": "string",
+                     "description": "O HTML completo. É servido como está — o "
+                                    "estilo vai dentro dele."},
+            "solicitante": {"type": "string",
+                            "description": "Id de quem pediu: o `hsos-<id>` da sua "
+                                           "chave de sessão, sem o prefixo."},
+            "dias_de_validade": {"type": "integer",
+                                 "description": "Opcional. Depois disso o link diz "
+                                                "'expirado'. Sem isso, não expira."},
+        },
+        "required": ["titulo", "html"],
+    },
+}, {
     "name": "relatorio_vendedores",
     "description": (
         "Gera a planilha de vendedores do HSGrowth (esforço, cards travados e "
@@ -163,6 +189,91 @@ def _resposta(ident, resultado=None, erro=None):
     return corpo
 
 
+async def _dono_do_pedido(conn, solicitante: str | None) -> str | None:
+    """Quem fica como dono do que o agente publicou.
+
+    Sem `solicitante` válido, cai no administrador — o mesmo desenho do
+    `/mcp/wiki`. Um cron não tem pessoa pedindo, e artefato sem dono não
+    aparece em lugar nenhum.
+    """
+    pedido = (solicitante or "").strip()
+    if pedido:
+        dono = await conn.fetchval(
+            "SELECT id::text FROM public.profiles WHERE id = $1::uuid", pedido)
+        if dono:
+            return dono
+    return await conn.fetchval(
+        "SELECT p.id::text FROM public.profiles p "
+        "  JOIN public.user_roles r ON r.user_id = p.id "
+        " WHERE r.role = 'administrador' ORDER BY p.created_at LIMIT 1")
+
+
+async def _publicar_pagina(ident, args: dict):
+    """Publica o HTML e devolve o link público.
+
+    ⚠️ **Isto existe porque o agente não tinha como entregar arquivo.** Em
+    20/08/2026 o CEO pediu três vezes um relatório para mandar aos vendedores, e
+    recebeu três vezes um caminho do disco da VPS do gateway
+    (`MEDIA:/root/.openclaw/workspace-atlas/…`), com o agente afirmando que havia
+    anexado. Ninguém alcança aquele caminho, e a tela não renderiza `MEDIA:`.
+
+    O destino certo já existia: `artifacts_published` + a rota pública
+    `/artifact/:id`. Os vendedores **não são usuários do HS.OS** — só três
+    pessoas têm login — então salvar em Documentos não os alcançaria.
+
+    ⚠️ **O link é público para quem o tiver.** O id é um UUID que não se
+    adivinha, mas não há senha: quem receber, abre. Para relatório com nome de
+    cliente e valor, use `dias_de_validade`.
+    """
+    titulo = str(args.get("titulo") or "").strip()
+    html = str(args.get("html") or "").strip()
+    if not titulo or not html:
+        return _resposta(ident, {"content": [{"type": "text",
+            "text": "Preciso de `titulo` e `html` para publicar."}], "isError": True})
+
+    dias = args.get("dias_de_validade")
+    expira = None
+    if isinstance(dias, int) and dias > 0:
+        expira = datetime.now(timezone.utc) + timedelta(days=dias)
+
+    async with sessao(role="service_role") as conn:
+        dono = await _dono_do_pedido(conn, args.get("solicitante"))
+        if not dono:
+            return _resposta(ident, {"content": [{"type": "text",
+                "text": "Não há administrador cadastrado para ficar como dono."}],
+                "isError": True})
+
+        # Mesmo HTML já publicado por essa pessoa devolve o link que existe. É a
+        # regra que o `POST /artefatos/publicados` já usa: republicar duas vezes
+        # deixaria dois links vivos para a mesma coisa, e o primeiro — que já
+        # pode ter sido enviado — viraria órfão em silêncio.
+        linha = await conn.fetchrow(
+            "SELECT id::text AS id FROM public.artifacts_published "
+            " WHERE created_by = $1::uuid AND html_content = $2 "
+            " ORDER BY created_at DESC LIMIT 1", dono, html)
+        reaproveitado = linha is not None
+        if not linha:
+            linha = await conn.fetchrow(
+                """
+                INSERT INTO public.artifacts_published
+                    (title, html_content, created_by, is_public, expires_at)
+                VALUES ($1, $2, $3::uuid, true, $4)
+                RETURNING id::text AS id
+                """, titulo, html, dono, expira)
+
+    base = (settings.FRONTEND_URL or "").split(",")[0].strip().rstrip("/")
+    url = f"{base}/artifact/{linha['id']}"
+    logger.info("Página publicada %s (%s) para %s%s",
+                linha["id"], titulo, dono, " [reaproveitada]" if reaproveitado else "")
+
+    validade = (f"\n\nO link expira em {dias} dia(s)." if expira else
+                "\n\nO link não expira. Quem tiver o endereço abre — não mande "
+                "para fora de quem deve ver.")
+    return _resposta(ident, {"content": [{"type": "text",
+        "text": f"**{titulo}** publicado.\n\n{url}\n\n"
+                f"Qualquer pessoa abre esse link, sem login.{validade}"}]})
+
+
 @router.post("/mcp/relatorios")
 async def mcp_relatorios(
     request: Request,
@@ -191,7 +302,12 @@ async def mcp_relatorios(
         return _resposta(ident, erro={"code": -32601, "message": f"método {metodo}"})
 
     args = (corpo.get("params") or {}).get("arguments") or {}
-    if (corpo.get("params") or {}).get("name") != "relatorio_vendedores":
+    nome = (corpo.get("params") or {}).get("name")
+
+    if nome == "publicar_pagina":
+        return await _publicar_pagina(ident, args)
+
+    if nome != "relatorio_vendedores":
         return _resposta(ident, erro={"code": -32602, "message": "ferramenta desconhecida"})
 
     dias = int(args.get("dias") or gerador.DIAS_PADRAO)
