@@ -18,23 +18,32 @@ Quebrou entrega, contexto e ruído.
 
 ## A. Contexto — a raiz de metade dos problemas
 
-### 1. ⚠️ A sessão do Atlas tem 182 mil tokens numa janela de 65 mil
+### 1. ⚠️ Os agentes perdem turno por pressão de contexto
 
-```
-atlas   182.161 tokens        deepseek-chat · contexto 65.536
-flow     39.286
-iris     22.742
-```
-
-É **quase três vezes** o que o modelo aguenta. Por isso a compactação automática
-não consegue recuperar, e o Nicholson perdeu **três turnos** — 11h11, 11h13 e
-11h36 — recebendo:
+O Nicholson perdeu **três turnos** — 11h11, 11h13 e 11h36 — recebendo:
 
 > *"Auto-compaction could not recover this turn. Please try again, use /compact,
 > or use /new to start a fresh session."*
 
-Ele teve que repetir a pergunta. Numa das vezes, digitou de novo palavra por
-palavra.
+Ele teve que repetir a pergunta. Numa das vezes, palavra por palavra.
+
+⚠️ **Uma correção minha, de 20/08:** eu escrevi aqui e em dois commits que a
+sessão tinha "182 mil tokens numa janela de 65 mil". **Está errado.**
+`sessions.list.totalTokens` é **consumo acumulado**, não tamanho do contexto — uma
+sessão que criei com 8 mensagens já marcava 26 mil. Medi comparando com o número
+de mensagens do histórico, e não deveria ter afirmado antes de fazer isso.
+
+**O número que importa é outro, e é pior de encarar:** os sete arquivos de cada
+agente somam **32 a 39 mil caracteres** — algo como **8 a 10 mil tokens em toda
+chamada**, antes de qualquer conversa. Some as skills e o schema das ferramentas
+e o piso do prompt passa de 20 mil. Numa janela de 65 mil, sobra pouco para o
+histórico, e a compactação vira rotina em vez de exceção.
+
+⚠️ **E fomos nós que engordamos isso.** Cada bloco escrito nesta semana —
+bastidor, cadeia de resposta, duas listas de gente, base de conhecimento,
+entregar arquivo, ponteiros de skill — entrou nos sete e é pago em todo turno.
+Estava certo escrever; falta agora medir o que cada bloco custa e mover para
+skill o que não precisa estar sempre presente.
 
 ### 2. `agents.defaults.compaction` não está configurado
 

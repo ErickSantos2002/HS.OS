@@ -823,6 +823,9 @@ async def enviar(
         )
 
     _SEQ_DO_RUN[run_id] = (agent_id, chave, seq_antes)
+    for _memoria in (_SEQ_DO_RUN, _RESPOSTA_DO_RUN, _TRAVA_DO_RUN,
+                     _REDIRECIONA_RUN, _JA_COMPACTOU):
+        _podar(_memoria)
     logger.info("Envio para %s por %s: run %s", agent_id, usuario.id, run_id)
     return EnvioOut(run_id=run_id)
 
@@ -858,6 +861,25 @@ _RESPOSTA_DO_RUN: dict[str, "MensagemOut"] = {}
 # novo. A tela continua perguntando pelo run que ela conhece e recebe a resposta
 # de verdade, sem saber que houve manutenção no meio.
 _REDIRECIONA_RUN: dict[str, str] = {}
+
+
+# ⚠️ **Memória de processo precisa de teto.** Estes quatro guardam uma entrada por
+# envio e nada os limpa: o `_SEQ_DO_RUN` some no caminho feliz, mas os outros
+# ficam para sempre, e todo caminho de erro deixa rastro. Num backend que roda
+# semanas, isso é vazamento — pequeno por entrada, sem fim no total.
+#
+# Podar por idade exigiria carimbar cada uma; a ordem de inserção do dict já
+# resolve, e o que interessa é sempre o envio recente. Acima do teto, sai o mais
+# antigo — que é justamente o que ninguém vai mais consultar.
+_TETO_DE_MEMORIA = 500
+
+
+def _podar(d) -> None:
+    while len(d) > _TETO_DE_MEMORIA:
+        if isinstance(d, set):
+            d.pop()
+        else:
+            d.pop(next(iter(d)), None)
 
 # Uma tentativa por pergunta. Sem o teto, uma sessão irrecuperável entraria em
 # laço de compactar e reenviar até o fim do mundo.
