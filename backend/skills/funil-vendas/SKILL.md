@@ -62,11 +62,30 @@ A régua é `report_service.py` do HSGrowth (`top_sdrs_by_meetings`), e são
 2. Atribui pelo **`cards.sdr_id`**, nunca por quem moveu o card nem pelo
    responsável.
 3. **`count(DISTINCT card_id)`** — card que voltou para "Agendado" conta uma vez.
-4. ⚠️ **Desconta no-show.** Entrada cujo card tem uma `card_tasks` com
-   `is_noshow = true` concluída **em ou depois** da entrada não conta. É esta a
-   condição que quase ninguém adivinha, e é ela que separa o número certo do
-   "quase certo": sem ela agosto/2026 dá Claudia 8, Miguel 7, Karolaine 6; com
-   ela dá **Claudia 7, Karolaine 6, Miguel 5**.
+4. ⚠️ **Desconta no-show — a ENTRADA, não o card.** O que sai da conta é a
+   **linha de `card_list_history`** que tem, depois dela, uma `card_tasks` com
+   `is_noshow = true`. O card continua contando pelas outras entradas dele.
+
+   ⚠️ **Ler isto como "card com no-show não conta" é o erro que já aconteceu**,
+   em 20/08/2026, com esta mesma skill aberta: o agente reescreveu a consulta a
+   partir desta frase, usou `NOT EXISTS (… ct.is_noshow)` sobre o card, e
+   entregou Claudia 3 quando a tela do CRM mostrava 7. **Use o SQL abaixo como
+   está.** Ele não é ilustração; é a régua.
+
+## Confira antes de entregar
+
+Rode a consulta para **01–20/08/2026** e compare com esta tabela:
+
+| SDR | certo | se você obtiver… | o que você errou |
+|---|---|---|---|
+| Claudia | **7** | 3 | excluiu o card inteiro em vez da entrada |
+| Karolaine Martins | **6** | 5 | idem |
+| Miguel Luiz | **5** | 4 | idem |
+| **Total** | **18** | 15 → régua errada · 21 → esqueceu o no-show | |
+
+**Bateu, siga. Não bateu, PARE** — não entregue o número, diga o que divergiu.
+Estes três valores foram conferidos contra o "Ranking SDR · Reuniões Agendadas"
+do dashboard do HSGrowth em 20/08/2026.
 
 ```sql
 WITH noshow AS (
