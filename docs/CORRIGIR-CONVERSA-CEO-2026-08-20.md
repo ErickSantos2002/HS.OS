@@ -1,118 +1,151 @@
-# O que quebrou na conversa do Nicholson com o Atlas — 20/08/2026
+# O dia do Nicholson no HS.OS — 20/08/2026
 
-Levantado da conversa inteira (`conversations`, usuário `np@`), do histórico da
-sessão no gateway e da `config.get`. **Sete defeitos**, três já corrigidos e
-quatro em aberto.
+Levantado das **75 mensagens** que ele trocou com Atlas, Flow e Iris entre 10h51
+e 12h27, do histórico das sessões no gateway e da `config.get`.
 
-A conversa foi produtiva: ele pediu oportunidades paradas, recebeu um quadro bom
-por vendedor, e a partir daí tudo o que deu errado foi **entrega e infraestrutura
-de conversa**, não análise.
+**Primeiro o que importa: as respostas estavam certas.** Ele recebeu oportunidades
+paradas por vendedor, atividades por SDR, comparativo julho×agosto, panorama de
+serviços — tudo com a régua das skills novas. **Nada do que quebrou foi análise.**
+Quebrou entrega, contexto e ruído.
 
----
-
-## Já corrigido em `33fbf37`
-
-### 1. A mesma resposta gravada duas vezes ✅
-
-Duas mensagens idênticas de 776 caracteres, no mesmo segundo (10:56:42 e :43), e
-de novo às 10:59.
-
-A tela chama `/reply` em laço e a espera segura 20 s, então duas chamadas do
-mesmo run ficavam em voo; o `pop` do `_SEQ_DO_RUN` só acontecia **depois** do
-INSERT. Agora há trava por `run_id` e memória do que já foi gravado.
-
-### 2. Texto de controle do gateway virando mensagem ✅
-
-O CEO leu, dentro da conversa:
-
-> *"This is a pre-compaction memory flush. Let me capture durable memories to
-> disk."* · *"Memória registrada. Nada mais a reportar nesta sessão."* ·
-> *"Nothing new to add beyond what's already captured"* · o token **`NO_REPLY`**,
-> que é justamente o sinal de **não** responder.
-
-⚠️ Filtrar por frase não funciona — três redações em dois turnos, em dois
-idiomas. O sinal é estrutural: o gateway insere `role: "system"` com
-`"Compaction"`, depois um **usuário sintético** (`"Continue the OpenClaw runtime
-event."`) e o agente responde a esse pedido interno. As duas coisas entraram no
-corte de fronteira.
-
-### 3. Os avisos voltavam depois de apagados ✅
-
-O `/recuperar` tratava o usuário sintético como pergunta de gente e abria uma
-janela para ele. Cada abertura da tela reimportava o texto de compactação.
+| agente | mensagens dele | do agente |
+|---|---|---|
+| Atlas | 20 | 44 |
+| Flow | 4 | 5 |
+| Iris | 2 | 2 |
 
 ---
 
-## Em aberto
+## A. Contexto — a raiz de metade dos problemas
 
-### 4. ⚠️ O agente entrega arquivo num caminho que ninguém alcança
+### 1. ⚠️ A sessão do Atlas tem 182 mil tokens numa janela de 65 mil
 
-Pedido: *"gere um HTML desse resultado com um link"*. Resposta:
+```
+atlas   182.161 tokens        deepseek-chat · contexto 65.536
+flow     39.286
+iris     22.742
+```
+
+É **quase três vezes** o que o modelo aguenta. Por isso a compactação automática
+não consegue recuperar, e o Nicholson perdeu **três turnos** — 11h11, 11h13 e
+11h36 — recebendo:
+
+> *"Auto-compaction could not recover this turn. Please try again, use /compact,
+> or use /new to start a fresh session."*
+
+Ele teve que repetir a pergunta. Numa das vezes, digitou de novo palavra por
+palavra.
+
+### 2. `agents.defaults.compaction` não está configurado
+
+O próprio gateway diz o que fazer na mensagem de erro —
+`reserveTokensFloor` para 20000 ou mais — e a seção **não existe** na config.
+Conferido no `config.get`.
+
+### 3. A mensagem de erro pede comando de terminal a quem está numa tela
+
+`/compact` e `/new` não são coisas que se digitam num chat de navegador. Foi
+exatamente assim que, em 15/08, ele digitou `/new to start a fresh session` como
+mensagem — e o agente respondeu ao texto.
+
+⚠️ **O botão "Nova conversa" já resolve isso** desde ontem, e ele não sabe que
+existe nem que é para usar quando isso aparece.
+
+---
+
+## B. Entrega de arquivo — ele pediu três vezes e não recebeu
+
+### 4. ⚠️ O agente entrega num caminho que ninguém alcança, e acha que anexou
 
 ```
 **MEDIA:/root/.openclaw/workspace-atlas/relatorio_oportunidades_paradas.html**
 ```
 
-Isso é o disco da **VPS do gateway**. O CEO não tem acesso, a tela não renderiza
-`MEDIA:` como anexo, e o agente **acredita que anexou** — escreveu *"o arquivo
-está pronto e anexado aqui na conversa — é só baixar pelo anexo"*.
+Disco da **VPS do gateway**. A tela não renderiza `MEDIA:` como anexo. E ele
+escreveu *"o arquivo está pronto e anexado aqui na conversa — é só baixar pelo
+anexo"*, o que é falso.
 
-Ele repetiu com o PDF às 10:58 e de novo às 10:59.
+Repetiu com o PDF às 10h58 e de novo às 10h59.
 
-**O caminho certo já existe e ele não sabe usar.** Construímos em 19/08 o
-`generated-documents` (bucket privado, registro em `generated_documents`,
-aparece em Documentos) e o agente só tem a ferramenta `relatorio_vendedores`,
-que gera **uma** planilha específica. Falta uma ferramenta genérica: *"salve este
-conteúdo como documento de quem pediu"*.
+### 5. Falta a ferramenta genérica de salvar documento
 
-Ele chegou a **oferecer isso**: *"Registrar em Documentos no HS.OS — posso fazer
-agora, é só confirmar"*. Não pode. Prometeu o que não tem.
+O caminho certo **existe desde 19/08** — `generated-documents`, bucket privado,
+aparece em Documentos. O Atlas só tem `relatorio_vendedores`, que gera **uma**
+planilha específica.
 
-### 5. ⚠️ Dois turnos perdidos por compactação
+Ele chegou a oferecer: *"Registrar em Documentos no HS.OS — posso fazer agora, é
+só confirmar."* **Não pode.** Prometeu o que não tem.
 
-Às 11:11 e 11:13, a duas perguntas diferentes:
-
-> *"Auto-compaction could not recover this turn. Please try again, use /compact,
-> or use /new to start a fresh session. To prevent this, increase your compaction
-> buffer by setting `agents.defaults.compaction.reserveTokensFloor` to 20000 or
-> higher."*
-
-O gateway **disse o que fazer** e ninguém fez: `agents.defaults.compaction`
-**não está configurado** — conferido no `config.get`. O `atlas` herda o padrão.
-
-Ele teve que repetir a pergunta. E a mensagem pede ao CEO que digite `/compact`
-ou `/new`, comandos de terminal que não fazem sentido para quem está numa tela —
-foi assim que ele digitou `/new to start a fresh session` como mensagem em 15/08.
-
-### 6. ⚠️ O agente tentou instalar pacote no sistema
+### 6. Tentou instalar pacote na VPS do gateway
 
 > *"Não tenho permissão para instalar pacotes no sistema."*
 
-Ele tentou resolver o PDF instalando algo na VPS do gateway. A recusa veio do
-sistema, não de uma regra nossa. Vale decidir se isso deve ser **proibido no
-arquivo dele**, porque hoje só não aconteceu por falta de permissão.
-
-### 7. Uma limitação real do CRM que ele reportou bem
-
-> *"O CRM não registra reunião como tipo de atividade — os tipos usados são todos
-> de sistema. Reunião é medida pela entrada do card na Aquisição."*
-
-E: **canal "Indicação" existe no cadastro e tem 0 registros** em agosto —
-Inbound 65, Base 18, Outbound 10. Não é defeito do agente; é dado que o comercial
-talvez queira olhar.
+A recusa veio do sistema operacional, não de uma regra nossa. Hoje só não
+aconteceu por falta de permissão — vale decidir se proíbe no arquivo dele.
 
 ---
 
-## Ordem sugerida para a próxima sessão
+## C. Ruído — metade do que ele leu era bastidor
 
-1. **Ferramenta de documento genérica** (item 4) — é o que o CEO pediu três vezes
-   e recebeu não três vezes. Reusa tudo que já existe.
-2. **`compaction.reserveTokensFloor`** (item 5) — uma linha de config, e o
-   gateway já disse qual é.
-3. Decidir sobre instalar pacote (item 6).
-4. Levar o canal "Indicação" (item 7) para o Nicholson ou o comercial.
+### 7. ⚠️ 26 das 51 mensagens do dia são narração, não resposta
+
+`"Vou consultar…"`, `"Tenho os dados. Vou consolidar…"`, `"Preciso entender
+quais SDRs estão ativos…"`, `"O count por created_at deu números muito baixos…"`.
+
+O corte de bastidor de 19/08 mantém só o turno final — mas **cada narração
+intermediária está virando uma mensagem separada**, e não uma parte descartável
+do mesmo turno. Por isso 20 perguntas viraram 44 respostas.
+
+**Isto ainda não foi diagnosticado**, e é o item que mais muda a experiência
+dele. Provável suspeito: o `agent.wait` retornando por etapa e não por execução,
+com a tela gravando a cada retorno.
+
+### 8. Ele é comentado em terceira pessoa, na frente dele
+
+> *"O CEO quer o número de receita em que pode confiar para este mês."*
+> *"O CEO pede desempenho dos vendedores. Antes de responder qualquer coisa…"*
+> *"O usuário agora quer as atividades do pessoal de serviços."*
+
+Quatro vezes hoje. A regra de não comentar sobre quem fala existe desde 19/08 e
+não pegou nesse formato.
+
+### 9 e 10. Duplicação e texto de compactação ✅ corrigidos, ⚠️ não em produção
+
+Resposta idêntica gravada duas vezes (10h56, 10h59, 12h27) e artefatos
+`NO_REPLY` / `pre-compaction` chegando à tela. **Consertados em `33fbf37`** — mas
+produção está atrás, então **continuam acontecendo para ele**.
+
+---
+
+## D. Produção está três commits atrás
+
+```
+produção  a8ae2dc
+main      d5bc7e6
+```
+
+Falta subir o backend com os consertos de duplicação e de texto de controle.
+Enquanto não subir, os itens 9 e 10 seguem visíveis para ele.
+
+---
+
+## Ordem sugerida
+
+1. **Deploy do backend** — dois defeitos já corrigidos esperando.
+2. **`compaction.reserveTokensFloor`** — uma linha, e o gateway já disse qual.
+3. **Ferramenta genérica de documento** — fecha o que ele pediu três vezes.
+4. **Investigar as 44 respostas para 20 perguntas** (item 7) — é o maior ruído.
+5. Contar a ele do botão "Nova conversa", e decidir sobre instalar pacote.
+
+## O que funcionou e vale registrar
+
+- As skills novas foram abertas e usadas: funil de vendas, de serviços e a de
+  relatório. As réguas seguraram.
+- O Flow respondeu quatro perguntas seguidas sobre financeiro, laboratório e
+  expedição **sem um tropeço** — sessão de 39 mil tokens, um quinto da do Atlas.
+- A Iris recusou responder "me fala dos vendedores" por ambiguidade legítima
+  (*"que equipe? depende de…"*) em vez de chutar.
 
 ## Notas relacionadas
 
 - [`CONFERIR-NA-VOLTA.md`](CONFERIR-NA-VOLTA.md) — o placar do que ele já pediu
-- [`ROADMAP-AGENTES-2026-08-19.md`](ROADMAP-AGENTES-2026-08-19.md)
