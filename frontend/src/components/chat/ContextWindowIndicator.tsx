@@ -1,7 +1,7 @@
 import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { getContextWindowFor, getModelLabel, DEFAULT_CONTEXT_WINDOW } from "@/lib/model-pricing";
+import { getContextWindowFor, getModelLabel } from "@/lib/model-pricing";
 import { useGatewayModels } from "@/hooks/use-gateway-models";
 import { getModelOverride, MODEL_OVERRIDE_EVENT } from "@/lib/agent-model-override";
 
@@ -86,7 +86,17 @@ export function ContextWindowIndicator({ agentId, actions }: Props) {
       if (!alive) return;
       const r: any = row;
       if (error || !r) {
-        setData({ contextTokens: 0, contextWindow: DEFAULT_CONTEXT_WINDOW, cacheRead: 0, cacheWrite: 0, estimatedCost: 0, model: null, snapshotAt: null });
+        // ⚠️ **Sem medição, esconde — não inventa zero.** Este ramo montava um
+        // snapshot com `contextTokens: 0`, e o badge passava a dizer
+        // "contexto 0%" com bolinha verde. Como a tabela por trás nunca foi
+        // preenchida (o endpoint que a enchia não tinha um único chamador), esse
+        // era o estado PERMANENTE de todo agente, para todo mundo: um número
+        // tranquilizador e falso, no cabeçalho, o dia inteiro.
+        //
+        // Zero é uma afirmação — "a janela está vazia" — e nós não sabíamos
+        // disso. `null` cai no ramo de baixo, que esconde o badge e mantém o
+        // seletor de modelo no lugar.
+        setData(null);
         return;
       }
       const model = (r.model ?? null) as string | null;

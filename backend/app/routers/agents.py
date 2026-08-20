@@ -2593,6 +2593,11 @@ async def contexto(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
     conversou. A tela esconde o indicador nesse caso, então um 404 só criaria
     ruído para o estado normal de quem acabou de chegar.
     """
+    # ⚠️ **A sessão de QUEM PERGUNTA, não a mais recente do agente.** O agente
+    # tem sessão de cron, de sistema e uma por pessoa; ordenar por `updated_at`
+    # entregava o contexto do briefing das 07h30 para quem estava conversando.
+    # O `ORDER BY` no fim é só o recuo para quem ainda não tem sessão própria.
+    minha = f"agent:{agent_id}:hsos-{usuario.id}"
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
             """
@@ -2600,10 +2605,10 @@ async def contexto(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
                    to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS updated_at
               FROM public.agent_context_state
              WHERE agent_id = $1
-             ORDER BY updated_at DESC
+             ORDER BY (session_key = $2) DESC, updated_at DESC
              LIMIT 1
             """,
-            agent_id,
+            agent_id, minha,
         )
     return dict(linha) if linha else None
 

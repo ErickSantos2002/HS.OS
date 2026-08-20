@@ -138,6 +138,32 @@ async def rondar_uma_vez() -> dict:
                 olhadas += 1
                 usado = s.get("totalTokens") or 0
 
+                # ⚠️ **O indicador de contexto da tela lia um espelho que ninguém
+                # enchia.** `public.agent_context_state` só era escrita por
+                # `POST /uso/varrer-contexto`, endpoint sem um único chamador em
+                # todo o repositório — mesma doença dos crons. A tabela tinha
+                # zero linhas desde sempre e o cabeçalho do chat mostrava
+                # "contexto 0%" para todo mundo, o tempo inteiro.
+                #
+                # ⚠️ **E a janela NÃO é o `contextTokens` do gateway.** Aquele
+                # campo volta 1.048.576 em TODAS as sessões, idêntico — é um
+                # teto genérico, não a janela do modelo deste agente (65.536 no
+                # deepseek). Usá-lo como denominador daria 2% onde o certo é 35%.
+                # A janela boa é a do `models.list`, que este laço já resolveu.
+                if usado > 0:
+                    await conn.execute(
+                        """INSERT INTO public.agent_context_state
+                               (session_key, agent_id, model, total_tokens,
+                                context_tokens, updated_at)
+                           VALUES ($1, $2, $3, $4, $5, now())
+                           ON CONFLICT (session_key) DO UPDATE SET
+                               agent_id = EXCLUDED.agent_id,
+                               model = EXCLUDED.model,
+                               total_tokens = EXCLUDED.total_tokens,
+                               context_tokens = EXCLUDED.context_tokens,
+                               updated_at = now()""",
+                        chave, partes[1], s.get("model"), usado, limite)
+
                 # Já passou da janela: compactar não vai adiantar. Se é sessão
                 # sem dono, arquivar é o único jeito de o próximo
                 # `sessions_send` funcionar. O `sessions.delete` do gateway
