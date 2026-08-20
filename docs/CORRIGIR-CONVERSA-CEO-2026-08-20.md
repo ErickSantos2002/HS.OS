@@ -96,9 +96,24 @@ O corte de bastidor de 19/08 mantém só o turno final — mas **cada narração
 intermediária está virando uma mensagem separada**, e não uma parte descartável
 do mesmo turno. Por isso 20 perguntas viraram 44 respostas.
 
-**Isto ainda não foi diagnosticado**, e é o item que mais muda a experiência
-dele. Provável suspeito: o `agent.wait` retornando por etapa e não por execução,
-com a tela gravando a cada retorno.
+✅ **Diagnosticado e fechado em 20/08.** O suspeito que eu tinha — `agent.wait`
+retornando por etapa — está **errado**: medido ao vivo, ele devolve `status: ok`
+com `endedAt` na primeira chamada, esperando a execução inteira. E o front envia
+uma vez só e faz polling; não reenvia.
+
+A causa eram os **usuários sintéticos da compactação**. Cada compactação insere
+`Continue the OpenClaw runtime event.` com `role: "user"`, e o `/recuperar`
+tratava isso como pergunta de gente, abrindo uma janela nova. A pergunta das
+11h38 veio logo depois de três compactações seguidas (11h11, 11h13, 11h36) — por
+isso ela sozinha virou quatro mensagens.
+
+Somado à duplicação do `/reply`, dá a razão de **2,0 respostas por pergunta**
+medida no dia dele. Os dois consertos entraram em `33fbf37`; refeito o mesmo tipo
+de pergunta pelo caminho real depois do deploy, a razão é **1:1**.
+
+⚠️ **Não deu para reconstituir a sequência original**: a sessão do gateway já
+tinha sido compactada e restaram 65 mensagens. O que sustenta o diagnóstico é a
+reprodução pelo caminho real, não a arqueologia.
 
 ### 8. Ele é comentado em terceira pessoa, na frente dele
 
