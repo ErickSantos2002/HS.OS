@@ -39,6 +39,7 @@ import os
 from app.database import sessao
 from app.gateway import config as cfg
 from app.gateway.client import ErroGateway, obter_cliente
+from app.guardiao_briefings import conferir as conferir_briefings
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +186,14 @@ async def rondar_uma_vez() -> dict:
                 await conn.execute("SELECT pg_advisory_unlock($1)", _TRAVA)
             except Exception:  # noqa: BLE001
                 logger.debug("Vigia: a trava cai com a conexão.")
+
+    # ⚠️ **Disparar o cron não é o mesmo que o briefing existir.** Um agente que
+    # estoura o contexto no meio não deixa rastro: nenhum documento, nenhum erro
+    # na tela. Quem confere o efeito é o guardião, que roda na mesma ronda.
+    try:
+        await conferir_briefings(cliente)
+    except Exception:  # noqa: BLE001
+        logger.exception("Vigia: o guardião dos briefings falhou; segue.")
 
     # O estado de um envio vive minutos; a linha em `agent_runs` fica para sempre
     # se ninguém a varrer. Uma semana é folga larga sobre isso e ainda deixa a
