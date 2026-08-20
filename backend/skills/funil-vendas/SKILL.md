@@ -45,18 +45,62 @@ papel está em `users.role_id` → `roles.name`.
 
 ### "Quantas reuniões o SDR agendou?"
 
-É o card **entrando na Aquisição**, com o SDR registrado:
+⚠️ **Esta pergunta tem UMA resposta certa, e ela é a da tela do CRM.** Existe um
+"Ranking SDR · Reuniões Agendadas" no dashboard do HSGrowth, o time olha para
+ele, e é com ele que a sua resposta tem que bater. Qualquer outra contagem
+plausível — e há várias — vai divergir do que a pessoa tem na frente dela.
+
+Em 20/08/2026 esta seção dizia outra coisa e produziu o estrago: o CEO recebeu
+**16** às 11h39 e **22** às 12h04, para a mesma pergunta, no mesmo dia, enquanto
+a tela dele mostrava **17**. Nenhum dos dois batia.
+
+A régua é `report_service.py` do HSGrowth (`top_sdrs_by_meetings`), e são
+**quatro** condições:
+
+1. Conta **entrada na lista `Agendado`** (`lists.id = 26`, board **Prospecção**),
+   lida em `card_list_history` — é passagem, não estado atual.
+2. Atribui pelo **`cards.sdr_id`**, nunca por quem moveu o card nem pelo
+   responsável.
+3. **`count(DISTINCT card_id)`** — card que voltou para "Agendado" conta uma vez.
+4. ⚠️ **Desconta no-show.** Entrada cujo card tem uma `card_tasks` com
+   `is_noshow = true` concluída **em ou depois** da entrada não conta. É esta a
+   condição que quase ninguém adivinha, e é ela que separa o número certo do
+   "quase certo": sem ela agosto/2026 dá Claudia 8, Miguel 7, Karolaine 6; com
+   ela dá **Claudia 7, Karolaine 6, Miguel 5**.
 
 ```sql
-SELECT u.name AS sdr, count(*) AS agendadas
-  FROM public.cards c
+WITH noshow AS (
+  SELECT clh.id
+    FROM public.card_list_history clh
+    JOIN public.card_tasks ct
+      ON ct.card_id = clh.card_id
+     AND ct.is_noshow = true
+     AND ct.completed_at >= clh.entered_at
+   WHERE clh.list_id = 26
+)
+SELECT u.name AS sdr, count(DISTINCT clh.card_id) AS agendadas
+  FROM public.card_list_history clh
+  JOIN public.cards c ON c.id = clh.card_id
   JOIN public.users u ON u.id = c.sdr_id
- WHERE c.sdr_id IS NOT NULL
-   AND COALESCE(c.is_deleted, false) = false
-   AND c.acquisition_entry_date >= DATE :inicio
-   AND c.acquisition_entry_date <  DATE :fim
- GROUP BY 1 ORDER BY 2 DESC;
+ WHERE clh.list_id = 26
+   AND c.sdr_id IS NOT NULL
+   AND clh.entered_at::date >= DATE :inicio
+   AND clh.entered_at::date <= DATE :fim
+   AND clh.id NOT IN (SELECT id FROM noshow)
+ GROUP BY u.id, u.name ORDER BY 2 DESC;
 ```
+
+⚠️ **O intervalo é fechado nos dois lados** (`>=` e `<=` sobre `entered_at::date`),
+igual ao CRM. Trocar por `< fim` muda o número do dia corrente.
+
+⚠️ **Reunião agendada NÃO é entrada na Aquisição.** São coisas diferentes e o
+`acquisition_entry_date` responde a outra pergunta — quando o vendedor recebeu o
+card. Usá-lo aqui foi o erro de 11h39.
+
+⚠️ **Se o seu número não bater com a tela, o errado é o seu.** Antes de entregar,
+confira se a diferença não é só o relógio: card que entra em "Agendado" depois da
+hora em que a pessoa olhou a tela aparece para você e não para ela. Foi o que
+aconteceu com a Karolaine em 20/08 — 5 às 12h07, 6 às 15h07.
 
 ⚠️ **`sdr_id` é quem prospectou; `assigned_to_id` é o vendedor dono do card.** São
 pessoas diferentes e colunas diferentes — trocar as duas troca o mérito de lugar.
@@ -111,7 +155,7 @@ Valor do negócio é `cards.value`; a data de fechamento é `cards.closed_at`.
 | coluna | o que é |
 |---|---|
 | `prospection_entry_date` | quando entrou na Prospecção |
-| `acquisition_entry_date` | quando entrou na Aquisição — **é a data da reunião agendada** |
+| `acquisition_entry_date` | quando entrou na Aquisição — é o **repasse ao vendedor**, ⚠️ **não** a data da reunião agendada |
 | `closed_at` | quando foi ganho ou perdido |
 
 Para "quanto tempo leva do lead ao fechamento", use essas três. Para tempo
