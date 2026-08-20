@@ -480,6 +480,38 @@ def _texto_da_resposta(mensagens: list, desde_seq: int) -> str:
     texto.** Agente que responde e só depois chama uma ferramenta é raro, mas
     engolir a resposta dele seria pior que mostrar bastidor.
     """
+    # ⚠️ **O turno do agente carrega texto de controle, e ele vazou para o CEO.**
+    #
+    # Em 20/08/2026 o Nicholson recebeu, dentro da conversa:
+    #   · "This is a pre-compaction memory flush. Let me capture durable
+    #      memories to disk." — em inglês, no meio de um pedido de PDF;
+    #   · "Memória registrada. Nada mais a reportar nesta sessão."
+    #   · o token "NO_REPLY", que é justamente o sinal de NÃO responder.
+    #
+    # São efeitos da compactação de contexto do gateway: ele pede ao agente que
+    # salve memória, e a resposta a esse pedido interno vira mensagem na tela.
+    # Nenhuma delas é resposta a quem perguntou.
+    #
+    # O `NO_REPLY` é removido do texto em vez de descartar o bloco inteiro:
+    # em 10:59:31 ele veio COLADO na resposta de verdade, e jogar fora o bloco
+    # levaria a resposta junto.
+    # ⚠️ **Padrão, não frase fixa.** A primeira versão listava a frase em inglês
+    # e escapou a variante em português ("Este é um novo turning de memória
+    # pre-compaction"), que chegou ao CEO no turno seguinte. O que é estável nas
+    # duas é o termo `pre-compaction`; a redação em volta muda com o modelo.
+    _CONTROLE = re.compile(
+        r"pre-?compaction|memory flush|durable memories"
+        r"|mem[oó]ria registrada\.\s*nada mais a reportar",
+        re.I)
+
+    def _limpar_controle(t: str) -> str:
+        limpo = "\n".join(l for l in t.splitlines() if l.strip() != "NO_REPLY")
+        # Bloco que é SÓ controle sai; bloco que mistura controle e conteúdo
+        # perde apenas as linhas de controle — em 10:59:31 o artefato veio
+        # colado na resposta de verdade, e descartar o bloco levaria a resposta.
+        linhas = [l for l in limpo.splitlines() if not _CONTROLE.search(l)]
+        return "\n".join(linhas).strip()
+
     def _texto(m) -> list[str]:
         conteudo = m.get("content")
         if isinstance(conteudo, str):
@@ -493,13 +525,35 @@ def _texto_da_resposta(mensagens: list, desde_seq: int) -> str:
     novas = [m for m in mensagens
              if (s := _seq(m)) is not None and s > desde_seq]
 
-    # `toolCall` e `toolResult` marcam onde o agente ainda estava trabalhando.
-    corte = max(((_seq(m) or 0) for m in novas
-                 if m.get("role") in ("toolCall", "toolResult")), default=0)
+    # O corte é a última fronteira: ferramenta, compactação ou pedido do runtime.
+    #
+    # ⚠️ **A compactação de contexto tem forma fixa e é ela que vazava.** O
+    # gateway insere `role: "system"` com "Compaction", depois um usuário
+    # SINTÉTICO — "Continue the OpenClaw runtime event." — e o agente responde
+    # a esse pedido interno. Essa resposta não é para quem perguntou, e foi o
+    # que o CEO leu em 20/08/2026: "pre-compaction memory flush", "Memória
+    # registrada. Nada mais a reportar", "Nothing new to add beyond what's
+    # already captured".
+    #
+    # Filtrar por frase não funciona — três redações diferentes em dois turnos,
+    # em dois idiomas. A fronteira é estrutural e não muda.
+    _SINTETICO = "continue the openclaw runtime event"
+
+    def _fronteira(m) -> bool:
+        if m.get("role") in ("toolCall", "toolResult", "system"):
+            return True
+        if m.get("role") == "user":
+            c = m.get("content")
+            t = c if isinstance(c, str) else " ".join(
+                b.get("text", "") for b in (c or []) if isinstance(b, dict))
+            return _SINTETICO in (t or "").strip().lower()
+        return False
+
+    corte = max(((_seq(m) or 0) for m in novas if _fronteira(m)), default=0)
 
     def _juntar(msgs) -> str:
-        partes = [t for m in msgs for t in _texto(m)]
-        return "\n\n".join(p.strip() for p in partes if p.strip())
+        partes = [_limpar_controle(t) for m in msgs for t in _texto(m)]
+        return "\n\n".join(p for p in partes if p)
 
     assistentes = [m for m in novas if m.get("role") == "assistant"]
     return _juntar([m for m in assistentes if (_seq(m) or 0) > corte]) or _juntar(assistentes)
@@ -537,10 +591,26 @@ def _janelas_por_pergunta(mensagens: list) -> list[tuple[int, list]]:
     uma linha em `conversations`, e é a mesma que o `/reply` grava no caminho
     normal — só que aqui reconstruída depois do fato.
     """
+    # ⚠️ **Usuário SINTÉTICO não abre janela.** O gateway insere
+    # "Continue the OpenClaw runtime event." depois de cada compactação, e ele
+    # tem `role: "user"` como qualquer pergunta. Tratado como pergunta de gente,
+    # ele abria uma janela própria — e a resposta do agente àquele pedido
+    # interno virava uma mensagem sozinha na conversa. Foi assim que os avisos
+    # de compactação voltaram ao histórico do CEO três vezes, mesmo depois de
+    # apagados: o `/recuperar` os reimportava a cada abertura da tela.
+    #
+    # Somado ao pedido, ele fica na janela anterior e o corte por fronteira
+    # (ver `_texto_da_resposta`) o descarta junto com o resto do bastidor.
+    def _sintetico(m) -> bool:
+        c = m.get("content")
+        t = c if isinstance(c, str) else " ".join(
+            b.get("text", "") for b in (c or []) if isinstance(b, dict))
+        return "continue the openclaw runtime event" in (t or "").strip().lower()
+
     grupos: list[list] = []
     atual: list = []
     for m in mensagens:
-        if m.get("role") == "user":
+        if m.get("role") == "user" and not _sintetico(m):
             if atual:
                 grupos.append(atual)
             atual = []
@@ -707,6 +777,21 @@ async def enviar(
     return EnvioOut(run_id=run_id)
 
 
+# ⚠️ **Uma trava por `run_id`, e a resposta já gravada.**
+#
+# A tela chama `/reply` em laço e a espera segura 20 segundos, então duas
+# chamadas do MESMO run ficam em voo ao mesmo tempo. Como o `pop` do
+# `_SEQ_DO_RUN` só acontecia depois do INSERT, as duas passavam pela conferência,
+# esperavam juntas e **gravavam a mesma resposta duas vezes**. Aconteceu com o
+# CEO em 20/08/2026: duas mensagens idênticas de 776 caracteres, no mesmo
+# segundo.
+#
+# A trava serializa; a memória do que já foi gravado faz a segunda chamada
+# devolver a MESMA mensagem em vez de inserir outra. As duas são memória de
+# processo, como o `_SEQ_DO_RUN` — reinício do backend perde e a tela reenvia.
+_TRAVA_DO_RUN: dict[str, asyncio.Lock] = {}
+_RESPOSTA_DO_RUN: dict[str, "MensagemOut"] = {}
+
 # Memória de processo: qual era o `seq` da sessão quando cada run começou. Cabe
 # aqui porque só vive entre o envio e a resposta, que é questão de segundos.
 # Se o backend reiniciar no meio, a espera devolve `erro` e a tela reenvia — o
@@ -786,6 +871,10 @@ async def resposta(
     Devolve `executando` quando o tempo de espera acaba antes do agente — é o
     sinal para a tela chamar de novo. Chamar repetidamente é o uso normal.
     """
+    # Já respondida por outra chamada em voo? Devolve a mesma, sem gravar de novo.
+    if (pronta := _RESPOSTA_DO_RUN.get(run_id)) is not None:
+        return RespostaOut(status="pronta", message=pronta)
+
     registro = _SEQ_DO_RUN.get(run_id)
     if registro is None:
         raise HTTPException(
@@ -800,49 +889,56 @@ async def resposta(
     if not c.configurado:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
 
-    espera = obter_cliente_de_espera(c.url, c.token)
-    try:
-        r = await espera.chamar("agent.wait", {"runId": run_id, "timeoutMs": _ESPERA_MS})
-    except ErroGateway as e:
-        return RespostaOut(status="erro", detalhe=str(e))
+    # A trava serializa as chamadas do mesmo run; a conferência de dentro pega
+    # quem entrou na fila antes de a primeira gravar.
+    async with _TRAVA_DO_RUN.setdefault(run_id, asyncio.Lock()):
+        if (pronta := _RESPOSTA_DO_RUN.get(run_id)) is not None:
+            return RespostaOut(status="pronta", message=pronta)
 
-    if r.get("status") == "timeout":
-        # `timeoutPhase: queue` com `providerStarted: false` significa que o
-        # gateway nem começou — pode ser fila ou run que já não existe. Nos dois
-        # casos a tela pergunta de novo; o limite de tentativas é dela.
-        return RespostaOut(status="executando")
+        espera = obter_cliente_de_espera(c.url, c.token)
+        try:
+            r = await espera.chamar("agent.wait", {"runId": run_id, "timeoutMs": _ESPERA_MS})
+        except ErroGateway as e:
+            return RespostaOut(status="erro", detalhe=str(e))
 
-    cliente = obter_cliente(c.url, c.token)
-    try:
-        hist = await cliente.chamar("chat.history", {"sessionKey": chave, "limit": 40})
-    except ErroGateway as e:
-        return RespostaOut(status="erro", detalhe=str(e))
+        if r.get("status") == "timeout":
+            # `timeoutPhase: queue` com `providerStarted: false` significa que o
+            # gateway nem começou — pode ser fila ou run que já não existe. Nos dois
+            # casos a tela pergunta de novo; o limite de tentativas é dela.
+            return RespostaOut(status="executando")
 
-    texto = _texto_da_resposta(hist.get("messages") or [], seq_antes)
-    if not texto:
-        return RespostaOut(
-            status="erro",
-            detalhe="O agente terminou sem produzir texto. Pode ter respondido só com "
-            "ferramentas, ou a resposta ficou vazia.",
-        )
+        cliente = obter_cliente(c.url, c.token)
+        try:
+            hist = await cliente.chamar("chat.history", {"sessionKey": chave, "limit": 40})
+        except ErroGateway as e:
+            return RespostaOut(status="erro", detalhe=str(e))
 
-    async with sessao(role="authenticated", user_id=usuario.id) as conn:
-        linha = await conn.fetchrow(
-            f"""
-            INSERT INTO public.conversations (agent_id, user_id, role, content)
-            VALUES ($1, $2::uuid, 'agent', $3)
-            RETURNING {_COLUNAS}
-            """,
-            agent_id, usuario.id, texto,
-        )
-    _SEQ_DO_RUN.pop(run_id, None)
-    saida = _para_saida(linha)
-    # Vai para o próprio usuário: é ele quem tem a conversa aberta, e assim uma
-    # segunda aba do mesmo dono também recebe a resposta.
-    hub.publicar(topico_usuario(usuario.id), "resposta-agente",
-                 {"agent_id": agent_id, "message": saida.model_dump()})
-    logger.info("Resposta de %s gravada (run %s, %d chars)", agent_id, run_id, len(texto))
-    return RespostaOut(status="pronta", message=saida)
+        texto = _texto_da_resposta(hist.get("messages") or [], seq_antes)
+        if not texto:
+            return RespostaOut(
+                status="erro",
+                detalhe="O agente terminou sem produzir texto. Pode ter respondido só com "
+                "ferramentas, ou a resposta ficou vazia.",
+            )
+
+        async with sessao(role="authenticated", user_id=usuario.id) as conn:
+            linha = await conn.fetchrow(
+                f"""
+                INSERT INTO public.conversations (agent_id, user_id, role, content)
+                VALUES ($1, $2::uuid, 'agent', $3)
+                RETURNING {_COLUNAS}
+                """,
+                agent_id, usuario.id, texto,
+            )
+        _SEQ_DO_RUN.pop(run_id, None)
+        saida = _para_saida(linha)
+        _RESPOSTA_DO_RUN[run_id] = saida
+        # Vai para o próprio usuário: é ele quem tem a conversa aberta, e assim uma
+        # segunda aba do mesmo dono também recebe a resposta.
+        hub.publicar(topico_usuario(usuario.id), "resposta-agente",
+                     {"agent_id": agent_id, "message": saida.model_dump()})
+        logger.info("Resposta de %s gravada (run %s, %d chars)", agent_id, run_id, len(texto))
+        return RespostaOut(status="pronta", message=saida)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
