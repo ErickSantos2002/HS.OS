@@ -604,12 +604,32 @@ async def _compactar_e_reenviar(cliente, agent_id: str, chave: str,
     if not pergunta:
         return None
     try:
-        await cliente.chamar("chat.send", {
-            "agentId": agent_id, "sessionKey": chave,
-            "message": "/compact", "idempotencyKey": f"hsos-compact-{uuid4()}"})
-        # O `/compact` é um turno: esperar o gateway assentar antes de refazer a
-        # pergunta evita mandá-la para o meio da compactação.
-        await asyncio.sleep(3)
+        # ⚠️ **`sessions.compact` (RPC) compacta; a mensagem `/compact` não.**
+        # Até 20/08/2026 este trecho mandava "/compact" como mensagem, esperava
+        # três segundos e refazia a pergunta. Medido naquele dia na sessão do
+        # CEO: o `totalTokens` ficou em 182.161 antes e depois da mensagem, e
+        # caiu na primeira chamada do RPC. A mensagem era um turno como outro
+        # qualquer — que, numa sessão estourada, nem chegava a rodar.
+        #
+        # ⚠️ **E não há segunda compactação.** Sessão já compactada devolve
+        # `{"ok": false, "compacted": false, "reason": "Already compacted"}` e
+        # continua do mesmo tamanho. Sem tratar isso, a pergunta era reenviada
+        # para a mesma sessão estourada e voltava o mesmo erro, em laço, até a
+        # tela desistir — foi o que o CEO viu três vezes em 20/08, tendo que
+        # redigitar a pergunta.
+        #
+        # Quando não dá mais para compactar, arquivar a sessão do gateway é o
+        # conserto, e é barato **aqui**: o que a pessoa lê na tela vem do nosso
+        # Postgres, não do gateway. Ela continua vendo a conversa inteira; quem
+        # perde a memória é o agente, que é o preço combinado.
+        r = await cliente.chamar("sessions.compact", {"key": chave})
+        corpo = r.get("payload") or r
+        if not corpo.get("compacted"):
+            await cliente.chamar("sessions.delete", {"key": chave})
+            logger.warning("Sessão %s não compactava mais (%s); arquivei e refiz a pergunta.",
+                           chave, corpo.get("reason"))
+        # Deixa o gateway assentar antes de refazer a pergunta.
+        await asyncio.sleep(2)
         seq = await _ultimo_seq(cliente, chave)
         novo = f"hsos-{uuid4()}"
         await cliente.chamar("chat.send", {

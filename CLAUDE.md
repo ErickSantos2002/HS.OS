@@ -637,6 +637,45 @@ sem sentido a partir do gateway. Enquanto a URL esteve errada, `nina` e `iris` c
 que a ferramenta não aparecia — e o `SOUL.md` das duas mandava usá-la ao detectar tentativa de
 subverter os limites. **Servidor MCP fora do ar não publica ferramenta e não dá erro.**
 
+### Sessão: compactar é prevenção, e a `main` não tem dono
+
+Levantado em 20/08/2026, destravando a `iris` depois que o CEO recebeu "Envio
+desconhecido".
+
+⚠️ **`sessions.compact` existe e funciona; a mensagem `/compact` não.** São
+coisas diferentes: a mensagem é um turno como outro qualquer e numa sessão
+estourada nem chega a rodar. Medido na sessão do CEO — `totalTokens` ficou em
+182.161 antes e depois do `/compact`, e caiu na primeira chamada do RPC. Passei
+uma manhã inteira concluindo errado a partir daquele número parado.
+
+⚠️ **Não há segunda compactação.** Sessão já compactada devolve
+`{"ok": false, "compacted": false, "reason": "Already compacted"}` e continua do
+mesmo tamanho, para sempre. A `agent:iris:main` tinha **três** marcadores de
+`Compaction` e respondia "Context overflow" a "responda apenas: ok". Depois
+desse ponto só `sessions.delete`, que **arquiva** em vez de destruir.
+
+⚠️ **`totalTokens` do `sessions.list` é o tamanho ATUAL do contexto**, não
+consumo acumulado. Três turnos curtos numa sessão nova: 23.416 → 23.450 →
+23.476. Eu li isso errado nos dois sentidos no mesmo dia — primeiro certo,
+depois "corrigindo" para cumulativo. O teste leva trinta segundos.
+
+⚠️ **Sessão travada aparece com `totalTokens` zerado ou nulo**, não com número
+alto: o contador só é atualizado por turno que deu certo. Limiar sozinho não a
+encontra.
+
+⚠️ **A `agent:<id>:main` é onde caem os `sessions_send` entre agentes, e ninguém
+olhava por ela.** A auto-compactação mora no `/reply`, que só roda com alguém
+esperando na tela. A `main` acumulava até travar, e travada **derruba todo
+`sessions_send` para aquele agente** — foi assim que a `nina` disse "deixa eu
+acioná-los em paralelo" e o CEO viu "Envio desconhecido". Hoje quem cuida é
+`app/vigia_sessoes.py`, que compacta no limiar e arquiva a sessão sem dono que
+já passou.
+
+⚠️ **O piso do prompt de um agente nosso é ~23 mil tokens numa janela de 65 mil.**
+Medido com sessão nova respondendo "oi". São os sete arquivos mais **12
+servidores MCP que todos os cinco agentes enxergam** — `tools.deny` está vazio em
+todos, ou seja o escopo de banco por agente descrito acima **não está aplicado**.
+
 ## A regra dos sete arquivos
 
 ⚠️ **O OpenClaw carrega exatamente sete nomes no contexto do agente**: `AGENTS.md`, `SOUL.md`,

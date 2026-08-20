@@ -13,6 +13,7 @@ from app.auth.router import router as auth_router
 from app.config import settings
 from app.escuta_banco import escutar
 from app.coletor_uso import rodar as rodar_coletor
+from app.vigia_sessoes import rodar as rodar_vigia
 from app.database import close_db, init_db
 from app.gateway.client import encerrar_cliente
 from app.routers.agent_export import router as agent_export_router
@@ -65,12 +66,22 @@ async def lifespan(app: FastAPI):
     parar_coletor = asyncio.Event()
     coletor = asyncio.create_task(rodar_coletor(parar_coletor))
 
+    # ⚠️ **A sessão `main` não tem quem olhe por ela.** A auto-compactação mora
+    # no `/reply`, que só roda com alguém esperando resposta na tela; a sessão
+    # que os agentes usam entre si acumula até travar, e travada derruba todo
+    # `sessions_send` para aquele agente. Este vigia compacta antes de estourar
+    # — depois do estouro a compactação recusa. Desligar: `VIGIA_SESSOES_SEGUNDOS=0`.
+    parar_vigia = asyncio.Event()
+    vigia = asyncio.create_task(rodar_vigia(parar_vigia))
+
     yield
 
     parar_escuta.set()
     parar_coletor.set()
+    parar_vigia.set()
     escuta.cancel()
     coletor.cancel()
+    vigia.cancel()
     # A conexão com o gateway é persistente; fechar no shutdown evita deixar
     # socket pendurado no OpenClaw a cada reinício.
     # Antes de tudo: solta os WebSockets abertos, senão o shutdown
