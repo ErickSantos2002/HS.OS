@@ -198,3 +198,46 @@ Enquanto não subir, os itens 9 e 10 seguem visíveis para ele.
 ## Notas relacionadas
 
 - [`CONFERIR-NA-VOLTA.md`](CONFERIR-NA-VOLTA.md) — o placar do que ele já pediu
+
+## "O agente terminou sem produzir texto" — era sintoma, não doença
+
+Apurado em 20/08/2026 lendo o histórico do gateway da sessão da `nina` do CEO,
+depois de o erro aparecer às 14h56. A sequência real:
+
+```
+seq 33  system     Compaction
+seq 34  user       "sim.quero a listagem por cliente, data e valor."
+seq 35  assistant  "⚠️ Auto-compaction could not recover this turn…"
+seq 36  system     Compaction
+seq 37  user       "/compact"        ← mandado pelo nosso código, como mensagem
+seq 38  assistant  "⚙️ Compacted (0 → 15k) • Context 15k/66k (23%)"
+                   ← fim da sessão. A pergunta refeita nunca foi enviada.
+```
+
+Duas coisas que a tela mostrava e o gateway desmente:
+
+⚠️ **A "Auto-compaction" aparece UMA vez no gateway e DUAS na tela.** É gravação
+dobrada — dois `/reply` em voo, em workers diferentes, ambos gravando.
+
+⚠️ **O "sem produzir texto" é o rastro do reenvio que não aconteceu.** O
+`/reply` seguinte procurou texto novo depois do seq 38, não achou, e deu o erro
+genérico.
+
+**As duas têm a mesma raiz, e ela é a memória de processo.** O `_JA_COMPACTOU`
+era um `set` de módulo: o worker que tratou o segundo poll não sabia que o
+primeiro já havia reservado a compactação, então tratou o aviso como resposta
+normal e gravou. Corrigido em `2c05b76`, onde a reserva é um
+`UPDATE … WHERE ja_compactou = false` em `public.agent_runs`.
+
+**Hipótese que testei e descartei:** que o turno virasse vazio por ser todo texto
+de controle (o `_limpar_controle` esvaziaria o bloco). Varri as 8 sessões de
+gente no gateway: **zero** mensagens `assistant` que ficam vazias depois da
+limpeza. Existem 9 mensagens que são só `toolCall` sem texto, mas todas no meio
+de turno, não no fim. Não há defeito a consertar aqui, e por isso não escrevi
+código para ele.
+
+**O que resta como risco de verdade:** turno que de fato termina só com chamada
+de ferramenta. A mensagem atual já diz isso sem inventar causa — "Pode ter
+respondido só com ferramentas, ou a resposta ficou vazia" — e a tela oferece
+"Tentar novamente". Fica assim até aparecer um caso real.
+
