@@ -19,3 +19,7 @@ openpyxl==3.1.5
 # O relatório lê o HSGrowth com psycopg síncrono — é a conexão do script
 # original do Erick, copiado fiel. O resto do backend usa asyncpg.
 psycopg[binary]==3.2.3
+
+# O agente escreve markdown na base de conhecimento e o editor da tela
+# (TipTap) guarda HTML — a conversão acontece em app/routers/mcp_wiki.py.
+markdown==3.7

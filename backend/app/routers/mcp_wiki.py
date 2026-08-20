@@ -51,6 +51,41 @@ _PROTOCOLO = "2024-11-05"
 # O espaço onde o agente pode escrever. Criado sob demanda na primeira escrita.
 _ESPACO_AGENTES = "Documentos dos agentes"
 
+# ⚠️ **A base guarda HTML, não markdown.** O editor da tela é o TipTap e grava
+# `<p>…</p>`; o agente escreve markdown, e sem conversão o documento aparecia com
+# `#`, `**` e `-` literais, tudo num parágrafo só. Foi assim que o briefing da
+# manhã de 20/08/2026 chegou ilegível.
+#
+# A conversão fica aqui, na fronteira do agente, e não na hora de exibir: assim a
+# coluna tem **um** formato só, e a pessoa consegue editar o documento do agente
+# na tela normalmente, como se ela o tivesse escrito.
+#
+# `tables` e `fenced_code` entram porque os briefings usam os dois. `nl2br` NÃO
+# entra: markdown de verdade trata quebra simples como continuação de parágrafo,
+# e ligá-lo transformaria cada linha numa quebra forçada.
+_EXTENSOES_MD = ["tables", "fenced_code", "sane_lists"]
+
+# O que o TipTap sabe representar. Tag fora daqui ele descarta ao carregar, e o
+# conteúdo dentro dela sumiria — melhor não gerar.
+_TAGS_TIPTAP = ("h1", "h2", "h3", "p", "strong", "em", "u", "s", "ul", "ol", "li",
+                "blockquote", "code", "pre", "hr", "br", "a", "table", "thead",
+                "tbody", "tr", "th", "td", "img")
+
+
+def _para_html(texto: str) -> str:
+    """Markdown do agente → HTML que o editor da tela entende.
+
+    Texto que já vem em HTML passa direto: o agente pode ter copiado um
+    documento existente, e converter de novo escaparia as tags.
+    """
+    if not texto:
+        return ""
+    inicio = texto.lstrip()[:40].lower()
+    if inicio.startswith("<") and any(f"<{t}" in inicio for t in _TAGS_TIPTAP):
+        return texto
+    import markdown as _md
+    return _md.markdown(texto, extensions=_EXTENSOES_MD)
+
 _FERRAMENTAS = [
     {
         "name": "documento_listar",
@@ -277,7 +312,7 @@ async def mcp_wiki(
 
         if nome == "documento_criar":
             titulo = str(args.get("titulo") or "").strip()
-            conteudo = str(args.get("conteudo") or "").strip()
+            conteudo = _para_html(str(args.get("conteudo") or "").strip())
             agente = str(args.get("agente") or "").strip() or "desconhecido"
             if not titulo or not conteudo:
                 return _resposta(ident, _texto(
@@ -322,7 +357,7 @@ async def mcp_wiki(
             ))
 
         if nome == "documento_editar":
-            conteudo = str(args.get("conteudo") or "").strip()
+            conteudo = _para_html(str(args.get("conteudo") or "").strip())
             titulo = str(args.get("titulo") or "").strip()
             if not conteudo:
                 return _resposta(ident, _texto("Faltou `conteudo`.", erro=True))
