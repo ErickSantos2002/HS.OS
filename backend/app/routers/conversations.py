@@ -11,6 +11,7 @@ filtro explícito por `user_id` fica assim mesmo: é a regra de negócio (cada u
 a própria conversa), não só a defesa.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -572,6 +573,55 @@ def _texto_da_resposta(mensagens: list, desde_seq: int) -> str:
 _JANELA_ULTIMO_SEQ = 5
 
 
+async def _ultima_pergunta(mensagens: list) -> str:
+    """A última pergunta de gente na sessão — a que precisa ser refeita.
+
+    Ignora o usuário sintético do runtime (`Continue the OpenClaw runtime
+    event.`), que não é pergunta de ninguém.
+    """
+    for m in reversed(mensagens or []):
+        if m.get("role") != "user":
+            continue
+        c = m.get("content")
+        t = c if isinstance(c, str) else " ".join(
+            b.get("text", "") for b in (c or []) if isinstance(b, dict))
+        t = (t or "").strip()
+        if t and "continue the openclaw runtime event" not in t.lower():
+            return t
+    return ""
+
+
+async def _compactar_e_reenviar(cliente, agent_id: str, chave: str,
+                                hist: dict, user_id: str) -> str | None:
+    """Manda `/compact` e refaz a pergunta. Devolve o `runId` novo, ou `None`.
+
+    ⚠️ **A pergunta vem do histórico do gateway, não do nosso banco.** É a mesma
+    sessão que falhou, então é ali que está o texto exato que o agente recebeu —
+    e assim funciona também quando a mensagem do usuário não chegou a ser gravada
+    do nosso lado.
+    """
+    pergunta = await _ultima_pergunta(hist.get("messages") or [])
+    if not pergunta:
+        return None
+    try:
+        await cliente.chamar("chat.send", {
+            "agentId": agent_id, "sessionKey": chave,
+            "message": "/compact", "idempotencyKey": f"hsos-compact-{uuid4()}"})
+        # O `/compact` é um turno: esperar o gateway assentar antes de refazer a
+        # pergunta evita mandá-la para o meio da compactação.
+        await asyncio.sleep(3)
+        seq = await _ultimo_seq(cliente, chave)
+        novo = f"hsos-{uuid4()}"
+        await cliente.chamar("chat.send", {
+            "agentId": agent_id, "sessionKey": chave,
+            "message": pergunta, "idempotencyKey": novo})
+    except (ErroGateway, OSError) as e:
+        logger.warning("Não consegui compactar %s: %s", chave, e)
+        return None
+    _SEQ_DO_RUN[novo] = (agent_id, chave, seq)
+    return novo
+
+
 async def _ultimo_seq(cliente, chave_completa: str) -> int:
     """Maior `seq` já presente na sessão, para saber o que é novo depois."""
     try:
@@ -792,6 +842,30 @@ async def enviar(
 _TRAVA_DO_RUN: dict[str, asyncio.Lock] = {}
 _RESPOSTA_DO_RUN: dict[str, "MensagemOut"] = {}
 
+# ⚠️ **Quando a compactação falha, quem conserta somos nós — não a pessoa.**
+#
+# Decisão do Erick em 20/08/2026, depois de o CEO perder três turnos: o agente
+# pode esquecer parte da conversa, mas quem pergunta não repete pergunta nem
+# aperta botão. O gateway devolvia, como se fosse resposta:
+#
+#     "Auto-compaction could not recover this turn. Please try again, use
+#      /compact, or use /new to start a fresh session."
+#
+# `/compact` e `/new` são comandos de terminal numa tela de navegador — foi assim
+# que ele digitou "/new to start a fresh session" como mensagem em 15/08.
+#
+# Aqui isso vira: compacta, reenvia a mesma pergunta e aponta o run antigo para o
+# novo. A tela continua perguntando pelo run que ela conhece e recebe a resposta
+# de verdade, sem saber que houve manutenção no meio.
+_REDIRECIONA_RUN: dict[str, str] = {}
+
+# Uma tentativa por pergunta. Sem o teto, uma sessão irrecuperável entraria em
+# laço de compactar e reenviar até o fim do mundo.
+_JA_COMPACTOU: set[str] = set()
+
+_FALHA_DE_COMPACTACAO = re.compile(
+    r"auto-?compaction could not recover|não foi possível recuperar.*compacta", re.I)
+
 # Memória de processo: qual era o `seq` da sessão quando cada run começou. Cabe
 # aqui porque só vive entre o envio e a resposta, que é questão de segundos.
 # Se o backend reiniciar no meio, a espera devolve `erro` e a tela reenvia — o
@@ -871,6 +945,13 @@ async def resposta(
     Devolve `executando` quando o tempo de espera acaba antes do agente — é o
     sinal para a tela chamar de novo. Chamar repetidamente é o uso normal.
     """
+    # A tela continua perguntando pelo run que ela conhece; se houve compactação
+    # no meio, seguimos a seta até o run que está de fato respondendo.
+    visitados = set()
+    while (destino := _REDIRECIONA_RUN.get(run_id)) and run_id not in visitados:
+        visitados.add(run_id)
+        run_id = destino
+
     # Já respondida por outra chamada em voo? Devolve a mesma, sem gravar de novo.
     if (pronta := _RESPOSTA_DO_RUN.get(run_id)) is not None:
         return RespostaOut(status="pronta", message=pronta)
@@ -914,6 +995,27 @@ async def resposta(
             return RespostaOut(status="erro", detalhe=str(e))
 
         texto = _texto_da_resposta(hist.get("messages") or [], seq_antes)
+
+        # ⚠️ **A falha de compactação não é resposta: é manutenção nossa.**
+        # Compacta, reenvia a mesma pergunta e aponta este run para o novo. A
+        # tela segue perguntando pelo run antigo e recebe a resposta de verdade.
+        if texto and _FALHA_DE_COMPACTACAO.search(texto) and run_id not in _JA_COMPACTOU:
+            _JA_COMPACTOU.add(run_id)
+            novo = await _compactar_e_reenviar(cliente, agent_id, chave, hist, usuario.id)
+            if novo:
+                _REDIRECIONA_RUN[run_id] = novo
+                _SEQ_DO_RUN.pop(run_id, None)
+                logger.info("Compactei %s e reenviei a pergunta (run %s → %s)",
+                            chave, run_id, novo)
+                return RespostaOut(status="executando")
+            # Não conseguiu compactar: melhor dizer que não deu do que colar na
+            # conversa um texto que manda a pessoa digitar /compact.
+            return RespostaOut(
+                status="erro",
+                detalhe="A conversa ficou grande demais e eu não consegui reduzi-la "
+                        "sozinho. Comece uma nova conversa no botão acima.",
+            )
+
         if not texto:
             return RespostaOut(
                 status="erro",
