@@ -95,8 +95,23 @@ SELECT c.id, c.title,
 
 ### Tempo numa etapa
 
-O **`card_list_history` cobre card de serviço também** (1.418 passagens). Mesma
-régua do funil de vendas: `entered_at`/`exited_at` por lista.
+⚠️ **NÃO é o `card_list_history`.** Aquela tabela só tem os boards 6 e 7 —
+Prospecção e Aquisição, que são vendas. Um teste meu comparou ids entre tabelas
+diferentes, que colidem, e concluiu que ela cobria serviço; o `atlas` derrubou
+isso no primeiro briefing, conferindo pelo `board_id`. Registro o erro porque a
+consulta enganosa é fácil de repetir.
+
+O histórico de serviço está em **`service_card_activities`**, com
+`activity_type = 'stage_change'` para a troca de etapa e `card_won` para o ganho:
+
+```sql
+SELECT activity_type, count(*) FROM public.service_card_activities GROUP BY 1;
+-- product_added 1564 · card_created 1393 · stage_change 818 · follow_up 561 …
+```
+
+⚠️ **E ele começa em 10/06/2026** — `stage_change` só existe a partir daí, e as
+primeiras semanas são de implantação. Comparar com período anterior a isso é
+comparar com ausência de registro, não com desempenho.
 
 ## Duas armadilhas de configuração
 
@@ -114,8 +129,11 @@ vendas. "Quando fechou" só existe como a entrada na lista de ganho, em
 - **Diga o board.** Sem isso, "ganho" é ambíguo por construção.
 - Quando a pergunta for de cobrança, diga se é **atrasado** ou **a vencer** —
   estão na mesma lista e são conversas comerciais diferentes.
-- A primeira lista da Cobrança tem mais de mil cards. É carteira, não fila do
-  dia: não a apresente como "acúmulo" sem olhar quanto tempo cada um está lá.
+⚠️ **A primeira lista da Cobrança tem mais de mil cards e isso NÃO é acúmulo.**
+  Todos os clientes com aparelho atrasado foram carregados de uma vez, de
+  propósito: ela funciona como **base de oportunidades que gera trabalho**, não
+  como fila do dia que alguém deixou crescer. Chamá-la de gargalo é ler errado o
+  desenho — e é o tipo de conclusão que soa analítica e desinforma.
 
 ## Notas relacionadas
 
