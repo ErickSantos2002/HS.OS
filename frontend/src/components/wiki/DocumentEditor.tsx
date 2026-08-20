@@ -191,11 +191,27 @@ export function DocumentEditor({ document, space, onDeleted }: Props) {
               style={{ fontFamily: "Rajdhani, sans-serif", fontWeight: 700, fontSize: 28, letterSpacing: "-0.01em" }}
               placeholder="Sem título"
             />
-            <div className="mt-1 text-xs text-muted-foreground">
-              Editado por {editorName || "alguém"} {document.updated_at && (
-                <>há {formatDistanceToNow(new Date(document.updated_at), { locale: ptBR })}</>
-              )}
-            </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {document.agent_id ? (
+                  <>
+                    {/* ⚠️ **`created_at`, não `updated_at`.** O briefing é o retrato de
+                        uma manhã: a hora em que o agente o escreveu é o dado. Manutenção
+                        nossa — converter formato, encurtar título — mexe no `updated_at`
+                        e faria a assinatura dizer que ele escreveu numa hora em que não
+                        estava rodando. */}
+                    Escrito por <strong className="font-medium text-foreground">{nomeDoAgente}</strong>
+                    {document.created_at && (
+                      <> · {format(new Date(document.created_at), "dd/MM 'às' HH:mm", { locale: ptBR })}</>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    Editado por {editorName || "alguém"} {document.updated_at && (
+                      <>há {formatDistanceToNow(new Date(document.updated_at), { locale: ptBR })}</>
+                    )}
+                  </>
+                )}
+              </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <span className="text-xs text-muted-foreground min-w-[60px] text-right">

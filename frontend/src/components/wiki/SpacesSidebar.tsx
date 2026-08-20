@@ -448,6 +448,10 @@ function SpaceItem({
                 <button
                   onClick={() => onSelectDoc(space.id, d.id)}
                   onDoubleClick={() => startRename(d)}
+                  {/* Documento recorrente tem o que o distingue no FIM do nome,
+                      e é ali que o `truncate` corta. O hover salva enquanto
+                      houver título longo. */}
+                  title={d.title || "Sem título"}
                   className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left"
                 >
                   {d.is_pinned ? <Pin className="h-3 w-3 shrink-0 fill-primary text-primary" /> : <FileText className="h-3 w-3 shrink-0" />}
