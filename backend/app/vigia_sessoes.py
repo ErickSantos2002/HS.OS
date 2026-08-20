@@ -186,6 +186,17 @@ async def rondar_uma_vez() -> dict:
             except Exception:  # noqa: BLE001
                 logger.debug("Vigia: a trava cai com a conexão.")
 
+    # O estado de um envio vive minutos; a linha em `agent_runs` fica para sempre
+    # se ninguém a varrer. Uma semana é folga larga sobre isso e ainda deixa a
+    # tabela servir para investigar o que aconteceu ontem.
+    async with sessao(role="service_role") as conn:
+        antigas = await conn.fetchval(
+            """DELETE FROM public.agent_runs
+                WHERE criado_em < now() - interval '7 days'
+            RETURNING 1""")
+    if antigas:
+        logger.info("Vigia: limpei envios com mais de 7 dias.")
+
     return {"ok": True, "olhadas": olhadas,
             "compactadas": compactadas, "arquivadas": arquivadas}
 

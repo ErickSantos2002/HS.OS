@@ -638,7 +638,7 @@ async def _compactar_e_reenviar(cliente, agent_id: str, chave: str,
     except (ErroGateway, OSError) as e:
         logger.warning("Não consegui compactar %s: %s", chave, e)
         return None
-    _SEQ_DO_RUN[novo] = (agent_id, chave, seq)
+    await _guardar_run(novo, agent_id, chave, seq, user_id)
     return novo
 
 
@@ -842,10 +842,8 @@ async def enviar(
             status.HTTP_502_BAD_GATEWAY, f"O agente não pôde ser acionado: {e}"
         )
 
-    _SEQ_DO_RUN[run_id] = (agent_id, chave, seq_antes)
-    for _memoria in (_SEQ_DO_RUN, _RESPOSTA_DO_RUN, _TRAVA_DO_RUN,
-                     _REDIRECIONA_RUN, _JA_COMPACTOU):
-        _podar(_memoria)
+    await _guardar_run(run_id, agent_id, chave, seq_antes, usuario.id)
+    _podar(_TRAVA_DO_RUN)
     logger.info("Envio para %s por %s: run %s", agent_id, usuario.id, run_id)
     return EnvioOut(run_id=run_id)
 
@@ -853,66 +851,113 @@ async def enviar(
 # ⚠️ **Uma trava por `run_id`, e a resposta já gravada.**
 #
 # A tela chama `/reply` em laço e a espera segura 20 segundos, então duas
-# chamadas do MESMO run ficam em voo ao mesmo tempo. Como o `pop` do
-# `_SEQ_DO_RUN` só acontecia depois do INSERT, as duas passavam pela conferência,
-# esperavam juntas e **gravavam a mesma resposta duas vezes**. Aconteceu com o
-# CEO em 20/08/2026: duas mensagens idênticas de 776 caracteres, no mesmo
-# segundo.
+# chamadas do MESMO run ficam em voo ao mesmo tempo. Sem serializar, as duas
+# passavam pela conferência, esperavam juntas e **gravavam a mesma resposta duas
+# vezes**. Aconteceu com o CEO em 20/08/2026: duas mensagens idênticas de 776
+# caracteres, no mesmo segundo.
 #
-# A trava serializa; a memória do que já foi gravado faz a segunda chamada
-# devolver a MESMA mensagem em vez de inserir outra. As duas são memória de
-# processo, como o `_SEQ_DO_RUN` — reinício do backend perde e a tela reenvia.
+# ⚠️ **Esta trava é de processo, e isso basta para ela — mas não bastava para o
+# resto.** Com `--workers 2` (`backend/Dockerfile:70`) são dois processos sem
+# memória compartilhada: a trava do worker A não segura o worker B. Quem impede
+# a gravação dupla entre workers é a reserva do `message_id` em
+# `public.agent_runs`, no INSERT — a trava aqui só evita o trabalho repetido
+# dentro do mesmo processo, que é o caso comum.
 _TRAVA_DO_RUN: dict[str, asyncio.Lock] = {}
-_RESPOSTA_DO_RUN: dict[str, "MensagemOut"] = {}
 
-# ⚠️ **Quando a compactação falha, quem conserta somos nós — não a pessoa.**
-#
-# Decisão do Erick em 20/08/2026, depois de o CEO perder três turnos: o agente
-# pode esquecer parte da conversa, mas quem pergunta não repete pergunta nem
-# aperta botão. O gateway devolvia, como se fosse resposta:
-#
-#     "Auto-compaction could not recover this turn. Please try again, use
-#      /compact, or use /new to start a fresh session."
-#
-# `/compact` e `/new` são comandos de terminal numa tela de navegador — foi assim
-# que ele digitou "/new to start a fresh session" como mensagem em 15/08.
-#
-# Aqui isso vira: compacta, reenvia a mesma pergunta e aponta o run antigo para o
-# novo. A tela continua perguntando pelo run que ela conhece e recebe a resposta
-# de verdade, sem saber que houve manutenção no meio.
-_REDIRECIONA_RUN: dict[str, str] = {}
-
-
-# ⚠️ **Memória de processo precisa de teto.** Estes quatro guardam uma entrada por
-# envio e nada os limpa: o `_SEQ_DO_RUN` some no caminho feliz, mas os outros
-# ficam para sempre, e todo caminho de erro deixa rastro. Num backend que roda
-# semanas, isso é vazamento — pequeno por entrada, sem fim no total.
-#
-# Podar por idade exigiria carimbar cada uma; a ordem de inserção do dict já
-# resolve, e o que interessa é sempre o envio recente. Acima do teto, sai o mais
-# antigo — que é justamente o que ninguém vai mais consultar.
+# ⚠️ **Memória de processo precisa de teto.** Uma entrada por envio e nada a
+# limpa. Podar por idade exigiria carimbar cada uma; a ordem de inserção do dict
+# já resolve, e o que interessa é sempre o envio recente.
 _TETO_DE_MEMORIA = 500
 
 
 def _podar(d) -> None:
     while len(d) > _TETO_DE_MEMORIA:
-        if isinstance(d, set):
-            d.pop()
-        else:
-            d.pop(next(iter(d)), None)
+        d.pop(next(iter(d)), None)
 
-# Uma tentativa por pergunta. Sem o teto, uma sessão irrecuperável entraria em
-# laço de compactar e reenviar até o fim do mundo.
-_JA_COMPACTOU: set[str] = set()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# O estado de um envio mora no banco, não na memória — ver `012_runs_no_banco.sql`
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ⚠️ **"Envio desconhecido" quase nunca foi reinício do servidor.** A mensagem
+# dizia isso, e o CEO a recebeu no meio de um pedido em 20/08/2026, tendo que
+# redigitar. O que havia era um dicionário de módulo lido por dois processos:
+# o `POST /enviar` registrava no worker A e o `GET /reply` caía no worker B, que
+# não conhecia o run. Some com deploy, some com o teto acima, e some quando o
+# poll troca de worker — três causas, uma mensagem, e a mensagem culpava a
+# única das três que quase não acontecia.
+
+
+async def _guardar_run(run_id: str, agent_id: str, chave: str,
+                       seq_antes: int, user_id: str) -> None:
+    """Registra o envio. `ON CONFLICT DO NOTHING` porque o `runId` é o nosso
+    `idempotencyKey`: reenvio do mesmo id é o mesmo envio, não um novo."""
+    async with sessao(role="authenticated", user_id=user_id) as conn:
+        await conn.execute(
+            """INSERT INTO public.agent_runs
+                   (run_id, agent_id, session_key, seq_antes, user_id)
+               VALUES ($1, $2, $3, $4, $5::uuid)
+               ON CONFLICT (run_id) DO NOTHING""",
+            run_id, agent_id, chave, seq_antes, user_id)
+
+
+async def _seguir_run(run_id: str, user_id: str):
+    """A linha do run que de fato responde, seguindo a seta da compactação.
+
+    `visitados` não é zelo teórico: `redireciona_para` é escrito por nós e um
+    ciclo travaria o pedido em laço dentro de uma conexão do pool.
+    """
+    visitados: set[str] = set()
+    async with sessao(role="authenticated", user_id=user_id) as conn:
+        while run_id and run_id not in visitados:
+            visitados.add(run_id)
+            linha = await conn.fetchrow(
+                """SELECT run_id, agent_id, session_key, seq_antes,
+                          redireciona_para, ja_compactou, message_id
+                     FROM public.agent_runs WHERE run_id = $1""", run_id)
+            if linha is None:
+                return None
+            if linha["redireciona_para"]:
+                run_id = linha["redireciona_para"]
+                continue
+            return linha
+    return None
+
+
+async def _mensagem_gravada(message_id, user_id: str):
+    """A mensagem que outra chamada já gravou para este run."""
+    async with sessao(role="authenticated", user_id=user_id) as conn:
+        linha = await conn.fetchrow(
+            f"SELECT {_COLUNAS} FROM public.conversations WHERE id = $1", message_id)
+    return _para_saida(linha) if linha else None
+
+
+async def _reservar_compactacao(run_id: str, user_id: str) -> bool:
+    """Uma tentativa de compactar por pergunta, valendo entre os workers.
+
+    O `WHERE ja_compactou = false` faz a reserva ser atômica: quem perder a
+    corrida recebe `False` e não entra no laço de compactar e reenviar.
+    """
+    async with sessao(role="authenticated", user_id=user_id) as conn:
+        return await conn.fetchval(
+            """UPDATE public.agent_runs SET ja_compactou = true
+                WHERE run_id = $1 AND ja_compactou = false
+            RETURNING true""", run_id) or False
+
+
+async def _apontar_run(run_id: str, destino: str, user_id: str) -> None:
+    async with sessao(role="authenticated", user_id=user_id) as conn:
+        await conn.execute(
+            "UPDATE public.agent_runs SET redireciona_para = $2 WHERE run_id = $1",
+            run_id, destino)
+
+
+class _JaGravado(Exception):
+    """Outra chamada gravou a resposta primeiro; desfaz o INSERT desta."""
+
 
 _FALHA_DE_COMPACTACAO = re.compile(
     r"auto-?compaction could not recover|não foi possível recuperar.*compacta", re.I)
-
-# Memória de processo: qual era o `seq` da sessão quando cada run começou. Cabe
-# aqui porque só vive entre o envio e a resposta, que é questão de segundos.
-# Se o backend reiniciar no meio, a espera devolve `erro` e a tela reenvia — o
-# custo de perder isto é baixo, e uma tabela para dado de segundos não se paga.
-_SEQ_DO_RUN: dict[str, tuple[str, str, int]] = {}
 
 # Quanto o gateway segura a conexão por chamada. 20s dá resposta quase imediata
 # na maioria dos turnos e ainda deixa o navegador refazer o pedido antes de
@@ -989,22 +1034,21 @@ async def resposta(
     """
     # A tela continua perguntando pelo run que ela conhece; se houve compactação
     # no meio, seguimos a seta até o run que está de fato respondendo.
-    visitados = set()
-    while (destino := _REDIRECIONA_RUN.get(run_id)) and run_id not in visitados:
-        visitados.add(run_id)
-        run_id = destino
-
-    # Já respondida por outra chamada em voo? Devolve a mesma, sem gravar de novo.
-    if (pronta := _RESPOSTA_DO_RUN.get(run_id)) is not None:
-        return RespostaOut(status="pronta", message=pronta)
-
-    registro = _SEQ_DO_RUN.get(run_id)
+    registro = await _seguir_run(run_id, usuario.id)
     if registro is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            "Envio desconhecido. Pode ter expirado com um reinício do servidor — reenvie a mensagem.",
+            "Não encontrei este envio. Mande a mensagem de novo.",
         )
-    agente_do_run, chave, seq_antes = registro
+    run_id = registro["run_id"]
+
+    # Já respondida por outra chamada em voo? Devolve a mesma, sem gravar de novo.
+    if registro["message_id"] and (pronta := await _mensagem_gravada(
+            registro["message_id"], usuario.id)):
+        return RespostaOut(status="pronta", message=pronta)
+
+    agente_do_run, chave, seq_antes = (
+        registro["agent_id"], registro["session_key"], registro["seq_antes"])
     if agente_do_run != agent_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Este envio é de outro agente.")
 
@@ -1015,7 +1059,9 @@ async def resposta(
     # A trava serializa as chamadas do mesmo run; a conferência de dentro pega
     # quem entrou na fila antes de a primeira gravar.
     async with _TRAVA_DO_RUN.setdefault(run_id, asyncio.Lock()):
-        if (pronta := _RESPOSTA_DO_RUN.get(run_id)) is not None:
+        de_novo = await _seguir_run(run_id, usuario.id)
+        if de_novo is not None and de_novo["message_id"] and (
+                pronta := await _mensagem_gravada(de_novo["message_id"], usuario.id)):
             return RespostaOut(status="pronta", message=pronta)
 
         espera = obter_cliente_de_espera(c.url, c.token)
@@ -1041,12 +1087,11 @@ async def resposta(
         # ⚠️ **A falha de compactação não é resposta: é manutenção nossa.**
         # Compacta, reenvia a mesma pergunta e aponta este run para o novo. A
         # tela segue perguntando pelo run antigo e recebe a resposta de verdade.
-        if texto and _FALHA_DE_COMPACTACAO.search(texto) and run_id not in _JA_COMPACTOU:
-            _JA_COMPACTOU.add(run_id)
+        if (texto and _FALHA_DE_COMPACTACAO.search(texto)
+                and await _reservar_compactacao(run_id, usuario.id)):
             novo = await _compactar_e_reenviar(cliente, agent_id, chave, hist, usuario.id)
             if novo:
-                _REDIRECIONA_RUN[run_id] = novo
-                _SEQ_DO_RUN.pop(run_id, None)
+                await _apontar_run(run_id, novo, usuario.id)
                 logger.info("Compactei %s e reenviei a pergunta (run %s → %s)",
                             chave, run_id, novo)
                 return RespostaOut(status="executando")
@@ -1065,18 +1110,38 @@ async def resposta(
                 "ferramentas, ou a resposta ficou vazia.",
             )
 
-        async with sessao(role="authenticated", user_id=usuario.id) as conn:
-            linha = await conn.fetchrow(
-                f"""
-                INSERT INTO public.conversations (agent_id, user_id, role, content)
-                VALUES ($1, $2::uuid, 'agent', $3)
-                RETURNING {_COLUNAS}
-                """,
-                agent_id, usuario.id, texto,
-            )
-        _SEQ_DO_RUN.pop(run_id, None)
+        # ⚠️ **A reserva do `message_id` é o que impede a resposta dobrada entre
+        # workers.** O INSERT e a reserva vão na MESMA transação: quem perder a
+        # corrida encontra `message_id` já preenchido, levanta `_JaGravado`, e o
+        # rollback desfaz o INSERT — em vez de deixar na conversa uma segunda
+        # mensagem idêntica, que foi o que o CEO recebeu em 20/08.
+        try:
+            async with sessao(role="authenticated", user_id=usuario.id) as conn:
+                async with conn.transaction():
+                    linha = await conn.fetchrow(
+                        f"""
+                        INSERT INTO public.conversations (agent_id, user_id, role, content)
+                        VALUES ($1, $2::uuid, 'agent', $3)
+                        RETURNING {_COLUNAS}
+                        """,
+                        agent_id, usuario.id, texto,
+                    )
+                    ganhou = await conn.fetchval(
+                        """UPDATE public.agent_runs SET message_id = $2
+                            WHERE run_id = $1 AND message_id IS NULL
+                        RETURNING true""",
+                        run_id, linha["id"])
+                    if not ganhou:
+                        raise _JaGravado
+        except _JaGravado:
+            outra = await _seguir_run(run_id, usuario.id)
+            pronta = await _mensagem_gravada(outra["message_id"], usuario.id) if outra else None
+            if pronta:
+                logger.info("Outra chamada já gravou o run %s; devolvendo a dela.", run_id)
+                return RespostaOut(status="pronta", message=pronta)
+            return RespostaOut(status="executando")
+
         saida = _para_saida(linha)
-        _RESPOSTA_DO_RUN[run_id] = saida
         # Vai para o próprio usuário: é ele quem tem a conversa aberta, e assim uma
         # segunda aba do mesmo dono também recebe a resposta.
         hub.publicar(topico_usuario(usuario.id), "resposta-agente",
