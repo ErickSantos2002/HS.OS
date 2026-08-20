@@ -310,10 +310,18 @@ async def mcp_wiki(
                 ))
             return _resposta(ident, _texto(f"# {linha['title']}\n\n{linha['content']}"))
 
+        # ⚠️ **Fora dos ramos de propósito: as DUAS ferramentas de escrita usam.**
+        # Em `f4b9502` esta linha ficou dentro do ramo do `documento_criar` e o
+        # `documento_editar` passou a referenciá-la — `UnboundLocalError`, que
+        # o FastAPI transforma em 500 sem corpo. Resultado: o `documento_editar`
+        # NUNCA funcionou desde aquele commit, e o agente só descobria ao tentar.
+        # Encontrado em 20/08/2026 quando o `atlas` reportou "Internal Server
+        # Error" ao corrigir dois erros de digitação num briefing.
+        agente = str(args.get("agente") or "").strip() or "desconhecido"
+
         if nome == "documento_criar":
             titulo = str(args.get("titulo") or "").strip()
             conteudo = _para_html(str(args.get("conteudo") or "").strip())
-            agente = str(args.get("agente") or "").strip() or "desconhecido"
             if not titulo or not conteudo:
                 return _resposta(ident, _texto(
                     "Faltou `titulo` ou `conteudo`.", erro=True))
