@@ -740,6 +740,33 @@ pergunta passou a devolver o número certo.
 **A conferência de uma skill é a resposta do agente, não a listagem do gateway.** `skills.status`
 mostrando o nome só diz que o arquivo chegou.
 
+## Config compartilhada entre dois sistemas: quem lê define o significado
+
+⚠️ **`MESES_ANALISE` em `tiny.configuracoes` valia `6,7,8` e significava coisas
+diferentes nos dois lados.** O painel do DataCoreHS jogava o valor direto no
+`new Date(ano, mes, 1)` do JavaScript, que conta mês **a partir de zero**, e
+apurava jul/ago/set. A skill `faturamento` usava `extract(month)` do Postgres, que
+é **1-based**, e apurava jun/jul/ago. Mesma chave, mesmo valor, **um mês de
+diferença** — e ninguém percebeu porque cada lado, sozinho, parecia coerente.
+
+O custo: o briefing da manhã saiu dois dias seguidos com **R$ 787 mil a mais** no
+realizado do trimestre e dizendo que faltava **metade** do que faltava de verdade,
+na véspera do fechamento. Corrigido em 21/08/2026 — o valor virou `7,8,9` e o
+`DashboardContext.tsx` passou a fazer `mes - 1`, com filtro `1..12` para
+`10,11,12` não virar janeiro de 2027 em silêncio.
+
+**A lição de método, que é maior que o bug:** a skill mandava conferir a régua
+contra janeiro de 2026, e a conferência **passava** — porque valida a soma de
+vendas e serviços num mês fechado, e passa igual com o trimestre recortado errado.
+Um número errado sobreviveu a **três** conferências com ✅ por isso. Âncora de
+verificação só serve se exercitar exatamente o que pode estar errado; conferir
+outra coisa e dar certo é pior que não conferir, porque dá confiança.
+
+⚠️ **Régua de negócio da HS mora em `~/projetos`, e o sistema de origem é a
+autoridade.** Ao divergir, o número do painel manda — foi ele que apontou o erro
+aqui. Não invente régua: `~/projetos/relatorios-hsgrowth/`,
+`~/projetos/extracao-consultoria/DESIGN.md` e o repo do sistema em questão.
+
 ## Rebrand — o que é dado e o que é hardcoded
 
 Boa parte da marca **já é dinâmica**, vinda da tabela `branding` via `frontend/src/hooks/use-branding.ts`:
@@ -821,10 +848,47 @@ avaliadas com as outras constantes, e trocar por `%s` exigiria mexer na régua.
 ### Agendamento (`cron.*`) — contrato levantado em 19/08/2026
 
 ```
-cron.add    { name, schedule, sessionTarget, agentId, payload }  → { job: {...} }
-cron.list   {}                                                   → { jobs: [...] }
-cron.remove { id }        ⚠️ por `id`, não por `name`
+cron.add    { name, schedule, sessionTarget, agentId, payload }  → o JOB, no topo
+cron.list   { includeDisabled? }                                 → { jobs: [...] }
+cron.get    { id }                                               → o job
+cron.update { id, patch }  ⚠️ é `patch`, não os campos soltos
+cron.remove { id }         ⚠️ por `id`, não por `name`
 ```
+
+⚠️ **`cron.add` devolve o job NO TOPO, e o job tem um campo `payload`.** O
+`chamar()` já entrega o resultado do RPC desembrulhado (`client.py:172`), então o
+idioma `(r.get("payload") or r)` — espalhado pelo backend como desembrulho
+defensivo, 18 ocorrências — aqui encontra o `payload` **do cron**
+(`{kind, message, timeoutSeconds}`) e devolve o objeto errado, sem erro nenhum.
+Em 21/08/2026 isso produziu HTTP 201 com `gateway_job_id` nulo: o job nascia no
+gateway e ficava órfão, sem como desligar nem apagar. O idioma é inofensivo
+quando o resultado não tem `payload` — `cron.list` e `agents.list` são assim —, e
+foi por isso que sobreviveu. **Desconfie dele em todo método cujo resultado seja
+um objeto de domínio, não um envelope.**
+
+Varrido em 21/08/2026, chamando cada método e olhando as chaves do resultado:
+
+| resultado tem `payload` no topo? | métodos |
+|---|---|
+| **⚠️ sim — o idioma devolve o objeto errado** | `cron.add`, `cron.get`, `cron.update` (os três devolvem o **job**) |
+| não — o idioma é inerte | `agents.list`, `agents.files.list`, `agents.files.get`, `config.get`, `models.list`, `models.authStatus`, `skills.status`, `cron.list`, `channels.status`, `sessions.list` |
+
+Ou seja: as 18 ocorrências espalhadas pelo backend **não estão quebradas hoje** —
+todas caem na segunda linha. Não saí trocando, porque mexer em 18 lugares sem
+mudança de comportamento é churn com risco. O que muda é a regra: **método novo
+que devolva um objeto de domínio, use `r` direto e confira as chaves antes.**
+
+⚠️ **`cron.list` sem parâmetro OMITE job desligado.** Levantado em 21/08/2026:
+desligar um agendamento o fazia sumir da lista, e como é ela que a tela mostra, o
+botão de religar sumia junto — porta de mão única com cara de "o toggle apagou o
+job". Com `includeDisabled: true` os 5 jobs viram **11** neste gateway: os
+desligados de propósito e mais quatro disparos de tiro único (`kind: "at"`) que o
+gateway desliga sozinho depois de rodar, e que ninguém via.
+
+⚠️ **`cron.update` não valida o enum de `delivery.mode`.** Um `patch` com
+`{"delivery":{"mode":"isto-nao-existe"}}` passa na validação de params e só falha
+no id. Mesma família do `agents.update` que grava modelo inválido: **releia
+depois de escrever**.
 
 `schedule` é uma união de três formas, e a mensagem de erro nomeia todas:
 `{kind:"at", at:"<ISO>"}` (tiro único, recusa horário no passado),
@@ -846,20 +910,85 @@ ficado um agendamento fantasma apontando para um agente que não existe.
 Levantado em 19/08/2026 porque o painel do `flow` dizia "nenhum agendamento" com
 dois crons rodando:
 
-| onde | quem escreve | linhas |
+| onde | quem escreve | estado hoje |
 |---|---|---|
-| `public.agent_crons` | `POST /agents/{id}/crons` — grava e **nunca** chama o gateway | 0 |
-| `public.cron_jobs` | `POST /coletor/estatisticas`, que um coletor da VPS deveria empurrar e **não empurra** | 0 |
-| `cron.list` do gateway | o próprio gateway | **os reais** |
+| `public.agent_crons` | `POST /agents/{id}/crons` | **espelho real desde 21/08** — a rota agenda no gateway e guarda o `gateway_job_id` |
+| `public.cron_jobs` | `POST /coletor/estatisticas`, que um coletor da VPS deveria empurrar e **não empurra** | 0 linhas, segue morta |
+| `cron.list` do gateway | o próprio gateway | **a verdade** |
 
 O painel lia o espelho vazio. Hoje `GET /agents/{id}/agendamentos-do-gateway`
-pergunta ao `cron.list`, com recuo para a tabela se o gateway estiver fora —
-mostrar o que se sabia é melhor que trocar vazio silencioso por erro.
+pergunta ao `cron.list` **com `includeDisabled`**, com recuo para a tabela se o
+gateway estiver fora — mostrar o que se sabia é melhor que trocar vazio
+silencioso por erro.
 
-⚠️ **`POST /agents/{id}/crons` continua não agendando nada**, e a tela sugere o
-contrário. Quem fala com o gateway é `app/routers/automacoes.py`.
+✅ **`POST /agents/{id}/crons` agenda de verdade desde 21/08/2026** (`b76689c`,
+`69c5f48`, migração `013`). Gateway primeiro, banco depois: se o `cron.add`
+recusar a expressão, nada é gravado. A rota confere o agente no `agents.list`
+antes, porque o `cron.add` não valida `agentId`. O `PATCH` liga/desliga por
+`cron.update` e o `DELETE` remove por `cron.remove`.
 
-**Os briefings da manhã** (19/08/2026) são dois jobs recorrentes: o `flow` às
-07h30 escreve "Operação — briefing de DD/MM/AAAA" na base de conhecimento, e a
-`iris` às 07h35 escreve "Faturamento — briefing de DD/MM/AAAA". Cada um roda em
-`sessionTarget: "isolated"` e usa a skill do seu domínio.
+⚠️ **Antes disso a rota não estava "sendo usada errado" — ela não tinha UM
+chamador.** O hook `use-agent-crons.ts` expunha `addCron`/`toggleCron`/
+`deleteCron` e nenhum era chamado; o `AgentDetailPanel` importava `useAgentCrons`
+e não o usava. A tela mostrava um "+" desabilitado. É a mesma doença da
+`agent_context_state`, que o comentário do vigia já nomeava: *"endpoint sem um
+único chamador em todo o repositório"*. **Ao encontrar uma rota que "não
+funciona", confira primeiro se alguém a chama** — pode não ser bug, pode ser
+código que nunca foi exercido.
+
+⚠️ **O nome do job carrega o id da nossa linha:** `hsos-agentcron-<uuid>`. É o que
+permite à tela saber o que é editável sem buscar duas listas. Cron criado direto
+no gateway (os briefings) aparece e fica read-only.
+
+⚠️ **Nós criamos, o gateway numera.** O `id` do job **não** é o uuid da nossa
+linha — o gateway atribui o dele. Sem guardar o `gateway_job_id` não há como
+editar nem apagar depois.
+
+**Os briefings da manhã** são **cinco** jobs recorrentes em dias úteis, todos em
+`sessionTarget: "isolated"` e usando a skill do seu domínio: `flow` 07h30
+(Operação), `iris` 07h35 (Faturamento), `atlas` 07h40 (Vendedores), 07h45 (SDR) e
+07h50 (Serviços).
+
+⚠️ **`sessionTarget: "isolated"` NÃO é sessão nova a cada execução.** Existe uma
+`agent:<id>:cron:<jobId>` que persiste e acumula entre os dias. Em 21/08/2026 a do
+cron de Serviços estava em 40.588 tokens — 98% da janela útil do `atlas` — e o
+briefing falhava com "Context overflow" todo dia. Ver *A janela útil* abaixo.
+
+⚠️ **`delivery: {mode: "announce"}` sem canal faz TODA execução terminar em
+`error`, mesmo quando o briefing saiu.** Este gateway não tem canal nenhum
+(`channels.status` devolve `channels: {}`), então o announce nunca entregou nada.
+Em 21/08 os cinco jobs reportaram `error` e **quatro tinham funcionado** — o campo
+que deveria ser o sinal de saúde mentia em 80% dos casos. Hoje os cinco estão em
+`{mode: "none"}` ("no runner fallback delivery"), e `error` voltou a significar
+falha de verdade. Os modos são `announce`, `webhook` e `none`.
+
+⚠️ **Por isso o guardião confere o EFEITO, não o status.** `app/guardiao_briefings.py`
+pergunta "o documento existe?" em vez de olhar `lastRunStatus` — se olhasse o
+status, em 21/08 teria refeito os cinco, quatro deles à toa, gastando contexto do
+`atlas`. Ele também **não** usa `includeDisabled`: briefing que alguém desligou de
+propósito não deve ser refeito.
+
+### A janela útil — por que o vigia media errado
+
+⚠️ **Uma execução não estoura na janela do modelo: estoura em
+`janela − reserveTokens`.** O gateway reserva `agents.defaults.compaction.reserveTokens`
+para conseguir compactar, e é esse o teto real.
+
+```
+janela do deepseek-chat            65.536
+− reserveTokens                    24.000
+─────────────────────────────────────────
+janela útil                        41.536   ← estoura aqui
+piso de um agente nosso           ~25.124   ← sete arquivos + ferramentas + skills
+espaço real de conversa           ~16.412
+```
+
+Até 21/08/2026 o `_LIMIAR` do `vigia_sessoes.py` multiplicava a **janela crua**:
+0,65 × 65.536 = 42.598, ou seja **mil tokens depois do ponto de falha**. Isso abria
+uma faixa morta em que a sessão falhava em toda execução e o vigia, olhando o
+denominador errado, achava que ela estava folgada. Hoje é 0,85 × janela útil =
+35.306 — que é **mais cedo**, apesar da fração maior.
+
+⚠️ **Não baixe a fração achando que é mais seguro.** 0,65 sobre a útil daria
+26.998, e com o piso em ~25.124 isso é compactar uma sessão com 1.874 tokens de
+conversa — gastar a única compactação em quem mal começou.

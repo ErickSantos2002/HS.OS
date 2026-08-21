@@ -1,6 +1,6 @@
 # Continuar aqui
 
-Ponto de retomada da portagem. Atualizado em **17/08/2026**. Leia isto, depois
+Ponto de retomada da portagem. Atualizado em **21/08/2026**. Leia isto, depois
 `CLAUDE.md` e `docs/ROADMAP.md`.
 
 👉 **Voltando na segunda (17/08)?** Pule para
@@ -19,6 +19,41 @@ para o básico — túnel, subida, login. Para o que mudou depois, veja
 [*Conferir no navegador*](#conferir-no-navegador) logo abaixo.
 
 ---
+
+## O que aconteceu em 21/08/2026
+
+Dia que começou com "o dia começou certo?" e terminou com **dois defeitos que se
+escondiam bem**: um como ausência, o outro como número exato. O tema é o mesmo de
+14/08 — conferir o efeito, não a configuração — com uma variação nova: **conferir
+a coisa errada e dar certo**.
+
+**A meta do trimestre saía com R$ 787 mil a mais.** `MESES_ANALISE` era lido
+0-based pelo painel do DataCoreHS e 1-based pela skill: mesma chave, trimestres
+diferentes. O briefing dizia 78,6% e faltando R$ 678 mil quando era **53,7% e
+faltando R$ 1,46 milhão**, na véspera do fechamento. Normalizado nos dois lados.
+⚠️ E o número errado tinha ✅ em **três** lugares, incluindo a âncora de
+conferência da própria skill — porque a âncora conferia janeiro, que passa igual
+com o trimestre errado. Ver *Config compartilhada* no `CLAUDE.md`.
+
+**O briefing de Serviços não saía havia dias.** A sessão `cron:<jobId>` do `atlas`
+acumulava entre execuções (`isolated` **não** é sessão nova) e estava em 40.588 de
+uma janela útil de 41.536. O vigia não a via porque media contra a janela crua —
+seu limiar caía **depois** do ponto de falha. Corrigido para `janela − reserveTokens`.
+
+**E o agente gastava o contexto atrás de uma comparação que não existe:** o funil
+de serviços do HSGrowth só entrou em uso em **20–22/07/2026** (antes: 6 cards de
+teste em junho). Não é coleta quebrada — `audit_logs` registrou ~6.000/semana o
+tempo todo. Está escrito na skill `funil-servicos` e no texto do cron.
+
+**Os quatro itens que ficaram em aberto foram fechados:** `delivery: none` nos
+cinco briefings (o `announce` sem canal fazia toda execução dizer `error`, mesmo
+quando o documento saía), o cron de Serviços reescrito, o buraco do HSGrowth
+explicado, e **agendar pela tela**, que nunca teve um chamador sequer.
+
+⚠️ **A frente seguinte não foi escolhida.** O backlog de 15/08 fechou. Os
+candidatos são a varredura do idioma `(r.get("payload") or r)` — 18 ocorrências,
+e já mordeu uma vez — e o `delivery.mode: "webhook"`, que trocaria o
+monitoramento puxado por aviso ativo quando um briefing termina ou falha.
 
 ## O que aconteceu em 14/08/2026
 
@@ -210,9 +245,11 @@ Ordem que foi combinada e cumprida em 17/08:
 
    ⚠️ O `docs/DEPLOY.md` diz que o serviço `worker` **ainda não está no deploy**.
 
-**Cron jobs saiu da lista de consertar.** Nem a nossa tabela nem o gateway têm
-agendamento nenhum: a tela está certa ao não mostrar nada. Ela só ganha utilidade
-quando existir o primeiro cron de verdade.
+~~**Cron jobs saiu da lista de consertar.**~~ ⚠️ **Isto envelheceu mal e virou o
+oposto.** Escrito em 17/08 quando não havia agendamento nenhum. Em 19/08 nasceram
+os briefings da manhã e em 21/08 a tela passou a agendar de verdade — hoje são
+**nove** jobs no gateway (cinco ligados) e `POST /agents/{id}/crons` fala com o
+`cron.add`. Ver *21/08* abaixo.
 
 ### 📋 Backlog do primeiro uso real (15/08) — **não é a frente atual**
 
