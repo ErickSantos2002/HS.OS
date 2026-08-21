@@ -48,13 +48,40 @@ logger = logging.getLogger(__name__)
 # e um não deve bloquear o outro.
 _TRAVA = 815_140_018
 
-# Fração da janela do modelo a partir da qual compactamos. 0,65 não é chute
+# Fração da janela **útil** a partir da qual compactamos. 0,85 não é chute
 # calibrado: é o meio-termo entre compactar cedo demais (perde contexto que
 # ainda cabia) e tarde demais (não há segunda chance). O piso fixo de um agente
 # nosso já é ~23 mil tokens numa janela de 65 mil — 36% da janela vai embora em
 # arquivo e ferramenta antes da primeira pergunta —, então a margem real de
 # manobra é menor do que a fração sugere.
-_LIMIAR = 0.65
+#
+# ⚠️ **A fração mudou junto com o denominador, e 0,85 é MAIS cedo que o 0,65 de
+# antes.** Sobre a janela crua, 0,65 dava 42.598 — depois do ponto de falha.
+# Sobre a útil, 0,85 dá 35.306. Manter 0,65 aqui dispararia em 26.998, e como o
+# piso de um agente nosso é ~25.124, isso é compactar uma sessão com 1.874
+# tokens de conversa: gasta a compactação numa sessão que mal começou. Em 0,85
+# a sessão já usou 62% do espaço real e ainda sobram ~6.200 para a execução em
+# curso terminar.
+_LIMIAR = 0.85
+
+# ⚠️ **A janela útil NÃO é a janela do modelo.** O gateway reserva
+# `reserveTokens` para conseguir compactar, e uma execução estoura ao cruzar
+# `janela − reserva`, não `janela`. Multiplicar o limiar pela janela crua põe o
+# gatilho ACIMA do ponto de falha e abre uma faixa morta: a sessão falha em toda
+# execução e o vigia, olhando o denominador errado, acha que ela está folgada.
+#
+# Em 21/08/2026 isto era real e diário. A sessão do cron de Serviços do `atlas`
+# estava em 40.588 tokens:
+#
+#     janela do deepseek-chat            65.536
+#     − reserveTokens                    24.000
+#     ─────────────────────────────────────────
+#     janela útil                        41.536   ← estoura aqui
+#     limiar antigo (0,65 × 65.536)      42.598   ← só agiria 1.062 depois
+#
+# 40.588 é 98% da janela útil e 62% da crua. O briefing de Serviços falhava com
+# "Context overflow" todo dia e esta ronda passava por ele sem tocar.
+_RESERVA_PADRAO = 24_000
 
 # Sessão que uma pessoa está olhando. Quem cuida delas é o `/reply`, que
 # compacta e **refaz a pergunta** na hora, com a pessoa esperando. Aqui só as
@@ -108,6 +135,27 @@ async def _janelas(cliente) -> dict[str, int]:
     return janela
 
 
+async def _reserva(cliente) -> int:
+    """Tokens que o gateway guarda para a própria compactação.
+
+    Vem de `agents.defaults.compaction.reserveTokens`. Ler em vez de fixar
+    importa porque mexer nesse número no gateway muda silenciosamente o ponto em
+    que toda execução passa a estourar — e o vigia tem que acompanhar.
+    """
+    try:
+        r = await cliente.chamar("config.get", {})
+    except (ErroGateway, OSError) as e:
+        logger.warning("Vigia: não li reserveTokens (%s); assumo %d.", e, _RESERVA_PADRAO)
+        return _RESERVA_PADRAO
+    conf = r.get("payload") or r
+    conf = conf.get("config", conf)
+    comp = ((conf.get("agents") or {}).get("defaults") or {}).get("compaction") or {}
+    valor = comp.get("reserveTokens")
+    if isinstance(valor, (int, float)) and valor > 0:
+        return int(valor)
+    return _RESERVA_PADRAO
+
+
 async def rondar_uma_vez() -> dict:
     """Uma ronda: compacta quem está perto, arquiva quem já travou."""
     try:
@@ -116,6 +164,7 @@ async def rondar_uma_vez() -> dict:
             return {"ok": False, "motivo": "gateway não configurado"}
         cliente = obter_cliente(c.url, c.token)
         janela = await _janelas(cliente)
+        reserva = await _reserva(cliente)
         r = await cliente.chamar("sessions.list", {"limit": 1000})
     except (ErroGateway, OSError) as e:
         logger.warning("Vigia: não consegui ler o gateway: %s", e)
@@ -181,7 +230,11 @@ async def rondar_uma_vez() -> dict:
                         logger.warning("Vigia: não consegui arquivar %s: %s", chave, e)
                     continue
 
-                if usado < limite * _LIMIAR:
+                # A decisão é contra a janela útil; o `limite` cru continua
+                # valendo para o ramo de cima, que é sobre compactar ser
+                # possível, e para o espelho de contexto da tela.
+                util = max(limite - reserva, 1)
+                if usado < util * _LIMIAR:
                     continue
 
                 try:
@@ -193,8 +246,8 @@ async def rondar_uma_vez() -> dict:
                 corpo = resp.get("payload") or resp
                 if corpo.get("compacted"):
                     compactadas.append(chave)
-                    logger.info("Vigia: compactei %s (estava em %d/%d).",
-                                chave, usado, limite)
+                    logger.info("Vigia: compactei %s (estava em %d/%d úteis, "
+                                "janela %d).", chave, usado, util, limite)
                 elif _sem_dono(chave):
                     # Recusou abaixo da janela — quase sempre "Already
                     # compacted", que é o aviso de que não há segunda chance.
