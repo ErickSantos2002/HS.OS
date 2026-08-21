@@ -8,6 +8,10 @@ export interface AgentCron {
   agent_id: string;
   name: string;
   expression: string;
+  /** A mensagem que o agente recebe quando dispara — vira `payload.message`. */
+  instruction: string;
+  /** O id do job no gateway. Nulo = agendamento órfão, só nosso. */
+  gateway_job_id: string | null;
   description: string | null;
   enabled: boolean;
   last_run: string | null;
@@ -41,7 +45,9 @@ export function useAgentCrons(agentId: string) {
   }, [agentId]);
 
   const addCron = useMutation({
-    mutationFn: async (cron: { name: string; expression: string; description?: string }) => {
+    mutationFn: async (cron: {
+      name: string; expression: string; instruction: string; description?: string;
+    }) => {
       await api(`/agents/${encodeURIComponent(agentId)}/crons`, { method: "POST", body: cron });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: key }),

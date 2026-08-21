@@ -9,9 +9,13 @@ import {
   Clock, Calendar, FileText, ClipboardList, Layout, Share2, MoreVertical, Plus, Trash2, Edit3, Play, AlertTriangle,
   User, Hash, Volume2, Mic2, Theater, FolderOpen, ChevronRight, Loader2, TrendingUp, TrendingDown, Users, Crown, Link2,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import StatCard from "@/components/dashboard/StatCard";
@@ -1016,13 +1020,15 @@ interface CronJobRow {
 function useGatewayCrons(agentId: string) {
   const [crons, setCrons] = useState<CronJobRow[]>([]);
   const [isLoading, setLoading] = useState(true);
+  const [versao, setVersao] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    // ⚠️ Estes são os crons do GATEWAY (tabela `cron_jobs`), não os da
-    // plataforma (`agent_crons`). Podem divergir — é para isso que existe o
-    // sincronizar-status.
+    // ⚠️ Esta é a lista do GATEWAY, que é quem executa — vem do `cron.list`,
+    // não da `cron_jobs`, que nunca teve uma linha porque o coletor da VPS que
+    // deveria enchê-la não existe. Era essa tabela vazia que fazia o painel
+    // dizer "nenhum agendamento" com dois crons rodando.
     api<any[]>(`/agents/${encodeURIComponent(agentId)}/agendamentos-do-gateway`)
       .then((d) => ({ data: d }), () => ({ data: [] }))
       .then(({ data }: any) => {
@@ -1031,9 +1037,18 @@ function useGatewayCrons(agentId: string) {
         setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [agentId]);
+  }, [agentId, versao]);
 
-  return { crons, isLoading };
+  return { crons, isLoading, recarregar: () => setVersao((v) => v + 1) };
+}
+
+// O job que nós criamos se chama `hsos-agentcron-<uuid da linha em agent_crons>`.
+// Ler o id do próprio nome evita buscar duas listas só para saber o que é nosso
+// — e o que não casa aqui é agendamento criado direto no gateway (os briefings
+// da manhã, por exemplo), que a tela mostra mas não se propõe a editar.
+const PREFIXO_NOSSO = "hsos-agentcron-";
+function idDaLinha(nome: string | null): string | null {
+  return nome?.startsWith(PREFIXO_NOSSO) ? nome.slice(PREFIXO_NOSSO.length) : null;
 }
 
 function statusDot(status: string | null, enabled: boolean | null): string {
@@ -1042,8 +1057,123 @@ function statusDot(status: string | null, enabled: boolean | null): string {
   return "bg-success shadow-[0_0_6px_hsl(160_84%_39%_/_0.6)]";
 }
 
+// A mensagem do backend é melhor que "erro ao criar": um 502 daqui quase sempre
+// é o gateway recusando a expressão cron, e ele nomeia o que está errado.
+function motivo(e: unknown, padrao: string): string {
+  return e instanceof Error && e.message ? e.message : padrao;
+}
+function NovoCronDialog({
+  agentId, aberto, aoFechar, aoCriar,
+}: { agentId: string; aberto: boolean; aoFechar: () => void; aoCriar: () => void }) {
+  const { addCron } = useAgentCrons(agentId);
+  const [form, setForm] = useState({ name: "", expression: "", instruction: "", description: "" });
+  const [salvando, setSalvando] = useState(false);
+
+  const valido = form.name.trim() && form.expression.trim() && form.instruction.trim();
+
+  async function salvar() {
+    setSalvando(true);
+    try {
+      await addCron.mutateAsync({
+        name: form.name.trim(),
+        expression: form.expression.trim(),
+        instruction: form.instruction.trim(),
+        description: form.description.trim() || undefined,
+      });
+      toast.success("Agendamento criado no gateway.");
+      setForm({ name: "", expression: "", instruction: "", description: "" });
+      aoCriar();
+      aoFechar();
+    } catch (e) {
+      toast.error(motivo(e, "Não consegui criar o agendamento."));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <Dialog open={aberto} onOpenChange={(o) => !o && aoFechar()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Novo agendamento</DialogTitle>
+          <DialogDescription>
+            Cria o cron no gateway, que é quem executa. Se o gateway recusar, nada é gravado.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="cron-nome">Nome</Label>
+            <Input id="cron-nome" value={form.name} placeholder="Briefing da tarde"
+                   onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="cron-expr">Expressão cron — em UTC</Label>
+            <Input id="cron-expr" value={form.expression} placeholder="30 10 * * 1-5"
+                   className="font-mono"
+                   onChange={(e) => setForm({ ...form, expression: e.target.value })} />
+            {/* ⚠️ O gateway não tem campo de fuso e interpreta o expr em UTC.
+                Dizer isso aqui evita o agendamento que dispara três horas fora
+                sem ninguém entender por quê. */}
+            <p className="text-[11px] text-muted-foreground">
+              O gateway conta em UTC, não em Brasília — <span className="font-mono">30 10 * * 1-5</span>{" "}
+              dispara às <strong>07h30</strong> daqui. Confira o próximo disparo na lista depois de salvar.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="cron-instr">O que o agente deve fazer</Label>
+            <Textarea id="cron-instr" rows={5} value={form.instruction}
+                      placeholder="Escreva UM documento na base de conhecimento com o título…"
+                      onChange={(e) => setForm({ ...form, instruction: e.target.value })} />
+            <p className="text-[11px] text-muted-foreground">
+              É a mensagem que o agente recebe na hora marcada, em sessão isolada.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="cron-desc">Descrição (opcional)</Label>
+            <Input id="cron-desc" value={form.description}
+                   onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={aoFechar} disabled={salvando}>Cancelar</Button>
+          <Button onClick={salvar} disabled={!valido || salvando}>
+            {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Agendar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function CronsCard({ agentId }: { agentId: string }) {
-  const { crons, isLoading } = useGatewayCrons(agentId);
+  const { crons, isLoading, recarregar } = useGatewayCrons(agentId);
+  const { toggleCron, deleteCron } = useAgentCrons(agentId);
+  const [novoAberto, setNovoAberto] = useState(false);
+
+  async function alternar(linhaId: string, ativo: boolean) {
+    try {
+      await toggleCron.mutateAsync({ id: linhaId, enabled: ativo });
+      recarregar();
+    } catch (e) {
+      toast.error(motivo(e, "Não consegui mudar o agendamento."));
+    }
+  }
+
+  async function excluir(linhaId: string, nome: string) {
+    if (!window.confirm(`Excluir o agendamento "${nome}"? Ele para de disparar.`)) return;
+    try {
+      await deleteCron.mutateAsync(linhaId);
+      toast.success("Agendamento removido.");
+      recarregar();
+    } catch (e) {
+      toast.error(motivo(e, "Não consegui remover o agendamento."));
+    }
+  }
 
   return (
     <div className="glass-card rounded-2xl p-3 flex flex-col">
@@ -1051,9 +1181,9 @@ function CronsCard({ agentId }: { agentId: string }) {
         <Clock className="h-3 w-3 text-primary" />
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex-1">Cron jobs</p>
         <button
-          disabled
-          title="Gerenciado via gateway"
-          className="h-5 w-5 rounded-md bg-secondary/40 text-muted-foreground/60 flex items-center justify-center cursor-not-allowed"
+          onClick={() => setNovoAberto(true)}
+          title="Novo agendamento"
+          className="h-5 w-5 rounded-md bg-secondary/60 hover:bg-secondary text-foreground/80 flex items-center justify-center transition-colors"
         >
           <Plus className="h-3 w-3" />
         </button>
@@ -1068,7 +1198,9 @@ function CronsCard({ agentId }: { agentId: string }) {
         <p className="text-[10px] text-muted-foreground italic">Nenhum cron configurado</p>
       ) : (
         <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-          {crons.map((c) => (
+          {crons.map((c) => {
+            const linhaId = idDaLinha(c.name);
+            return (
             <div key={c.id} className="rounded-xl border border-border/50 bg-card/40 p-2 space-y-1">
               <div className="flex items-start gap-2">
                 <span className={`h-1.5 w-1.5 mt-1.5 rounded-full shrink-0 ${statusDot(c.status, c.enabled)}`} />
@@ -1078,6 +1210,25 @@ function CronsCard({ agentId }: { agentId: string }) {
                     {c.cron_expression ? describeCron(c.cron_expression) : "—"}
                   </p>
                 </div>
+                {/* Só o que nasceu por aqui tem linha em `agent_crons` para
+                    editar. Cron criado direto no gateway aparece e fica
+                    read-only — fingir que dá para apagar seria pior. */}
+                {linhaId && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Switch
+                      checked={c.enabled !== false}
+                      onCheckedChange={(v) => alternar(linhaId, v)}
+                      className="scale-[0.6] origin-right"
+                    />
+                    <button
+                      onClick={() => excluir(linhaId, c.name || "sem nome")}
+                      title="Excluir agendamento"
+                      className="h-5 w-5 rounded-md hover:bg-destructive/15 text-muted-foreground hover:text-destructive flex items-center justify-center transition-colors"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2 text-[9px] text-muted-foreground pl-3.5">
                 <span className="flex items-center gap-1">
@@ -1088,9 +1239,12 @@ function CronsCard({ agentId }: { agentId: string }) {
                 </span>
               </div>
             </div>
-          ))}
+          );})}
         </div>
       )}
+
+      <NovoCronDialog agentId={agentId} aberto={novoAberto}
+                      aoFechar={() => setNovoAberto(false)} aoCriar={recarregar} />
     </div>
   );
 }

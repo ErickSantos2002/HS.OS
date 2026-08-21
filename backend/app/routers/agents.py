@@ -2690,7 +2690,12 @@ def _resultado(linha) -> dict:
 
 @router.get("/{agent_id}/crons")
 async def crons(agent_id: str, usuario: Usuario = Depends(exige_papel("administrador"))):
-    """Os agendamentos do agente, do mais recente para o mais antigo."""
+    """Os agendamentos do agente, do mais recente para o mais antigo.
+
+    Lê da nossa tabela, que desde a `013` é espelho de algo real: cada linha com
+    `gateway_job_id` tem um job correspondente no `cron.list`. Quem quer a
+    verdade do gateway sem intermediário usa `GET /{id}/agendamentos-do-gateway`.
+    """
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             "SELECT * FROM public.agent_crons WHERE agent_id = $1 ORDER BY created_at DESC",
@@ -2702,18 +2707,78 @@ async def crons(agent_id: str, usuario: Usuario = Depends(exige_papel("administr
 class CronIn(BaseModel):
     name: str = Field(min_length=1)
     expression: str = Field(min_length=1)
+    instruction: str = Field(min_length=1)
     description: str | None = None
+
+
+async def _cliente_ou_502():
+    """O cliente do gateway, ou 502 na cara — nunca seguir sem ele."""
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "Gateway não configurado.")
+    return obter_cliente(c.url, c.token)
 
 
 @router.post("/{agent_id}/crons", status_code=status.HTTP_201_CREATED)
 async def criar_cron(
     agent_id: str, dados: CronIn, usuario: Usuario = Depends(exige_papel("administrador"))
 ):
+    """Agenda no gateway e só então grava aqui.
+
+    ⚠️ **Gateway primeiro, banco depois** — a regra da casa para escrita que toca
+    as duas pontas. Até a `013` esta rota gravava só na tabela e a tela dizia
+    "agendamento criado" para algo que nunca ia disparar.
+
+    ⚠️ **O `expr` é UTC e o gateway não tem campo de fuso.** `30 10 * * 1-5` é
+    07h30 de Brasília. Não convertemos aqui de propósito: traduzir expressão
+    cron entre fusos erra no dia da semana quando a hora cruza a meia-noite. Em
+    vez disso devolvemos o `next_run` que o próprio gateway calculou, e a tela o
+    mostra em Brasília — a pessoa confere o efeito em vez de confiar na conta.
+
+    ⚠️ **`cron.add` NÃO valida o `agentId`** (levantado em 19/08/2026: uma
+    sondagem com agente inexistente criou o job). Por isso conferimos o agente
+    aqui antes, senão a tela deixaria criar agendamento fantasma.
+    """
+    cliente = await _cliente_ou_502()
+
+    try:
+        r = await cliente.chamar("agents.list", {})
+        existe = any(str(a.get("id")) == agent_id
+                     for a in ((r.get("payload") or r).get("agents") or []))
+    except (ErroGateway, OSError) as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Gateway indisponível: {e}")
+    if not existe:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Agente {agent_id} não existe no gateway.")
+
+    linha_id = str(uuid4())
+    nome_job = f"hsos-agentcron-{linha_id}"
+    try:
+        r = await cliente.chamar("cron.add", {
+            "name": nome_job,
+            "schedule": {"kind": "cron", "expr": dados.expression},
+            "sessionTarget": "isolated",
+            "agentId": agent_id,
+            "payload": {"kind": "agentTurn", "message": dados.instruction,
+                        "timeoutSeconds": 900},
+            "delivery": {"mode": "none"},
+        })
+    except (ErroGateway, OSError) as e:
+        # Expressão inválida cai aqui. Nada foi gravado — é o ponto de abortar.
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"O gateway recusou o agendamento: {e}")
+
+    job = (r.get("payload") or r).get("job") or {}
+    proximo = (job.get("state") or {}).get("nextRunAtMs") or job.get("nextRunAtMs")
+
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
-            "INSERT INTO public.agent_crons (agent_id, name, expression, description) "
-            "VALUES ($1,$2,$3,$4) RETURNING *",
-            agent_id, dados.name, dados.expression, dados.description,
+            "INSERT INTO public.agent_crons "
+            "  (id, agent_id, name, expression, instruction, description, "
+            "   gateway_job_id, next_run) "
+            "VALUES ($1::uuid,$2,$3,$4,$5,$6,$7, "
+            "        CASE WHEN $8::bigint IS NULL THEN NULL "
+            "             ELSE to_timestamp($8::bigint / 1000.0) END) RETURNING *",
+            linha_id, agent_id, dados.name, dados.expression, dados.instruction,
+            dados.description, job.get("id"), proximo,
         )
     return json.loads(json.dumps(dict(linha), default=str))
 
@@ -2729,33 +2794,68 @@ async def alternar_cron(
     dados: CronPatchIn,
     usuario: Usuario = Depends(exige_papel("administrador")),
 ):
-    """Liga e desliga o agendamento. Só isso — mudar a expressão é apagar e criar.
+    """Liga e desliga o agendamento — no gateway e aqui. Mudar a expressão é apagar e criar.
 
-    ⚠️ **Isto não desliga o cron no gateway**, que é quem de fato executa. A
-    tabela é o registro da plataforma; a sincronização é do
-    `POST /automacoes/sincronizar-status`.
+    ⚠️ Antes da `013` o docstring desta rota avisava que "isto não desliga o cron
+    no gateway". Não desligava mesmo, e como o gateway era quem executava, o
+    botão da tela não fazia nada além de mudar uma cor.
     """
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
-        achado = await conn.fetchval(
-            "UPDATE public.agent_crons SET enabled = $3 "
-            " WHERE id = $2::uuid AND agent_id = $1 RETURNING id",
-            agent_id, cron_id, dados.enabled,
-        )
-    if achado is None:
+        alvo = await conn.fetchrow(
+            "SELECT gateway_job_id FROM public.agent_crons "
+            " WHERE id = $2::uuid AND agent_id = $1", agent_id, cron_id)
+    if alvo is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agendamento não encontrado.")
+
+    if alvo["gateway_job_id"]:
+        cliente = await _cliente_ou_502()
+        try:
+            await cliente.chamar("cron.update", {"id": alvo["gateway_job_id"],
+                                                 "patch": {"enabled": dados.enabled}})
+        except (ErroGateway, OSError) as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                                f"Não consegui mudar o agendamento no gateway: {e}")
+
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        await conn.execute(
+            "UPDATE public.agent_crons SET enabled = $3 "
+            " WHERE id = $2::uuid AND agent_id = $1", agent_id, cron_id, dados.enabled)
 
 
 @router.delete("/{agent_id}/crons/{cron_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def excluir_cron(
     agent_id: str, cron_id: str, usuario: Usuario = Depends(exige_papel("administrador"))
 ):
+    """Remove no gateway e depois aqui.
+
+    ⚠️ **`cron.remove` é por `id`, não por `name`.** É para isso que a `013`
+    guarda o `gateway_job_id`.
+
+    Job que o gateway não conhece mais (removido por fora) não impede a limpeza
+    daqui: apagar a linha é justamente o que reconcilia os dois lados.
+    """
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
-        marca = await conn.execute(
-            "DELETE FROM public.agent_crons WHERE id = $2::uuid AND agent_id = $1",
-            agent_id, cron_id,
-        )
-    if marca.rsplit(" ", 1)[-1] == "0":
+        alvo = await conn.fetchrow(
+            "SELECT gateway_job_id FROM public.agent_crons "
+            " WHERE id = $2::uuid AND agent_id = $1", agent_id, cron_id)
+    if alvo is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Agendamento não encontrado.")
+
+    if alvo["gateway_job_id"]:
+        cliente = await _cliente_ou_502()
+        try:
+            await cliente.chamar("cron.remove", {"id": alvo["gateway_job_id"]})
+        except (ErroGateway, OSError) as e:
+            if "not found" not in str(e).lower():
+                raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                                    f"Não consegui remover o agendamento no gateway: {e}")
+            logger.info("Cron %s já não existia no gateway; sigo apagando a linha.",
+                        alvo["gateway_job_id"])
+
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        await conn.execute(
+            "DELETE FROM public.agent_crons WHERE id = $2::uuid AND agent_id = $1",
+            agent_id, cron_id)
 
 
 @router.get("/{agent_id}/atividades")
