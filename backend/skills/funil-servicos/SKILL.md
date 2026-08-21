@@ -109,9 +109,30 @@ SELECT activity_type, count(*) FROM public.service_card_activities GROUP BY 1;
 -- product_added 1564 · card_created 1393 · stage_change 818 · follow_up 561 …
 ```
 
-⚠️ **E ele começa em 10/06/2026** — `stage_change` só existe a partir daí, e as
-primeiras semanas são de implantação. Comparar com período anterior a isso é
-comparar com ausência de registro, não com desempenho.
+⚠️ **O funil de serviços entrou em uso em 20–22/07/2026, e antes disso não há
+o que comparar.** Levantado no banco em 21/08/2026, dia a dia:
+
+| quando | o que existe |
+|---|---|
+| 09–11/06/2026 | **6 cards** ao todo — teste de implantação |
+| 12/06 a 17/07 | **nada** |
+| 18/07 · 20/07 | 2 e 72 cards criados — o board começa a ser usado |
+| **22/07** | primeiro `stage_change`/`card_won` da retomada (48 no dia) |
+| 27/07 | **1.213 cards criados de uma vez** — a carga da `Oportunidade Existente` |
+
+⚠️ **Isto NÃO é falha de coleta, e não vá procurar coletor quebrado.** No mesmo
+período o resto do HSGrowth registrou normalmente: `audit_logs` com ~6.000
+eventos por semana sem interrupção, e o funil de vendas (`card_list_history`,
+`activities`) contínuo. O board de serviço é que é novo.
+
+**As duas consequências práticas:**
+
+1. **Comparação mês a mês só fica honesta em setembro/2026.** Enquanto o mês
+   corrente for agosto, o mesmo trecho do mês passado cai antes de 22/07 e vem
+   vazio. Se o trecho anterior terminar antes de 22/07/2026, **diga que não há
+   comparação** em vez de apresentar queda — a queda seria do dado.
+2. **Não conte "cards criados" em julho como trabalho.** O dia 27/07 sozinho
+   tem 1.213 criações, que são a carga da base de oportunidades, não prospecção.
 
 ## Duas armadilhas de configuração
 
