@@ -102,7 +102,7 @@ outras réguas, em `tiny.configuracoes`:
 | chave | o que é |
 |---|---|
 | `META` | a meta **anual** da empresa |
-| `MESES_ANALISE` | os meses do trimestre em acompanhamento (hoje `6,7,8`) |
+| `MESES_ANALISE` | os meses do trimestre em acompanhamento, 1-based — 1 = janeiro (hoje `7,8,9`) |
 
 ⚠️ **A meta cadastrada é ANUAL, mas ninguém acompanha por ano.** O DataCoreHS
 divide por 4 e mede o trimestre corrente — os meses de `MESES_ANALISE`. Comparar
