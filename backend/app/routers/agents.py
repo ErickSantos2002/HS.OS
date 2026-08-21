@@ -2743,8 +2743,7 @@ async def criar_cron(
 
     try:
         r = await cliente.chamar("agents.list", {})
-        existe = any(str(a.get("id")) == agent_id
-                     for a in ((r.get("payload") or r).get("agents") or []))
+        existe = any(str(a.get("id")) == agent_id for a in (r.get("agents") or []))
     except (ErroGateway, OSError) as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Gateway indisponível: {e}")
     if not existe:
@@ -2766,8 +2765,20 @@ async def criar_cron(
         # Expressão inválida cai aqui. Nada foi gravado — é o ponto de abortar.
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"O gateway recusou o agendamento: {e}")
 
-    job = (r.get("payload") or r).get("job") or {}
+    # ⚠️ **`cron.add` devolve o JOB no topo, e o job tem um campo `payload`.**
+    # `chamar()` já entrega o resultado do RPC desembrulhado (`client.py:172`),
+    # então o idioma `(r.get("payload") or r)` — espalhado pelo projeto como
+    # desembrulho defensivo — aqui encontra o `payload` DO CRON
+    # (`{kind, message, timeoutSeconds}`) e devolve o objeto errado, calado.
+    # Custou um `gateway_job_id` nulo com HTTP 201: o job nascia no gateway e
+    # ficava órfão, sem como desligar nem apagar. O resultado É o job.
+    job = r or {}
     proximo = (job.get("state") or {}).get("nextRunAtMs") or job.get("nextRunAtMs")
+    if not job.get("id"):
+        # Sem o id não há edição nem remoção depois. Melhor falhar agora, com o
+        # job recém-criado ainda localizável pelo nome, do que gravar um órfão.
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                            f"O gateway criou o agendamento mas não devolveu o id: {r}")
 
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linha = await conn.fetchrow(
@@ -3217,15 +3228,24 @@ async def agendamentos_do_gateway(agent_id: str, usuario: Usuario = Depends(exig
     espelho** se o gateway estiver fora: melhor mostrar o que se sabia do que
     trocar um vazio silencioso por um erro.
 
-    ⚠️ Não confundir com `GET /{id}/crons`, que é a tabela `agent_crons` da
-    plataforma — e que também não agenda nada, porque ninguém a envia ao
-    gateway. São três coisas com o mesmo nome.
+    ⚠️ Não confundir com `GET /{id}/crons`, que lê a tabela `agent_crons` da
+    plataforma. Desde a `013` ela é espelho de algo real — cada linha tem o job
+    correspondente aqui —, mas continuam sendo duas leituras diferentes: esta é
+    a verdade do gateway, aquela é o que nasceu pela nossa tela.
+
+    ⚠️ **`cron.list` sem parâmetro OMITE job desligado.** Levantado em
+    21/08/2026: desligar um agendamento o fazia sumir desta lista, e como é ela
+    que a tela mostra, o botão de religar ia junto — porta de mão única. Com
+    `includeDisabled` os mesmos 5 jobs viram 11 aqui: além dos desligados por
+    nós, aparecem os disparos de tiro único (`kind: "at"`) que o gateway desliga
+    sozinho depois de rodar.
     """
     c = await cfg.carregar()
     if c.configurado:
         try:
-            r = await obter_cliente(c.url, c.token).chamar("cron.list", {})
-            jobs = ((r.get("payload") or r).get("jobs")) or []
+            r = await obter_cliente(c.url, c.token).chamar(
+                "cron.list", {"includeDisabled": True})
+            jobs = (r.get("jobs")) or []
             saida = []
             for j in jobs:
                 if j.get("agentId") != agent_id:
