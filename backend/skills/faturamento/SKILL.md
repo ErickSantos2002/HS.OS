@@ -136,8 +136,21 @@ SELECT meta.m AS meta_trimestre, v.t+s.t AS realizado,
   FROM meta, v, s;
 ```
 
-Em 19/08/2026 isto devolve: meta do trimestre **R$ 3.166.666,68**, realizado
-**R$ 2.438.461,71**, **77,0%**, faltando **R$ 728.204,97**.
+Em 21/08/2026 isto devolve: meta do trimestre **R$ 3.166.666,68**, realizado
+**R$ 1.701.782,14**, **53,7%**, faltando **R$ 1.464.884,54**.
+
+⚠️ **Se você viu 77,0% e R$ 2.438.461,71 em algum lugar, é o número errado.** Até
+21/08/2026 `MESES_ANALISE` valia `6,7,8` e era lido com duas convenções: o painel
+do DataCoreHS jogava direto no `new Date` do JavaScript, que conta mês a partir
+de **zero**, e apurava jul/ago/set; esta consulta usa `extract(month)`, que é
+**1-based**, e apurava jun/jul/ago. Mesma chave, mesmo valor, um mês de
+diferença — e o briefing da manhã saiu dois dias seguidos com R$ 787 mil a mais,
+dizendo que faltava metade do que faltava de verdade.
+
+Hoje a chave é `7,8,9` e os dois lados a leem como 1 = janeiro. **A conferência
+que pega esse tipo de erro é bater com a tela Meta Trimestral do DataCoreHS**, e
+não só com a página Financeiro: os totais mensais batendo não provam que o
+recorte do trimestre está certo.
 
 ⚠️ **Existem faixas de bônus e elas NÃO são o percentual de atingimento.** O
 DataCoreHS tem uma aba de Meta onde se escolhe uma faixa de 55% a 100% e ela
@@ -209,6 +222,17 @@ Esses dois números batem com a página Financeiro do DataCoreHS.
 Se você mudar a consulta e quiser saber se continua certa, rode-a para janeiro
 de 2026 e compare. Bateu, a régua está certa. Não bateu, **pare** — não entregue
 o número, diga o que divergiu.
+
+⚠️ **Janeiro conferido NÃO prova que a meta está certa.** Aquele teste valida a
+régua de vendas e serviços num mês fechado — ele passa igual com o trimestre
+recortado errado, e foi por isso que o erro do `MESES_ANALISE` sobreviveu a três
+conferências. A meta tem âncora própria: **a soma dos meses que você apurou tem
+que bater com a tela Meta Trimestral do DataCoreHS**, mês a mês. Em 21/08/2026
+ela mostra Julho R$ 1.123.090,94 · Agosto R$ 578.691,20 · Setembro R$ 0,00.
+
+Se os meses que a sua consulta somou não forem os mesmos que aparecem naquela
+tela, o problema é o recorte, não a régua — **pare e diga qual trimestre você
+usou**, em vez de entregar o total.
 
 ## Ao responder
 

@@ -42,7 +42,7 @@ enxerga — a única verificação que vale é a resposta dele):
 | pergunta | antes (17/08) | depois (19/08) |
 |---|---|---|
 | "o que está parado >48h no Task" *(flow)* | régua improvisada pelo último comentário, com ressalva; 396 mil tokens de exploração | abriu a skill, mediu pelo `audit_log`: 104 cards em Correios, 16,2 dias de média, pior 29,9 |
-| "quanto falta para a meta" *(iris)* | não tinha resposta | meta do trimestre R$ 3.166.666,68 · realizado R$ 2.438.461,71 · **77,0%** · faltam R$ 728.204,97 |
+| "quanto falta para a meta" *(iris)* | não tinha resposta | meta do trimestre R$ 3.166.666,68 · realizado R$ 1.701.782,14 · **53,7%** · faltam R$ 1.464.884,54 *(corrigido em 21/08 — ver a skill `faturamento`)* |
 | "quantas reuniões os SDR marcaram" *(atlas)* | *"não há departamento COMERCIAL nem papéis de SDR"* | Miguel Luiz 9 · Claudia 8 · Karolaine 5 |
 
 ⚠️ **O `atlas` resolveu por um caminho melhor que o desenhado.** O bloco novo no

@@ -9,7 +9,7 @@ de "já ajustamos tudo?" sem reabrir cada fonte.
 | pergunta | estado |
 |---|---|
 | Faturamento do mês | ✅ régua da skill · agosto até 19: R$ 528.564,80 |
-| Quanto falta para a meta | ✅ 77,0% do trimestre · faltam R$ 728.204,97 |
+| Quanto falta para a meta | ✅ 53,7% do trimestre · faltam R$ 1.464.884,54 · ⚠️ o 77,0% registrado aqui até 21/08 vinha do `MESES_ANALISE` lido com dois offsets de mês |
 | Faturamento **por vendedor** | ✅ com o aviso de que serviços não têm vendedor |
 | Quantas propostas abertas · por vendedor | ✅ já respondia em 17/08 |
 | Reuniões que os **SDR** marcaram | ✅ Miguel 9 · Claudia 8 · Karolaine 5 |
