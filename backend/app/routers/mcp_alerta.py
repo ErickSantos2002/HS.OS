@@ -95,7 +95,7 @@ _FERRAMENTAS = [
 _MARCA = {"informativo": "ℹ️", "atencao": "⚠️", "urgente": "🚨"}
 
 
-async def _avisar(agent_id: str, assunto: str, detalhe: str, gravidade: str) -> dict:
+async def avisar_administradores(agent_id: str, assunto: str, detalhe: str, gravidade: str) -> dict:
     """Manda a mensagem no chat do administrador com este agente, e notifica.
 
     ⚠️ **A mensagem no chat é o alerta; a notificação é só o aviso de que ele
@@ -139,13 +139,22 @@ async def _avisar(agent_id: str, assunto: str, detalhe: str, gravidade: str) -> 
 
     # Tempo real: o alerta aparece sem a pessoa precisar recarregar. Falhar aqui
     # não desfaz o registro — a notificação já está no banco.
+    #
+    # ⚠️ **Este push nunca funcionou até 26/08/2026, e o `except` escondia.**
+    # `Hub.publicar` é **síncrono e de três argumentos** — `(topico, tipo, dados)`,
+    # como todos os outros doze chamadores fazem. Aqui ia com dois, com o `tipo`
+    # empacotado dentro do dicionário, e ainda com `await` numa função que não é
+    # corrotina. Toda chamada morria em `TypeError`, virava `logger.warning` e
+    # seguia: o alerta entrava no banco e o sininho só acendia quando a pessoa
+    # recarregava a tela. Foi encontrado ao testar o guardião de agendamentos,
+    # que usa este mesmo caminho — e é exatamente o "alarme que não toca" contra
+    # o qual o cabeçalho deste arquivo adverte, uma camada mais fundo.
     for uid in admins:
         try:
-            await hub.publicar(topico_usuario(str(uid)), {
-                "tipo": "notificacao", "origem": agent_id,
-                "assunto": assunto, "gravidade": gravidade,
+            hub.publicar(topico_usuario(str(uid)), "notificacao", {
+                "origem": agent_id, "assunto": assunto, "gravidade": gravidade,
             })
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning("Alerta gravado, mas não empurrado a %s: %s", uid, e)
 
     logger.warning(
@@ -222,7 +231,7 @@ async def mcp_alerta(
         agent_id = (str(args.get("agente") or "").strip()
                     or request.headers.get("x-agent-id", "").strip()
                     or "desconhecido")
-        r = await _avisar(agent_id, assunto, detalhe,
+        r = await avisar_administradores(agent_id, assunto, detalhe,
                           str(args.get("gravidade") or "atencao"))
 
         texto = ("Mensagem enviada no chat de {n} administrador(es), com "

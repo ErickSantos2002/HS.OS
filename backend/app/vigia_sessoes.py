@@ -40,6 +40,7 @@ from app.database import sessao
 from app.gateway import config as cfg
 from app.gateway.client import ErroGateway, obter_cliente
 from app.guardiao_briefings import conferir as conferir_briefings
+from app.guardiao_crons import conferir as conferir_crons
 
 logger = logging.getLogger(__name__)
 
@@ -273,6 +274,18 @@ async def rondar_uma_vez() -> dict:
         await conferir_briefings(cliente)
     except Exception:  # noqa: BLE001
         logger.exception("Vigia: o guardião dos briefings falhou; segue.")
+
+    # ⚠️ **E agendamento desgovernado não deixa rastro no lugar onde se olha.**
+    # Em 25/08/2026 um cron de 3 minutos rodou 560 vezes em 28 horas gastando
+    # token e enchendo a Base de Conhecimento, e o que o interrompeu foi uma
+    # pessoa abrir a tela por outro motivo. Este guardião é o disjuntor: desliga
+    # o que dispara demais e avisa. Roda na mesma ronda porque o gateway já está
+    # conectado aqui — e porque um vigia que dependesse de outro laço seria mais
+    # uma peça para falhar em silêncio.
+    try:
+        await conferir_crons(cliente)
+    except Exception:  # noqa: BLE001
+        logger.exception("Vigia: o guardião dos agendamentos falhou; segue.")
 
     # O estado de um envio vive minutos; a linha em `agent_runs` fica para sempre
     # se ninguém a varrer. Uma semana é folga larga sobre isso e ainda deixa a

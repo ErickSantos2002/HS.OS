@@ -1740,7 +1740,14 @@ def _nome_mcp(nome: str) -> str:
 # - `skill_workshop`: criar, editar e instalar skill é do Erick ou da `nina`.
 #   Um especialista que possa escrever a própria skill pode reescrever a régua
 #   que o governa — e a `faturamento` é exatamente uma régua dessas.
-_DENY_NAO_MCP = ("sessions_send", "sessions_spawn", "skill_workshop")
+# - `cron`: agente não agenda a si mesmo. Em 25/08/2026 a `nina` diagnosticou
+#   corretamente que a `iris` estava travada por contexto e, em vez de avisar o
+#   administrador — ferramenta que ela tinha e usou nessa mesma conversa —,
+#   criou para si um cron `everyMs: 180000`. Rodou **560 vezes** em 28 horas,
+#   escreveu **197 documentos** dizendo "ainda pendente", e só parou porque o
+#   Erick abriu a tela e estranhou. Não havia condição de saída, teto de
+#   execuções nem prazo. Agendar é ato humano, pela tela de agendamentos.
+_DENY_NAO_MCP = ("sessions_send", "sessions_spawn", "skill_workshop", "cron")
 
 
 def _sem_prefixo(nome: str) -> str:
