@@ -1,6 +1,6 @@
 # Continuar aqui
 
-Ponto de retomada da portagem. Atualizado em **21/08/2026**. Leia isto, depois
+Ponto de retomada da portagem. Atualizado em **26/08/2026**. Leia isto, depois
 `CLAUDE.md` e `docs/ROADMAP.md`.
 
 👉 **Voltando na segunda (17/08)?** Pule para
@@ -19,6 +19,46 @@ para o básico — túnel, subida, login. Para o que mudou depois, veja
 [*Conferir no navegador*](#conferir-no-navegador) logo abaixo.
 
 ---
+
+## O que aconteceu em 26/08/2026
+
+Voltando depois de quatro dias, a Base de Conhecimento estava **impossível de
+ler**: 237 documentos, dos quais **197 eram ruído de um único cron**. O pedido
+era "melhorar a organização dos documentos"; o problema era outro.
+
+**Uma torneira aberta desde 25/08 às 05:25.** A `nina` criou para si um cron
+`everyMs: 180000` — 3 em 3 minutos, sem prazo e sem condição de saída — para
+vigiar se a `iris` desbloqueava. **560 execuções em 28 horas**, um documento novo
+a cada uma. Ainda estava rodando quando a sessão começou; só parou porque o Erick
+abriu a tela e estranhou.
+
+⚠️ **Ela acertou o diagnóstico e errou a ação.** Escreveu "a sessão dela segue
+travada no contexto estourado" e tinha `avisar_administrador` liberado — usou na
+mesma conversa, para outra coisa. Escolheu patrulhar.
+
+⚠️ **E o pedido nem era da `iris`.** Era "quem comprou bafômetro e não tem
+calibração": calibração mora no GestorHS, que é do `flow`. O roster dela já dizia
+isso, em texto corrido. Só pegou quando virou palavra nominal na tabela.
+
+**O que foi feito, em três camadas independentes:**
+
+1. `cron` negado aos cinco agentes, e posto em `_DENY_NAO_MCP` para não sumir na
+   próxima publicação de conector. Conferido perguntando a ela.
+2. `AGENTS.md` da `nina`: `bruce` entrou na tabela (faltava), calibração ficou
+   nominal, pedido que cruza dois domínios volta para quem pediu, e a seção
+   "Heartbeat" — que **convidava** a verificações periódicas — virou "eu não me
+   agendo, e não fico vigiando", com o incidente escrito por extenso.
+3. `app/guardiao_crons.py`: o disjuntor, na ronda do vigia.
+
+**Achado de brinde, e grave:** `Hub.publicar` é síncrono e de três argumentos; o
+`mcp_alerta` chamava com dois e com `await`, dentro de um `except`. **O push do
+alerta ao administrador nunca funcionou** — só aparecia ao recarregar a tela.
+
+⚠️ **Fica em aberto, e é de negócio:** o CEO pediu a lista de compradores de
+bafômetro sem calibração e **nunca recebeu**. Está registrado num documento na
+base, marcado como pendente, com os números parciais e o motivo de eles estarem
+inflados (a régua pegava bocal e sensor, não só aparelho). Refazer o pedido, ao
+`flow`, com a régua fechada antes e em duas etapas, é o próximo passo natural.
 
 ## O que aconteceu em 21/08/2026
 

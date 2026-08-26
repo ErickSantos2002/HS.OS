@@ -40,6 +40,16 @@ O **Realtime saiu inteiro**: a captura é por trigger + `pg_notify`, o backend
 roteia por `channel_id`/`user_id`/`agent_id`, e nenhum arquivo abre mais
 `supabase.channel(...)`. Ver `docs/PLANO-REALTIME.md`.
 
+⚠️ **`Hub.publicar` é SÍNCRONO e tem três argumentos: `(topico, tipo, dados)`.**
+Chamar com dois — empacotando o `tipo` dentro do dicionário — levanta
+`TypeError`, e dar `await` numa função que não é corrotina levanta outro. O
+`mcp_alerta` fazia as duas coisas, dentro de um `try/except` que virava
+`logger.warning`: **o push do alerta ao administrador nunca funcionou**, e o
+sininho só acendia quando a pessoa recarregava a tela. Ficou assim por semanas
+porque o registro no banco funcionava e ninguém conferia o efeito ao vivo.
+Corrigido em 26/08/2026, encontrado ao testar o guardião de agendamentos, que usa
+o mesmo caminho. Os outros doze chamadores sempre passaram os três.
+
 O `/ws` também aceita tráfego **de volta**, para o que é efêmero e não deve
 tocar o banco: hoje só o "fulano está digitando". O navegador manda
 `{tipo: "digitando", topico: "canal:<id>"}` e o servidor republica no tópico —
@@ -967,6 +977,53 @@ pergunta "o documento existe?" em vez de olhar `lastRunStatus` — se olhasse o
 status, em 21/08 teria refeito os cinco, quatro deles à toa, gastando contexto do
 `atlas`. Ele também **não** usa `includeDisabled`: briefing que alguém desligou de
 propósito não deve ser refeito.
+
+### Agente não agenda a si mesmo — e o disjuntor que ficou disso
+
+⚠️ **Em 25/08/2026 a `nina` criou para si um cron de 3 em 3 minutos e ele rodou
+560 vezes em 28 horas.** Ela percebeu que a `iris` estava travada por contexto
+estourado — escreveu isso, com essas palavras — e, em vez de avisar, montou um
+vigia próprio para conferir se a colega voltava. Cada execução escrevia um
+documento novo dizendo "ainda pendente": **197 documentos**, contra 40 úteis na
+Base de Conhecimento inteira. Parou porque o Erick abriu a tela por outro motivo.
+
+⚠️ **Ela tinha `avisar_administrador` liberado e usou na MESMA conversa**, para
+outra coisa. Não faltou ferramenta nem diagnóstico — faltou a regra de que
+bloqueio de terceiro se relata, não se patrulha. É o exemplo mais limpo que
+temos de agente que acerta o diagnóstico e erra a ação.
+
+E o pedido nem era da `iris`: era *"quem comprou bafômetro e não tem
+calibração"*, e o cadastro de calibração vive no **GestorHS**, que é do `flow`.
+O roster no `AGENTS.md` dela dizia isso — em texto corrido, no meio de uma frase
+longa. Só passou a funcionar quando virou palavra nominal (`aparelho`,
+`calibração`) na linha do Flow **e** na coluna "não é dele" da Iris.
+
+Três camadas saíram disso, e de propósito **nenhuma depende das outras**:
+
+| camada | onde | o que garante |
+|---|---|---|
+| a ferramenta | `cron` em `_DENY_NAO_MCP` | o agente não consegue se agendar |
+| o julgamento | `AGENTS.md` da `nina` | ele relata em vez de patrulhar |
+| o disjuntor | `app/guardiao_crons.py` | pega o que as duas primeiras não previram |
+
+⚠️ **`cron` precisou entrar na tupla `_DENY_NAO_MCP`, não só na config.** O
+`_deny_de_mcp` reescreve o `deny` de cada agente **do zero** a cada publicação de
+conector; o que não estiver naquela tupla some sem erro e sem aviso.
+
+⚠️ **A conferência de um `deny` é perguntar ao agente.** Reler o `config.get` não
+distingue um deny que casou de um que não casou — mesma armadilha de 14/08 com o
+prefixo `mcp__`. Aqui: *"você tem a ferramenta `cron`?"* → *"NÃO."*
+
+**O disjuntor não julga se o job é útil** — julgar intenção foi o que falhou. Ele
+mede o período por `nextRunAtMs − lastRunAtMs` (serve para `expr` e para
+`everyMs` sem interpretar expressão cron) e confere a procedência pelo nome:
+
+- abaixo de 15 min **e** fora de `hsos-agentcron-*`/`hsos-briefing-*` → **desliga** e alerta;
+- abaixo de 15 min mas nascido pela tela → só alerta o custo, porque a escolha foi de gente;
+- procedência desconhecida com ritmo normal → só visibilidade.
+
+Uma ação por job por dia, reservada em `app_settings` com `ON CONFLICT DO
+NOTHING` — sem isso os dois workers do uvicorn alertam em dobro.
 
 ### A janela útil — por que o vigia media errado
 
