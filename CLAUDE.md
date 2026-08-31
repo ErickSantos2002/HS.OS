@@ -563,11 +563,33 @@ aba da `SettingsPage`, que serve `/settings` **e** `/profile`, e o nome só apar
 `App.tsx`. Em 07/08/2026 isso custou um commit inteiro — religuei a `ProfilePage` morta e deixei a
 `SettingsPage` viva chamando `supabase.auth.updateUser`, ou seja, com "trocar senha" quebrado.
 
-Grep pelo nome do componente **não serve** (casa com import e comentário). A conferência que funciona:
+Grep pelo nome do componente **não serve** (casa com import e comentário).
+
+⚠️ **E a conferência que este arquivo recomendava também não servia.** Ela era:
 
 ```bash
-grep -oP '<Route[^>]*element=\{<\K[A-Za-z]+' frontend/src/App.tsx | sort -u
+grep -oP '<Route[^>]*element=\{<\K[A-Za-z]+' frontend/src/App.tsx | sort -u   # ERRADO
 ```
+
+Só casa `element={<X />}` numa linha. As rotas de verdade são multilinha, com o
+componente aninhado dentro de `<ProtectedRoute>` e `<AppLayout>` — o comando
+devolvia **11** de 21 páginas vivas. Usado para decidir se uma página está morta,
+ele erra para o lado pior: faz página em uso parecer órfã, que é o inverso do
+acidente da `ProfilePage` que ele foi escrito para evitar.
+
+A que funciona olha o JSX renderizado, não a linha do `<Route>`:
+
+```bash
+# páginas vivas: renderizadas em App.tsx e existentes em pages/
+grep -oP '<\K[A-Z][A-Za-z]*(?=\s*/>)' frontend/src/App.tsx | sort -u \
+  | while read n; do [ -f "frontend/src/pages/$n.tsx" ] && echo "$n"; done
+```
+
+**Hoje: 28 arquivos em `pages/`, 21 vivos.** Das sete restantes, três são abas da
+`SettingsPage` (`DocumentationPage`, `MissionControlDossierPage`, `UsersPage`) e
+quatro não são renderizadas por ninguém: `ChannelsPage` (fundida na `ChatPage`,
+ver o comentário no `App.tsx`), `DashboardPage`, `Index` e a `ProfilePage` do
+acidente. Arquivo morto por decisão — mas confira antes de reviver qualquer uma.
 
 ### Arquivos gerados — não editar à mão
 
