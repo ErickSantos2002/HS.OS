@@ -238,19 +238,34 @@ Não dá para responder quanto custou a semana. E o Bloco 1 do roadmap anterior 
 justamente sobre economia de token — sem essa tabela não há como saber se
 funcionou.
 
-### 9. `agent_turns` está inteiramente vazia ⛔ decisão do Erick
+### 9. ~~`agent_turns` está inteiramente vazia~~ ❌ não é defeito: é entulho arquivado
 
-```sql
-select count(*) from agent_turns;  -- 0
-```
+⚠️ **Eu levantei isto como decisão pendente e não era.** A resposta já estava
+escrita em [`DECISAO-RECONCILIADOR.md`](DECISAO-RECONCILIADOR.md), de 11/08.
 
-Zero linhas, nunca. A tabela de acompanhamento de turno — com `status`,
-`attempts`, `dispatched_at`, `delivered_at`, `nudged_at` — existe no schema e
-ninguém escreve nela. É exatamente o instrumento que teria mostrado as oito
-perguntas engolidas no dia em que aconteceram, em vez de seis dias depois.
+A `agent_turns` (e a `agent_turn_events`, também com 0 linhas e 0 escritores)
+alimentava a `turn-reconciler`, arquivada de propósito em `_pausado/`. O motivo:
+o desenho herdado **empurrava** a resposta e a reconciliadora existia para
+recuperar o que o webhook perdesse; o nosso **puxa**, e o buraco não existe.
 
-Decidir: fazer escrever, ou tirar do schema. Tabela vazia que parece
-instrumentação é pior que nenhuma.
+O mesmo doc definiu o sinal que reabriria a decisão — *"resposta que some depois
+de fechar a aba, com uso real"* — e mandou consertar pela recuperação ao abrir a
+conversa, **não** portando a reconciliadora. O sinal apareceu em 17/08 e o
+conserto foi feito (`/recuperar`).
+
+**As 8 perguntas engolidas de 24 a 30/08 são o mesmo sinal pela segunda vez**, e
+a resposta certa segue a mesma: o item 5 deste roadmap, feito em 31/08.
+
+Não há nada a construir nem a decidir. Fica a lição de leitura: `0 linhas, 0
+escritores` parece instrumentação quebrada e é tabela aposentada — o repo arquiva
+sem apagar de propósito (ver `EM-CONSTRUCAO.md`), então tabela vazia pede uma
+busca nos docs antes de virar item de roadmap.
+
+### 9b. `gateway_health` tem código e mesmo assim não tem linha
+
+Caso diferente da `agent_turns`, e este é de verdade: **dois arquivos do backend
+mencionam `gateway_health` e a tabela tem 0 linhas**. Ou o coletor não roda, ou
+falha em silêncio. Pequeno, mas é saúde do gateway que ninguém está vendo.
 
 ### 10. Não existe registro de login
 
@@ -320,7 +335,7 @@ na listagem de calibrações atrasadas e na cobrança de calibração.
 1. ~~Item 1 (`reserveTokensFloor`)~~ — era premissa errada; a causa real (contextWindow pela metade) foi corrigida em 31/08
 2. Item 4 (duplicata) — confirmar a hipótese do `seq` antes de mexer
 3. Item 5 (pergunta engolida) — é o que o CEO sente mais
-4. Itens 8 e 9 (medição) — sem isso não se sabe se o resto funcionou
+4. Item 8 (medição) — sem isso não se sabe se o resto funcionou
 5. Item 2 (aviso em inglês na tela)
 6. Itens 6 e 7 (como o agente fala)
 7. ~~Item 11 (falar com a Ketlin)~~ — descartado em 31/08
@@ -376,11 +391,6 @@ com o **último retrato**, e total menor que ele é a assinatura da sessão
 recriada.
 
 ## Decisões que ficaram para o Erick
-
-**Item 9 — `agent_turns`.** Confirmado: **nenhum escritor no código vivo**. A
-única menção fora do schema é o `types.ts` gerado do Supabase. É schema morto
-herdado do remix. Construir a instrumentação é feature de porte; apagar a tabela
-é destrutivo. Nenhum dos dois cabia em "seguir o recomendado".
 
 **Item 11 — a Ketlin.** Descartado pelo Erick em 31/08. O achado de
 onboarding continua valendo para o próximo usuário que entrar: acesso dado não é
