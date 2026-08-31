@@ -9,7 +9,7 @@ mesmos que o código herdado usa, com a mesma divisão entre público e privado:
 | `audio-messages`      | qualquer um — áudio toca em `<audio src>`            |
 | `wiki-uploads`        | qualquer um — imagem dentro de documento             |
 | `company-docs`        | autenticado                                          |
-| `generated-documents` | autenticado                                          |
+| `generated-documents` | **só o dono** — um diretório por pessoa               |
 
 **Por que os três primeiros são públicos:** a tela os usa em `src` de tag HTML,
 e o navegador não manda o cabeçalho `Authorization` nesse caso. Era assim no
@@ -190,8 +190,15 @@ async def documento_gerado(
     A edge criava uma URL assinada de 1 hora do Supabase Storage. Aqui não há
     assinatura: `generated-documents` é bucket privado, servido por
     `/storage/privado/...`, que já exige o token do usuário em cada request.
-    O efeito de segurança é o mesmo — melhor, até: a URL assinada valia para
-    quem a tivesse durante uma hora, esta vale só para quem tem o token.
+    ⚠️ **O efeito de segurança NÃO é o mesmo, e este comentário afirmava que
+    era.** A URL assinada do Supabase valia para **um arquivo** durante uma hora;
+    o token vale para **o bucket inteiro**. Enquanto a conferência de dono
+    existia só aqui, ela gate descobrir o caminho — não ler o arquivo, que
+    `/storage/privado/…` servia a qualquer pessoa autenticada. Corrigido em
+    31/08/2026: a mesma regra de dono passou a valer lá, em `_pode_ler_privado`.
+
+    Também atualiza o cabeçalho do módulo: `generated-documents` não é
+    "autenticado", é **do dono**.
 
     A conferência de dono acontece aqui e não pelo RLS porque a leitura roda
     como `service_role` para poder olhar a linha antes de decidir.
@@ -441,11 +448,46 @@ async def listar(bucket: str, prefixo: str, usuario: Usuario = Depends(usuario_a
     return {"arquivos": sorted(f.name for f in alvo.iterdir() if f.is_file())}
 
 
+# ⚠️ **A conferência de dono existia numa porta e faltava na outra.**
+#
+# `GET /storage/documento/{id}` confere que a linha em `generated_documents` é de
+# quem pediu, e devolve 404 em vez de 403 para o não-dono nem descobrir que o
+# documento existe. Só que ele então entrega uma URL
+# `/storage/privado/generated-documents/…` que, até 31/08/2026, servia o arquivo
+# a **qualquer pessoa autenticada**: a checagem gate descobrir o caminho, não ler.
+#
+# E o caminho é adivinhável por construção — `{user_id}/{doc_id}.{tipo}`, escrito
+# vinte linhas acima, com o `user_id` visível em várias telas.
+#
+# O docstring de lá afirmava que o efeito de segurança era "o mesmo — melhor,
+# até" que a URL assinada do Supabase. Não era, e vale registrar a forma do erro:
+# a URL assinada valia para **um arquivo**; o token vale para **o bucket**.
+#
+# ⚠️ **Sem exceção para administrador**, porque a porta que já funcionava não tem.
+# Duas regras diferentes para o mesmo arquivo é o que produz o próximo buraco.
+_DIRETORIO_POR_PESSOA = {"generated-documents"}
+
+
+def _pode_ler_privado(bucket: str, caminho: str, usuario_id: str) -> bool:
+    """Quem pede pode ler este arquivo?
+
+    `company-docs` é da empresa por desenho (ver o cabeçalho do módulo) e segue
+    valendo para qualquer pessoa autenticada. `generated-documents` guarda um
+    diretório por pessoa, e o dono é o primeiro segmento do caminho.
+    """
+    if bucket not in _DIRETORIO_POR_PESSOA:
+        return True
+    dono = (caminho or "").lstrip("/").split("/")[0]
+    # Falha fechada: caminho sem diretório de pessoa não tem dono declarado, e
+    # tratar isso como "de todos" faria um caminho malformado virar chave mestra.
+    return bool(dono) and "/" in caminho.lstrip("/") and dono == usuario_id
+
+
 @router.get("/privado/{bucket}/{caminho:path}")
 async def baixar_privado(
     bucket: str,
     caminho: str,
-    _: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(usuario_atual),
 ):
     """Serve arquivo de bucket privado, exigindo token.
 
@@ -457,6 +499,10 @@ async def baixar_privado(
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, "Bucket não é privado — use /storage/{bucket}/…"
         )
+    # 404 e não 403, igual à porta de `/documento/{id}`: quem não é dono também
+    # não deveria descobrir que o arquivo existe.
+    if not _pode_ler_privado(bucket, caminho, str(usuario.id)):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Arquivo não encontrado.")
     alvo = _resolver(bucket, caminho)
     if not alvo.is_file():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Arquivo não encontrado.")
