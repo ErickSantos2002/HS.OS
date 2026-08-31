@@ -754,8 +754,8 @@ def _ja_esta_la(texto: str, existentes: list[str]) -> bool:
     return False
 
 
-def _deve_recuperar(texto: str, existentes: list[str]) -> bool:
-    """A janela do gateway vira linha em `conversations`?
+def _texto_a_recuperar(texto: str, existentes: list[str]) -> str | None:
+    """O que a janela do gateway vira em `conversations` — ou `None` se nada.
 
     ⚠️ **O `/reply` recusa o aviso de compactação e o `/recuperar` o reimportava.**
     O caminho normal trata esse texto como manutenção nossa (ver
@@ -763,12 +763,27 @@ def _deve_recuperar(texto: str, existentes: list[str]) -> bool:
     grava. A recuperação não tinha essa trava e o trazia de volta do gateway a
     cada abertura da tela — foi assim que o CEO leu três vezes, em inglês, um
     pedido para rodar `/compact`, comando que não existe no HS.OS.
+
+    ⚠️ **E é aqui que o bastidor entra, não pelo webhook.** Sondando a produção
+    em 31/08/2026, `POST /conversations/webhook/resposta` responde **503**: o
+    `AGENT_REPLY_WEBHOOK_SECRET` não está em `integration_secrets` nem no
+    ambiente, e o `exige_segredo` falha fechado. Quem escreve é esta rota — das
+    140 bolhas de agente da semana de 24/08, 74 vieram sem `message_id` em
+    `agent_runs`, e das 25 de bastidor, 20.
+
+    ⚠️ **Aparar ANTES de comparar, não depois.** A bolha que o `/reply` gravou
+    chega sem a narração; comparar a nossa ainda com bastidor faz a contenção
+    não casar, e a mesma resposta entra duas vezes com textos ligeiramente
+    diferentes. Foi metade das duplicatas daquela semana.
     """
     if not texto:
-        return False
+        return None
     if _FALHA_DE_COMPACTACAO.search(texto):
-        return False
-    return not _ja_esta_la(texto, existentes)
+        return None
+    aparado = _aparar_bastidor(texto)
+    if not aparado or _ja_esta_la(aparado, existentes):
+        return None
+    return aparado
 
 
 @router.post("/{agent_id}/recuperar", response_model=list[MensagemOut])
@@ -832,18 +847,41 @@ async def recuperar(
         for fim_ms, msgs in janelas:
             if fim_ms and fim_ms <= corte_ms:
                 continue
-            texto = _texto_da_resposta(msgs, 0)
-            if not _deve_recuperar(texto, existentes):
+            texto = _texto_a_recuperar(_texto_da_resposta(msgs, 0), existentes)
+            if texto is None:
                 continue
+            # ⚠️ **A conferência em Python não protege de corrida, e a corrida
+            # acontece.** Medido em 24/08/2026 às 16h33 na conversa do CEO: o
+            # mesmo texto de 7.715 caracteres gravado duas vezes, uma pelo
+            # `/reply` (tem `message_id` em `agent_runs`) e outra por aqui (não
+            # tem). Das 140 bolhas de agente daquela semana, 74 vieram sem run.
+            #
+            # A sequência é clássica: a tela abre e chama `/recuperar`, que lê a
+            # lista de `existentes`; o `/reply` da pergunta em curso insere logo
+            # depois; e o `/recuperar`, com a lista velha na mão, insere de novo.
+            # Ler e depois escrever, com outro escritor no meio.
+            #
+            # Por isso a última palavra é do banco, na mesma instrução: só grava
+            # se não houver mensagem igual do mesmo agente para a mesma pessoa na
+            # última meia hora. `NULL` quando alguém chegou primeiro — e aí não é
+            # erro, é o caso bom.
             linha = await conn.fetchrow(
                 f"""
                 INSERT INTO public.conversations (agent_id, user_id, role, content, created_at)
-                VALUES ($1, $2::uuid, 'agent', $3, to_timestamp($4::bigint / 1000.0))
+                SELECT $1, $2::uuid, 'agent', $3, to_timestamp($4::bigint / 1000.0)
+                 WHERE NOT EXISTS (
+                       SELECT 1 FROM public.conversations
+                        WHERE user_id = $2::uuid AND agent_id = $1 AND role = 'agent'
+                          AND created_at > now() - interval '30 minutes'
+                          AND content = $3
+                 )
                 RETURNING {_COLUNAS}
                 """,
                 agent_id, usuario.id, texto, fim_ms or 0,
             )
             existentes.append(texto)
+            if linha is None:
+                continue
             recuperadas.append(_para_saida(linha))
 
     if recuperadas:

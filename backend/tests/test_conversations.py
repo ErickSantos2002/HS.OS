@@ -61,21 +61,21 @@ def test_nao_recupera_o_aviso_de_compactacao():
     É por isso que o CEO leu três vezes, em inglês, um pedido para rodar
     `/compact` — comando que não existe no HS.OS.
     """
-    assert c._deve_recuperar(AVISO_DE_COMPACTACAO, []) is False
+    assert c._texto_a_recuperar(AVISO_DE_COMPACTACAO, []) is None
 
 
 def test_recupera_resposta_de_verdade():
     texto = "Faturamento de agosto/2026 até 28/08: R$ 1.031.451,60."
-    assert c._deve_recuperar(texto, []) is True
+    assert c._texto_a_recuperar(texto, []) == texto
 
 
 def test_nao_recupera_o_que_ja_esta_gravado():
     texto = "Faturamento de agosto/2026 até 28/08: R$ 1.031.451,60."
-    assert c._deve_recuperar(texto, [texto]) is False
+    assert c._texto_a_recuperar(texto, [texto]) is None
 
 
 def test_nao_recupera_texto_vazio():
-    assert c._deve_recuperar("", []) is False
+    assert c._texto_a_recuperar("", []) is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -132,3 +132,41 @@ def test_so_apara_no_comeco():
 def test_paragrafo_com_numero_nao_e_bastidor():
     texto = "Vou consultar o mês.\n\nTotal: R$ 1.031.451,60."
     assert c._aparar_bastidor(texto) == "Total: R$ 1.031.451,60."
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ **O bastidor entra pelo `/recuperar`, não pelo webhook.**
+#
+# Em 31/08/2026, sondando a produção: `POST /conversations/webhook/resposta`
+# responde **503** — o `AGENT_REPLY_WEBHOOK_SECRET` não está em `integration_secrets`
+# nem no ambiente, e o `exige_segredo` falha fechado. O webhook está morto, então
+# filtrar lá não muda nada hoje.
+#
+# Quem escreve é o `/recuperar`: das 140 bolhas de agente da semana de 24/08, 74
+# vieram sem `message_id` em `agent_runs` — e das 25 de bastidor, 20.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_recuperar_apara_o_bastidor_antes_de_gravar():
+    texto = BASTIDOR_MAIS_RESPOSTA
+    assert c._texto_a_recuperar(texto, []).startswith("Nicholson, o destaque")
+
+
+def test_recuperar_descarta_janela_que_e_so_bastidor():
+    assert c._texto_a_recuperar(BASTIDOR_PURO, []) is None
+
+
+def test_recuperar_compara_o_texto_JA_APARADO_com_o_que_existe():
+    """A bolha do `/reply` chega aparada; a do `/recuperar` tem que ser comparada
+    no mesmo estado, senão a contenção não casa e a resposta entra duas vezes."""
+    ja_gravado = "Nicholson, o destaque do mês é o **Eduardo Luna**."
+    assert c._texto_a_recuperar(BASTIDOR_MAIS_RESPOSTA, [ja_gravado]) is None
+
+
+def test_recuperar_ainda_recusa_o_aviso_de_compactacao():
+    assert c._texto_a_recuperar(AVISO_DE_COMPACTACAO, []) is None
+
+
+def test_recuperar_devolve_resposta_limpa_intacta():
+    texto = "Faturamento de agosto/2026: R$ 1.031.451,60."
+    assert c._texto_a_recuperar(texto, []) == texto
