@@ -86,13 +86,30 @@ def _cron_do_gateway(job: dict) -> dict:
     }
 
 
-def _sessoes_por_agente(sessoes: list) -> dict[str, dict]:
-    """Agrega o `sessions.list` por agente.
+# ⚠️ **Sessão abandonada não é sessão em uso, e são a maioria.** Medido no
+# gateway em 31/08/2026: 100 sessões, **29** tocadas nos últimos sete dias. As
+# outras 71 são de teste e diagnóstico da migração (`teste-*`, `diag-*`,
+# `escopo-conf-*`), de até 17 dias atrás.
+#
+# Sem janela, o painel diria que o `atlas` tem 37 sessões para sempre, e o pico
+# de tokens dele seria o de um teste de duas semanas. Ruído apresentado como
+# sinal é pior que campo vazio — o vazio ninguém interpreta como saúde.
+_JANELA_DE_SESSAO_MS = 7 * 24 * 60 * 60 * 1000
+
+
+def _sessoes_por_agente(sessoes: list, agora_ms: int | None = None) -> dict[str, dict]:
+    """Agrega o `sessions.list` por agente, olhando só a janela recente.
 
     A chave é `agent:<agentId>:<sufixo>`; qualquer outra coisa é descartada em
     silêncio — o gateway já devolveu chave fora do formato e derrubar a coleta
     inteira por causa de uma linha seria trocar dado parcial por dado nenhum.
+
+    ⚠️ **Sessão sem carimbo de tempo conta.** Falha aberta de propósito: não dá
+    para saber se está viva, e sumir com um agente do painel por falta de campo é
+    pior que contar a mais.
     """
+    if agora_ms is None:
+        agora_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
     por_agente: dict[str, dict] = {}
     for s in sessoes or []:
         if not isinstance(s, dict):
@@ -100,6 +117,10 @@ def _sessoes_por_agente(sessoes: list) -> dict[str, dict]:
         partes = str(s.get("key") or "").split(":")
         if len(partes) < 3 or partes[0] != "agent" or not partes[1]:
             continue
+        carimbo = s.get("updatedAt") or s.get("endedAt")
+        if isinstance(carimbo, (int, float)) and carimbo > 0:
+            if agora_ms - carimbo > _JANELA_DE_SESSAO_MS:
+                continue
         tokens = s.get("totalTokens") or 0
         tokens = int(tokens) if isinstance(tokens, (int, float)) else 0
         atual = por_agente.setdefault(
@@ -107,7 +128,7 @@ def _sessoes_por_agente(sessoes: list) -> dict[str, dict]:
         )
         atual["session_count"] += 1
         atual["max_total_tokens"] = max(atual["max_total_tokens"], tokens)
-        quando = _instante(s.get("updatedAt") or s.get("endedAt"))
+        quando = _instante(carimbo)
         if quando and (atual["latest_updated_at"] is None or quando > atual["latest_updated_at"]):
             atual["latest_updated_at"] = quando
     return por_agente

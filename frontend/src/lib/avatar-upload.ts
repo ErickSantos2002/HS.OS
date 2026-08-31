@@ -19,7 +19,12 @@ export async function uploadUserAvatar(userId: string, dataUrl: string): Promise
   return url;
 }
 
-/** Upload a cropped avatar for an AGENT → upserts agent_avatars */
+/** Sobe o avatar recortado de um AGENTE: arquivo no storage e `avatar_url` no
+ *  perfil, por `PATCH /agents/{id}`.
+ *
+ *  ⚠️ O comentário aqui dizia "upserts agent_avatars" e essa tabela saiu do
+ *  caminho — tem zero linhas e ninguém a lê. Quem procurasse o avatar por ela
+ *  não acharia nada e concluiria que o upload está quebrado. */
 export async function uploadAgentAvatar(agentId: string, dataUrl: string): Promise<string> {
   const blob = await dataUrlToBlob(dataUrl);
   const path = `avatars/${agentId}.png`;

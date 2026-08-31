@@ -72,3 +72,48 @@ def test_agrega_as_sessoes_por_agente():
 
 def test_chave_malformada_nao_derruba_a_coleta():
     assert m._sessoes_por_agente([{"key": None}, {}, {"key": "agent:só-duas"}]) == {}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ⚠️ **Sessão abandonada não é sessão em uso, e são a maioria.**
+# Medido no gateway em 31/08/2026: 100 sessões, **29** tocadas nos últimos sete
+# dias. As outras 71 são de teste e diagnóstico da migração — `teste-*`,
+# `diag-*`, `escopo-conf-*` — de até 17 dias atrás.
+#
+# Sem janela, o painel diria que o `atlas` tem 37 sessões para sempre, e o
+# `max_total_tokens` dele seria o pico de um teste de duas semanas atrás. Ruído
+# apresentado como sinal é pior que campo vazio: o vazio ninguém interpreta.
+# ─────────────────────────────────────────────────────────────────────────────
+
+AGORA_MS = 1788000000000
+DIA = 86_400_000
+
+
+def test_conta_so_a_sessao_tocada_na_janela():
+    sessoes = [
+        {"key": "agent:atlas:viva", "totalTokens": 30_000, "updatedAt": AGORA_MS - 2 * DIA},
+        {"key": "agent:atlas:teste-antigo", "totalTokens": 99_000, "updatedAt": AGORA_MS - 17 * DIA},
+    ]
+    r = m._sessoes_por_agente(sessoes, agora_ms=AGORA_MS)
+    assert r["atlas"]["session_count"] == 1
+
+
+def test_o_pico_ignora_a_sessao_abandonada():
+    """Senão o painel mostra como pico atual o de um teste de duas semanas."""
+    sessoes = [
+        {"key": "agent:atlas:viva", "totalTokens": 30_000, "updatedAt": AGORA_MS - 2 * DIA},
+        {"key": "agent:atlas:teste-antigo", "totalTokens": 99_000, "updatedAt": AGORA_MS - 17 * DIA},
+    ]
+    assert m._sessoes_por_agente(sessoes, agora_ms=AGORA_MS)["atlas"]["max_total_tokens"] == 30_000
+
+
+def test_sessao_sem_carimbo_de_tempo_conta():
+    """Falha aberta: não dá para saber se está viva, e esconder um agente do
+    painel por falta de campo é pior que contar a mais."""
+    sessoes = [{"key": "agent:iris:sem-data", "totalTokens": 10_000}]
+    assert m._sessoes_por_agente(sessoes, agora_ms=AGORA_MS)["iris"]["session_count"] == 1
+
+
+def test_agente_so_com_sessao_velha_some_do_painel():
+    sessoes = [{"key": "agent:bruce:so-velha", "totalTokens": 5, "updatedAt": AGORA_MS - 30 * DIA}]
+    assert "bruce" not in m._sessoes_por_agente(sessoes, agora_ms=AGORA_MS)
