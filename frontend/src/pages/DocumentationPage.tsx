@@ -748,7 +748,11 @@ Body:
             {/* 8. EDGE FUNCTIONS */}
             <SectionHeading id="edge-functions" title="9. Edge Functions" />
             <P>
-              O HS.OS utiliza Supabase Edge Functions (runtime Deno) como camada serverless para lógica de negócio.
+              <strong>Esta seção é histórica.</strong> O HS.OS usou Supabase Edge Functions (runtime
+              Deno) como camada serverless até agosto de 2026. Não usa mais: das 73, 65 viraram rotas
+              da API própria em FastAPI e 8 foram arquivadas por decisão — Arena, war room, voz e a
+              reconciliadora de turnos. Nenhuma das funções listadas abaixo existe hoje; a tabela fica
+              como mapa do que cada uma fazia, que é o que ajuda a achar a rota equivalente.
             </P>
             <TableWrapper>
               <thead>
@@ -783,7 +787,7 @@ Body:
               </thead>
               <tbody>
                 <tr><Td>profiles</Td><Td>Perfis de usuários (nome, email, avatar, status)</Td></tr>
-                <tr><Td>user_roles</Td><Td>Papéis dos usuários (administrador, member, user)</Td></tr>
+                <tr><Td>user_roles</Td><Td>Papéis dos usuários: <strong>administrador</strong> e <strong>colaborador</strong>. Uma pessoa pode ter mais de uma linha; vale o papel mais forte. São acesso ao sistema, não hierarquia da empresa — o CEO é colaborador.</Td></tr>
                 <tr><Td>channels</Td><Td>Canais de comunicação (public, private, dm)</Td></tr>
                 <tr><Td>channel_messages</Td><Td>Mensagens em canais com suporte a threads e anexos</Td></tr>
                 <tr><Td>channel_members</Td><Td>Associação de usuários/agentes a canais</Td></tr>
@@ -822,7 +826,7 @@ Body:
                 <tr><Th>Enum</Th><Th>Valores</Th></tr>
               </thead>
               <tbody>
-                <tr><Td>app_role</Td><Td>administrador, member, user</Td></tr>
+                <tr><Td>app_role</Td><Td>administrador, colaborador</Td></tr>
                 <tr><Td>author_type</Td><Td>human, agent</Td></tr>
                 <tr><Td>channel_type</Td><Td>public, private, dm</Td></tr>
               </tbody>

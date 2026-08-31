@@ -699,7 +699,7 @@ banco_de_dados:
     Edge Functions utilizam SUPABASE_SERVICE_ROLE_KEY para bypass de RLS quando necessário.
   enums:
     - nome: app_role
-      valores: [administrador, member, user]
+      valores: [administrador, colaborador]
     - nome: author_type
       valores: [human, agent]
     - nome: channel_type
@@ -708,7 +708,7 @@ banco_de_dados:
     - nome: profiles
       descricao: Perfis de usuários (nome, email, avatar, status)
     - nome: user_roles
-      descricao: Papéis dos usuários (administrador, member, user) — tabela separada do perfil
+      descricao: Papéis dos usuários (administrador, colaborador) — tabela separada do perfil
     - nome: channels
       descricao: Canais de comunicação (public, private, dm)
     - nome: channel_messages
