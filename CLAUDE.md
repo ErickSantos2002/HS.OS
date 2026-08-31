@@ -814,7 +814,14 @@ O que é código e precisa de mudança manual:
 Nomes de agentes da instância original (`lia`, `rock`, `milo`, `kira`, `radar`, `sigma`, `rodrigo`)
 ainda aparecem nos YAMLs de documentação. **Saíram do `use-agent-avatar.ts` em 10/08** — eram oito
 ids fixos que o carregador sondava e que não existem aqui. A resolução do agente **líder/orquestrador** já foi corrigida para ser
-dinâmica (via `agent_templates.is_leader_template`) em vez de assumir "lia" — não reintroduza o hardcode.
+dinâmica em vez de assumir "lia" — não reintroduza o hardcode.
+
+⚠️ **Mas não é pela `agent_templates`, como este arquivo dizia até 31/08/2026.**
+Quem responde é `agent_profiles.is_leader`, com índice único parcial garantindo
+um líder por instalação (ver `agent_profiles_single_leader_idx` no `ROADMAP.md`).
+A `agent_templates` tem **zero linhas e zero referências** — nem no backend nem
+no front. É tabela herdada do remix, como a `agent_turns`; ler a documentação
+antiga levaria alguém a procurar a resolução no lugar errado.
 
 ## Documentação que vale ler antes de mexer
 

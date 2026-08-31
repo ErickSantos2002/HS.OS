@@ -331,7 +331,7 @@ consumo ao abrir.
 
 | Decisão | Contexto |
 |---|---|
-| Manter as 191 policies de RLS? | Funcionam e são defesa em profundidade, mas duplicam a autorização do FastAPI. Se aposentar, vira a `003`. |
+| ~~Manter as 191 policies de RLS?~~ **Sim.** Decidido em 31/08/2026 — ver abaixo. | Medido: nenhuma query depende delas para escopo. Aposentar é possível e não compensa. |
 | As flags `dnos_flag_*` viram padrão? | São 4 correções de estabilidade desligadas por padrão. Ver `RESUMO-CONSOLIDACAO`. |
 | Trocar a senha do admin | `admin123` num `super_admin` que guarda o token do gateway. **O endpoint já existe** (`POST /auth/trocar-senha`, exigindo a senha atual) e a tela está pronta. Falta só fazer, antes de liberar para a equipe. |
 | Lovable AI Gateway e ElevenLabs | Travam 9 das 13 functions restantes. Escolher provedor e pagar, ou tirar do produto: transcrição de áudio, visão de imagem, leitura do contexto da empresa e a voz da Arena. |
@@ -346,3 +346,42 @@ consumo ao abrir.
 - **O wizard de `/setup`** — aposentado. O que sobrou de útil está catalogado em
   `frontend/src/_legado/README.md`.
 - **Multi-tenant / remix** — o HS.OS é instalação única da Health & Safety.
+
+
+---
+
+## As 191 policies de RLS ficam — decidido em 31/08/2026
+
+A pergunta estava em aberto porque ninguém tinha medido o que elas protegem.
+Medido agora, e a resposta muda o enquadramento: **não são load-bearing.**
+
+Varredura do `app/` procurando, dentro de cada bloco que abre
+`sessao(role="authenticated")`, as queries que tocam tabela de dado pessoal
+(`conversations`, `notifications`, `channel_messages`, `wiki_documents`,
+`live_artifacts`, `agent_runs` e outras) sem filtro de dono no SQL:
+
+| | |
+|---|---|
+| queries sob `authenticated` em tabela pessoal | **64** |
+| sem filtro de dono (`user_id`, `author_id`, `created_by`…) | **0** |
+
+⚠️ **A varredura é aproximada e isso importa para a conclusão.** Ela lê o SQL
+como texto e aceita o filtro montado antes da query — o caso do
+`conversations.py:201`, onde o `user_id` entra numa lista `condicoes` a vinte
+linhas de distância. Aceitar isso evita falso positivo e admite falso negativo:
+uma query cujo `user_id` pertença a *outra* consulta próxima passaria batido.
+
+**Por que ficam, então.** O resultado diz que dá para aposentá-las sem quebrar
+escopo — e é justamente por isso que não compensa. O ganho é tirar duplicação
+que não custa nada em runtime; o risco é a varredura ter errado **uma** vez, e o
+sintoma de errar é vazamento de dado entre pessoas, que ninguém descobre por
+teste. Trocar um risco silencioso por uma economia estética é mau negócio.
+
+O que muda de verdade: elas deixam de ser dúvida. Ficam como segunda camada
+declarada, e a autorização de verdade continua sendo a do FastAPI — que é onde
+ela deve ser lida, mexida e testada.
+
+⚠️ **Isto reabre se a primeira camada mudar de desenho.** Se algum dia uma query
+passar a depender da policy para escopo, a decisão inverte: aí a RLS vira
+load-bearing sem ninguém ter decidido que fosse, que é o pior dos dois mundos.
+A varredura está em `docs/` como procedimento, não como resultado de uma vez só.
