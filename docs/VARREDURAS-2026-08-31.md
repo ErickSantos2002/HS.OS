@@ -102,3 +102,34 @@ vem do `models.json` do agente, **não** do `models.providers.deepseek.apiKey` d
 | `backend/scripts/auditar_deriva_schema.py` | coluna no banco sem migração |
 | `backend/scripts/auditar_rls.py` | query que depende de RLS para escopo |
 | `scripts/conferir-contratos.py` | campo declarado × campo devolvido (**precisa de backend e token**) |
+
+
+---
+
+## Mapa do que está morto, e por quê
+
+45 das 71 tabelas estão vazias. A pergunta útil não é "quais" — é **quais têm
+código atrás**, porque tabela vazia com código é ou feature nunca ligada ou
+escrita quebrada, e as duas se parecem de fora.
+
+⚠️ **Este mapa existe porque a confusão custou tempo hoje quatro vezes.** Em
+todas, "0 linhas + código" pareceu defeito e não era; numa delas (`agent_turns`)
+virou item de roadmap que não devia existir.
+
+| tabela | estado | como se sabe |
+|---|---|---|
+| `agent_turns`, `agent_turn_events` | **arquivada por decisão** | alimentavam a `turn-reconciler`, arquivada em 11/08 com o motivo em `DECISAO-RECONCILIADOR.md` |
+| `email_send_log`, `email_send_state`, `email_unsubscribe_tokens`, `suppressed_emails` | **nunca portada** | zero referências no backend; só aparecem no YAML de documentação e nos tipos gerados do Supabase |
+| `agent_avatars` | **saiu do caminho** | o avatar vive em `agent_profiles.avatar_url`; o `avatar-upload.ts` dizia fazer upsert nela e não faz (corrigido em 31/08) |
+| `agent_activity`, `agent_activity_log` | **sem produtor** | as três rotas que escreveriam nela são guardadas pelo `BRIDGE_API_TOKEN`, que responde **503**; e nenhum dos 12 servidores MCP do gateway as chama. O `AgentActivityCard` some sozinho quando vazio, então não aparece quebrado |
+| `cron_jobs`, `gateway_health`, `usage_daily`, `agent_stats` | **eram sem produtor; corrigido em 31/08** | o coletor da VPS sumiu na migração; agora `app/coletor_metricas.py` as enche |
+| `llm_provider_ops` | **fila sem consumidor** | o sincronizador nunca existiu; o produtor foi removido em 31/08 e a fila não pode mais crescer |
+| `skills`, `agent_skills` | **vazia de propósito** | só skill de origem `plataforma` mora no banco; as sete em uso vêm do repositório e do gateway, e o endpoint funde as duas fontes desde 17/08 |
+| `model_pricing` | **só alimenta a rota de importação** | o custo do dia a dia vem do gateway pela `usage_events`; a rota `/uso/importar` é a única leitora |
+| `teams`, `team_agents`, `automations`, `automation_runs`, `drafts`, `message_reactions`, `arena*`, `push_subscriptions` | **feature não usada** | têm rota e tela; ninguém usou ainda |
+| `routine_phrases` | **sem uma referência sequer** | nem backend, nem front, nem documentação |
+
+**A régua para a próxima:** antes de tratar tabela vazia como defeito, procure o
+produtor. Se ele existe e não roda, é bug; se não existe, é feature desligada; se
+existe e é guardado por segredo que responde 503, é config — e foi esse o caso
+mais comum aqui.
