@@ -47,6 +47,37 @@ criou para si e rodou 560 vezes. Está **desligado** — o disjuntor funcionou �
 segue listado, e a tela mostra botão de religar para job desligado. Só pode
 acontecer uma coisa com ele daqui para frente, e não é boa.
 
+### `openclaw models list` quebra no gateway ⛔ decisão do Erick
+
+`Cannot read properties of undefined (reading 'input')`. Isolado por bisecção
+contra **cópias** da config (`OPENCLAW_CONFIG_PATH`), sem tocar na viva:
+`anthropic/claude-sonnet-5` em `agents.defaults.models` é a causa. Remover só ele
+faz o comando voltar; tirar o `alias` sem tirar o id não resolve; mover o alias
+para um modelo válido também não.
+
+O modelo **resolve** — aparece na lista com `Auth yes` — mas este gateway não sabe
+precificá-lo, e o CLI lê `cost.input`. É a mesma razão de a `usage_events` ter
+74.915 tokens dele custando **US$ 0,00**.
+
+⚠️ **Só o CLI quebra, e isso muda o tamanho do achado.** O RPC `models.list`, que
+é o que o backend usa, responde normal — 123 chamadas com ✓ no log de hoje. O
+produto não é afetado. O que se perde é diagnóstico na VPS, que fez falta
+justamente hoje. Nenhum agente usa o modelo; os cinco estão em `deepseek-chat`.
+
+Script pronto em `~/hsos-tirar-sonnet5-do-catalogo.sh`. **Não é urgente** — cabe
+na próxima vez que a config for tocada.
+
+⚠️ **E confirmou por que não ler a chave do gateway** (ver o conserto do
+`/llm/descobrir`): o `models status` mostra que a credencial efetiva do DeepSeek
+vem do `models.json` do agente, **não** do `models.providers.deepseek.apiKey` do
+`openclaw.json` — cujos 21 caracteres são resto.
+
+## Também apareceu
+
+- **`claude-cli` com OAuth expirado** (`expires in 0m`). Não é o provedor em uso e
+  nada depende dele hoje; fica anotado antes que alguém troque um agente para ele
+  e leve meia hora para entender a recusa.
+
 ## O que deu limpo, e com que força
 
 | varredura | resultado | força |
