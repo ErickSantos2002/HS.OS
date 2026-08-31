@@ -274,11 +274,19 @@ escritores` parece instrumentação quebrada e é tabela aposentada — o repo a
 sem apagar de propósito (ver `EM-CONSTRUCAO.md`), então tabela vazia pede uma
 busca nos docs antes de virar item de roadmap.
 
-### 9b. `gateway_health` tem código e mesmo assim não tem linha
+### 9b. As quatro tabelas de monitoramento ✅ feito em 31/08
 
-Caso diferente da `agent_turns`, e este é de verdade: **dois arquivos do backend
-mencionam `gateway_health` e a tabela tem 0 linhas**. Ou o coletor não roda, ou
-falha em silêncio. Pequeno, mas é saúde do gateway que ninguém está vendo.
+Era maior do que parecia: as **quatro** (`gateway_health`, `usage_daily`,
+`agent_stats`, `cron_jobs`) estavam em zero linha. Quem as enchia era um coletor
+na VPS chamando `POST /coletor/estatisticas` — e ele **não existe mais**.
+Conferido na máquina do gateway: nenhum script, agendamento ou serviço, nem
+sequer o que apontava para o Supabase, que era o que o `TESTAR-SEGUNDA.md` dizia
+estar lá.
+
+Agora quem enche é `app/coletor_metricas.py`, um laço ao lado dos três que o
+backend já roda. A escrita reusa o `_gravar` do router; o que o módulo acrescenta
+são os adaptadores, porque o formato do gateway é aninhado e o do coletor antigo
+era plano.
 
 ### 10. Não existe registro de login
 
@@ -320,7 +328,7 @@ porque acompanhou a construção. Ninguém mais tem esse contexto.
 
 ## Bloco 6 — Dívida com o usuário
 
-### 12. Um pedido nunca foi entregue
+### 12. ~~Um pedido nunca foi entregue~~ ✅ entregue por fora no mesmo dia
 
 **Empresas que compraram bafômetro e não fizeram calibração** — pedido de 25/08
 às 5h15 à Nina. A Iris estourou o contexto no meio, chegou a calcular 946 CNPJs,
@@ -328,9 +336,16 @@ e ela mesma questionou o número: a primeira versão da consulta contava **peça
 acessórios** (bocal, sensor, visor, LCD, módulos) como "comprou bafômetro",
 inflando a lista.
 
-O critério certo (só aparelho, não peça) ficou por definir e o dado nunca chegou.
-Isso é entregável, não bug — e cruza com o que já existe em
-na listagem de calibrações atrasadas e na cobrança de calibração.
+**O dado chegou — só que não pelos agentes.** O Nicholson perguntou à Nina às
+05h15; às **07h55 do mesmo dia** a planilha
+`Calibracoes-Atrasadas-2026-08-25.xlsx` foi gerada pelo `atrasadas.py`, no
+caminho do Erick: 984 clientes, 3.126 aparelhos atrasados, **1.632 nunca
+calibrados** — que é exatamente a pergunta dele. O critério que a Iris estava
+refinando quando estourou (só aparelho, não peça) é a decisão de escopo nº 2
+daquele script: Phoebus conta pelo módulo, nunca pelo aparelho.
+
+Fica como medida do custo real da falha: 2h40 e um caminho humano para uma
+pergunta que o sistema deveria responder.
 
 ---
 
@@ -436,3 +451,41 @@ parágrafos do começo, medida de novo contra as 137:
 ⚠️ **É heurística, calibrada numa semana de um usuário.** Vale reconferir o
 número quando houver outro mês de conversa — e a lista de marcadores em
 `_BASTIDOR` é o lugar de ajustar, não o desenho.
+
+
+---
+
+## Fechamento de 31/08
+
+Não sobrou item de código em aberto neste roadmap. O que resta são duas coisas
+que não são dele:
+
+**Decisão do Erick — as 191 policies de RLS.** Funcionam e são defesa em
+profundidade, mas duplicam a autorização que já está no FastAPI. Aposentar é
+migração de banco, e a decisão vem antes do trabalho. Está no `ROADMAP.md`, em
+"Decisões em aberto", desde antes deste documento.
+
+**Projeto de conteúdo — reescrever a Documentação.** São 2.859 linhas entre
+`DocumentationPage.tsx` e `dnos-documentation-yaml.ts` descrevendo a arquitetura
+anterior. ⚠️ **Não é ponta solta:** os dois arquivos já carregam, cada um, um
+aviso específico no topo dizendo o que está velho e por quê — inclusive um
+dirigido a LLMs, para não gerarem código chamando função que não existe. Em
+31/08 saíram os dois erros que o aviso não cobria: o papel `member`/`user`, que
+não existe no banco desde a migração 005, e o tempo verbal da seção de Edge
+Functions.
+
+**Item 3 — a delegação em cascata — segue sem conserto e provavelmente sem
+precisar.** As duas vezes que a Nina ficou pendurada foi porque a Iris travou por
+contexto estourado; com a janela real (1M em vez de 65.536) essa condição fica
+muito mais difícil. **Reavaliar depois de ver os agentes rodando uma semana**, em
+vez de construir agora um destravamento para um caso que pode ter deixado de
+existir.
+
+### O que conferir amanhã
+
+| quando | o quê | o que significa |
+|---|---|---|
+| 07h30–07h50 | os cinco briefings | passar de primeira confirma o diagnóstico da janela |
+| depois das 08h | `conversation_resets` | a taxa deve cair muito abaixo de 24/semana |
+| a qualquer hora | `/monitoring` | deixa de estar vazia pela primeira vez |
+| se algo falhar | o chat da `nina` | o guardião agora avisa, em vez de só registrar em log |
