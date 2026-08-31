@@ -572,6 +572,18 @@ def _texto_da_resposta(mensagens: list, desde_seq: int) -> str:
 # das 13h57 repetida palavra por palavra antes do conteúdo novo.
 _JANELA_ULTIMO_SEQ = 5
 
+# Quantas mensagens o `/recuperar` lê do gateway — e, obrigatoriamente, quantas
+# linhas nossas ele compara para não regravar.
+#
+# ⚠️ **Os dois números são o mesmo de propósito.** Ler mais do gateway do que se
+# compara do nosso lado reimportaria como "órfã" a resposta antiga que já está na
+# tela. Estava em 60 contra 60 por coincidência; agora não pode divergir.
+#
+# 60 não alcançava a sessão real: de 24 a 30/08/2026 a do `atlas` chegou a 177
+# mensagens e a da `iris` a 113. Resposta órfã mais antiga que a janela não era
+# recuperável — e o reset apagava a sessão antes de alguém notar.
+_JANELA_RECUPERAR = 200
+
 
 async def _ultima_pergunta(mensagens: list) -> str:
     """A última pergunta de gente na sessão — a que precisa ser refeita.
@@ -630,7 +642,7 @@ async def _compactar_e_reenviar(cliente, agent_id: str, chave: str,
                            chave, corpo.get("reason"))
         # Deixa o gateway assentar antes de refazer a pergunta.
         await asyncio.sleep(2)
-        seq = await _ultimo_seq(cliente, chave)
+        seq = await _ultimo_seq(cliente, chave, piso=await _piso_do_seq(chave, user_id))
         novo = f"hsos-{uuid4()}"
         await cliente.chamar("chat.send", {
             "agentId": agent_id, "sessionKey": chave,
@@ -642,16 +654,44 @@ async def _compactar_e_reenviar(cliente, agent_id: str, chave: str,
     return novo
 
 
-async def _ultimo_seq(cliente, chave_completa: str) -> int:
-    """Maior `seq` já presente na sessão, para saber o que é novo depois."""
+async def _ultimo_seq(cliente, chave_completa: str, piso: int = 0) -> int:
+    """Maior `seq` já presente na sessão, para saber o que é novo depois.
+
+    ⚠️ **`piso` existe porque a janela acima não é confiável, e subir o número
+    não resolve.** Em 19/08/2026 a correção foi trocar `limit=1` por `limit=5`,
+    tratando o sintoma: se uma janela de 1 erra aos 52, uma de 5 erra mais
+    adiante. Errou — de 24 a 30/08 a sessão do `atlas` chegou a 177 mensagens e
+    voltaram 12 respostas duplicadas na conversa do CEO.
+
+    Subestimar o corte é o que duplica: o `/reply` grava tudo com `seq >` ele, e
+    o que vem antes é turno anterior colado na frente da resposta. O `seq` de uma
+    sessão só cresce, então **o que já vimos é piso**, e o nosso `agent_runs` é
+    quem o guarda. Tomar o maior entre os dois nunca superestima — e superestimar
+    seria pior, engoliria a resposta nova.
+    """
     try:
         r = await cliente.chamar(
             "chat.history", {"sessionKey": chave_completa, "limit": _JANELA_ULTIMO_SEQ}
         )
     except ErroGateway:
-        return 0
+        # Gateway fora não é motivo para o corte cair a zero: isso regravaria a
+        # sessão inteira como se fosse nova.
+        return piso
     msgs = r.get("messages") or []
-    return max((m.get("__openclaw") or {}).get("seq") or 0 for m in msgs) if msgs else 0
+    do_gateway = (
+        max((m.get("__openclaw") or {}).get("seq") or 0 for m in msgs) if msgs else 0
+    )
+    return max(piso, do_gateway)
+
+
+async def _piso_do_seq(chave: str, user_id: str) -> int:
+    """O maior `seq` que já registramos para esta sessão, do nosso lado."""
+    async with sessao(role="authenticated", user_id=user_id) as conn:
+        v = await conn.fetchval(
+            "SELECT max(seq_antes) FROM public.agent_runs WHERE session_key = $1",
+            chave,
+        )
+    return int(v or 0)
 
 
 def _janelas_por_pergunta(mensagens: list) -> list[tuple[int, list]]:
@@ -714,6 +754,23 @@ def _ja_esta_la(texto: str, existentes: list[str]) -> bool:
     return False
 
 
+def _deve_recuperar(texto: str, existentes: list[str]) -> bool:
+    """A janela do gateway vira linha em `conversations`?
+
+    ⚠️ **O `/reply` recusa o aviso de compactação e o `/recuperar` o reimportava.**
+    O caminho normal trata esse texto como manutenção nossa (ver
+    `_FALHA_DE_COMPACTACAO` no `/reply`): compacta, refaz a pergunta e nunca o
+    grava. A recuperação não tinha essa trava e o trazia de volta do gateway a
+    cada abertura da tela — foi assim que o CEO leu três vezes, em inglês, um
+    pedido para rodar `/compact`, comando que não existe no HS.OS.
+    """
+    if not texto:
+        return False
+    if _FALHA_DE_COMPACTACAO.search(texto):
+        return False
+    return not _ja_esta_la(texto, existentes)
+
+
 @router.post("/{agent_id}/recuperar", response_model=list[MensagemOut])
 async def recuperar(
     agent_id: str,
@@ -743,7 +800,9 @@ async def recuperar(
 
     try:
         hist = await obter_cliente(c.url, c.token).chamar(
-            "chat.history", {"sessionKey": _chave_sessao(agent_id, usuario.id), "limit": 60}
+            "chat.history",
+            {"sessionKey": _chave_sessao(agent_id, usuario.id),
+             "limit": _JANELA_RECUPERAR},
         )
     except ErroGateway as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Não consegui ler o histórico: {e}")
@@ -764,8 +823,8 @@ async def recuperar(
             r["content"] for r in await conn.fetch(
                 "SELECT content FROM public.conversations "
                 " WHERE user_id = $1::uuid AND agent_id = $2 AND role = 'agent' "
-                " ORDER BY created_at DESC LIMIT 60",
-                usuario.id, agent_id,
+                " ORDER BY created_at DESC LIMIT $3",
+                usuario.id, agent_id, _JANELA_RECUPERAR,
             )
         ]
 
@@ -774,7 +833,7 @@ async def recuperar(
             if fim_ms and fim_ms <= corte_ms:
                 continue
             texto = _texto_da_resposta(msgs, 0)
-            if not texto or _ja_esta_la(texto, existentes):
+            if not _deve_recuperar(texto, existentes):
                 continue
             linha = await conn.fetchrow(
                 f"""
@@ -819,7 +878,9 @@ async def enviar(
 
     chave = _chave_sessao(agent_id, usuario.id)
     cliente = obter_cliente(c.url, c.token)
-    seq_antes = await _ultimo_seq(cliente, chave)
+    seq_antes = await _ultimo_seq(
+        cliente, chave, piso=await _piso_do_seq(chave, usuario.id)
+    )
 
     # O `runId` volta igual ao `idempotencyKey` e é o que a espera usa depois.
     # Precisa ser único por envio: reaproveitar faria o gateway deduplicar e a

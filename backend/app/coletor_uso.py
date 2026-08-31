@@ -45,6 +45,26 @@ def intervalo() -> int:
         return 300
 
 
+def _delta(total: int, ultimo_acumulado: int | None) -> int:
+    """Quanto do consumo desta sessão ainda não foi registrado.
+
+    ⚠️ **A comparação é com o ÚLTIMO retrato, não com a soma do que gravamos.**
+    Essa foi a causa de o coletor parar em 24/08/2026. O `session_key` é fixo por
+    (agente, usuário) — `agent:iris:hsos-<uuid>` — e o botão "Limpar" apaga a
+    sessão no gateway, que recomeça do zero com a mesma chave. Comparando com a
+    soma histórica, o acumulado antigo virava marca d'água: `delta` negativo,
+    `continue`, e nunca mais uma linha para aquele agente. Cada agente do CEO
+    parou no primeiro reset dele e não voltou — 24 resets só na semana de 24/08.
+
+    Total menor que o último retrato é a assinatura da sessão recriada, e aí o
+    que o gateway mostra agora é todo novo. Comparar com o último retrato (e não
+    com a soma) é o que impede a marca d'água de voltar no ciclo seguinte.
+    """
+    if ultimo_acumulado is None or total < ultimo_acumulado:
+        return total
+    return total - ultimo_acumulado
+
+
 async def coletar_uma_vez() -> dict:
     """Uma passada: lê o gateway, grava o que faltava. Devolve o que fez."""
     try:
@@ -79,12 +99,17 @@ async def coletar_uma_vez() -> dict:
                 # O que já registramos desta sessão. Deriva da própria tabela em
                 # vez de um estado à parte: se alguém apagar linhas, o coletor
                 # se corrige sozinho no ciclo seguinte.
-                ja = await conn.fetchval(
-                    "SELECT COALESCE(sum(total_tokens), 0) FROM public.usage_events "
-                    " WHERE session_key = $1 AND source = 'session_delta'",
+                # O último retrato desta sessão, não a soma do histórico — ver
+                # `_delta`. `ORDER BY id` e não `ts`: o `ts` vem do `endedAt` do
+                # gateway e pode voltar no tempo; o `id` é a ordem em que
+                # gravamos, que é a que interessa aqui.
+                ultimo = await conn.fetchval(
+                    "SELECT (meta->>'acumulado')::bigint FROM public.usage_events "
+                    " WHERE session_key = $1 AND source = 'session_delta' "
+                    " ORDER BY id DESC LIMIT 1",
                     chave,
-                ) or 0
-                delta = total - int(ja)
+                )
+                delta = _delta(int(total), None if ultimo is None else int(ultimo))
                 if delta <= 0:
                     continue
 
@@ -133,6 +158,16 @@ async def coletar_uma_vez() -> dict:
                     # ⚠️ O `external_id` carrega o acumulado, não o delta: é ele
                     # que impede o mesmo retrato de entrar duas vezes se o ciclo
                     # repetir sem a sessão ter andado.
+                    #
+                    # ⚠️ **Limitação conhecida, aceita:** depois de um reset a
+                    # sessão nova pode passar exatamente por um acumulado que a
+                    # antiga já registrou, e aí este `ON CONFLICT` engole o
+                    # retrato. Os tokens não somem — o ciclo seguinte compara com
+                    # o retrato anterior e traz a diferença junto; só se perdem
+                    # se a sessão terminar exatamente naquele número. Resolver de
+                    # verdade pede um identificador de instância da sessão, que o
+                    # `sessions.list` talvez traga (`startedAt`); não foi
+                    # verificado contra o gateway e não se inventa campo.
                     f"{chave}#{total}",
                     f'{{"acumulado": {total}, "status": "{s.get("status")}"}}',
                     especie,

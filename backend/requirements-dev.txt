@@ -1,0 +1,9 @@
+# Só para rodar os testes. NÃO entra na imagem — o Dockerfile copia apenas o
+# requirements.txt, e pytest em produção é peso morto.
+#
+#   ./.venv/bin/pip install -r requirements-dev.txt
+#   ./.venv/bin/python -m pytest tests -q
+#
+# Os testes async usam `asyncio.run` direto, sem plugin: são funções puras com
+# um cliente falso, não precisam de event loop compartilhado.
+pytest==9.1.1
