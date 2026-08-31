@@ -59,37 +59,50 @@ mudança de 26/08 foi acrescentar `"cron"` a umas listas de permissão. A
 recomendação que o gateway dá na própria mensagem de erro já estava aplicada e
 não resolveu.
 
-### 1b. A causa real: o gateway declarava metade do contexto ✅ feito em 31/08
+### 1b. A causa real: o gateway declarava 6,5% do contexto ✅ feito em 31/08
 
-O `deepseek-chat` (V3.1) tem **131.072** de janela. A config declarava **65.536**.
+⚠️ **O `deepseek-chat` foi aposentado em 24/07/2026.** As chamadas roteiam para
+o **DeepSeek-V4-Flash**, que tem **1.000.000** de contexto. A config do gateway
+declarava **65.536** — 6,5% da capacidade real. (O nome no `models.providers`
+entrega: `"name": "DeepSeek V4 Flash"` com `"id": "deepseek-chat"`.)
 
-| | antes | depois |
-|---|---|---|
-| `contextWindow` | 65.536 | **131.072** |
-| `reserveTokens` | 24.000 | 24.000 |
-| sobra para a conversa | ~41.5K | **~107K** |
+| | contextWindow |
+|---|---|
+| declarado até 31/08 | 65.536 |
+| passo intermediário (doc do V3.1, desatualizada) | 131.072 |
+| **aplicado** | **1.000.000** |
 
-Descontando ainda o `AGENTS.md` + `SOUL.md` sempre presentes — `atlas` ~4,5K
-tokens, `nina` ~6,8K — mais ferramentas e ponteiros de skill, o que restava para
-a conversa em si era pouco. Com respostas carregando artefatos HTML de 7KB, uma
-sessão de CEO enchia em poucos turnos: são os 24 resets da semana e as três
-falhas.
+**A prova de que era isto.** Logo após subir para 131.072, o `sessions list`
+mostrou a sessão do `atlas` em **66k/131k (50%)**. Com os 65.536 declarados
+antes, a mesma sessão estaria **acima de 100% da janela** — é exatamente a
+condição que faz a compactação disparar sem parar e, às vezes, não conseguir
+recuperar. Os 24 resets da semana não eram um sistema no limite: eram um sistema
+usando 6,5% do que tem.
 
-Aplicado direto no gateway (`openclaw-gateway.service`, unidade **de usuário** —
-`systemctl --user`, não a de sistema; foi por isso que o script original não
-achava o serviço). Parar antes de editar é obrigatório: o próprio gateway
-escreve nesse arquivo e sobrescreveria a mudança ao desligar.
+⚠️ **O `reserveTokens` de 24.000 ficou irrelevante** contra 1M — não precisa
+mexer. E o `maxTokens` de saída segue em 8.192 de propósito: o V4 Flash aceita
+muito mais, mas resposta de chat não deve crescer.
 
-Backup em `/root/.openclaw/openclaw.json.antes-contextwindow-20260831-130428`.
-Rollback pronto em `~/hsos-rollback-contextwindow.sh`.
+**Como aplicar e desfazer.** `openclaw-gateway.service` é unidade **de usuário**
+(`systemctl --user`, não a de sistema — foi por isso que o primeiro script não
+achava o serviço). E é obrigatório **parar o gateway antes de editar**: ele mesmo
+escreve nessa config e sobrescreve a mudança ao desligar. Scripts na máquina do
+Erick: `~/hsos-contextwindow-1m.sh` e `~/hsos-rollback-contextwindow.sh`.
 
-Conferido depois de subir: serviço ativo, porta 18789 escutando no loopback,
-chamadas ao DeepSeek voltando com sucesso no log, e `hsosapi.healthsafetytech.com/health`
-em 200.
+Conferido depois de subir: serviço ativo, 18789 escutando no loopback (v4 e v6),
+plugins pré-aquecidos, `hsosapi.healthsafetytech.com/health` em 200, e as sessões
+vivas já reportando a janela nova.
 
-⚠️ **O que ainda não foi medido:** se a janela maior de fato derruba a taxa de
-reset. Isso só aparece com uso — vale reconferir `conversation_resets` daqui a
-uma semana.
+⚠️ **Ruído no boot, não causado por isto:** `[main-session-restart-recovery]
+failed to resume interrupted main session agent "main"`. É estado velho de antes
+da frota ser separada — a `usage_events` tem uma sessão `main` com eventos de
+11/05 a 23/08. Falha sozinha (`recovered=0 failed=1`) e o gateway segue. Não dá
+para provar que é anterior pelo journal (ele só guarda desde 25/08 e o gateway
+não reiniciou nesse intervalo), mas o caminho é de startup e não tem relação com
+janela de contexto.
+
+⚠️ **O que ainda não foi medido:** se a janela certa derruba a taxa de reset.
+Só aparece com uso — reconferir `conversation_resets` daqui a uma semana.
 
 ### 2. O aviso cru de compactação não pode chegar à tela ✅ feito em 31/08
 
