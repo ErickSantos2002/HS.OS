@@ -77,3 +77,20 @@ export function apagarChave(chave: string): void {
     /* modo privado */
   }
 }
+
+/**
+ * Cancelamento real: "parar" também manda `/stop` ao gateway?
+ *
+ * ⚠️ **Ligada por padrão desde 31/08/2026, e a inversão é o conserto.** Nasceu
+ * como opt-in em `chat-sender.ts` e ninguém nunca a ligou — nem em produção.
+ * Com ela desligada, "parar" só aborta o poll do navegador: a resposta some da
+ * tela e **o agente continua rodando e gastando no gateway até terminar**. O
+ * comportamento que parecia seguro (opt-in) era o que desperdiçava.
+ *
+ * Fica aqui, e não no `chat-sender`, para poder ser testada sem levantar a
+ * camada de rede junto — e porque a migração do nome antigo é assunto deste
+ * arquivo: quem desligou como `dnos_flag_real_stop` continua desligado.
+ */
+export function cancelamentoRealLigado(): boolean {
+  return lerChave("hsos_flag_real_stop") !== "off";
+}

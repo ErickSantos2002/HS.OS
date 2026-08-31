@@ -22,7 +22,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createElement } from "react";
 import { RefreshCw, Check, AlertCircle } from "lucide-react";
-import { gravarChave, lerChave } from "@/lib/chaves-locais";
+import { cancelamentoRealLigado, gravarChave, lerChave } from "@/lib/chaves-locais";
 
 const RESET_COMMANDS = new Set(["/new", "/reset"]);
 function isResetCommand(text: string) {
@@ -124,20 +124,6 @@ export function wasAgentResponseStopped(agentId: string) {
   return stoppedAgents.has(agentId);
 }
 
-/**
- * Feature flag (cancelamento real): quando ligada, "parar" também envia /stop
- * ao gateway em vez de só abortar o fetch local (que hoje só esconde a resposta
- * da tela — o agente continua rodando e gastando no servidor). Testar com:
- * localStorage.setItem('hsos_flag_real_stop','on'). OFF = comportamento atual.
- */
-function isRealStopEnabled(): boolean {
-  try {
-    return lerChave("hsos_flag_real_stop") === "on";
-  } catch {
-    return false;
-  }
-}
-
 export function stopAgentResponse(agentId: string) {
   const activeRequest = activeAgentRequests.get(agentId);
   if (!activeRequest) return;
@@ -152,7 +138,7 @@ export function stopAgentResponse(agentId: string) {
   // Cancelamento real: manda /stop pro gateway em paralelo, fire-and-forget —
   // não atrasa o feedback visual imediato (que já aconteceu acima). Se falhar,
   // o comportamento é idêntico ao de hoje (só o abort local).
-  if (isRealStopEnabled()) {
+  if (cancelamentoRealLigado()) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10_000);
     enviarComando(agentId, "/stop", controller.signal)
@@ -427,37 +413,6 @@ function capMessage(text: string, maxBytes = 2048): string {
 }
 
 /** Build chat-completions style messages array for /api/stream */
-/**
- * Feature flag (V3 — cache da DeepSeek): quando ligada, os blocos de sistema
- * DINÂMICOS (tarefa pendente, status, pasta, artefatos) vão para o FIM do prompt
- * (logo antes da mensagem atual) em vez do topo. Isso mantém o prefixo estável
- * (prompt estático + histórico) para a DeepSeek cachear a conversa acumulada, em
- * vez de reprocessar tudo a cada turno. Testar com: localStorage.setItem(
- * 'hsos_flag_reorder_prompt','on'). OFF por padrão = comportamento atual idêntico.
- */
-function isReorderPromptEnabled(): boolean {
-  try {
-    return lerChave("hsos_flag_reorder_prompt") === "on";
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Feature flag (A3 — erro estruturado): quando ligada, o cliente reconhece o erro
- * do gateway (que vem disfarçado de HTTP 200 com JSON {error, detail}) e mostra
- * "Falhou: <motivo>" na hora, em vez de tentar ler como stream e cair no poll de
- * 15 minutos ("trabalhando…" mentiroso). Testar: localStorage.setItem(
- * 'hsos_flag_structured_errors','on'). OFF por padrão = comportamento atual.
- */
-function isStructuredErrorsEnabled(): boolean {
-  try {
-    return lerChave("hsos_flag_structured_errors") === "on";
-  } catch {
-    return false;
-  }
-}
-
 /**
  * As instruções que o agente precisa saber uma vez por conversa.
  *

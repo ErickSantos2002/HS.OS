@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { apagarChave, gravarChave, lerChave } from "./chaves-locais";
+import { apagarChave, cancelamentoRealLigado, gravarChave, lerChave } from "./chaves-locais";
 
 /**
  * O que estes testes protegem: **o valor que já estava no navegador da pessoa
@@ -67,5 +67,37 @@ describe("gravarChave", () => {
   it("grava sob o nome novo", () => {
     gravarChave("hsos:z", "1");
     expect(localStorage.getItem("hsos:z")).toBe("1");
+  });
+});
+
+/**
+ * Cancelamento real (item das "4 correções de estabilidade" do artefato de
+ * 21/08). Ligada, "parar" também manda `/stop` ao gateway; desligada, o abort
+ * é só local — a resposta some da tela e **o agente segue rodando e gastando
+ * no servidor**. Nunca foi ligada por ninguém, então o desperdício é o
+ * comportamento em produção desde sempre.
+ *
+ * Passou a valer por padrão em 31/08/2026: quem quiser o comportamento antigo
+ * grava `off` explicitamente.
+ */
+describe("cancelamentoRealLigado", () => {
+  it("vem ligado quando ninguém disse nada", () => {
+    expect(cancelamentoRealLigado()).toBe(true);
+  });
+
+  it("respeita quem desligou de propósito", () => {
+    localStorage.setItem("hsos_flag_real_stop", "off");
+    expect(cancelamentoRealLigado()).toBe(false);
+  });
+
+  it("segue ligado para quem já o tinha ligado à mão", () => {
+    localStorage.setItem("hsos_flag_real_stop", "on");
+    expect(cancelamentoRealLigado()).toBe(true);
+  });
+
+  it("respeita o desligamento gravado sob o nome antigo", () => {
+    // O rebrand não pode religar o que a pessoa desligou.
+    localStorage.setItem("dnos_flag_real_stop", "off");
+    expect(cancelamentoRealLigado()).toBe(false);
   });
 });
