@@ -70,6 +70,21 @@ uma única passagem. Diga quantas passagens sustentam cada média.
 
 ### 2. O que está parado AGORA, e há quanto tempo
 
+⚠️ **Os dois `COALESCE(archived,false) = false` não são detalhe, e o do CARD é o
+que morde.** Medido em 31/08/2026 contra o briefing daquela manhã: sem ele, o
+board Serviço reporta **166** cards parados em Correios onde há **47** — 3,5
+vezes — porque aquela lista tem 378 cards no total e só 59 ativos. No TaskHS
+inteiro a inflação é de **54%**: 454 no lugar de 295.
+
+O board Vendas e o Módulo quase não mudam, e é justamente isso que torna o erro
+difícil de ver: dois dos três números continuam certos, e o terceiro parece só
+"o gargalo maior".
+
+É a mesma forma do erro que a skill `faturamento` documenta — somar sem a régua
+inflou 48% e foi entregue à diretoria com cara de dado exato. Card arquivado é
+card resolvido; contá-lo como parado inventa uma fila que não existe e joga a
+recomendação do briefing para o problema errado.
+
 ```sql
 WITH ultimo AS (
   SELECT DISTINCT ON (a.card_id) a.card_id, a.created_at AS desde,

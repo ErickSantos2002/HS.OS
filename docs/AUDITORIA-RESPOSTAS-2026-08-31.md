@@ -76,3 +76,92 @@ As três réguas estão em `backend/skills/faturamento/SKILL.md`,
 sempre o mesmo: ler a régua, escrever a consulta do zero, medir, **e só então**
 abrir a resposta do agente para comparar. Olhar a resposta antes contamina a
 consulta.
+
+
+---
+
+# Segunda rodada: os briefings da manhã
+
+66 documentos escritos por agente sem ninguém pedir, e ninguém nunca tinha
+conferido. Auditei os cinco de 31/08.
+
+## Faturamento · 31/08 ✅ exato
+
+Vendas R$ 781.342,30 em 61 notas, serviços R$ 250.109,30 em 142, total
+R$ 1.031.451,60 — os três batem com a minha medição do mesmo dia. A meta do
+trimestre também: realizado R$ 2.154.542,54, meta R$ 3.166.666,68, atingimento
+68,0%, falta R$ 1.012.124,14. Os quatro exatos.
+
+E o `MESES_ANALISE` está em `7,8,9` — a config que produziu o erro de R$ 787 mil
+em 21/08 está corrigida, e o briefing usou o trimestre certo.
+
+## Operação · 31/08 ❌ **54% inflado, e a causa é uma linha**
+
+O briefing reporta **261 cards parados em Correios**, com o board Serviço em
+**167** (média 18,1 dias). Rodando a régua da própria skill `gargalos-taskhs`:
+são **47**.
+
+**Reproduzi o erro exato.** A SQL da skill traz `COALESCE(c.archived,false) =
+false`; sem essa linha, o resultado é 166 cards com média 18,6 — o número do
+briefing, à diferença de um card que se moveu nas seis horas entre a apuração
+dele e a minha.
+
+| board | briefing | com o filtro (certo) | sem o filtro |
+|---|---|---|---|
+| Serviço | 167 · 18,1 dias | **47 · 11,0** | 166 · 18,6 |
+| Vendas | 76 | 75 | 75 |
+| Módulo | 18 | 17 | 17 |
+
+No TaskHS inteiro: **295 cards realmente parados, reportados como 454 — 54% a
+mais.**
+
+⚠️ **Por que passou despercebido:** só o board Serviço tem massa arquivada
+suficiente para a diferença aparecer (378 cards no total, 59 ativos). Vendas e
+Módulo ficam certos. Dois dos três números batem, e o terceiro parece apenas "o
+gargalo maior" — que é exatamente o que o briefing recomenda atacar.
+
+⚠️ **E não é de hoje.** Em 28/08 o Flow respondeu ao CEO "📮 Correios (Serviço),
+162 cards, média 16,1 dias". Mesma régua incompleta, série consistente.
+
+É a mesma forma do incidente de 14/08 no faturamento: somar sem a régua inflou
+48% e foi entregue com cara de dado exato. Aqui foram 54%.
+
+**Conserto aplicado:** a skill ganhou um aviso com os números medidos, no ponto
+exato onde a linha é largada. ⚠️ **Falta publicar** — `bash
+scripts/publicar-skills.sh --enviar` — que é escrita no gateway.
+
+## GestorHS: não dá para auditar, e isso é o achado
+
+O mesmo briefing diz "**193 ordens** em Pós-Vendas, média de **100 dias**". Não
+existe régua escrita para "ordem parada" no GestorHS: a `gargalos-taskhs` declara
+explicitamente que **não** cobre esse sistema ("eles têm fases e datas próprias"),
+e nenhuma outra skill o faz.
+
+Sem régua, a métrica depende da data que se escolhe, e a `ordens` tem seis:
+
+| data usada | ordens com ela preenchida | média |
+|---|---|---|
+| `data_solicitacao` | **85 de 192** | 100,5 dias |
+| `data_chegada` | 192 | 54,3 dias |
+| `data_calibracao` | 185 | 51,2 dias |
+
+O briefing bate com `data_solicitacao` — preenchida em **44%** das ordens. A média
+de 100 dias descreve uma minoria e é apresentada como se cobrisse as 193.
+
+**Não é erro do agente**, é ausência de régua: ele escolheu uma leitura defensável
+entre várias. Enquanto não houver skill de GestorHS, esse número muda conforme
+quem responde.
+
+## Os outros três
+
+`Vendedores`, `SDR` e `Serviços` saem do HSGrowth, cuja régua já foi auditada na
+primeira rodada e bateu exata. Não os reauditei linha a linha.
+
+## O que a rodada ensina
+
+Os domínios **com régua escrita** verificam exato — faturamento e funil, ao
+centavo. O domínio **com régua escrita e parcialmente aplicada** infla 54%. O
+domínio **sem régua** não é auditável.
+
+A régua não é documentação: é a diferença entre um número conferível e um palpite
+bem formatado.
