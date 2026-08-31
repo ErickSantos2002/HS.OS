@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.auth.router import router as auth_router
 from app.config import settings
 from app.escuta_banco import escutar
+from app.coletor_metricas import rodar as rodar_metricas
 from app.coletor_uso import rodar as rodar_coletor
 from app.vigia_sessoes import rodar as rodar_vigia
 from app.database import close_db, init_db
@@ -74,14 +75,24 @@ async def lifespan(app: FastAPI):
     parar_vigia = asyncio.Event()
     vigia = asyncio.create_task(rodar_vigia(parar_vigia))
 
+    # ⚠️ **As quatro tabelas de `/monitoring` nunca tiveram uma linha.** Quem as
+    # enchia era um coletor na VPS chamando `POST /coletor/estatisticas`, e em
+    # 31/08/2026 se confirmou que ele não existe mais — sumiu na migração. O
+    # webhook continua de pé; este laço é o caminho de dentro, que não depende
+    # de máquina nem segredo à parte. Desligar: `COLETOR_METRICAS_SEGUNDOS=0`.
+    parar_metricas = asyncio.Event()
+    metricas = asyncio.create_task(rodar_metricas(parar_metricas))
+
     yield
 
     parar_escuta.set()
     parar_coletor.set()
     parar_vigia.set()
+    parar_metricas.set()
     escuta.cancel()
     coletor.cancel()
     vigia.cancel()
+    metricas.cancel()
     # A conexão com o gateway é persistente; fechar no shutdown evita deixar
     # socket pendurado no OpenClaw a cada reinício.
     # Antes de tudo: solta os WebSockets abertos, senão o shutdown
