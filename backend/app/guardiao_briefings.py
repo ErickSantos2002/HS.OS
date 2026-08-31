@@ -116,6 +116,56 @@ async def _documento_existe(titulo: str, dia: datetime) -> bool:
             titulo, dia.date()) or False
 
 
+# ⚠️ **O `assunto` do alerta tem `maxLength: 60` no schema do MCP.** Título
+# comprido no cron faria o alerta ser recusado justamente no dia em que importa.
+_LIMITE_DO_ASSUNTO = 60
+
+
+def _alerta(titulo: str, refeito: bool) -> tuple[str, str, str]:
+    """O que dizer ao administrador. Devolve `(assunto, detalhe, gravidade)`.
+
+    ⚠️ **`urgente` não entra aqui.** O `mcp_alerta` guarda essa gravidade para
+    tentativa de subverter o agente ou risco a dado sensível; briefing que não
+    saiu é operação. Gastar o degrau mais alto com isto o esvazia para quando
+    for preciso.
+    """
+    if refeito:
+        assunto = f"Briefing refeito: {titulo}"
+        detalhe = (
+            f'O briefing "{titulo}" não estava na base de conhecimento no horário '
+            "e foi refeito automaticamente, em sessão limpa. O documento deve "
+            "aparecer em alguns minutos.\n\n"
+            "Não é falha para hoje — o valor chega. É custo: uma execução a mais, "
+            "e um sinal de que aquele agendamento vem tropeçando."
+        )
+        gravidade = "informativo"
+    else:
+        assunto = f"Briefing não saiu: {titulo}"
+        detalhe = (
+            f'O briefing "{titulo}" não está na base de conhecimento e a tentativa '
+            "de hoje já foi usada — o guardião refaz uma vez por dia, e essa "
+            "acabou.\n\n"
+            "Ninguém mais vai tentar hoje: isto precisa de uma pessoa. Vale olhar "
+            "o erro do agendamento no gateway antes de refazer à mão."
+        )
+        gravidade = "atencao"
+    return assunto[:_LIMITE_DO_ASSUNTO], detalhe, gravidade
+
+
+async def _avisar(titulo: str, refeito: bool) -> None:
+    """Manda o alerta pelo mesmo caminho do guardião de crons.
+
+    Import tardio para não amarrar ordem de boot, e falha engolida de propósito:
+    não avisar é ruim, mas deixar de refazer o briefing por causa do aviso é pior.
+    """
+    from app.routers.mcp_alerta import avisar_administradores
+    assunto, detalhe, gravidade = _alerta(titulo, refeito)
+    try:
+        await avisar_administradores("nina", assunto, detalhe, gravidade)
+    except Exception:  # noqa: BLE001
+        logger.exception("Guardião: não consegui avisar sobre %s.", titulo)
+
+
 async def conferir(cliente, agora: datetime | None = None) -> dict:
     """Uma passada: para cada briefing atrasado sem documento, refaz uma vez."""
     agora = agora or datetime.now(BRASILIA)
@@ -155,6 +205,9 @@ async def conferir(cliente, agora: datetime | None = None) -> dict:
             # de novo. Nos dois casos a resposta é a mesma: não insistir.
             logger.warning('Guardião: "%s" não saiu e a tentativa de hoje já foi '
                            "usada; fica para uma pessoa olhar.", titulo)
+            # ⚠️ **Este era o caso que ninguém via.** O log dizia "fica para uma
+            # pessoa olhar" e pessoa nenhuma era avisada de que devia olhar.
+            await _avisar(titulo, refeito=False)
             continue
 
         # ⚠️ **Sessão própria, não a do cron.** A do cron pode ser justamente a
@@ -172,5 +225,6 @@ async def conferir(cliente, agora: datetime | None = None) -> dict:
             continue
         refeitos.append(titulo)
         logger.warning('Guardião: "%s" não estava na base; refiz o briefing.', titulo)
+        await _avisar(titulo, refeito=True)
 
     return {"ok": True, "conferidos": conferidos, "refeitos": refeitos}
