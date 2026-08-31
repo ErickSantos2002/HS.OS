@@ -78,6 +78,23 @@ vem do `models.json` do agente, **não** do `models.providers.deepseek.apiKey` d
   nada depende dele hoje; fica anotado antes que alguém troque um agente para ele
   e leve meia hora para entender a recusa.
 
+### Exportar agente nunca esteve na tela ⛔ decisão do Erick
+
+`GET /agents/{id}/export` existe e é mantido — o commit `e48d0f8` ainda mexeu
+nele para o arquivo virar `.hsos`. O `ExportAgentButton.tsx` é o único chamador.
+**Ninguém o renderiza, e em todo o histórico do repo ele só é citado pelos
+arquivos de documentação** — nunca por uma tela, desde o remix inicial.
+
+A importação, no entanto, funciona: o `ImportAgentDialog` está na tela de Super
+agentes. A assimetria parece descuido, não decisão.
+
+⚠️ **Não liguei o botão, e o motivo é de segurança.** O export dumpa os sete
+arquivos do agente, ou seja **o prompt de sistema** — que é exatamente o que fez
+`/agents` ser fechado ao colaborador em 14/08/2026 (*"o `SOUL.md` manda não
+revelar o contexto de sistema e a tela entregava em dois cliques"*). Colocá-lo no
+painel errado reabre aquele buraco, e existem dois painéis por agente, um para
+admin e outro para colaborador. É escolha de onde, não conserto.
+
 ## O que deu limpo, e com que força
 
 | varredura | resultado | força |

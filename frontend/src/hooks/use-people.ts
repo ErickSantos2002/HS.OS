@@ -76,8 +76,10 @@ export async function findOrCreateDm(
   targetUserId: string,
   targetName: string
 ): Promise<string | null> {
-  // TODO: ainda no Supabase — pertence ao lote do chat (channels/conversations),
-  // que será portado em seguida.
+  // ⚠️ O TODO que estava aqui dizia "ainda no Supabase — pertence ao lote do
+  // chat" e ficou em cima do código já portado: isto chama a nossa API desde o
+  // lote 3. Dívida marcada que sobrevive à quitação manda a próxima pessoa
+  // procurar Supabase onde não há.
   try {
     const { channel_id } = await api<{ channel_id: string }>("/conversations/dm/abrir", {
       method: "POST",
