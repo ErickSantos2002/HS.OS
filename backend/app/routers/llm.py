@@ -356,6 +356,36 @@ async def _descobrir(tipo: str, chave: str, base_url: str | None) -> dict:
     return {"ok": True, "models": modelos}
 
 
+# ⚠️ **Aqui saía uma op para `llm_provider_ops`, e era o mesmo defeito que a
+# remoção de provedor já tinha corrigido vinte e tantas linhas abaixo.** O
+# docstring de lá diz: *"antes daqui saía uma op esperando um sincronizador que
+# não existe — a remoção ficava `pending` para sempre e a tela dizia que ia
+# confirmar"*. A descoberta ficou para trás: o admin clicava, recebia
+# `queued: true`, e o `/descobrir/{op_id}` nunca respondia. A `llm_provider_ops`
+# tem zero linhas desde sempre porque nada nunca a consumiu.
+#
+# ⚠️ **Ler a chave do gateway para perguntar na hora foi descartado.** O cofre do
+# agente (`auth_profile_store`, no SQLite de cada um) **vence** o
+# `models.providers` — está no `CLAUDE.md` —, então a chave da config pode não
+# ser a que funciona. Perguntar com a credencial errada devolveria "o provedor
+# recusou a chave" para uma chave correta, que é pior que dizer que não dá.
+def _descoberta_sem_chave(provedor: str) -> dict:
+    """A resposta quando não veio `api_key` no corpo.
+
+    Diz a saída em vez de só recusar: quem está nesta tela tem a chave à mão, e
+    colá-la é um passo, não um obstáculo.
+    """
+    return {
+        "ok": False,
+        "error": (
+            f"Para listar os modelos de {provedor} é preciso colar a chave aqui. "
+            "A que está guardada fica no cofre do gateway e não volta para o "
+            "navegador — e o cofre do agente pode ter outra, então perguntar com "
+            "a da configuração daria um erro enganoso."
+        ),
+    }
+
+
 @router.post("/descobrir")
 async def descobrir(dados: DescobertaIn, _: Usuario = Depends(exige_papel("administrador"))):
     """Lista os modelos que uma chave enxerga.
@@ -374,23 +404,7 @@ async def descobrir(dados: DescobertaIn, _: Usuario = Depends(exige_papel("admin
     ident = (dados.provider_id or "").strip().lower() if tipo == "custom" else _PROVEDORES.get(tipo)
     if not ident:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Provedor inválido.")
-
-    async with sessao(role="service_role") as conn:
-        existente = await conn.fetchval(
-            "SELECT id::text FROM public.llm_provider_ops "
-            "WHERE op = 'discover_models' AND provider_id = $1 AND status = 'pending' LIMIT 1",
-            ident,
-        )
-        if existente:
-            # Já há um pedido igual na fila: devolver o mesmo id evita empilhar
-            # trabalho para o sincronizador a cada clique.
-            return {"ok": True, "queued": True, "op_id": existente}
-        novo = await conn.fetchval(
-            "INSERT INTO public.llm_provider_ops (op, provider_id) "
-            "VALUES ('discover_models', $1) RETURNING id::text",
-            ident,
-        )
-    return {"ok": True, "queued": True, "op_id": novo}
+    return _descoberta_sem_chave(ident)
 
 
 @router.get("/descobrir/{op_id}")
