@@ -39,15 +39,57 @@ select agent_id, count(*), sum(mensagens) from conversation_resets
 where created_at >= '2026-08-24' and created_at < '2026-08-31' group by 1;
 ```
 
-### 1. Subir o `reserveTokensFloor` ⏳ script pronto, falta rodar
+### 1. ~~Subir o `reserveTokensFloor`~~ ❌ premissa errada — o defeito era outro
 
-O script está em `~/hsos-compaction.sh` (na máquina do Erick). Roda na VPS do
-gateway como root, faz backup, valida o JSON antes de trocar e só reinicia se
-validar. **Confirmado em 20/08 que a seção `agents.defaults.compaction` não
-existe na config** — por isso o erro voltou três vezes nesta semana.
+⚠️ **Este item estava errado, e o roadmap o colocou em primeiro lugar.** A
+premissa veio do `CORRIGIR-CONVERSA-CEO-2026-08-20.md`, que apurou em 20/08 que
+a seção `agents.defaults.compaction` não existia. Ela existe. Conferido no
+gateway em 31/08 comparando os três backups da config:
 
-A própria mensagem de erro diz o caminho: `agents.defaults.compaction.reserveTokensFloor`
-para 20000 ou mais. É a correção mais barata do roadmap e destrava o resto.
+```
+openclaw.json.bak.2 (21/08)  floor=20000 reserve=24000
+openclaw.json.bak.1 (21/08)  floor=20000 reserve=24000
+openclaw.json.bak   (26/08)  floor=20000 reserve=24000
+openclaw.json       (atual)  floor=20000 reserve=24000
+```
+
+O `reserveTokensFloor` já estava em 20000 desde pelo menos 21/08 — **antes das
+três falhas de compactação** (27/08 10h03 e 18h23, 28/08 19h30). A única
+mudança de 26/08 foi acrescentar `"cron"` a umas listas de permissão. A
+recomendação que o gateway dá na própria mensagem de erro já estava aplicada e
+não resolveu.
+
+### 1b. A causa real: o gateway declarava metade do contexto ✅ feito em 31/08
+
+O `deepseek-chat` (V3.1) tem **131.072** de janela. A config declarava **65.536**.
+
+| | antes | depois |
+|---|---|---|
+| `contextWindow` | 65.536 | **131.072** |
+| `reserveTokens` | 24.000 | 24.000 |
+| sobra para a conversa | ~41.5K | **~107K** |
+
+Descontando ainda o `AGENTS.md` + `SOUL.md` sempre presentes — `atlas` ~4,5K
+tokens, `nina` ~6,8K — mais ferramentas e ponteiros de skill, o que restava para
+a conversa em si era pouco. Com respostas carregando artefatos HTML de 7KB, uma
+sessão de CEO enchia em poucos turnos: são os 24 resets da semana e as três
+falhas.
+
+Aplicado direto no gateway (`openclaw-gateway.service`, unidade **de usuário** —
+`systemctl --user`, não a de sistema; foi por isso que o script original não
+achava o serviço). Parar antes de editar é obrigatório: o próprio gateway
+escreve nesse arquivo e sobrescreveria a mudança ao desligar.
+
+Backup em `/root/.openclaw/openclaw.json.antes-contextwindow-20260831-130428`.
+Rollback pronto em `~/hsos-rollback-contextwindow.sh`.
+
+Conferido depois de subir: serviço ativo, porta 18789 escutando no loopback,
+chamadas ao DeepSeek voltando com sucesso no log, e `hsosapi.healthsafetytech.com/health`
+em 200.
+
+⚠️ **O que ainda não foi medido:** se a janela maior de fato derruba a taxa de
+reset. Isso só aparece com uso — vale reconferir `conversation_resets` daqui a
+uma semana.
 
 ### 2. O aviso cru de compactação não pode chegar à tela ✅ feito em 31/08
 
@@ -224,7 +266,7 @@ responder, mas por acidente.
 
 ## Bloco 5 — Adoção: dar acesso não é dar uso
 
-### 11. A Ketlin entrou por 4 minutos e não voltou
+### 11. A Ketlin entrou por 4 minutos e não voltou ⛔ fora de escopo (Erick, 31/08)
 
 **Ketlin Scalco**, Consultora de Vendas, criada em 25/08 às 11h11 com acesso a um
 agente só, o Atlas.
@@ -275,13 +317,13 @@ na listagem de calibrações atrasadas e na cobrança de calibração.
 
 ## Ordem sugerida
 
-1. Item 1 (`reserveTokensFloor`) — mais barato, destrava o resto
+1. ~~Item 1 (`reserveTokensFloor`)~~ — era premissa errada; a causa real (contextWindow pela metade) foi corrigida em 31/08
 2. Item 4 (duplicata) — confirmar a hipótese do `seq` antes de mexer
 3. Item 5 (pergunta engolida) — é o que o CEO sente mais
 4. Itens 8 e 9 (medição) — sem isso não se sabe se o resto funcionou
 5. Item 2 (aviso em inglês na tela)
 6. Itens 6 e 7 (como o agente fala)
-7. Item 11 (falar com a Ketlin) — pode ir em paralelo, não depende de código
+7. ~~Item 11 (falar com a Ketlin)~~ — descartado em 31/08
 
 ## Notas relacionadas
 
@@ -340,7 +382,9 @@ recriada.
 herdado do remix. Construir a instrumentação é feature de porte; apagar a tabela
 é destrutivo. Nenhum dos dois cabia em "seguir o recomendado".
 
-**Item 11 — a Ketlin.** Depende de conversar com ela.
+**Item 11 — a Ketlin.** Descartado pelo Erick em 31/08. O achado de
+onboarding continua valendo para o próximo usuário que entrar: acesso dado não é
+uso, e quem cai numa tela de chat vazia sem exemplo não volta.
 
 
 ## Itens 6 e 7, feitos depois — e o corpus como bancada de teste
