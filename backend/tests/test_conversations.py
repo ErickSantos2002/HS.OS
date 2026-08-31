@@ -76,3 +76,59 @@ def test_nao_recupera_o_que_ja_esta_gravado():
 
 def test_nao_recupera_texto_vazio():
     assert c._deve_recuperar("", []) is False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Itens 6 e 7 do roadmap: o monólogo interno e as bolhas de preâmbulo.
+#
+# O mecanismo é o `POST /webhook/resposta`: o agente empurra `content` como
+# lista e cada item vira uma linha. O `_HEARTBEAT` só barra o que começa com
+# emoji, então a narração em texto puro passava — 1,8 bolha por pergunta, e o
+# CEO sendo chamado de "o CEO" na terceira pessoa, na cara dele.
+#
+# Os textos abaixo são reais, da conversa de 24 a 30/08/2026.
+# ─────────────────────────────────────────────────────────────────────────────
+
+BASTIDOR_PURO = (
+    "O CEO pergunta sobre a origem dos leads de agosto. Vou verificar as "
+    "colunas de origem/aquisição nos cards."
+)
+
+BASTIDOR_MAIS_RESPOSTA = (
+    "O CEO pergunta quem está melhor no mês. Pelo quadro de hoje que já apurei "
+    "(agosto, board Aquisição), o destaque é claro. Vou responder direto.\n\n"
+    "Nicholson, o destaque do mês é o **Eduardo Luna**.\n\n"
+    "Em agosto (01–27), contra julho: **15 negócios** fechados vs. 4."
+)
+
+
+def test_bastidor_puro_nao_sobra_nada():
+    assert c._aparar_bastidor(BASTIDOR_PURO) == ""
+
+
+def test_apara_o_prefixo_e_preserva_a_resposta():
+    """Descartar a mensagem inteira seria errado: medido no corpus da semana,
+    5 das 24 que começam com monólogo trazem a resposta no mesmo bloco."""
+    saida = c._aparar_bastidor(BASTIDOR_MAIS_RESPOSTA)
+    assert saida.startswith("Nicholson, o destaque do mês é o **Eduardo Luna**.")
+    assert "15 negócios" in saida
+    assert "O CEO pergunta" not in saida
+
+
+def test_resposta_limpa_passa_intacta():
+    texto = ("Faturamento de agosto/2026 — até 28/08\n\n"
+             "Vendas R$ 776.442,30 · serviços R$ 213.956,30.")
+    assert c._aparar_bastidor(texto) == texto
+
+
+def test_so_apara_no_comeco():
+    """`Vou` no meio da resposta é o agente dizendo o próximo passo a quem
+    perguntou — isso é resposta, não bastidor."""
+    texto = ("O total de agosto é R$ 990.398,60.\n\n"
+             "Vou consultar setembro se você quiser.")
+    assert c._aparar_bastidor(texto) == texto
+
+
+def test_paragrafo_com_numero_nao_e_bastidor():
+    texto = "Vou consultar o mês.\n\nTotal: R$ 1.031.451,60."
+    assert c._aparar_bastidor(texto) == "Total: R$ 1.031.451,60."

@@ -1237,6 +1237,40 @@ _HEARTBEAT = re.compile(
 )
 
 
+# ⚠️ **Bastidor em texto puro passava pelo `_HEARTBEAT`, que só olha emoji.**
+#
+# Medido na conversa do CEO de 24 a 30/08/2026: 1,8 bolha de agente por
+# pergunta, 22 delas só preâmbulo ("Vou consultar…") e 15 falando dele em
+# terceira pessoa — *"O CEO pergunta sobre a origem dos leads"*. Ele estava
+# lendo o agente pensar sobre ele.
+#
+# ⚠️ **Descartar a mensagem inteira seria errado, e foi medido.** Das 24 que
+# começam com monólogo, 5 trazem a resposta no mesmo bloco: *"O CEO pergunta
+# quem está melhor no mês. […] Vou responder direto. / Nicholson, o destaque do
+# mês é o Eduardo Luna."* Por isso a regra apara parágrafos do começo em vez de
+# julgar o bloco. Rodada contra as 137 respostas da semana: 41 seriam aparadas,
+# 25 são bastidor puro e **nenhuma perde texto com R$ ou tabela**.
+#
+# Só no começo, de propósito: "Vou consultar setembro se você quiser" no fim é
+# o agente falando com quem perguntou — isso é resposta.
+_BASTIDOR = re.compile(r"""^\s*(
+    o\s+ceo\b | o\s+pedido\s*[:é] | a\s+pergunta\s+(é|foi)\b |
+    vou\s+(verificar\s+quem|montar\s+a\s+resposta|come[çc]ar|abrir\s+a\s+skill
+           |consultar|buscar|apurar|olhar|rodar|medir|ver\b) |
+    deixa?\s+eu\s+(entender|ver|conferir|abrir|come[çc]ar|pegar) |
+    entendi\s+a\s+r[ée]gua | preciso\s+entender | primeiro,?\s+deixa
+)""", re.I | re.X)
+
+
+def _aparar_bastidor(texto: str) -> str:
+    """Tira a narração de bastidor do começo. Vazio = o bloco era só bastidor."""
+    paragrafos = [p for p in re.split(r"\n\s*\n", texto or "") if p.strip()]
+    i = 0
+    while i < len(paragrafos) and _BASTIDOR.match(paragrafos[i]):
+        i += 1
+    return "\n\n".join(paragrafos[i:]).strip()
+
+
 @router.post("/webhook/resposta", status_code=status.HTTP_201_CREATED)
 async def resposta_do_agente(
     dados: RespostaDoAgenteIn,
@@ -1255,6 +1289,8 @@ async def resposta_do_agente(
         partes = [p.strip() for p in bruto if isinstance(p, str) and p.strip()]
         # Mensagem de andamento não vira linha na conversa.
         partes = [p for p in partes if not _HEARTBEAT.match(p)]
+        # Nem a narração de bastidor — e quando ela é o bloco todo, some.
+        partes = [x for p in partes if (x := _aparar_bastidor(p))]
 
     if not partes:
         raise HTTPException(

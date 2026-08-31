@@ -154,7 +154,7 @@ a resposta quando ela chega, não quando o navegador vem buscar.
 
 ## Bloco 3 — Como o agente fala
 
-### 6. O monólogo interno continua vazando ⛔ decisão do Erick
+### 6. O monólogo interno continua vazando ✅ feito em 31/08
 
 O item 5 de 19/08 mandou cortar o raciocínio interno da resposta. Não pegou.
 **15 mensagens** desta semana falam do usuário em terceira pessoa ou narram o
@@ -171,7 +171,7 @@ Como a instrução escrita não foi suficiente, o corte tem que ser no nosso lad
 não gravar em `conversations` a mensagem que é claramente monólogo. O sinal é
 razoavelmente limpo (terceira pessoa + anúncio de próximo passo).
 
-### 7. Preâmbulo demais
+### 7. Preâmbulo demais ✅ feito em 31/08 — é o mesmo defeito do item 6
 
 **1,8 bolha de agente por pergunta** (Nina 2,0; Atlas 1,8; Iris e Flow 1,6), e
 **22 delas são só preâmbulo** — mensagens curtas começando com "Vou consultar…",
@@ -340,12 +340,32 @@ recriada.
 herdado do remix. Construir a instrumentação é feature de porte; apagar a tabela
 é destrutivo. Nenhum dos dois cabia em "seguir o recomendado".
 
-**Itens 6 e 7 — monólogo e preâmbulo.** Parei de propósito. Filtrar o que vai
-para `conversations` é mexer no caminho da mensagem do CEO **sem poder verificar
-contra o gateway**, e o modo de falha é engolir resposta de verdade — pior que o
-defeito atual. Some-se que os dois casos são diferentes: parte é prefixo colado
-numa resposta boa (dá para aparar), parte é bolha inteira sem resposta nenhuma
-(só dá para não gravar). Fazer isso às cegas é a decisão que eu não tomaria
-sozinho.
-
 **Item 11 — a Ketlin.** Depende de conversar com ela.
+
+
+## Itens 6 e 7, feitos depois — e o corpus como bancada de teste
+
+Eu tinha parado nestes dois por não poder verificar contra o gateway. Não era
+preciso: as **137 respostas da semana estão no banco**, e elas são a bancada.
+
+**O mecanismo não era o que o roadmap supunha.** Não é o `/reply`, que grava uma
+linha por run e só depois de o run terminar. É o `POST /webhook/resposta`: o
+agente empurra `content` como lista e **cada item vira uma linha**. O único
+filtro era o `_HEARTBEAT`, que olha se o texto começa com emoji — narração em
+texto puro passava direto.
+
+**A primeira regra que escrevi estava errada, e o corpus mostrou.** Descartar a
+mensagem que começa com monólogo derrubaria 5 das 24: elas trazem a resposta no
+mesmo bloco, como *"O CEO pergunta quem está melhor no mês. […] Vou responder
+direto. / Nicholson, o destaque do mês é o Eduardo Luna."* Trocada por aparar
+parágrafos do começo, medida de novo contra as 137:
+
+| | |
+|---|---|
+| mensagens aparadas | 41 |
+| bastidor puro (o bloco todo some) | 25 |
+| que perderam texto com R$ ou tabela | **0** |
+
+⚠️ **É heurística, calibrada numa semana de um usuário.** Vale reconferir o
+número quando houver outro mês de conversa — e a lista de marcadores em
+`_BASTIDOR` é o lugar de ajustar, não o desenho.
