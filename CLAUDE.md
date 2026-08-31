@@ -409,24 +409,36 @@ Antes de mexer aqui, leia `docs/AUDITORIA-ESTABILIDADE-2026-07-16.md` — os bug
 exatamente as armadilhas deste caminho (execução duplicada, falso-positivo de context overflow,
 heartbeat descartando resposta final).
 
-### Feature flags
+### Feature flags — sobrou uma, e ela vem ligada
 
-Mudanças de risco no caminho do chat entraram atrás de flags **em `localStorage`, desligadas por padrão**.
-Não há tabela nem UI — liga-se pelo console do navegador:
+⚠️ **Revisadas em 31/08/2026, e o que estava escrito aqui não batia com o
+código.** Esta seção listava quatro flags desligadas por padrão, como decisão em
+aberto. Eram três no código, e duas delas já não faziam nada.
 
-```js
-localStorage.setItem('hsos_flag_real_stop', 'on')                  // /stop real no gateway
-localStorage.setItem('hsos_flag_structured_errors', 'on')          // reconhece erro do gateway (HTTP 200 + JSON)
-localStorage.setItem('hsos_flag_fix_overflow_falsepositive', 'on') // só reseta sessão em erro real
-localStorage.setItem('hsos_flag_reorder_prompt', 'on')             // reordena prompt p/ cache do modelo
-```
+| flag | estado |
+|---|---|
+| `hsos_flag_real_stop` | **ligada por padrão** desde 31/08; grava `off` para voltar ao antigo |
+| `hsos_flag_reorder_prompt` | **removida** — nunca era chamada |
+| `hsos_flag_structured_errors` | **removida** — nunca era chamada |
+| `hsos_flag_fix_overflow_falsepositive` | **nunca existiu no código**; só estava documentada aqui |
 
-Todas definidas em `frontend/src/lib/chat-sender.ts`. Desligar volta ao comportamento antigo na hora, sem deploy.
+As duas removidas morreram quando o `agent-chat.ts` substituiu o miolo de rede
+do `chat-sender.ts`: o front não monta mais o prompt (quem guarda a conversa é a
+sessão no gateway) nem lê o stream do gateway (a resposta vem pronta pela nossa
+API). Ligar qualquer uma delas não faria nada.
 
-O prefixo era `dnos_` e virou `hsos_` em 11/08/2026. **Quem já tinha uma flag ligada não a perdeu:**
-`frontend/src/lib/chaves-locais.ts` lê o nome novo e, não achando, adota o antigo e o regrava — a
-migração acontece na primeira leitura, sem varredura no boot. Vale para todas as chaves `dnos:`/`dnos-`.
-Exceção: o IndexedDB continua `dnos-fs`, porque renomear ali órfã a pasta local que a pessoa conectou.
+A `real_stop` é a que importava, e estar desligada era o desperdício: com ela
+`off`, "parar" só aborta o poll do navegador — a resposta some da tela e **o
+agente segue rodando e gastando no gateway até terminar**. Ninguém nunca a
+ligou, então esse foi o comportamento desde sempre. A decisão mora agora em
+`cancelamentoRealLigado()`, em `frontend/src/lib/chaves-locais.ts`, onde dá para
+testá-la sem levantar a camada de rede e onde a migração do nome antigo já é
+assunto do arquivo — quem desligou como `dnos_flag_real_stop` continua desligado.
+
+⚠️ **A lição vale mais que as flags: "decisão em aberto" documentada envelhece
+igual a código.** Três das quatro linhas desta seção descreviam um sistema que já
+não existia, e a decisão ficou "pendente" semanas esperando alguém escolher entre
+opções que tinham deixado de ser opções.
 
 ### Estado e persistência
 
@@ -1025,27 +1037,44 @@ mede o período por `nextRunAtMs − lastRunAtMs` (serve para `expr` e para
 Uma ação por job por dia, reservada em `app_settings` com `ON CONFLICT DO
 NOTHING` — sem isso os dois workers do uvicorn alertam em dobro.
 
-### A janela útil — por que o vigia media errado
+### A janela útil — e a janela que estava declarada pela metade
 
-⚠️ **Uma execução não estoura na janela do modelo: estoura em
-`janela − reserveTokens`.** O gateway reserva `agents.defaults.compaction.reserveTokens`
-para conseguir compactar, e é esse o teto real.
+⚠️ **Em 31/08/2026 descobriu-se que a conta abaixo partia de um número errado.**
+O `deepseek-chat` foi aposentado em 24/07/2026 e as chamadas roteiam para o
+**DeepSeek-V4-Flash, que tem 1.000.000 de contexto**. A config do gateway
+declarava 65.536 — 6,5% da capacidade real. A denúncia estava no próprio
+`models.providers`: `"name": "DeepSeek V4 Flash"` sob `"id": "deepseek-chat"`.
+
+Era essa a causa dos 24 resets de conversa na semana de 24/08 e do
+`Context overflow` que derrubava briefing de manhã. A prova: logo após a
+correção, o `sessions list` mostrou a sessão do `atlas` em **66k** — que, contra
+os 65.536 declarados antes, é **mais de 100% da janela**.
 
 ```
-janela do deepseek-chat            65.536
-− reserveTokens                    24.000
-─────────────────────────────────────────
-janela útil                        41.536   ← estoura aqui
-piso de um agente nosso           ~25.124   ← sete arquivos + ferramentas + skills
-espaço real de conversa           ~16.412
+                                   até 31/08      depois
+janela do deepseek                 65.536         1.000.000
+− reserveTokens                    24.000         24.000
+──────────────────────────────────────────────────────────
+janela útil                        41.536         976.000
+piso de um agente nosso           ~25.124        ~25.124
+espaço real de conversa           ~16.412        ~950.000
 ```
 
-Até 21/08/2026 o `_LIMIAR` do `vigia_sessoes.py` multiplicava a **janela crua**:
-0,65 × 65.536 = 42.598, ou seja **mil tokens depois do ponto de falha**. Isso abria
-uma faixa morta em que a sessão falhava em toda execução e o vigia, olhando o
-denominador errado, achava que ela estava folgada. Hoje é 0,85 × janela útil =
-35.306 — que é **mais cedo**, apesar da fração maior.
+⚠️ **O vigia lê a janela do gateway, então ele acompanhou sozinho — e foi longe
+demais.** `_LIMIAR` de 0,85 sobre 976.000 dá ~829.600: sessão crescendo 23× antes
+de compactar. Como o prompt inteiro é reenviado a cada turno, contexto grande é
+custo e latência em **todo** turno seguinte, não uma vez. Por isso existe agora
+um teto absoluto, `_TETO = 150_000` em `vigia_sessoes.py`: acaba o estouro em 41K
+sem deixar a sessão inchar sem limite. O ponto de compactar virou
+`_ponto_de_compactar(limite, reserva)`, com teste.
 
-⚠️ **Não baixe a fração achando que é mais seguro.** 0,65 sobre a útil daria
-26.998, e com o piso em ~25.124 isso é compactar uma sessão com 1.874 tokens de
-conversa — gastar a única compactação em quem mal começou.
+⚠️ **Não baixe a fração achando que é mais seguro** — o raciocínio de 21/08
+continua valendo dentro do teto: 0,65 sobre a útil antiga daria 26.998, e com o
+piso em ~25.124 isso é compactar uma sessão com 1.874 tokens de conversa.
+
+⚠️ **A conta antiga, que ficou aqui como registro do erro de método.** Até
+21/08/2026 o `_LIMIAR` multiplicava a **janela crua**: 0,65 × 65.536 = 42.598, ou
+seja mil tokens **depois** do ponto de falha — uma faixa morta em que a sessão
+falhava em toda execução e o vigia, olhando o denominador errado, achava que
+estava folgada. O erro de 31/08 é o mesmo em outra camada: o denominador certo
+sobre um número que ninguém tinha conferido na origem.

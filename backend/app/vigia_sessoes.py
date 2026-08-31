@@ -65,6 +65,39 @@ _TRAVA = 815_140_018
 # curso terminar.
 _LIMIAR = 0.85
 
+# ⚠️ **Teto absoluto, porque a fração deixou de bastar em 31/08/2026.**
+#
+# Naquele dia o `contextWindow` do DeepSeek foi corrigido de 65.536 para
+# 1.000.000 — o `deepseek-chat` roteia para o V4 Flash desde 24/07 e a config
+# declarava 6,5% da capacidade real. Como este vigia lê a janela do gateway em
+# vez de fixá-la (e isso está certo), o limiar acompanhou sozinho: de 35.306
+# para ~829.600.
+#
+# Só que o defeito que se queria consertar era a execução estourar em 41K, não
+# "a sessão é pequena demais". Deixar crescer 23× troca um problema por outro:
+# o prompt inteiro é reenviado a cada turno, então contexto grande é custo e
+# latência em TODO turno seguinte, não uma vez.
+#
+# 150.000 sai de duas medidas, não de gosto: a maior sessão real já observada
+# foi a do `atlas` em 31/08, com 66k — o teto deixa mais do que o dobro de folga
+# — e o piso de um agente nosso é ~25k, então ainda sobram ~125k de conversa,
+# contra os ~16k do regime antigo.
+#
+# ⚠️ **Se o teto começar a ser atingido de verdade, subi-lo é a resposta certa.**
+# O que não se deve fazer é voltar a depender só da fração: numa janela de 1M ela
+# significa "compacte quando o turno já custar caro".
+_TETO = 150_000
+
+
+def _ponto_de_compactar(limite: int, reserva: int) -> int:
+    """A partir de quantos tokens este vigia compacta a sessão.
+
+    A janela útil é `limite − reserva` — uma execução estoura ali, não na janela
+    crua. Sobre ela vale a fração; sobre a fração vale o teto.
+    """
+    util = max(limite - reserva, 1)
+    return max(1, min(int(util * _LIMIAR), _TETO))
+
 # ⚠️ **A janela útil NÃO é a janela do modelo.** O gateway reserva
 # `reserveTokens` para conseguir compactar, e uma execução estoura ao cruzar
 # `janela − reserva`, não `janela`. Multiplicar o limiar pela janela crua põe o
@@ -234,8 +267,7 @@ async def rondar_uma_vez() -> dict:
                 # A decisão é contra a janela útil; o `limite` cru continua
                 # valendo para o ramo de cima, que é sobre compactar ser
                 # possível, e para o espelho de contexto da tela.
-                util = max(limite - reserva, 1)
-                if usado < util * _LIMIAR:
+                if usado < _ponto_de_compactar(limite, reserva):
                     continue
 
                 try:
