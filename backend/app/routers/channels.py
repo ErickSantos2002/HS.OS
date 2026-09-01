@@ -521,6 +521,22 @@ async def membros(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
 async def entrar(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
     """Entra no canal. Repetir não é erro — era `upsert ignoreDuplicates`."""
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        # ⚠️ **Quem já é membro não tenta inserir de novo — achado religando o
+        # DM entre pessoas em 01/09/2026.** A policy "Users join allowed
+        # channels" só libera self-insert em canal PÚBLICO; num DM (onde o
+        # `find_or_create_dm` já colocou as duas pessoas dentro), o
+        # `ON CONFLICT DO NOTHING` não salva: o Postgres avalia o `WITH CHECK`
+        # da policy ANTES de decidir se há conflito, e reprova mesmo a
+        # inserção que resultaria em nada. Sem este atalho, a outra pessoa do
+        # DM recebia 500 só de abrir uma conversa em que já está — o `ChatPage`
+        # entra em todo canal selecionado com este PUT, e o ramo `kind:
+        # "person"` nunca tinha rodado para expor isto.
+        ja_membro = await conn.fetchval(
+            "SELECT true FROM public.channel_members WHERE channel_id = $1::uuid AND user_id = $2",
+            channel_id, usuario.id,
+        )
+        if ja_membro:
+            return
         try:
             await conn.execute(
                 "INSERT INTO public.channel_members (channel_id, user_id, member_type) "
