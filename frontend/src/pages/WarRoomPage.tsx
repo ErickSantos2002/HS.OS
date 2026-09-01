@@ -967,7 +967,15 @@ export default function WarRoomPage() {
                     {new Date(e.ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                   </span>
                   <span className="wr-txt">
-                    <span dangerouslySetInnerHTML={{ __html: e.texto }} />
+                    {/* ⚠️ Era `dangerouslySetInnerHTML` e virou filho normal
+                        em 01/09/2026. `texto` é montado com o conteúdo cru de
+                        `conversations` — que comprovadamente carrega HTML e CSS
+                        de artefato publicado — e ia direto para o DOM de uma
+                        tela que qualquer pessoa com o link da TV enxerga. O
+                        `montar_eventos` não emite marcação nenhuma, então não
+                        havia o que ganhar; a edge antiga é que grifava com
+                        `<b>` no `humanizar()`. React escapa sozinho. */}
+                    <span>{e.texto}</span>
                     {e.tipo === "autonomo" && <span className="wr-selo">ninguém pediu</span>}
                   </span>
                 </div>
