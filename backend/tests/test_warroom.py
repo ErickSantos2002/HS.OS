@@ -46,151 +46,165 @@ def test_token_com_acento_nao_explode():
     assert w.confere_token("señha", "señha") is True
 
 
-# ── Faixa de agentes ─────────────────────────────────────────────────────────
-
-def test_agente_aparece_com_nome_na_faixa():
-    faixa = w.bloco_agentes(
-        [{"agent_id": "iris", "status": "ok"}],
-        [{"agent_id": "iris", "total_tokens": 250_000, "context_tokens": 1_000_000}],
-    )
-    assert faixa[0]["agente"] == "iris"
-
-
-def test_ocupacao_de_contexto_e_fracao_da_janela():
-    faixa = w.bloco_agentes(
-        [{"agent_id": "iris", "status": "ok"}],
-        [{"agent_id": "iris", "total_tokens": 250_000, "context_tokens": 1_000_000}],
-    )
-    assert faixa[0]["ocupacao"] == 25.0
-
-
-def test_janela_desconhecida_nao_vira_zero_por_cento():
-    """`0%` afirma 'contexto vazio'. Sem a janela não se sabe nada — e foi
-    exatamente esta confusão que fez o gateway declarar 6,5% do contexto real."""
-    faixa = w.bloco_agentes(
-        [{"agent_id": "nina", "status": "ok"}],
-        [{"agent_id": "nina", "total_tokens": 900, "context_tokens": 0}],
-    )
-    assert faixa[0]["ocupacao"] is None
-
-
-def test_agente_sem_linha_de_contexto_continua_na_faixa():
-    """A faixa é a lista de agentes, não a lista de quem tem contexto medido."""
-    faixa = w.bloco_agentes([{"agent_id": "flow", "status": "ok"}], [])
-    assert len(faixa) == 1 and faixa[0]["ocupacao"] is None
-
-
-# ── Publicado hoje ───────────────────────────────────────────────────────────
-
-def test_publicado_traz_hora_agente_e_titulo():
-    from datetime import datetime, timezone
-    item = w.bloco_publicado([{
-        "agent_id": "iris",
-        "title": "Faturamento · 01/09",
-        "created_at": datetime(2026, 9, 1, 10, 36, tzinfo=timezone.utc),
-    }])[0]
-    assert item["agente"] == "iris"
-    assert item["titulo"] == "Faturamento · 01/09"
-    assert item["hora"] == "07:36"
-
-
-# ── Agora ────────────────────────────────────────────────────────────────────
-
-def test_agora_identifica_quem_falou():
-    linha = w.bloco_agora([{"role": "user", "agent_id": "iris",
-                            "content": "e o funil?", "created_at": None}])[0]
-    assert linha["de"] == "pessoa" and linha["para"] == "iris"
-
-
-def test_agora_encurta_texto_longo():
-    """É uma TV vista de longe: parágrafo inteiro não cabe e não se lê."""
-    linha = w.bloco_agora([{"role": "agent", "agent_id": "iris",
-                            "content": "x" * 400, "created_at": None}])[0]
-    assert len(linha["texto"]) <= 120
-
-
-# ── Consumo do dia ───────────────────────────────────────────────────────────
-
-def test_consumo_soma_tokens_e_custo():
-    uso = w.bloco_consumo({"tokens": 170_909, "custo": 0.052})
-    assert uso["tokens"] == 170_909 and uso["custo"] == 0.052
-
-
-def test_dia_sem_evento_e_zero_de_verdade():
-    """Aqui zero é medido, não inventado: nenhum evento significa nenhum token.
-    A distinção que importa é contra campo que ninguém apurou."""
-    assert w.bloco_consumo({"tokens": 0, "custo": 0})["tokens"] == 0
-
-
-# ── Quem pode ver o painel ───────────────────────────────────────────────────
-# Dois caminhos, como na tela original: a TV entra por token; quem já está
-# logado entra pela sessão. Nada além disso.
-
-def test_tv_com_token_valido_ve():
-    assert w.pode_ver(token="segredo", segredo="segredo", tem_sessao=False) is True
-
-
-def test_pessoa_logada_ve_sem_token():
-    """Quem abre o painel do próprio navegador já se autenticou no sistema."""
-    assert w.pode_ver(token=None, segredo="segredo", tem_sessao=True) is True
-
-
-def test_sem_token_e_sem_sessao_nao_ve():
-    assert w.pode_ver(token=None, segredo="segredo", tem_sessao=False) is False
-
-
-def test_token_errado_com_sessao_ainda_ve():
-    """A sessão é credencial independente; token torto não deve derrubar quem
-    já entrou pela porta da frente."""
-    assert w.pode_ver(token="errado", segredo="segredo", tem_sessao=True) is True
-
-
-def test_segredo_nao_configurado_nao_abre_para_a_tv():
-    """Sem `WARROOM_TOKEN` configurado, a TV não entra — mas quem tem sessão
-    continua entrando. Esquecer a config não pode virar porta aberta nem
-    derrubar o painel de quem está logado."""
-    assert w.pode_ver(token="qualquer", segredo=None, tem_sessao=False) is False
-    assert w.pode_ver(token=None, segredo=None, tem_sessao=True) is True
-
-
-# ── "Online" não sai de `status` ─────────────────────────────────────────────
-# Descoberto ao conferir o feed contra o banco: `agent_stats.status` vale "ok"
-# nas 5 linhas — é o resultado da última execução, não sinal de vida. Lido como
-# liveness, a faixa inteira ficaria apagada para sempre e a parede diria que os
-# agentes estão mortos enquanto eles publicam cinco briefings por manhã.
-# O sinal é `last_active`.
+# ── O estado do agente, e a linha até a pessoa ───────────────────────────────
+# A tela original é uma constelação: cada agente é um nó e, quando conversa com
+# alguém, nasce uma curva até a pessoa. Quem manda no desenho é `estado` — nó
+# ocioso não emite rota — e `parceiro`, que diz para onde a curva vai.
+#
+# `longo` existe porque a parede precisa mostrar demora: o `LONGO_MIN_PADRAO`
+# da edge original era 8 minutos, e é a régua mantida aqui.
 
 from datetime import datetime, timedelta, timezone
 
 AGORA = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
 
 
-def test_atividade_recente_acende_o_agente():
-    faixa = w.bloco_agentes(
-        [{"agent_id": "iris", "status": "ok", "last_active": AGORA - timedelta(minutes=5)}],
-        [], agora=AGORA)
-    assert faixa[0]["online"] is True
+def _msg(role, minutos, texto="e o funil?"):
+    return {"role": role, "content": texto, "created_at": AGORA - timedelta(minutes=minutos),
+            "autor": "Nicholson"}
 
 
-def test_atividade_antiga_apaga_o_agente():
-    faixa = w.bloco_agentes(
-        [{"agent_id": "iris", "status": "ok", "last_active": AGORA - timedelta(hours=4)}],
-        [], agora=AGORA)
-    assert faixa[0]["online"] is False
+def test_agente_sem_conversa_esta_ocioso():
+    assert w.estado_do_agente(None, AGORA) == "ocioso"
 
 
-def test_status_ok_sozinho_nao_acende():
-    """O bug que este bloco existe para impedir: `status` é "ok" em toda linha,
-    inclusive nas de agente parado há horas."""
-    faixa = w.bloco_agentes(
-        [{"agent_id": "iris", "status": "ok", "last_active": AGORA - timedelta(days=2)}],
-        [], agora=AGORA)
-    assert faixa[0]["online"] is False
+def test_pergunta_recente_deixa_o_agente_pensando():
+    assert w.estado_do_agente(_msg("user", 2), AGORA) == "pensando"
 
 
-def test_sem_atividade_registrada_e_desconhecido_e_nao_apagado():
-    """Agente que nunca rodou não é o mesmo que agente parado. `None` deixa a
-    parede mostrar 'não sei' em vez de afirmar que está fora."""
-    faixa = w.bloco_agentes(
-        [{"agent_id": "novo", "status": "ok", "last_active": None}], [], agora=AGORA)
-    assert faixa[0]["online"] is None
+def test_pergunta_parada_ha_muito_vira_demora():
+    """Oito minutos sem resposta é o que a parede precisa destacar — é a queixa
+    que o CEO mais sentiu, e virou item 5 do roadmap de 31/08."""
+    assert w.estado_do_agente(_msg("user", 9), AGORA) == "longo"
+
+
+def test_agente_que_ja_respondeu_volta_a_ficar_ocioso():
+    """A última fala é dele: entregou. Nó aceso sem trabalho vira ruído."""
+    assert w.estado_do_agente(_msg("agent", 1), AGORA) == "ocioso"
+
+
+def test_conversa_de_ontem_nao_acende_a_parede():
+    assert w.estado_do_agente(_msg("user", 60 * 26), AGORA) == "ocioso"
+
+
+# ── Montagem dos agentes ─────────────────────────────────────────────────────
+
+PERFIL = {"agent_id": "iris", "name": "Iris", "role": "Faturamento"}
+
+
+def test_agente_conversando_ganha_parceiro():
+    """`parceiro` é a ponta da curva — sem ele a linha não tem para onde ir."""
+    a = w.montar_agentes([PERFIL], [], {"iris": _msg("user", 2)}, AGORA)[0]
+    assert a["parceiro"] == "Nicholson"
+
+
+def test_agente_ocioso_nao_tem_parceiro():
+    a = w.montar_agentes([PERFIL], [], {"iris": _msg("agent", 1)}, AGORA)[0]
+    assert a["parceiro"] is None
+
+
+def test_a_pergunta_aberta_vira_a_tarefa_na_tela():
+    a = w.montar_agentes([PERFIL], [], {"iris": _msg("user", 2)}, AGORA)[0]
+    assert a["tarefa"] == "e o funil?"
+
+
+def test_sem_conversa_a_tarefa_e_nula_e_a_tela_mostra_o_papel():
+    a = w.montar_agentes([PERFIL], [], {}, AGORA)[0]
+    assert a["tarefa"] is None and a["papel"] == "Faturamento"
+
+
+def test_contexto_e_fracao_entre_zero_e_um():
+    """O anel do nó desenha `1 - contexto`; a tela quer fração, não porcento."""
+    a = w.montar_agentes(
+        [PERFIL], [{"agent_id": "iris", "total_tokens": 250_000, "context_tokens": 1_000_000}],
+        {}, AGORA)[0]
+    assert a["contexto"] == 0.25
+
+
+def test_contexto_sem_janela_conhecida_e_nulo():
+    """`0` desenharia anel vazio, que na parede se lê como 'contexto limpo'.
+    Nulo faz a tela não desenhar anel nenhum."""
+    a = w.montar_agentes(
+        [PERFIL], [{"agent_id": "iris", "total_tokens": 900, "context_tokens": 0}], {}, AGORA)[0]
+    assert a["contexto"] is None
+
+
+def test_sub_agentes_ficam_vazios_por_falta_de_fonte():
+    """Os satélites orbitando quem os criou dependem da `subagent_watch`, que
+    tem 0 linha e **nenhum escritor** — medido em 01/09/2026. Lista vazia é a
+    verdade; inventar filho seria desenhar órbita de coisa que não existe."""
+    assert w.montar_agentes([PERFIL], [], {}, AGORA)[0]["filhos"] == []
+
+
+# ── Eventos e números ────────────────────────────────────────────────────────
+
+def test_briefing_publicado_e_uma_entrega():
+    ev = w.montar_eventos(
+        [{"agent_id": "iris", "title": "Faturamento · 01/09", "created_at": AGORA}], [])[0]
+    assert ev["tipo"] == "entrega" and "Faturamento · 01/09" in ev["texto"]
+
+
+def test_eventos_vem_do_mais_novo_para_o_mais_velho():
+    evs = w.montar_eventos(
+        [{"agent_id": "iris", "title": "antigo", "created_at": AGORA - timedelta(hours=3)}],
+        [_msg("agent", 1, "recente")])
+    assert evs[0]["texto"].endswith("recente") or "recente" in evs[0]["texto"]
+
+
+def test_taxa_de_cache_sem_fonte_fica_nula():
+    """`cached_tokens` está zerado nas 217 linhas e nada escreve o campo — o
+    mesmo buraco achado no coletor hoje. `0%` na parede afirmaria que o cache
+    nunca acerta."""
+    assert w.montar_numeros({"tokens": 1, "custo": 0}, entregas=5, conversas=9)["cacheTaxa"] is None
+
+
+def test_numeros_contam_entregas_e_conversas():
+    n = w.montar_numeros({"tokens": 170_909, "custo": 0.052}, entregas=5, conversas=9)
+    assert n["entregas"] == 5 and n["conversas"] == 9 and n["tokens"] == 170_909
+
+
+# ── O rótulo do nó ───────────────────────────────────────────────────────────
+# Conferido contra o banco em 01/09: `agent_profiles.role` está VAZIO nos cinco
+# agentes; quem carrega o papel é `specialty`. Lendo `role`, os nós subiriam sem
+# rótulo nenhum — e o rótulo é o que faz a parede ser lida de longe.
+
+PERFIL_REAL = {"agent_id": "iris", "name": "Iris", "role": "",
+               "specialty": "Dados do ERP Tiny e notas de serviço — consulta e análise do DataCoreHS"}
+
+
+def test_papel_sai_de_specialty_quando_role_esta_vazio():
+    a = w.montar_agentes([PERFIL_REAL], [], {}, AGORA)[0]
+    assert a["papel"].startswith("Dados do ERP Tiny")
+
+
+def test_papel_e_encurtado_para_caber_no_no():
+    """É rótulo de nó numa TV, não descrição de catálogo."""
+    a = w.montar_agentes([PERFIL_REAL], [], {}, AGORA)[0]
+    assert len(a["papel"]) <= 40
+
+
+def test_role_preenchido_tem_preferencia():
+    """Se um dia alguém preencher `role`, é ele que vale — é o campo específico."""
+    a = w.montar_agentes(
+        [{"agent_id": "x", "name": "X", "role": "Faturamento", "specialty": "outra coisa"}],
+        [], {}, AGORA)[0]
+    assert a["papel"] == "Faturamento"
+
+
+# ── A tarefa também precisa caber ────────────────────────────────────────────
+# Achado olhando a tela renderizada, não os testes: o rótulo do Atlas saiu
+# cuspindo `{ color:#E41A11; } .green { color:#22c55e; } .blue.bar > span {…`
+# atravessando a parede inteira. A mensagem era de um artefato publicado e
+# levava CSS junto. Eu encurtava `papel` e não `tarefa`.
+
+def test_tarefa_longa_e_encurtada():
+    longa = {"role": "user", "content": "x" * 500, "created_at": AGORA, "autor": "Nicholson"}
+    a = w.montar_agentes([PERFIL], [], {"iris": longa}, AGORA)[0]
+    assert len(a["tarefa"]) <= 46
+
+
+def test_tarefa_perde_a_quebra_de_linha():
+    """Numa linha só de SVG, `\\n` vira caractere solto no meio da frase."""
+    multi = {"role": "user", "content": "primeira\nsegunda", "created_at": AGORA, "autor": "N"}
+    a = w.montar_agentes([PERFIL], [], {"iris": multi}, AGORA)[0]
+    assert "\n" not in a["tarefa"]

@@ -108,10 +108,28 @@ login — ela nunca conectaria. Para display sem operador, o polling ainda falha
 melhor: a tela mantém o último feed e marca "sem atualizar desde HH:MM" em vez de
 congelar mostrando ontem.
 
-**Onde está:** `backend/app/warroom.py` (lógica pura, 23 testes),
-`backend/app/routers/warroom.py` (`GET /warroom/feed`),
-`frontend/src/pages/WarRoomPage.tsx` (177 linhas — a original tinha 990 e
-continua em `_legado/warroom/` como referência).
+**A tela é a original.** Eu tinha escrito uma de 177 linhas com quatro blocos
+empilhados, e estava errado: o valor da War room não é a informação, é o
+desenho. A constelação — pessoas em hexágono, agentes em círculo, o núcleo
+pulsando no meio, curvas que nascem quando alguém conversa com um agente e
+partículas viajando por elas — já existia, versionada, com 378 linhas de
+`src/styles/warroom.css` que nunca saíram do lugar. Só a fonte dos dados mudou.
+
+**Onde está:** `backend/app/warroom.py` (lógica pura, 26 testes),
+`backend/app/routers/warroom.py` (`GET /warroom/feed`, devolvendo a interface
+`Feed` que a tela já esperava), `frontend/src/pages/WarRoomPage.tsx` (a
+original, de volta de `_legado/`).
+
+⚠️ **O rótulo do nó precisa de corte, e não é estética.** Conferido no navegador
+em 01/09: uma mensagem de agente trazia o CSS de um artefato publicado e o nome
+do Atlas saiu cuspindo `{ color:#E41A11; } .green {…` de ponta a ponta da
+parede. `tarefa` corta em 46 caracteres, `papel` em 40 — e nenhum teste pegaria
+isso, porque só aparece renderizado.
+
+⚠️ **O arranjo dos nós ficou no `localStorage` da TV**, não em `app_settings`.
+Some o único endpoint de escrita que este painel precisaria, e é mais certo: a
+TV da sala e o notebook de quem espelha têm formatos diferentes e não deveriam
+disputar o mesmo mapa.
 
 **A TV entra por token.** `/warroom?t=<token>`, conferido contra o segredo
 `WARROOM_TOKEN` (`ler_segredo`: `integration_secrets` primeiro, ambiente depois).
@@ -148,7 +166,7 @@ TV. Não é um processo da Health & Safety hoje.
 servindo outras telas.
 
 **A `warroom-feed` continua em `_pausado/`** e não volta para a fila de
-portagem: a tela nova não a usa. Fica como referência do que o painel mostrava
+portagem: o endpoint novo a substitui. Fica como referência do que o painel mostrava
 quando havia dado para mostrar.
 
 ### Voz (ElevenLabs)

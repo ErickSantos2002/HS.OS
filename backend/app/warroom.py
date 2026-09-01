@@ -31,10 +31,19 @@ FUSO = ZoneInfo("America/Recife")
 # Uma TV é vista de longe: parágrafo não cabe e não se lê.
 _LIMITE_TEXTO = 120
 
-# Quanto tempo sem atividade ainda conta como "trabalhando". Os briefings saem
-# em janelas de 5 minutos, e meia hora cobre uma conversa em andamento sem
-# acender agente que só rodou de manhã.
-_JANELA_ATIVO = timedelta(minutes=30)
+# Rótulo de nó lido a quatro metros. `specialty` costuma ser uma frase inteira.
+_LIMITE_PAPEL = 40
+
+# A tarefa é uma linha de SVG embaixo do nó. Mensagem de agente pode trazer
+# tabela, markdown ou CSS de artefato publicado — sem corte, atravessa a parede.
+_LIMITE_TAREFA = 46
+
+# Pergunta sem resposta além disto é demora que a parede precisa destacar.
+# É o `LONGO_MIN_PADRAO` da edge original, mantido.
+_LONGO = timedelta(minutes=8)
+
+# Depois disso a conversa não é mais "agora": o nó apaga e a curva some.
+_ESQUECE = timedelta(hours=2)
 
 
 def confere_token(recebido: str | None, esperado: str | None) -> bool:
@@ -64,87 +73,118 @@ def pode_ver(token: str | None, segredo: str | None, tem_sessao: bool) -> bool:
     return tem_sessao or confere_token(token, segredo)
 
 
-def bloco_agentes(stats: list, contexto: list, agora: datetime | None = None) -> list[dict]:
-    """A faixa do topo: um agente por coluna, com quanto da janela já gastou.
+def _encurtar(texto: str, limite: int) -> str:
+    """Corta no limite com reticências. Parede não é catálogo."""
+    if len(texto) <= limite:
+        return texto
+    return texto[: limite - 1].rstrip(" ,;:—-") + "…"
 
-    A lista é a dos agentes — quem não tem linha de contexto continua aparecendo,
-    sem ocupação. O contrário esconderia da parede justamente o agente que ainda
-    não falou hoje.
 
-    ⚠️ **`online` NÃO sai de `agent_stats.status`.** Conferido contra o banco em
-    01/09/2026: `status` vale `"ok"` nas cinco linhas — é o resultado da última
-    execução, não sinal de vida. Lido como liveness, a faixa ficaria apagada
-    para sempre enquanto os agentes publicam cinco briefings por manhã. O sinal
-    é `last_active`.
+def estado_do_agente(ultima, agora: datetime) -> str:
+    """`ocioso`, `pensando` ou `longo` — é quem manda no desenho.
 
-    Três estados, não dois: sem `last_active` o agente é **desconhecido**
-    (`None`), não "fora". Agente que nunca rodou não é agente parado.
+    Nó ocioso não emite rota; `longo` é o que a parede destaca. A régua dos 8
+    minutos vem do `LONGO_MIN_PADRAO` da edge original, e o motivo dela é o item
+    5 do roadmap de 31/08: pergunta engolida foi a queixa que o CEO mais sentiu.
+
+    Última fala do agente significa que ele entregou — volta a ocioso. Nó aceso
+    sem trabalho vira ruído numa parede vista o dia inteiro.
     """
-    agora = agora or datetime.now(timezone.utc)
+    if not ultima or not isinstance(ultima.get("created_at"), datetime):
+        return "ocioso"
+    idade = agora - ultima["created_at"]
+    if idade > _ESQUECE or (ultima.get("role") or "") != "user":
+        return "ocioso"
+    return "longo" if idade >= _LONGO else "pensando"
+
+
+def montar_agentes(perfis: list, contexto: list, ultimas: dict,
+                   agora: datetime) -> list[dict]:
+    """Os nós da constelação, no formato que a tela espera.
+
+    ⚠️ **`filhos` sai sempre vazio, e não é esquecimento.** Os satélites que
+    orbitam quem os criou liam a `subagent_watch` — 0 linha e **nenhum
+    escritor**, medido em 01/09/2026. Desenhar órbita de sub-agente inventado
+    seria pior que não desenhar.
+    """
     por_agente = {c.get("agent_id"): c for c in contexto if c.get("agent_id")}
-    faixa = []
-    for s in stats:
-        agente = s.get("agent_id")
+    nos = []
+    for p in perfis:
+        agente = p.get("agent_id")
         if not agente:
             continue
+        ultima = ultimas.get(agente)
+        estado = estado_do_agente(ultima, agora)
+        ativo = estado != "ocioso"
         c = por_agente.get(agente) or {}
         janela = int(c.get("context_tokens") or 0)
-        gasto = int(c.get("total_tokens") or 0)
-        visto = s.get("last_active")
-        faixa.append({
-            "agente": agente,
-            "online": (agora - visto <= _JANELA_ATIVO) if isinstance(visto, datetime) else None,
-            # Sem janela conhecida não se sabe a ocupação. `0%` seria uma
-            # afirmação — e foi a janela errada que fez o gateway declarar 6,5%
-            # do contexto que tinha.
-            "ocupacao": round(100.0 * gasto / janela, 1) if janela > 0 else None,
+        nos.append({
+            "id": agente,
+            "nome": p.get("name") or agente,
+            # ⚠️ `role` está vazio nos cinco agentes (medido em 01/09); quem
+            # carrega o papel é `specialty`. Lendo só `role`, os nós subiriam
+            # sem rótulo — e o rótulo é o que faz a parede ser lida de longe.
+            "papel": _encurtar((p.get("role") or p.get("specialty") or "").strip(),
+                               _LIMITE_PAPEL),
+            "estado": estado,
+            # A pergunta em aberto é o que o agente está fazendo. Sem conversa
+            # não há tarefa, e a tela cai no papel.
+            #
+            # ⚠️ Encurtar aqui não é estética. Visto na parede em 01/09: uma
+            # mensagem trazia o CSS de um artefato publicado e o rótulo do nó
+            # saiu cuspindo `{ color:#E41A11; } .green {…` de ponta a ponta.
+            "tarefa": (_encurtar(" ".join(((ultima or {}).get("content") or "").split()),
+                                 _LIMITE_TAREFA) or None) if ativo else None,
+            "desde": (ultima or {}).get("created_at").isoformat() if ativo else None,
+            # Fração, não porcento: o anel desenha `1 - contexto`. Sem janela
+            # conhecida é `None` — `0` desenharia anel vazio, lido na parede
+            # como "contexto limpo".
+            "contexto": (round(int(c.get("total_tokens") or 0) / janela, 4)
+                         if janela > 0 else None),
+            "filhos": [],
+            "parceiro": (ultima or {}).get("autor") if ativo else None,
+            # Agente falando com agente não tem fonte: a delegação acontece no
+            # gateway e não deixa linha nossa.
+            "parceiroAgente": None,
         })
-    return faixa
+    return nos
 
 
-def _hora_local(quando) -> str | None:
-    if not isinstance(quando, datetime):
-        return None
-    return quando.astimezone(FUSO).strftime("%H:%M")
-
-
-def bloco_publicado(documentos: list) -> list[dict]:
-    """Os briefings do dia. É o que esta plataforma entrega sem ninguém pedir —
-    cinco por dia útil — e o que faz a parede ter o que mostrar de manhã."""
-    return [
-        {
-            "hora": _hora_local(d.get("created_at")),
-            "agente": d.get("agent_id"),
-            "titulo": d.get("title"),
-        }
-        for d in documentos
-    ]
-
-
-def bloco_agora(conversas: list) -> list[dict]:
-    """As últimas trocas, encurtadas para caber na parede."""
-    linhas = []
+def montar_eventos(publicados: list, conversas: list, limite: int = 12) -> list[dict]:
+    """A coluna que rola: o que aconteceu, do mais novo para o mais velho."""
+    eventos = []
+    for d in publicados:
+        eventos.append({
+            "ts": d.get("created_at"),
+            "tipo": "entrega",
+            "texto": f"{d.get('agent_id')} publicou {d.get('title')}",
+        })
     for c in conversas:
         texto = (c.get("content") or "").strip().replace("\n", " ")
         if len(texto) > _LIMITE_TEXTO:
             texto = texto[: _LIMITE_TEXTO - 1].rstrip() + "…"
-        do_agente = (c.get("role") or "") == "agent"
-        linhas.append({
-            "de": c.get("agent_id") if do_agente else "pessoa",
-            "para": "pessoa" if do_agente else c.get("agent_id"),
-            "texto": texto,
-            "hora": _hora_local(c.get("created_at")),
-        })
-    return linhas
+        quem = c.get("agent_id") if (c.get("role") == "agent") else (c.get("autor") or "alguém")
+        eventos.append({"ts": c.get("created_at"), "tipo": "conversa",
+                        "texto": f"{quem}: {texto}"})
+    eventos.sort(key=lambda e: e["ts"] or datetime.min.replace(tzinfo=timezone.utc),
+                 reverse=True)
+    for e in eventos:
+        e["ts"] = e["ts"].isoformat() if isinstance(e["ts"], datetime) else None
+    return eventos[:limite]
 
 
-def bloco_consumo(total: dict) -> dict:
-    """Tokens e custo do dia.
+def montar_numeros(total: dict, entregas: int, conversas: int) -> dict:
+    """O rodapé. Zero de token é medido; taxa de cache não é.
 
-    Zero aqui é medido, não inventado: nenhum evento significa nenhum token. A
-    distinção que importa é contra campo que ninguém apurou — esses ficam nulos.
+    ⚠️ `cacheTaxa` fica **nula** enquanto ninguém escrever `cached_tokens` — o
+    campo está zerado nas linhas todas e o `coletor_uso` não o menciona. `0%` na
+    parede afirmaria que o cache nunca acerta, que é o mesmo erro que o coletor
+    de métricas cometeu com `messages_total` até hoje.
     """
     return {
+        "entregas": int(entregas),
+        "conversas": int(conversas),
         "tokens": int(total.get("tokens") or 0),
         "custo": float(total.get("custo") or 0),
+        "cacheTaxa": None,
     }
