@@ -156,6 +156,7 @@ Duas seções descreviam um estado que não existe mais. Medido hoje:
 |---|---|---|
 | Lote 7 — o banco | 185 chamadas `.from()` em 56 arquivos vivos | **0 vivas**, 0 arquivos |
 | Lote 6 — edge functions | 4 de trabalho real, 9 bloqueadas | **0 na raiz**, 8 em `_pausado/` |
+| 🔴 Bloqueio do Lovable AI Gateway | 3 functions presas à plataforma de origem | **resolvido em 10/08**, portado para OpenAI |
 
 O Lote 7 estava concluído e a prosa não acompanhou — o Placar, logo acima na
 mesma página, já dizia `0`. As duas linhas se contradiziam há semanas.
@@ -167,6 +168,21 @@ e documentação, nenhum vivo:
   que é justamente o projeto de conteúdo em aberto
 - `use-channels.ts`, `use-typing-indicator.ts`, `realtime.ts` — comentários
   explicando o que o `pg_notify` substituiu
+
+**A terceira contradição, e o padrão que ela fecha.** O bloco 🔴 do Lovable
+descreveu por três semanas um bloqueio que o `EM-CONSTRUCAO.md` já registrava
+como resolvido: as três functions foram para a OpenAI em `app/routers/ia.py` em
+10/08. Conferido pela régua da própria página — endpoint existir não é tela usar
+— as três estão ligadas em `EmpresaTab`, `ChannelChat`, `ThreadPanel`,
+`ChannelsPage`, `ChatPage` e `lib/chat-image-vision.ts`. Sobrou a ElevenLabs, e
+só para voz.
+
+⚠️ **Três contradições no mesmo dia, todas da mesma forma:** um documento
+registrou o fato novo e o outro não foi visitado. Nenhuma delas seria pega
+lendo, porque cada página é coerente sozinha — só cruzando é que aparecem. O
+`ROADMAP.md` é o que mais atrasa, por ser o mais citado e o menos reescrito.
+Vale conferi-lo contra o `EM-CONSTRUCAO.md` e o `CONTINUAR-AQUI.md` sempre que
+alguém for tomar decisão a partir dele.
 
 🟠 **A linha `_portado` do Placar mede errado.** O comando
 `ls backend/supabase/functions/_portado | wc -l` devolve **2**, não 68 — as

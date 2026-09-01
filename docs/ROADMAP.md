@@ -93,26 +93,31 @@ As exceções já decididas e fechadas: o vazamento do `admin_token` para o nave
 (Lote 1) e os achados de segurança da auditoria. Fora dessas, reaproveitar o
 comportamento, não só o contrato.
 
-🔴 **Bloqueio: três functions dependem do Lovable AI Gateway.**
-`transcribe-audio`, `chat-image-vision` e `parse-company-context` chamam
-`ai.gateway.lovable.dev` com `LOVABLE_API_KEY` e `google/gemini-2.5-flash`. É
-dependência da **plataforma de origem** — exatamente o que a migração existe para
-remover — e não sai sem escolher outro provedor de LLM multimodal, o que custa
-dinheiro. Afeta: transcrever áudio no chat, descrever imagem anexada, e preencher
-o perfil da empresa a partir de um documento.
+✅ **O bloqueio do Lovable AI Gateway saiu em 10/08/2026.** Esta seção descreveu
+por três semanas um bloqueio que não existia mais — corrigido em 01/09.
 
-Três caminhos, todos com custo:
-1. **Chave direta de provedor** (Gemini ou OpenAI). Mais simples; some a Lovable,
-   entra uma conta nova.
-2. **Pelo OpenClaw**, que a HS já paga. Mas `/v1/chat/completions` é 404 e o
-   `chat.send` manda mensagem para um agente — transcrição entraria no histórico
-   dele e gastaria contexto.
-3. **Desligar as três** e assumir que áudio não transcreve, imagem não é descrita
-   e o perfil da empresa é preenchido à mão.
+`transcribe-audio`, `chat-image-vision` e `parse-company-context` chamavam
+`ai.gateway.lovable.dev` com `LOVABLE_API_KEY`, dependência da plataforma de
+origem. Foram portadas para **OpenAI** em `app/routers/ia.py`:
+`POST /ia/transcrever`, `POST /ia/descrever-imagem` e `POST /ia/perfil-da-empresa`.
 
-A metade determinística do `extract-file-text` **já foi portada** e funciona sem
-LLM nenhuma: `POST /storage/extrair-texto/{bucket}/{caminho}` devolve o texto de
-txt, md, pdf e docx.
+⚠️ **Por que OpenAI e não DeepSeek**, que é o provedor dos agentes: o DeepSeek é
+modelo de texto. Serviria o perfil da empresa e nada mais — transcrever precisa
+de áudio, descrever precisa de visão. Dois provedores para economizar numa
+chamada rara não se paga.
+
+**Conferido pela régua desta página** (endpoint existir não é tela usar), em
+01/09: as três estão ligadas em tela viva — `EmpresaTab`, `ChannelChat`,
+`ThreadPanel`, `ChannelsPage`, `ChatPage` e `lib/chat-image-vision.ts`. A chave
+sai de `OPENAI_API_KEY` pelo `ler_segredo` (banco primeiro, ambiente depois), e
+sem ela os três respondem **503 dizendo o que falta**, não 500.
+
+A metade determinística do `extract-file-text` também já foi portada e funciona
+sem LLM nenhuma: `POST /storage/extrair-texto/{bucket}/{caminho}` devolve o texto
+de txt, md, pdf e docx.
+
+**O que sobrou de externo é só a ElevenLabs**, e só para voz — decisão de
+assinatura, não de engenharia. Ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md).
 
 **Removidas sem portar** (07/08/2026) — não é dívida, é código morto:
 - `seed-agents` — semeava agentes pelo wizard de `/setup`, que foi aposentado
@@ -350,7 +355,8 @@ consumo ao abrir.
 | ~~Manter as 191 policies de RLS?~~ **Sim.** Decidido em 31/08/2026 — ver abaixo. | Medido: nenhuma query depende delas para escopo. Aposentar é possível e não compensa. |
 | As flags `dnos_flag_*` viram padrão? | São 4 correções de estabilidade desligadas por padrão. Ver `RESUMO-CONSOLIDACAO`. |
 | Trocar a senha do admin | `admin123` num `super_admin` que guarda o token do gateway. **O endpoint já existe** (`POST /auth/trocar-senha`, exigindo a senha atual) e a tela está pronta. Falta só fazer, antes de liberar para a equipe. |
-| Lovable AI Gateway e ElevenLabs | Travam 9 das 13 functions restantes. Escolher provedor e pagar, ou tirar do produto: transcrição de áudio, visão de imagem, leitura do contexto da empresa e a voz da Arena. |
+| ~~Lovable AI Gateway~~ **resolvido em 10/08/2026** — portado para OpenAI em `app/routers/ia.py`, ligado em tela. | |
+| ElevenLabs — assinar ou tirar do produto | Só a **voz**: o botão "ouvir" no chat, a escolha de voz do agente e o modo voz da Arena. Previsto voltar quando a ElevenLabs entrar por marketing. Ver `EM-CONSTRUCAO.md`. |
 | Variante do wordmark para tema escuro | O "OS" cinza tem contraste baixo no escuro. |
 | Gerenciador de pacotes do front | Três lockfiles convivendo. |
 

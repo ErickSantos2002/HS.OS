@@ -605,16 +605,15 @@ faz o `grep -v _legado` seguinte não filtrar nada — ele reportava 9 chamadas
 
 ---
 
-## As duas coisas que travam o resto
+## A coisa que trava o resto
 
-Não são técnicas. São decisões suas.
+Não é técnica. É decisão sua. **Eram duas até 10/08/2026** — a outra saiu.
 
-### 🔴 Lovable AI Gateway
+### ✅ Lovable AI Gateway — resolvido em 10/08/2026
 
-`transcribe-audio`, `chat-image-vision` e `parse-company-context` usam a LLM
-hospedada pelo Lovable. Sair de lá significa escolher um provedor e pagar por
-ele — ou aceitar que transcrição de áudio, visão de imagem e leitura automática
-do contexto da empresa deixem de existir.
+`transcribe-audio`, `chat-image-vision` e `parse-company-context` foram portadas
+para OpenAI em `app/routers/ia.py` e estão ligadas em tela viva (conferido em
+01/09). Não é mais decisão pendente.
 
 ### 🟠 ElevenLabs
 
