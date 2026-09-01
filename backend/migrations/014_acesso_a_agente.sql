@@ -124,6 +124,8 @@ $$;
 -- ⚠️ Só INSERT. `UPDATE` de linha de membro não existe no código — quem sai é
 --    removido — e cobrir UPDATE convidaria a mudar `member_type` no lugar.
 
+DROP TRIGGER IF EXISTS exige_acesso_ao_agente_no_canal_trigger ON public.channel_members;
+
 CREATE TRIGGER exige_acesso_ao_agente_no_canal_trigger
     BEFORE INSERT ON public.channel_members
     FOR EACH ROW EXECUTE FUNCTION public.exige_acesso_ao_agente_no_canal();
