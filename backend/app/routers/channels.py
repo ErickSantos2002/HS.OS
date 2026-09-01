@@ -16,7 +16,7 @@ import json
 import logging
 import re
 from datetime import datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -37,10 +37,92 @@ def traduzir_hs001(erro: Exception) -> HTTPException | None:
     O trigger é a defesa e o Python é a cortesia: quando a validação daqui
     deixa passar um caminho que ninguém previu, é este tradutor que evita a
     pessoa receber um 500 com SQL dentro.
+
+    ⚠️ `erro.message`, não `str(erro)`. `str()` de um `PostgresError` inclui o
+    `DETAIL` (`pessoa=<uuid>;agente=<id>`) que o trigger anexa para quem for
+    ler o log — e um 403 não é log, é resposta para a própria pessoa. `.message`
+    devolve só a frase da `RAISE EXCEPTION`, sem o detalhe interno.
     """
     if isinstance(erro, asyncpg.PostgresError) and getattr(erro, "sqlstate", None) == "HS001":
-        return HTTPException(status.HTTP_403_FORBIDDEN, str(erro))
+        return HTTPException(status.HTTP_403_FORBIDDEN, getattr(erro, "message", str(erro)))
     return None
+
+
+def traduzir_rls(erro: Exception) -> HTTPException | None:
+    """A negativa de RLS na inserção de membro, virada 403.
+
+    A policy `Users join allowed channels` só deixa o criador do canal (ou
+    super_admin) inserir OUTRA pessoa; quem tenta e não é dono cai em
+    `insufficient_privilege` (`42501`). Sem isto, adicionar alguém a um DM que
+    não se criou vira 500 em vez de 403 — a checagem de "sou membro" que
+    `adicionar_membros` já faz não cobre este caso, porque em DM ela não exige
+    ser o criador, só estar dentro.
+    """
+    if isinstance(erro, asyncpg.PostgresError) and getattr(erro, "sqlstate", None) == "42501":
+        return HTTPException(
+            status.HTTP_403_FORBIDDEN, "Você não tem permissão para adicionar estes membros."
+        )
+    return None
+
+
+def _normalizar_agent_id(agent_id: str) -> str:
+    """Sem espaço nas pontas, minúsculo, sem o prefixo `openclaw:` — a forma
+    que `agent_profiles.agent_id` guarda.
+
+    `agent_ids` chega cru do corpo do request. Sem normalizar antes de checar
+    E antes de gravar, `"Iris"` ou `"openclaw:iris"` não bate com a linha do
+    agente numa comparação de string exata, cai em "agente sem perfil libera"
+    (regra que existe para *exibir* lista, não para autorizar) e o invariante
+    fura com uma letra maiúscula no corpo do request.
+    """
+    return agent_id.strip().lower().removeprefix("openclaw:")
+
+
+async def _agentes_desconhecidos(conn, agent_ids: list[str]) -> list[str]:
+    """Quais destes ids (já normalizados) não têm linha em `agent_profiles`.
+
+    `pode_ver_agente` libera agente sem perfil de propósito — é a regra que
+    deixa `GET /agents` exibir um agente recém-sincronizado do gateway e ainda
+    sem configuração de acesso. Essa mesma regra falha aberto se for usada
+    para *autorizar* entrada em canal: um id inventado ou mal digitado também
+    "libera". Por isso quem exige agente conhecido é este portão — a função de
+    acesso continua igual, ela é para exibição, não para isto.
+    """
+    if not agent_ids:
+        return []
+    linhas = await conn.fetch(
+        "SELECT agent_id FROM public.agent_profiles WHERE agent_id = ANY($1::text[])",
+        list(dict.fromkeys(agent_ids)),
+    )
+    conhecidos = {l["agent_id"] for l in linhas}
+    return [a for a in dict.fromkeys(agent_ids) if a not in conhecidos]
+
+
+# A mesma consulta que `_primeiro_par_sem_acesso` roda — extraída para
+# constante porque `scripts/provar_invariante.py` a importa daqui para provar
+# contra um banco de verdade, em vez de copiar o texto (duas cópias divergem
+# sem avisar ninguém; ver o script para o motivo de ele existir).
+SQL_PAR_SEM_ACESSO = """
+    WITH humanos AS (
+        SELECT user_id FROM public.channel_members
+         WHERE channel_id = $1::uuid AND member_type = 'human'
+        UNION
+        SELECT unnest($2::text[])
+    ), agentes AS (
+        SELECT user_id FROM public.channel_members
+         WHERE channel_id = $1::uuid AND member_type = 'agent'
+        UNION
+        SELECT unnest($3::text[])
+    )
+    SELECT COALESCE(NULLIF(p.full_name, ''), p.email, h.user_id) AS pessoa,
+           COALESCE(ap.name, a.user_id)                          AS agente
+      FROM humanos h
+      CROSS JOIN agentes a
+      LEFT JOIN public.profiles p ON p.id::text = h.user_id
+      LEFT JOIN public.agent_profiles ap ON ap.agent_id = a.user_id
+     WHERE NOT public.pode_ver_agente(h.user_id::uuid, a.user_id)
+     LIMIT 1
+"""
 
 
 async def _primeiro_par_sem_acesso(
@@ -52,30 +134,17 @@ async def _primeiro_par_sem_acesso(
     consulta une as duas listas com os membros de hoje antes de cruzar. Validar
     só quem entra deixaria passar exatamente o caso que motivou a regra.
     """
-    linha = await conn.fetchrow(
-        """
-        WITH humanos AS (
-            SELECT user_id FROM public.channel_members
-             WHERE channel_id = $1::uuid AND member_type = 'human'
-            UNION
-            SELECT unnest($2::text[])
-        ), agentes AS (
-            SELECT user_id FROM public.channel_members
-             WHERE channel_id = $1::uuid AND member_type = 'agent'
-            UNION
-            SELECT unnest($3::text[])
-        )
-        SELECT COALESCE(p.full_name, p.email, h.user_id) AS pessoa,
-               COALESCE(ap.name, a.user_id)              AS agente
-          FROM humanos h
-          CROSS JOIN agentes a
-          LEFT JOIN public.profiles p ON p.id::text = h.user_id
-          LEFT JOIN public.agent_profiles ap ON ap.agent_id = a.user_id
-         WHERE NOT public.pode_ver_agente(h.user_id::uuid, a.user_id)
-         LIMIT 1
-        """,
-        channel_id, user_ids, agent_ids,
-    )
+    for uid in user_ids:
+        try:
+            UUID(uid)
+        except (ValueError, AttributeError, TypeError):
+            # `user_ids` chega cru do corpo do request. Sem isto, um id mal
+            # formado só aparece dentro do `::uuid` da consulta como `22P02`
+            # — 500 em vez do 400 que uma entrada ruim merece.
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, f"'{uid}' não é um id de pessoa válido."
+            )
+    linha = await conn.fetchrow(SQL_PAR_SEM_ACESSO, channel_id, user_ids, agent_ids)
     return (linha["pessoa"], linha["agente"]) if linha else None
 
 
@@ -230,11 +299,22 @@ async def criar(dados: CanalIn, usuario: Usuario = Depends(usuario_atual)):
             )
             canal_id = linha["id"]
 
+            # ⚠️ Normalizado ANTES de checar e ANTES de gravar — é a mesma
+            # forma que vai para o `INSERT` logo abaixo. Normalizar só na
+            # checagem e gravar o valor cru divergiria checagem de dado.
+            agentes_norm = [_normalizar_agent_id(a) for a in dados.agent_ids]
+
+            desconhecidos = await _agentes_desconhecidos(conn, agentes_norm)
+            if desconhecidos:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, f"Agente {desconhecidos[0]} não existe."
+                )
+
             # O criador entra sempre e primeiro: sem ele o RLS esconde o canal
             # do próprio autor.
             membros = [(usuario.id, "human")]
             membros += [(m, "human") for m in dados.member_ids if m != usuario.id]
-            membros += [(a, "agent") for a in dados.agent_ids]
+            membros += [(a, "agent") for a in agentes_norm]
 
             # ⚠️ O trigger da 014 recusa canal que nasce com pessoa e agente
             # incompatíveis. A transação inteira volta atrás — que é o
@@ -437,11 +517,21 @@ async def membros(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
 async def entrar(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
     """Entra no canal. Repetir não é erro — era `upsert ignoreDuplicates`."""
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
-        await conn.execute(
-            "INSERT INTO public.channel_members (channel_id, user_id, member_type) "
-            "VALUES ($1::uuid, $2, 'human') ON CONFLICT (channel_id, user_id) DO NOTHING",
-            channel_id, usuario.id,
-        )
+        try:
+            await conn.execute(
+                "INSERT INTO public.channel_members (channel_id, user_id, member_type) "
+                "VALUES ($1::uuid, $2, 'human') ON CONFLICT (channel_id, user_id) DO NOTHING",
+                channel_id, usuario.id,
+            )
+        except asyncpg.PostgresError as erro:
+            # ⚠️ Quarta rota que insere em `channel_members` — o trigger da
+            # 014 já a alcança sozinho (é o canal público com agente que este
+            # usuário não pode ver). O que faltava era só a tradução: sem
+            # isto, entrar num canal assim vira 500 com SQL dentro.
+            traduzido = traduzir_hs001(erro)
+            if traduzido is not None:
+                raise traduzido from erro
+            raise
 
 
 @router.get("/{channel_id}/messages", response_model=list[MensagemCanalOut])
@@ -595,7 +685,7 @@ _AVISO_FALHA = (
 
 
 def _nome_de_exibicao(agent_id: str) -> str:
-    normal = agent_id.strip().lower().removeprefix("openclaw:")
+    normal = _normalizar_agent_id(agent_id)
     return " ".join(p.capitalize() for p in re.split(r"[-_\s]+", normal) if p) or normal
 
 
@@ -753,7 +843,7 @@ async def acionar_agente(
     canal inteiro ver que o agente está trabalhando. Antes disso só quem
     mencionou via o indicador, e para os outros o canal parecia parado.
     """
-    agente = agent_id.strip().lower().removeprefix("openclaw:")
+    agente = _normalizar_agent_id(agent_id)
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         canal = await conn.fetchval(
             "SELECT 1 FROM public.channels WHERE id = $1::uuid", channel_id
@@ -1020,7 +1110,10 @@ async def adicionar_membros(
     - **o invariante** — nenhum par pessoa×agente sem acesso, contando quem já
       está no canal.
     """
-    membros = [(u, "human") for u in dados.user_ids] + [(a, "agent") for a in dados.agent_ids]
+    # ⚠️ Normalizado ANTES de checar e ANTES de gravar — é a mesma forma que
+    # vai para o `INSERT` logo abaixo. Ver `_normalizar_agent_id`.
+    agentes_norm = [_normalizar_agent_id(a) for a in dados.agent_ids]
+    membros = [(u, "human") for u in dados.user_ids] + [(a, "agent") for a in agentes_norm]
     if not membros:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nenhum membro informado.")
 
@@ -1047,7 +1140,13 @@ async def adicionar_membros(
                 "Só o administrador adiciona pessoas a um canal.",
             )
 
-        par = await _primeiro_par_sem_acesso(conn, channel_id, dados.user_ids, dados.agent_ids)
+        desconhecidos = await _agentes_desconhecidos(conn, agentes_norm)
+        if desconhecidos:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, f"Agente {desconhecidos[0]} não existe."
+            )
+
+        par = await _primeiro_par_sem_acesso(conn, channel_id, dados.user_ids, agentes_norm)
         if par is not None:
             pessoa, agente = par
             raise HTTPException(
@@ -1064,7 +1163,7 @@ async def adicionar_membros(
                     channel_id, membro_id, tipo_membro,
                 )
         except asyncpg.PostgresError as erro:
-            traduzido = traduzir_hs001(erro)
+            traduzido = traduzir_hs001(erro) or traduzir_rls(erro)
             if traduzido is not None:
                 raise traduzido from erro
             raise
