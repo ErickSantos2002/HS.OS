@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Sun, Moon, ArrowLeft, Move, Check, RotateCcw, ZoomIn, ZoomOut, Maximize, Minimize, Sparkles, LayoutGrid } from "lucide-react";
 import { api } from "@/lib/api";
+import { type Feed, normalizar } from "@/lib/warroom-feed";
 import "@/styles/warroom.css";
 
 /**
@@ -22,28 +23,6 @@ import "@/styles/warroom.css";
  * função própria que só devolve estado agregado.
  */
 
-interface Agente {
-  id: string; nome: string; papel: string;
-  estado: "ocioso" | "pensando" | "longo";
-  tarefa: string | null; desde: string | null;
-  contexto: number | null; filhos: { nome: string; vivo: boolean }[]; parceiro: string | null;
-  parceiroAgente: string | null;
-}
-interface Evento { ts: string; tipo: "entrega" | "autonomo" | "conversa"; texto: string }
-interface Feed {
-  ts: string;
-  diasNoAr: number | null;
-  pessoas: { id: string; nome: string }[];
-  agentes: Agente[];
-  eventos: Evento[];
-  numeros: { entregas: number; conversas: number; tokens: number; custo: number; cacheTaxa: number | null };
-  /** Consultas que falharam — aparecem discretas no rodapé em vez de sumir. */
-  avisos?: string[];
-}
-
-/** Largura lógica fixa; a ALTURA acompanha o formato do painel para o desenho
- *  ocupar a tela inteira, sem faixas vazias nas laterais. Posições salvas
- *  continuam válidas porque a largura nunca muda. */
 /** O arranjo dos nós vive no navegador desta tela — ver `salvarMapa`. */
 const CHAVE_LAYOUT = "warroom_layout";
 
@@ -239,12 +218,14 @@ export default function WarRoomPage() {
     // está logado quando existe. A TV não tem sessão e entra pelo token na URL.
     const puxar = async () => {
       try {
-        const dados = await api<Feed>(
+        const dados = await api<unknown>(
           `/warroom/feed${chave ? `?t=${encodeURIComponent(chave)}` : ""}`,
         );
         if (!vivo) return;
         setErro(null);
-        setFeed(dados);
+        // ⚠️ Normalizar aqui, não confiar na resposta: front e back não sobem
+        // juntos, e em 01/09 um `filhos` ausente derrubou a parede inteira.
+        setFeed(normalizar(dados));
       } catch (e) {
         if (!vivo) return;
         // Mantém o último feed na tela: parede em branco não diz nada, parede
