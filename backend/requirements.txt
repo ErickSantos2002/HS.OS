@@ -23,3 +23,7 @@ psycopg[binary]==3.2.3
 # O agente escreve markdown na base de conhecimento e o editor da tela
 # (TipTap) guarda HTML — a conversão acontece em app/routers/mcp_wiki.py.
 markdown==3.7
+
+# scripts/carregar_pessoas.py lê o quadro de pessoal pelo cadastro único de
+# bancos (`bancos.consultar`, em ~/projetos/bancos), que devolve DataFrame.
+pandas>=2.2.0
