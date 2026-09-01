@@ -37,7 +37,6 @@ prático e continua sendo um arquivo de verdade, com histórico no git.
 | Funcionalidade | Desde | Onde está o código |
 |---|---|---|
 | **Arena** | 10/08/2026 | `frontend/src/_legado/arena/`, `functions/_pausado/arena-*` |
-| **War room** | 10/08/2026 | `frontend/src/_legado/warroom/`, `functions/_pausado/warroom-feed` |
 | **Voz** (ElevenLabs) | 10/08/2026 | `frontend/src/_legado/voz/`, `functions/_pausado/*elevenlabs*` |
 | **`turn-reconciler`** | 11/08/2026 | `functions/_pausado/turn-reconciler` — ver [`DECISAO-RECONCILIADOR.md`](DECISAO-RECONCILIADOR.md) |
 
@@ -85,7 +84,50 @@ páginas originais e restaurar os imports. E em
 (está no histórico do git) para o card de voz voltar a oferecer "aplicar em
 todas as arenas".
 
-### War room
+### ✅ War room — de volta em 01/09/2026, re-fonteada
+
+**Não foi restaurada; foi refeita**, e a diferença é o que importa registrar.
+Medido antes de começar: a `warroom-feed` lê 12 tabelas e **seis estavam
+vazias**, entre elas as duas do conteúdo principal — `agent_results` (entregas) e
+`agent_activity` (ações autônomas), zeradas nos 14 dias anteriores. As automações
+reais moram no gateway (`cron_jobs`), não na tabela `automations`;
+`subagent_watch` não tem escritor nenhum. **Portar fiel teria subido uma TV em
+branco.**
+
+As fontes passaram a ser o que este sistema de fato produz: briefings publicados
+(`wiki_documents`), conversas, consumo (`usage_events`) e o estado dos agentes
+(`agent_stats` + `agent_context_state`).
+
+⚠️ **`online` não sai de `agent_stats.status`.** Ele vale `"ok"` em toda linha —
+resultado da última execução, não sinal de vida. O sinal é `last_active`, com
+janela de 30 min, e três estados: ligado, parado e **desconhecido** (agente que
+nunca rodou não é agente parado).
+
+⚠️ **Polling de 15s, não realtime.** O `/ws` exige JWT de usuário e a TV não faz
+login — ela nunca conectaria. Para display sem operador, o polling ainda falha
+melhor: a tela mantém o último feed e marca "sem atualizar desde HH:MM" em vez de
+congelar mostrando ontem.
+
+**Onde está:** `backend/app/warroom.py` (lógica pura, 23 testes),
+`backend/app/routers/warroom.py` (`GET /warroom/feed`),
+`frontend/src/pages/WarRoomPage.tsx` (177 linhas — a original tinha 990 e
+continua em `_legado/warroom/` como referência).
+
+**A TV entra por token.** `/warroom?t=<token>`, conferido contra o segredo
+`WARROOM_TOKEN` (`ler_segredo`: `integration_secrets` primeiro, ambiente depois).
+Quem já está logado entra sem token. **O link é a credencial** — rotacionar o
+segredo é o que revoga. Sem o segredo configurado a TV não entra, e quem tem
+sessão continua entrando: esquecer a config não abre porta nem derruba o painel.
+
+Fora do `AppLayout` e **sem `ProtectedRoute`** — ele redirecionaria a TV para
+`/login` antes de o token na URL ser lido.
+
+**O que ficou de fora** (YAGNI, entra se fizer falta): layout arrastável,
+watchdog de sessão longa, humanização de nome de cron e o modo voz.
+
+---
+
+### War room — como era antes da volta
 
 **O que era.** Uma tela cheia para espelhar numa TV do escritório, mostrando os
 agentes trabalhando ao vivo: entregas concluídas, ações autônomas e conversas
@@ -105,16 +147,9 @@ TV. Não é um processo da Health & Safety hoje.
 (`agent_activity_log`, `agent_results`, `conversations`) continuam vivas e
 servindo outras telas.
 
-**Como voltar:**
-
-```bash
-git mv frontend/src/_legado/warroom/WarRoomPage.tsx frontend/src/pages/
-git mv backend/supabase/functions/_pausado/warroom-feed backend/supabase/functions/
-```
-
-Depois, em `frontend/src/App.tsx`, trocar `<WarRoomPausada />` por
-`<WarRoomPage />` e restaurar o import. E a `warroom-feed` volta para a fila de
-portagem — ela ainda chama o Supabase.
+**A `warroom-feed` continua em `_pausado/`** e não volta para a fila de
+portagem: a tela nova não a usa. Fica como referência do que o painel mostrava
+quando havia dado para mostrar.
 
 ### Voz (ElevenLabs)
 

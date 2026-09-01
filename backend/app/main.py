@@ -39,6 +39,7 @@ from app.routers.relatorios import router as relatorios_router
 from app.routers.profiles import router as profiles_router
 from app.routers.tarefas import router as tarefas_router
 from app.routers.uso import router as uso_router
+from app.routers.warroom import router as warroom_router
 from app.routers.times import router as times_router
 from app.routers.wiki import router as wiki_router
 from app.routers.skills import router as skills_router
@@ -219,6 +220,7 @@ app.include_router(relatorios_router)
 app.include_router(skills_router)
 app.include_router(storage_router)
 app.include_router(uso_router)
+app.include_router(warroom_router)
 app.include_router(times_router)
 app.include_router(wiki_router)
 app.include_router(tarefas_router)

@@ -22,24 +22,13 @@ import SessionsPage from "./pages/SessionsPage";
 import SettingsPage from "./pages/SettingsPage";
 import SkillsPage from "./pages/SkillsPage";
 import ClawHubPage from "./pages/ClawHubPage";
+import WarRoomPage from "./pages/WarRoomPage";
 // ⚠️ Arena pausada em 10/08/2026. As três telas estão em `src/_legado/arena/`,
 // fora da compilação, e as rotas caem no aviso de "em construção". Para voltar:
 // mover os arquivos de volta e trocar os `<ArenaPausada />` pelas páginas
 // originais. Ver `docs/EM-CONSTRUCAO.md`.
 import EmConstrucao from "./components/EmConstrucao";
-import { Swords, MonitorPlay } from "lucide-react";
-
-// ⚠️ Parede de TV pausada em 10/08/2026. A tela está em
-// `src/_legado/warroom/WarRoomPage.tsx` e a `warroom-feed` em
-// `functions/_pausado/`. Ver `docs/EM-CONSTRUCAO.md`.
-const WarRoomPausada = () => (
-  <EmConstrucao
-    icone={MonitorPlay}
-    titulo="War room"
-    resumo="O painel de parede está pausado enquanto o resto da plataforma vai ao ar. A ideia continua de pé e o trabalho já feito está guardado."
-    oQueEra="Uma tela cheia para espelhar numa TV, mostrando os agentes trabalhando ao vivo: entregas, ações autônomas e conversas conforme aconteciam."
-  />
-);
+import { Swords } from "lucide-react";
 
 const ArenaPausada = () => (
   <EmConstrucao
@@ -98,14 +87,11 @@ const App = () => {
 
                 {/* War room — exige login como qualquer tela, mas sem
                     AppLayout: é uma tela cheia para espelhar na TV. */}
-                <Route
-                  path="/warroom"
-                  element={
-                    <ProtectedRoute>
-                      <WarRoomPausada />
-                    </ProtectedRoute>
-                  }
-                />
+                {/* ⚠️ Sem `ProtectedRoute` de propósito: a TV não faz login e
+                    seria redirecionada para /login antes de o token na URL ser
+                    lido. Quem autoriza é `GET /warroom/feed` — a tela sozinha
+                    não mostra dado nenhum. */}
+                <Route path="/warroom" element={<WarRoomPage />} />
 
                 {/* O wizard de /setup foi aposentado — ver src/_legado/setup/.
                     Ele era o onboarding do cliente da dn.ia (contratar VPS na
