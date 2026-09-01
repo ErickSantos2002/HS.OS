@@ -117,3 +117,85 @@ def test_sessao_sem_carimbo_de_tempo_conta():
 def test_agente_so_com_sessao_velha_some_do_painel():
     sessoes = [{"key": "agent:bruce:so-velha", "totalTokens": 5, "updatedAt": AGORA_MS - 30 * DIA}]
     assert "bruce" not in m._sessoes_por_agente(sessoes, agora_ms=AGORA_MS)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Os seis campos chumbados (01/09/2026)
+#
+# As quatro tabelas passaram a ter linha em 31/08, e isso foi lido como
+# "resolvido". Em 01/09, conferindo o conteúdo: `version` estava vazio nas 431
+# amostras, e `usage_daily` do dia trazia `tokens_total = 170.909` com
+# `messages_total = 0`. A causa é este módulo — seis campos escritos como
+# literal em vez de medidos:
+#
+#     {"status": "ok", "version": None, "uptime_seconds": None, ...}
+#     {"messages_total": 0, "cache_hit_rate": 0, "error_rate": 0, "tool_calls": 0, ...}
+#
+# ⚠️ **Zero é pior que vazio aqui.** Tabela sem linha pede investigação; tabela
+# com linha e zero dentro passa por "o sistema está parado". É a mesma forma do
+# erro dos cards arquivados: o número aparece, parece plausível, ninguém
+# desconfia. Daí a regra que estes testes fixam: **medido ou NULL, nunca zero
+# inventado.**
+
+INFO_SERVIDOR = {
+    "server": {"name": "openclaw", "version": "2026.7.1-2"},
+    "protocol": "1.0",
+    "auth": {"scopes": ["operator.read", "operator.write"]},
+}
+
+
+def test_grava_a_versao_que_o_gateway_declarou():
+    """O dado já estava no objeto que o coletor tem em mãos — a aba Gateway o
+    mostra desde o Lote 1. Faltava só ler."""
+    assert m._saude_do_gateway(INFO_SERVIDOR, 42)["version"] == "2026.7.1-2"
+
+
+def test_latencia_medida_atravessa_intacta():
+    assert m._saude_do_gateway(INFO_SERVIDOR, 42)["latency_ms"] == 42
+
+
+def test_uptime_ausente_vira_none_e_nao_zero():
+    """Este gateway não declara uptime no hello. `0` diria 'subiu agora', que é
+    uma afirmação; `None` diz 'não medimos', que é a verdade."""
+    assert m._saude_do_gateway(INFO_SERVIDOR, 42)["uptime_seconds"] is None
+
+
+def test_uptime_e_lido_quando_o_gateway_declarar():
+    """Não observado neste gateway, mas o dia em que ele declarar não deve
+    exigir voltar aqui."""
+    info = {"server": {"version": "x", "uptimeMs": 90_000}}
+    assert m._saude_do_gateway(info, 1)["uptime_seconds"] == 90
+
+
+def test_payload_torto_nao_derruba_a_coleta():
+    saude = m._saude_do_gateway({}, None)
+    assert saude["status"] == "ok" and saude["version"] is None
+
+
+def test_mensagens_do_dia_sao_contadas_e_nao_zeradas():
+    uso = m._uso_do_dia("2026-09-01", {"tokens": 170909, "custo": 0.052},
+                        mensagens=14, cache=None)
+    assert uso["messages_total"] == 14
+
+
+def test_metricas_sem_fonte_ficam_none():
+    """`error_rate` e `tool_calls` não têm de onde sair: nenhuma tabela nossa
+    registra erro por dia nem chamada de ferramenta. Enquanto não tiverem
+    fonte, NULL — e a tela mostra 'sem dado', não '0%'."""
+    uso = m._uso_do_dia("2026-09-01", {"tokens": 1, "custo": 0}, mensagens=0, cache=None)
+    assert uso["error_rate"] is None
+    assert uso["tool_calls"] is None
+
+
+def test_cache_hit_rate_sem_dado_e_none():
+    """`usage_events.cached_tokens` está em 0 nas 217 linhas e nada o escreve —
+    `coletor_uso.py` não menciona o campo. Taxa 0% afirmaria que o cache nunca
+    acerta; NULL diz que ninguém mediu."""
+    assert m._uso_do_dia("2026-09-01", {"tokens": 1, "custo": 0},
+                         mensagens=0, cache=None)["cache_hit_rate"] is None
+
+
+def test_cache_hit_rate_e_calculado_quando_houver_dado():
+    uso = m._uso_do_dia("2026-09-01", {"tokens": 1, "custo": 0}, mensagens=0,
+                        cache={"entrada": 1000, "cacheado": 250})
+    assert uso["cache_hit_rate"] == 25.0

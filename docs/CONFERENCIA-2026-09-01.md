@@ -13,7 +13,7 @@ Tudo aqui é **medido no banco `hsos` e no `taskhs`**, não lido em tela.
 |---|---|
 | os cinco briefings | ✅ passaram de primeira |
 | `conversation_resets` | ⚠️ zero desde 28/08, mas sem tráfego que prove |
-| `/monitoring` | ✅ com dado pela primeira vez |
+| `/monitoring` | ⚠️ com linha, mas 6 dos 9 campos eram chumbados — corrigido no mesmo dia |
 | o guardião | ✅ nada para avisar |
 
 ### 1. Os cinco briefings passaram ✅
@@ -52,9 +52,9 @@ de "ninguém conversou".
 comparar resets contra mensagens em `conversations`, não resets contra o
 calendário.
 
-### 3. `/monitoring` deixou de estar vazia ✅
+### 3. `/monitoring` tem linha, e eu parei de conferir cedo demais ⚠️
 
-As quatro tabelas, todas escritas às 09:25 de hoje pelo `app/coletor_metricas.py`:
+As quatro tabelas foram escritas às 09:25 de hoje pelo `app/coletor_metricas.py`:
 
 | tabela | linhas |
 |---|---|
@@ -63,12 +63,45 @@ As quatro tabelas, todas escritas às 09:25 de hoje pelo `app/coletor_metricas.p
 | `agent_stats` | 5 |
 | `usage_daily` | 2 |
 
-🟠 **Um furo no adaptador:** `usage_daily` de hoje traz `tokens_total = 170.909`
-e `messages_total = 0`. Conta token e não conta mensagem — o campo existe, a
-tela vai mostrar zero, e quem olhar vai concluir que ninguém usou o sistema.
-É o mesmo formato de erro que o item 8 acabou de consertar em `usage_events`:
-tabela viva com uma coluna morta dentro parece pior do que tabela vazia, porque
-não pede conferência.
+**Dei isto por resolvido olhando a contagem de linhas.** Estava errado, e a
+correção é a parte que interessa deste documento.
+
+Fui ver o conteúdo: **`version` está vazio nas 431 amostras** — 100% delas —
+enquanto a aba Gateway mostra `2026.7.1-2` na mesma tela. Abrindo o coletor, não
+era um campo, eram **seis literais**:
+
+```python
+{"status": "ok", "version": None, "uptime_seconds": None, "latency_ms": latencia}
+{"date": ..., "messages_total": 0, "tokens_total": ..., "cost_total": ...,
+ "cache_hit_rate": 0, "error_rate": 0, "tool_calls": 0}
+```
+
+Só `latency_ms`, `tokens_total` e `cost_total` eram medidos. O resto era retrato
+de um sistema parado, escrito à mão.
+
+⚠️ **Zero é pior que vazio.** Tabela sem linha pede investigação; tabela com
+linha e zero dentro passa por "ninguém usou o sistema". É a mesma forma do erro
+dos cards arquivados, que este mesmo dia mediu em 54%: o número aparece, parece
+plausível, ninguém desconfia. E foi exatamente o que eu fiz de manhã ao aceitar
+`count(*) > 0` como prova.
+
+**Consertado hoje**, com a régua "medido ou `NULL`, nunca zero inventado":
+
+| campo | antes | agora |
+|---|---|---|
+| `version` | `None` | do `cliente.info_servidor`, que o coletor já tinha em mãos |
+| `uptime_seconds` | `None` | lido se o gateway declarar; `NULL` se não — nunca `0` |
+| `messages_total` | `0` | `count(*)` em `conversations` do dia |
+| `cache_hit_rate` | `0` | calculado; `NULL` enquanto nada escrever `cached_tokens` |
+| `error_rate` | `0` | `NULL` — nenhuma tabela nossa registra erro por dia |
+| `tool_calls` | `0` | `NULL` — idem |
+
+Os dois últimos ficam nulos **de propósito**: não têm fonte, e inventar `0%` de
+erro é a mesma mentira, só que a favor.
+
+🟠 **E `usage_daily` não tem leitor.** A `UsageTab` lê `usage_events` cru; as
+telas que restam consomem `gateway_health`. A tabela é escrita e nunca lida —
+fica registrado para a decisão ser consciente, não corrigido às escondidas.
 
 ### 4. O guardião não tinha o que avisar ✅
 

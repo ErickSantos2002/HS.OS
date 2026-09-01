@@ -171,6 +171,62 @@ def _agentes_do_gateway(agentes: list, sessoes: list, consumo: dict) -> list[dic
     return linhas
 
 
+def _saude_do_gateway(info_servidor: dict | None, latencia_ms: int | None) -> dict:
+    """A linha de `gateway_health` a partir do hello que o cliente já guardou.
+
+    ⚠️ **`version` e `uptime_seconds` eram literais `None` até 01/09/2026**, e o
+    resultado foi 431 amostras com a versão em branco enquanto a aba Gateway
+    mostrava `2026.7.1-2` na mesma tela. O dado nunca faltou: está em
+    `cliente.info_servidor`, populado no handshake.
+
+    ⚠️ **Uptime ausente fica `None`, não `0`.** Zero afirma "subiu agora"; nulo
+    diz "não medimos". Este gateway (2026.7.1-2) não declara uptime no hello —
+    a leitura fica escrita porque o dia em que ele declarar não deve exigir
+    voltar aqui.
+    """
+    servidor = ((info_servidor or {}).get("server") or {})
+    uptime = None
+    for chave, divisor in (("uptimeSeconds", 1), ("uptime", 1), ("uptimeMs", 1000)):
+        bruto = servidor.get(chave)
+        if isinstance(bruto, (int, float)) and bruto > 0:
+            uptime = int(bruto / divisor)
+            break
+    return {
+        "status": "ok",
+        "version": servidor.get("version"),
+        "uptime_seconds": uptime,
+        "latency_ms": latencia_ms,
+    }
+
+
+def _uso_do_dia(dia, total: dict, mensagens: int | None,
+                cache: dict | None) -> dict:
+    """A linha de `usage_daily`. **Medido ou `NULL`, nunca zero inventado.**
+
+    ⚠️ Quatro destes campos eram literais `0` até 01/09/2026, e a tela mostrava
+    `messages_total = 0` ao lado de `tokens_total = 170.909` — leitura natural:
+    "ninguém usou o sistema". Tabela vazia pede investigação; tabela com zero
+    dentro passa despercebida, que é a mesma forma do erro dos cards
+    arquivados.
+
+    `error_rate` e `tool_calls` continuam nulos **de propósito**: nenhuma tabela
+    nossa registra erro por dia nem chamada de ferramenta. Quando tiverem
+    fonte, entram aqui — até lá, a tela mostra "sem dado", não "0%".
+    """
+    taxa = None
+    if cache and cache.get("entrada"):
+        taxa = round(100.0 * (cache.get("cacheado") or 0) / cache["entrada"], 2)
+    return {
+        "date": dia,
+        "messages_total": mensagens,
+        "tokens_total": total["tokens"],
+        "cost_total": total["custo"],
+        "cache_hit_rate": taxa,
+        "error_rate": None,
+        "tool_calls": None,
+    }
+
+
 async def _consumo_do_dia(conn, dia) -> tuple[dict, dict]:
     """`(por_agente, total)` do dia, da `usage_events`."""
     linhas = await conn.fetch(
@@ -189,6 +245,34 @@ async def _consumo_do_dia(conn, dia) -> tuple[dict, dict]:
         "custo": sum(c for _, c in por_agente.values()),
     }
     return por_agente, total
+
+
+async def _mensagens_e_cache(conn, dia) -> tuple[int, dict | None]:
+    """Mensagens do dia e, se houver, a base da taxa de cache.
+
+    As mensagens saem de `conversations`, que é onde a conversa de fato mora —
+    não do gateway, que só conhece a sessão viva.
+
+    ⚠️ **O cache volta `None` enquanto ninguém escrever `cached_tokens`.** A
+    coluna existe e está em `0` nas linhas todas porque é o default: o
+    `coletor_uso.py` não menciona o campo. Dividir por ele daria "0% de acerto
+    de cache", que é uma afirmação medida sobre um dado que não existe — o erro
+    que este módulo acabou de cometer com `messages_total`. No dia em que
+    alguma linha trouxer valor, a taxa aparece sozinha.
+    """
+    mensagens = await conn.fetchval(
+        "SELECT count(*) FROM public.conversations "
+        "WHERE created_at >= $1::date AND created_at < $1::date + 1", dia)
+    linha = await conn.fetchrow(
+        """SELECT sum(input_tokens) entrada, sum(cached_tokens) cacheado,
+                  count(*) FILTER (WHERE cached_tokens > 0) com_dado
+             FROM public.usage_events
+            WHERE ts >= $1::date AND ts < $1::date + 1""", dia)
+    cache = None
+    if linha and (linha["com_dado"] or 0) > 0:
+        cache = {"entrada": int(linha["entrada"] or 0),
+                 "cacheado": int(linha["cacheado"] or 0)}
+    return int(mensagens or 0), cache
 
 
 async def coletar_uma_vez() -> dict:
@@ -217,8 +301,8 @@ async def coletar_uma_vez() -> dict:
         quando = datetime.now(timezone.utc)
         try:
             async with sessao(role="service_role") as conn:
-                await _gravar(conn, {"status": "down", "version": None,
-                                     "uptime_seconds": None, "latency_ms": None},
+                await _gravar(conn, {**_saude_do_gateway(None, None),
+                                     "status": "down"},
                               None, [], [], quando)
         except Exception:  # noqa: BLE001
             logger.exception("Coletor de métricas: nem a saúde consegui gravar.")
@@ -234,13 +318,11 @@ async def coletar_uma_vez() -> dict:
             return {"ok": True, "pulado": True}
         try:
             por_agente, total = await _consumo_do_dia(conn, quando.date())
+            mensagens, cache = await _mensagens_e_cache(conn, quando.date())
             erros = await _gravar(
                 conn,
-                {"status": "ok", "version": None, "uptime_seconds": None,
-                 "latency_ms": latencia},
-                {"date": quando.date(), "messages_total": 0,
-                 "tokens_total": total["tokens"], "cost_total": total["custo"],
-                 "cache_hit_rate": 0, "error_rate": 0, "tool_calls": 0},
+                _saude_do_gateway(cliente.info_servidor, latencia),
+                _uso_do_dia(quando.date(), total, mensagens, cache),
                 _agentes_do_gateway(agentes_brutos, sessoes, por_agente),
                 [_cron_do_gateway(j) for j in jobs if isinstance(j, dict)],
                 quando,
