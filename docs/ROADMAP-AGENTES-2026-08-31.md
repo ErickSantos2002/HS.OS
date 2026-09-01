@@ -483,6 +483,12 @@ existir.
 
 ### O que conferir amanhã
 
+➡️ **Conferido em 01/09.** Resultado em
+[`CONFERENCIA-2026-09-01.md`](CONFERENCIA-2026-09-01.md): os cinco briefings
+passaram de primeira, o `/monitoring` encheu, e os resets caíram — mas sem
+tráfego que prove, então a linha 2 continua em aberto.
+
+
 | quando | o quê | o que significa |
 |---|---|---|
 | 07h30–07h50 | os cinco briefings | passar de primeira confirma o diagnóstico da janela |

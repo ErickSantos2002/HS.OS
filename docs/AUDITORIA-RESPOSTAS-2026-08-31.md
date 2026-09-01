@@ -127,8 +127,15 @@ gargalo maior" — que é exatamente o que o briefing recomenda atacar.
 48% e foi entregue com cara de dado exato. Aqui foram 54%.
 
 **Conserto aplicado:** a skill ganhou um aviso com os números medidos, no ponto
-exato onde a linha é largada. ⚠️ **Falta publicar** — `bash
-scripts/publicar-skills.sh --enviar` — que é escrita no gateway.
+exato onde a linha é largada. ✅ **Publicada em 01/09/2026** — `bash
+scripts/publicar-skills.sh --enviar`, conferido por `md5sum` contra
+`/root/.openclaw/skills`. Que o agente a leia só se vê no briefing: o número de
+referência e o teste estão em
+[`CONFERENCIA-2026-09-01.md`](CONFERENCIA-2026-09-01.md).
+
+⚠️ **A tabela acima rotula como "board Serviço" números que são da etapa
+Correios.** Os `378 cards no total, 59 ativos` são da lista Correios; o board
+tem 554 e 195. Conferido em 01/09.
 
 ## GestorHS: não dá para auditar, e isso é o achado
 

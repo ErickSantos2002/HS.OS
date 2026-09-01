@@ -8,14 +8,14 @@ Atualizar este arquivo conforme os lotes forem fechando.
 
 ## Placar
 
-Atualizado em **07/08/2026**. Todo número aqui é **medido**, não mantido à mão —
+Atualizado em **07/08/2026**; linhas do front reconferidas em **01/09/2026**. Todo número aqui é **medido**, não mantido à mão —
 o contador já derivou uma vez, chegando a dizer "72 de 73" com 13 functions
 ainda na pasta.
 
 | | Feito | Total | Comando |
 |---|---|---|---|
 | Edge functions **por portar** | — | **0** |
-| Portadas | 68 | 73 | `ls backend/supabase/functions/_portado \| wc -l` (4 pausadas em `_pausado/`) |
+| Portadas | 65 | 73 | ⚠️ **não meça por `ls _portado`** — dá 2: as portadas foram apagadas, não movidas. O número está em "Nenhuma function resta", abaixo. 8 arquivadas em `_pausado/` |
 | Arquivos do front **com Supabase** | **1** | 278 | `grep -rl "integrations/supabase/client" frontend/src \| grep -v _legado \| wc -l` — e o que sobrou é o próprio client |
 | Rotas na API própria | **181** | — | `curl -s localhost:8002/openapi.json \| jq '.paths \| length'` |
 | Chamadas `.from("…")` restantes | **0** vivas (9 em `_legado/`) | — | `grep -rho '\.from(\s*"' frontend/src \| wc -l` |
@@ -277,20 +277,36 @@ existe**, e é o que bloqueia o `turn-reconciler`.
 
 Lembrar do achado de segurança: `trigger-automation` estava aberto na internet.
 
-## Lote 6 — O que resta das edge functions
+## ✅ Lote 6 — O que restava das edge functions
 
-Quatro de trabalho real e nove bloqueadas por chave externa — a tabela está no
-Placar, acima.
+Nada. A raiz de `backend/supabase/functions/` tem **0 functions por portar**
+(medido em 01/09/2026); as 8 em `_pausado/` são as arquivadas por decisão —
+6 presas ao ElevenLabs, a `turn-reconciler` e a `warroom-feed`.
 
-## 🔴 Lote 7 — O banco (o maior que sobrou)
+A linha anterior aqui dizia "quatro de trabalho real e nove bloqueadas", que era
+o estado antes de 11/08. Ver "Nenhuma function resta", acima.
 
-**185 chamadas `.from("…")` em 56 arquivos vivos** (63 importam o client, 7 deles dentro de `_legado/`). É o subsistema que mal começou, e
-o que separa "o front fala com a nossa API" de "o front ainda é um cliente
-Supabase com endpoints por cima".
+## ✅ Lote 7 — O banco (concluído)
 
-Estratégia que funcionou nos primeiros lotes: **portar por tabela, não por tela.**
-Uma tabela some do front de uma vez, e o endpoint nasce coerente em vez de
+Era o maior que sobrava: **185 chamadas `.from("…")` em 56 arquivos vivos**. Medido
+em 01/09/2026 restam **0 vivas** e **0 arquivos vivos** — as 9 que o grep ainda
+acha estão todas em `_legado/`, que não é roteado.
+
+A estratégia que fechou foi a dos primeiros lotes: **portar por tabela, não por
+tela.** Uma tabela some do front de uma vez, e o endpoint nasce coerente em vez de
 recortado pela necessidade de uma tela só.
+
+⚠️ **Esta seção descreveu por semanas um estado que não existia mais**, enquanto o
+Placar, na mesma página, já dizia `0`. Duas linhas do mesmo documento se
+contradizendo é pior que número velho sozinho: quem lê a prosa não desconfia. Ver
+[`CONFERENCIA-2026-09-01.md`](CONFERENCIA-2026-09-01.md).
+
+O que o grep ainda encontra, e por que nenhum conta:
+
+- `dnos-documentation-yaml.ts:1341` — `supabase.functions.invoke('export-agent')`
+  é **string dentro do YAML da Documentação**, o projeto de conteúdo em aberto
+- `use-channels.ts`, `use-typing-indicator.ts`, `lib/realtime.ts` — comentários
+  explicando o que o `pg_notify` substituiu
 
 ## ✅ Lote 8 — Realtime (concluído em 07/08/2026)
 
