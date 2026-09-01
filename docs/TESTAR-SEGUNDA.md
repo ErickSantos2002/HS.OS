@@ -23,7 +23,8 @@ cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 
 cd frontend && npm run dev     # http://localhost:8080
 ```
 
-Login: `ti@healthsafetytech.com` / `admin123`.
+Login: `ti@healthsafetytech.com`. A senha foi rotacionada em 01/09/2026 e não
+fica versionada — peça ao Erick.
 
 ---
 
@@ -68,8 +69,13 @@ A ordem importa: cada bloco depende do anterior estar de pé.
 - [ ] O menu carrega e as telas abrem sem erro no console
 - [ ] Trocar senha em **Configurações → Perfil** (pede a senha atual agora)
 
-⚠️ **Este é o momento de trocar o `admin123`.** E a senha do banco
-(`administrador`/`administrador`), que também é temporária.
+✅ **A senha do `super_admin` foi trocada em 01/09/2026.**
+
+⚠️ **A do banco não.** O superusuário do Postgres de produção continua com a
+senha padrão, e ela estava escrita **aqui**, em texto aberto, num repositório
+público — a varredura de set/2026 limpou as strings de conexão de três repos e
+não pegou esta, porque estava em prosa. Removida em 01/09; **rotacionar segue
+pendente** e é o que resolve. Ver `SETUP-CLAUDE.md`.
 
 ### 2. Agentes
 

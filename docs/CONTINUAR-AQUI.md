@@ -519,7 +519,11 @@ começa em 2026. Decorar a data de uma tabela não protege da próxima.
 
 Nada disso é novo de 14/08, e nada disso bloqueia o trabalho acima:
 
-- **Senha `administrador`/`administrador`** no superusuário do Postgres.
+- 🔴 **A senha padrão do superusuário do Postgres**, ainda não rotacionada. O
+  valor estava escrito nesta linha, em texto aberto, num repositório público —
+  removido em 01/09/2026. Removê-lo do texto **não revoga nada**: ele segue no
+  histórico do git e nos três outros repos onde vazou em set/2026. Rotacionar é
+  o que resolve, e uma rotação cobre os três bancos que compartilham a conta.
 - **`integrations.credentials` em texto puro** — nove senhas de banco.
 - **`sandbox` por agente**: um agente ainda alcança o SQLite do outro via `exec`.
   A tentativa com `tools.fs.workspaceOnly` foi revertida por não fechar isso e
@@ -812,7 +816,7 @@ Escrito e testado só nas guardas, porque o caminho feliz tem efeito real:
 
 | Decisão | Por quê importa |
 |---|---|
-| **Trocar a senha `admin123`** | Conta `super_admin` que guarda o token do gateway. O endpoint existe (`POST /auth/trocar-senha`) e a tela está pronta. Fazer **antes** de liberar para a equipe. |
+| ~~**Trocar a senha do `super_admin`**~~ | ✅ Feito em 01/09/2026. ⚠️ Trocar não apaga o histórico do git: a antiga segue nos commits anteriores deste repositório público — o que a rotação faz é torná-la inútil. |
 | Flags `dnos_flag_*` viram padrão? | São 4 correções de estabilidade hoje **desligadas**: o sistema roda com os bugs antigos ativos. |
 | Manter as 191 policies de RLS? | Funcionam, mas duplicam a autorização do FastAPI. Se aposentar, vira a `003`. |
 | **Reescrever a documentação oficial** | Ela avisa que a parte técnica está defasada (11/08), mas continua descrevendo edge functions que não existem. São 2.791 linhas misturando material que vale com material errado. Adiado de propósito: com uso real dá para saber quais seções as pessoas consultam e corrigir essas primeiro. |

@@ -130,7 +130,8 @@ ssh -N -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
 
 Sem o `ServerAliveInterval` o túnel morre em minutos de inatividade e o sintoma é confuso.
 
-Login de desenvolvimento: `ti@healthsafetytech.com` / `admin123`.
+Login de desenvolvimento: `ti@healthsafetytech.com`. **A senha não fica aqui** — foi
+rotacionada em 01/09/2026 e este repositório é público. Peça ao Erick.
 
 Stack completa: `docker compose up -d --build` na raiz. Deploy: ver `docs/DEPLOY.md`.
 

@@ -354,7 +354,7 @@ consumo ao abrir.
 |---|---|
 | ~~Manter as 191 policies de RLS?~~ **Sim.** Decidido em 31/08/2026 — ver abaixo. | Medido: nenhuma query depende delas para escopo. Aposentar é possível e não compensa. |
 | As flags `dnos_flag_*` viram padrão? | São 4 correções de estabilidade desligadas por padrão. Ver `RESUMO-CONSOLIDACAO`. |
-| Trocar a senha do admin | `admin123` num `super_admin` que guarda o token do gateway. **O endpoint já existe** (`POST /auth/trocar-senha`, exigindo a senha atual) e a tela está pronta. Falta só fazer, antes de liberar para a equipe. |
+| ~~Trocar a senha do admin~~ **feito em 01/09/2026** | Era a senha padrão num `super_admin` que guarda o token do gateway, em texto aberto num repositório público. ⚠️ Fica pendente a senha do **superusuário do Postgres**, que é outra e continua a padrão. |
 | ~~Lovable AI Gateway~~ **resolvido em 10/08/2026** — portado para OpenAI em `app/routers/ia.py`, ligado em tela. | |
 | ElevenLabs — assinar ou tirar do produto | Só a **voz**: o botão "ouvir" no chat, a escolha de voz do agente e o modo voz da Arena. Previsto voltar quando a ElevenLabs entrar por marketing. Ver `EM-CONSTRUCAO.md`. |
 | Variante do wordmark para tema escuro | O "OS" cinza tem contraste baixo no escuro. |
