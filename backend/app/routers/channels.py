@@ -316,14 +316,30 @@ async def criar(dados: CanalIn, usuario: Usuario = Depends(exige_papel("administ
 
             # O criador entra sempre e primeiro: sem ele o RLS esconde o canal
             # do próprio autor.
-            membros = [(usuario.id, "human")]
-            membros += [(m, "human") for m in dados.member_ids if m != usuario.id]
+            humanos = [usuario.id] + [m for m in dados.member_ids if m != usuario.id]
+            membros = [(u, "human") for u in humanos]
             membros += [(a, "agent") for a in agentes_norm]
 
-            # ⚠️ O trigger da 014 recusa canal que nasce com pessoa e agente
-            # incompatíveis. A transação inteira volta atrás — que é o
-            # comportamento certo: canal criado pela metade foi o defeito que
-            # esta função foi escrita para evitar.
+            # ⚠️ Checagem prévia, com nome — a mesma que `adicionar_membros` usa
+            # (Tarefa 4). O canal acabou de nascer e ainda não tem UM membro
+            # sequer, então o par sai inteiro das listas que vieram no request:
+            # sem isto, quem esbarra na recusa lê "Alguém neste canal não tem
+            # acesso ao agente X" (o trigger da 014, que só enxerga quem já
+            # está inserido) em vez de saber quem é "alguém".
+            par = await _primeiro_par_sem_acesso(conn, canal_id, humanos, agentes_norm)
+            if par is not None:
+                pessoa, agente = par
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    f"{pessoa} não tem acesso ao agente {agente}. "
+                    "Libere o acesso na tela do agente antes de juntar os dois no mesmo canal.",
+                )
+
+            # ⚠️ O trigger da 014 continua aqui, e continua importando: a
+            # checagem acima é cortesia (nomeia o par para quem lê a tela); o
+            # trigger é a defesa. Ver `_primeiro_par_sem_acesso` também nesse
+            # caso: um caminho que insira em `channel_members` por fora desta
+            # rota (`find_or_create_dm`, por exemplo) não passa pelo Python.
             try:
                 for membro_id, tipo in membros:
                     await conn.execute(
