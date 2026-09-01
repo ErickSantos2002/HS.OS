@@ -500,7 +500,11 @@ FORA = "33333333-3333-3333-3333-333333333333"
 RESTRITO = {"access_type": "specific_users", "allowed_user_ids": [DENTRO]}
 ABERTO = {"access_type": "all", "allowed_user_ids": None}
 SO_ADMIN = {"access_type": "admins_only", "allowed_user_ids": None}
-SEM_LISTA = {"access_type": "specific_users", "allowed_user_ids": None}
+# ⚠️ Duas formas de "sem lista", e as duas acontecem. No banco a coluna é
+# `NOT NULL DEFAULT '{}'`, então de lá vem sempre a lista vazia; o `None` vem do
+# `.get()` quando a chave nem existe no dicionário. A gêmea SQL usa `'{}'::uuid[]`.
+SEM_LISTA_VAZIA = {"access_type": "specific_users", "allowed_user_ids": []}
+SEM_LISTA_NULA = {"access_type": "specific_users", "allowed_user_ids": None}
 SEM_PERFIL: dict = {}
 
 
@@ -528,8 +532,13 @@ def test_admins_only_libera_admin():
     assert _pode_ver(SO_ADMIN, FORA, is_admin=True)
 
 
-def test_specific_users_sem_lista_recusa():
-    assert not _pode_ver(SEM_LISTA, FORA, is_admin=False)
+def test_specific_users_com_lista_vazia_recusa():
+    """É esta a forma que vem do banco: a coluna é NOT NULL DEFAULT '{}'."""
+    assert not _pode_ver(SEM_LISTA_VAZIA, FORA, is_admin=False)
+
+
+def test_specific_users_sem_a_chave_recusa():
+    assert not _pode_ver(SEM_LISTA_NULA, FORA, is_admin=False)
 
 
 def test_agente_sem_perfil_libera():
