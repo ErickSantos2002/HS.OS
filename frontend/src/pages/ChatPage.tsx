@@ -648,7 +648,7 @@ export default function ChatPage() {
   const { agents, loading, error } = useAgents();
   const { channels, loading: channelsLoading, createChannel, joinChannel, refetch: refetchChannels } = useChannels();
   const { people, loading: peopleLoading } = usePeople();
-  const { user, profile } = useAuthContext();
+  const { user, profile, role } = useAuthContext();
   const { peers: dmPeers, peerIdToChannelId } = useDmPeers(channels, user?.id);
   const { notifications, unreadByChannel, unreadByAgentOnly, unreadCount, markAsRead, markAllAsReadForChannel, markAllAsReadForAgent, setActiveChannel, setActiveAgent } = useNotificationsContext();
   const isMobile = useIsMobile();
@@ -2202,13 +2202,18 @@ export default function ChatPage() {
 
   /* ── Channel create handler ── */
   const handleCreateChannel = async (name: string, desc: string, type: "public" | "private" | "dm", agentIds?: string[], memberIds?: string[]) => {
-    const ch = await createChannel(name, desc, type, memberIds, agentIds);
-    if (ch) {
-      setSelection({ type: "channel", channel: ch });
-      setCreateOpen(false);
-      toast.success(`Canal #${ch.name} criado!`);
-    } else {
-      toast.error("Erro ao criar canal.");
+    try {
+      const ch = await createChannel(name, desc, type, memberIds, agentIds);
+      if (ch) {
+        setSelection({ type: "channel", channel: ch });
+        setCreateOpen(false);
+        toast.success(`Canal #${ch.name} criado!`);
+      }
+    } catch (erro) {
+      // A mensagem do backend é o conteúdo, não o rótulo: ela nomeia a pessoa e
+      // o agente que não fecham. Trocá-la por "Erro ao criar canal" obriga quem
+      // esbarrou a adivinhar o que fazer.
+      toast.error(erro instanceof Error ? erro.message : "Erro ao criar canal.");
     }
   };
 
@@ -2927,7 +2932,7 @@ export default function ChatPage() {
             <div className="border-b border-border/30 shrink-0 px-3 pt-3 pb-2 bg-gradient-to-b from-primary/5 to-transparent">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-lg font-display font-bold text-foreground">Chat</h2>
-                {sidebarTab === "channels" && (
+                {sidebarTab === "channels" && role === "administrador" && (
                   <button onClick={() => setCreateOpen(true)} className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors touch-target" title="Criar canal">
                     <Plus className="h-5 w-5" />
                   </button>
@@ -3132,7 +3137,7 @@ export default function ChatPage() {
         <div className="p-3 border-b border-border/30 space-y-2 bg-gradient-to-b from-primary/5 to-transparent">
           <div className="flex items-center justify-between">
             <h2 className="text-[10px] font-display font-semibold uppercase tracking-wider text-muted-foreground">Chat</h2>
-            {sidebarTab === "channels" && (
+            {sidebarTab === "channels" && role === "administrador" && (
               <button onClick={() => setCreateOpen(true)} className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" title="Criar canal">
                 <Plus className="h-3.5 w-3.5" />
               </button>
