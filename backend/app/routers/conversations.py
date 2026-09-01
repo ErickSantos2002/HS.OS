@@ -18,6 +18,7 @@ import re
 from datetime import datetime
 from uuid import uuid4
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
@@ -1461,11 +1462,26 @@ async def abrir_dm(dados: DmIn, usuario: Usuario = Depends(exige_papel("administ
     onde tem que ficar: dois cliques quase simultâneos em "conversar" criariam
     dois canais se a verificação e a criação fossem passos separados aqui.
     """
+    # Import local: `channels.py` importa `_texto_da_resposta` deste módulo no
+    # topo do arquivo, e um `from app.routers.channels import traduzir_hs001`
+    # aqui em cima criaria import circular (confirmado tentando — quebra o
+    # `import app.routers.conversations` sozinho, antes de qualquer rota).
+    from app.routers.channels import traduzir_hs001
+
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
-        canal = await conn.fetchval(
-            "SELECT public.find_or_create_dm($1::uuid, $2)",
-            dados.target_user_id, dados.target_name,
-        )
+        try:
+            canal = await conn.fetchval(
+                "SELECT public.find_or_create_dm($1::uuid, $2)",
+                dados.target_user_id, dados.target_name,
+            )
+        except asyncpg.PostgresError as erro:
+            # ⚠️ O `find_or_create_dm` é SECURITY DEFINER e insere em
+            # `channel_members` direto, então o trigger da 014 alcança ele.
+            # Sem esta tradução, abrir DM com agente sem acesso viraria 500.
+            traduzido = traduzir_hs001(erro)
+            if traduzido is not None:
+                raise traduzido from erro
+            raise
     if canal is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Não foi possível abrir a conversa.")
     return {"channel_id": str(canal)}

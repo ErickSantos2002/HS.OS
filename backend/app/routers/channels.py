@@ -28,6 +28,57 @@ from app.gateway.client import ErroGateway, obter_cliente, obter_cliente_de_espe
 from app.realtime import hub, topico_canal
 from app.routers.conversations import _texto_da_resposta
 
+import asyncpg
+
+
+def traduzir_hs001(erro: Exception) -> HTTPException | None:
+    """O erro do trigger da 014, virado 403 com o texto que ele já traz.
+
+    O trigger é a defesa e o Python é a cortesia: quando a validação daqui
+    deixa passar um caminho que ninguém previu, é este tradutor que evita a
+    pessoa receber um 500 com SQL dentro.
+    """
+    if isinstance(erro, asyncpg.PostgresError) and getattr(erro, "sqlstate", None) == "HS001":
+        return HTTPException(status.HTTP_403_FORBIDDEN, str(erro))
+    return None
+
+
+async def _primeiro_par_sem_acesso(
+    conn, channel_id: str, user_ids: list[str], agent_ids: list[str]
+) -> tuple[str, str] | None:
+    """O primeiro par (pessoa, agente) do canal que não fecha, com nomes.
+
+    O par pode ser entre quem entra e quem JÁ está no canal — por isso a
+    consulta une as duas listas com os membros de hoje antes de cruzar. Validar
+    só quem entra deixaria passar exatamente o caso que motivou a regra.
+    """
+    linha = await conn.fetchrow(
+        """
+        WITH humanos AS (
+            SELECT user_id FROM public.channel_members
+             WHERE channel_id = $1::uuid AND member_type = 'human'
+            UNION
+            SELECT unnest($2::text[])
+        ), agentes AS (
+            SELECT user_id FROM public.channel_members
+             WHERE channel_id = $1::uuid AND member_type = 'agent'
+            UNION
+            SELECT unnest($3::text[])
+        )
+        SELECT COALESCE(p.full_name, p.email, h.user_id) AS pessoa,
+               COALESCE(ap.name, a.user_id)              AS agente
+          FROM humanos h
+          CROSS JOIN agentes a
+          LEFT JOIN public.profiles p ON p.id::text = h.user_id
+          LEFT JOIN public.agent_profiles ap ON ap.agent_id = a.user_id
+         WHERE NOT public.pode_ver_agente(h.user_id::uuid, a.user_id)
+         LIMIT 1
+        """,
+        channel_id, user_ids, agent_ids,
+    )
+    return (linha["pessoa"], linha["agente"]) if linha else None
+
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/channels", tags=["channels"])
@@ -185,15 +236,25 @@ async def criar(dados: CanalIn, usuario: Usuario = Depends(usuario_atual)):
             membros += [(m, "human") for m in dados.member_ids if m != usuario.id]
             membros += [(a, "agent") for a in dados.agent_ids]
 
-            for membro_id, tipo in membros:
-                await conn.execute(
-                    """
-                    INSERT INTO public.channel_members (channel_id, user_id, member_type)
-                    VALUES ($1::uuid, $2, $3)
-                    ON CONFLICT (channel_id, user_id) DO NOTHING
-                    """,
-                    canal_id, membro_id, tipo,
-                )
+            # ⚠️ O trigger da 014 recusa canal que nasce com pessoa e agente
+            # incompatíveis. A transação inteira volta atrás — que é o
+            # comportamento certo: canal criado pela metade foi o defeito que
+            # esta função foi escrita para evitar.
+            try:
+                for membro_id, tipo in membros:
+                    await conn.execute(
+                        """
+                        INSERT INTO public.channel_members (channel_id, user_id, member_type)
+                        VALUES ($1::uuid, $2, $3)
+                        ON CONFLICT (channel_id, user_id) DO NOTHING
+                        """,
+                        canal_id, membro_id, tipo,
+                    )
+            except asyncpg.PostgresError as erro:
+                traduzido = traduzir_hs001(erro)
+                if traduzido is not None:
+                    raise traduzido from erro
+                raise
     logger.info("Canal %s criado por %s com %d membros", canal_id, usuario.id, len(membros))
     return CanalOut(**dict(linha))
 
@@ -697,8 +758,16 @@ async def acionar_agente(
         canal = await conn.fetchval(
             "SELECT 1 FROM public.channels WHERE id = $1::uuid", channel_id
         )
-    if not canal:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Canal não encontrado.")
+        if not canal:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Canal não encontrado.")
+
+        pode = await conn.fetchval(
+            "SELECT public.pode_ver_agente($1::uuid, $2)", usuario.id, agente
+        )
+        if not pode:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Você não tem acesso a este agente."
+            )
 
     async with sessao(role="service_role") as conn:
         await conn.execute(
@@ -935,17 +1004,70 @@ async def adicionar_membros(
     dados: MembrosIn,
     usuario: Usuario = Depends(usuario_atual),
 ):
-    """Acrescenta pessoas e agentes ao canal. Quem já está é ignorado."""
+    """Acrescenta pessoas e agentes ao canal. Quem já está é ignorado.
+
+    ⚠️ **Até 01/09/2026 esta rota não tinha checagem NENHUMA.** Qualquer pessoa
+    autenticada adicionava qualquer pessoa ou agente a qualquer canal — com 4
+    pessoas de confiança nunca teve consequência; com 26 dentro, é o caminho
+    mais curto para furar o `allowed_user_ids`: basta me pôr num canal onde o
+    agente está.
+
+    Três guardas, e as três importam:
+
+    - **ser membro do canal** — quem está fora não mexe em quem está dentro;
+    - **administrador para canal que não é DM** — canal de grupo é do admin
+      (decisão do Erick, 01/09/2026), e quem cria também é quem chama;
+    - **o invariante** — nenhum par pessoa×agente sem acesso, contando quem já
+      está no canal.
+    """
     membros = [(u, "human") for u in dados.user_ids] + [(a, "agent") for a in dados.agent_ids]
     if not membros:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nenhum membro informado.")
+
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
-        for membro_id, tipo in membros:
-            await conn.execute(
-                "INSERT INTO public.channel_members (channel_id, user_id, member_type) "
-                "VALUES ($1::uuid, $2, $3) ON CONFLICT DO NOTHING",
-                channel_id, membro_id, tipo,
+        tipo = await conn.fetchval(
+            "SELECT c.type::text FROM public.channels c WHERE c.id = $1::uuid", channel_id
+        )
+        if tipo is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Canal não encontrado.")
+
+        sou_membro = await conn.fetchval(
+            "SELECT EXISTS (SELECT 1 FROM public.channel_members "
+            " WHERE channel_id = $1::uuid AND user_id = $2 AND member_type = 'human')",
+            channel_id, usuario.id,
+        )
+        if not sou_membro:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "Só quem está no canal adiciona alguém a ele."
             )
+
+        if tipo != "dm" and usuario.papel != "administrador":
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Só o administrador adiciona pessoas a um canal.",
+            )
+
+        par = await _primeiro_par_sem_acesso(conn, channel_id, dados.user_ids, dados.agent_ids)
+        if par is not None:
+            pessoa, agente = par
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                f"{pessoa} não tem acesso ao agente {agente}. "
+                "Libere o acesso na tela do agente antes de juntar os dois no mesmo canal.",
+            )
+
+        try:
+            for membro_id, tipo_membro in membros:
+                await conn.execute(
+                    "INSERT INTO public.channel_members (channel_id, user_id, member_type) "
+                    "VALUES ($1::uuid, $2, $3) ON CONFLICT DO NOTHING",
+                    channel_id, membro_id, tipo_membro,
+                )
+        except asyncpg.PostgresError as erro:
+            traduzido = traduzir_hs001(erro)
+            if traduzido is not None:
+                raise traduzido from erro
+            raise
 
 
 @router.get("/{channel_id}/agentes-trabalhando")
