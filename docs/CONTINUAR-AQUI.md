@@ -1,6 +1,6 @@
 # Continuar aqui
 
-Ponto de retomada da portagem. Atualizado em **26/08/2026**. Leia isto, depois
+Ponto de retomada da portagem. Atualizado em **01/09/2026**. Leia isto, depois
 `CLAUDE.md` e `docs/ROADMAP.md`.
 
 👉 **Voltando na segunda (17/08)?** Pule para
@@ -11,12 +11,59 @@ Ponto de retomada da portagem. Atualizado em **26/08/2026**. Leia isto, depois
 importa o client é o próprio `integrations/supabase/client.ts`, que existe só
 para lançar caso alguém o use. **Zero** edge functions por portar.
 
-👉 **Arena, War room e voz pausadas em 10/08** — ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md).
+👉 **Arena e voz seguem pausadas; a War room voltou em 01/09** — ver
+[`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md).
 
 👉 **Vai testar o sistema?** [`TESTAR-SEGUNDA.md`](TESTAR-SEGUNDA.md) é o roteiro
 da **fase da migração** (escrito em 07–10/08), e essa fase fechou. Continua útil
 para o básico — túnel, subida, login. Para o que mudou depois, veja
 [*Conferir no navegador*](#conferir-no-navegador) logo abaixo.
+
+---
+
+## O que aconteceu em 01/09/2026
+
+Dia de conferir o que 31/08 deixou marcado, e o que mais apareceu ao conferir.
+O registro medido está em [`CONFERENCIA-2026-09-01.md`](CONFERENCIA-2026-09-01.md).
+
+**Os cinco briefings passaram de primeira** (07:32–07:50), confirmando o conserto
+da janela de contexto. O `/monitoring` encheu. Os `conversation_resets` caíram de
+31 para 11 por semana — mas **sem tráfego que prove**: 14 mensagens em 31/08,
+nenhuma em 01/09. Zero reset sem uso não separa conserto de silêncio; reconferir
+na primeira semana de uso real.
+
+**A lição do dia, que se repetiu três vezes: contar linha não é conferir dado.**
+
+- Dei o `/monitoring` por resolvido olhando `count(*) > 0`. O coletor gravava
+  **seis campos chumbados** — `version`, `uptime_seconds`, `messages_total`,
+  `cache_hit_rate`, `error_rate`, `tool_calls`. De nove, três eram medidos.
+- A War room ia mostrar todos os agentes apagados: `agent_stats.status` vale
+  `"ok"`, não `"online"` — é resultado da última execução, não sinal de vida.
+- Os nós iam subir sem rótulo: `agent_profiles.role` está **vazio** nos cinco;
+  quem carrega o papel é `specialty`.
+
+A régua que ficou no código, em `app/warroom.py` e `app/coletor_metricas.py`:
+**medido ou `NULL`, nunca zero inventado.** Numa parede vista de longe, `0%` é
+lido como medição.
+
+**E dois bugs que só apareceram renderizando**, não na suíte: o rótulo de um nó
+cuspiu o CSS de um artefato publicado pela tela toda, e o `dangerouslySetInnerHTML`
+herdado transformava mensagem de agente em DOM — XSS numa tela que qualquer um
+com o link da TV enxerga. Ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md).
+
+**A War room voltou**, re-fonteada: 6 das 12 tabelas que a `warroom-feed` lia
+estão vazias, então portar fiel teria subido uma TV em branco. A constelação
+original é a mesma; só a origem dos dados mudou.
+
+⚠️ **Front e back sobem separados no EasyPanel.** Deployar um só descasa as
+versões, e foi o que deu tela branca em produção. `lib/warroom-feed.ts` agora
+normaliza a resposta na fronteira, então a tela degrada em vez de quebrar — mas
+a regra continua: mexeu nos dois, sobe os dois.
+
+**Três contradições entre documentos** foram corrigidas — o Lote 6, o Lote 7 e o
+bloqueio do Lovable descreviam estado que não existia mais. Todas da mesma forma:
+um documento recebeu o fato novo e o outro não foi visitado. Nenhuma aparece
+lendo; só cruzando. O `ROADMAP.md` é o que mais atrasa, por ser o mais citado.
 
 ---
 
