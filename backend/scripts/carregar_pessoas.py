@@ -65,17 +65,26 @@ def quem_falta(quadro: list[dict], existentes: set[str]) -> list[dict]:
 
 
 def ler_quadro() -> list[dict]:
-    """A view `pessoas` do TalentHS, pelo cadastro único de bancos."""
+    """A view `pessoas` do TalentHS, pelo cadastro único de bancos.
+
+    `bancos.conectar()` + cursor, não `bancos.consultar()` — aquele devolve
+    DataFrame, e o único uso daqui é virar uma lista de dicionários. Ir direto
+    ao psycopg evita depender do pandas só para isto (o resto do backend não
+    precisa dele) e resolve de graça outro problema: `cargo` vem NULL para
+    quem o RH não preencheu (hoje, além do cadastro de teste, `np@` — gente de
+    verdade). O psycopg devolve isso como `None` nativo; foi o pandas, numa
+    versão anterior deste script, que o transformava em `NaN` (float) — e
+    `NaN` sobrevive ao `json.dumps` como um token que não é JSON válido,
+    vazando no corpo do `POST /profiles`. Sem pandas no meio, o bug não existe
+    mais — mas o motivo de `cargo` poder vir `None` continua valendo.
+    """
     sys.path.insert(0, os.path.expanduser("~/projetos/bancos"))
     import bancos  # noqa: E402
 
-    df = bancos.consultar("talenths", "SELECT nome, email, setor, cargo FROM public.pessoas")
-    # `cargo` vem NULL para quem o RH não preencheu (ex.: np@) — o pandas
-    # devolve isso como `NaN` (float), não `None`. Sem esta troca, `NaN` vaza
-    # para o JSON do POST (`json.dumps` aceita o literal inválido `NaN`) e o
-    # `httpx.post` mandaria um corpo que o FastAPI do outro lado rejeitaria.
-    df = df.astype(object).where(df.notna(), None)
-    return df.to_dict("records")
+    with bancos.conectar("talenths") as conn, conn.cursor() as cur:
+        cur.execute("SELECT nome, email, setor, cargo FROM public.pessoas")
+        colunas = [d.name for d in cur.description]
+        return [dict(zip(colunas, linha)) for linha in cur.fetchall()]
 
 
 def main() -> int:
@@ -105,26 +114,42 @@ def main() -> int:
             print(f"  {p['email']:<38} {p['nome']}  ({p.get('setor') or '—'})")
         return 0
 
+    # ⚠️ A senha de cada pessoa é impressa NO INSTANTE em que a conta nasce,
+    # não guardada para um bloco no fim do laço. Se o processo morrer no meio
+    # — timeout, conexão caindo — as contas já criadas antes daquele ponto não
+    # podem ficar com senha que só existia na memória do processo que morreu:
+    # o backend guarda hash, então sem isto a única saída seria o
+    # administrador trocar senha conta por conta, na mão, contra produção.
+    print("\n── senhas · levar para o FortiPAM ──")
     criadas, falhas = [], []
     for pessoa in falta:
         senha = senha_forte()
-        r = cliente.post("/profiles", json={
-            "email": pessoa["email"],
-            "nome": pessoa["nome"],
-            "senha": senha,
-            "role": "colaborador",
-            "departamento": pessoa.get("setor"),
-            "cargo": pessoa.get("cargo"),
-        })
+        try:
+            r = cliente.post("/profiles", json={
+                "email": pessoa["email"],
+                "nome": pessoa["nome"],
+                "senha": senha,
+                "role": "colaborador",
+                "departamento": pessoa.get("setor"),
+                "cargo": pessoa.get("cargo"),
+            })
+        except httpx.HTTPError as erro:
+            # Falha de rede (timeout, conexão caindo) não é `status_code`
+            # nenhum — sem este `except`, uma pessoa derrubava o processo e
+            # levava consigo as senhas de quem já tinha sido criado antes,
+            # mais quem ainda faltava. Conta como falha e o laço segue.
+            falhas.append((pessoa["email"], "erro de rede", str(erro)[:120]))
+            continue
         if r.status_code == 201:
             criadas.append((pessoa["email"], senha))
+            # `flush=True`: se a saída for redirecionada para arquivo (não um
+            # terminal), o Python passa a bufferizar em bloco — sem isto, a
+            # senha ficaria só no buffer até o processo terminar, que é
+            # exatamente o cenário (queda no meio do laço) que este print
+            # antecipado existe para cobrir.
+            print(f"{pessoa['email']}\t{senha}", flush=True)
         else:
             falhas.append((pessoa["email"], r.status_code, r.text[:120]))
-
-    # ⚠️ Só aqui a senha existe em texto. Leve para o FortiPAM agora.
-    print("\n── senhas · levar para o FortiPAM ──")
-    for email, senha in criadas:
-        print(f"{email}\t{senha}")
 
     if falhas:
         print("\n── falhas ──", file=sys.stderr)
