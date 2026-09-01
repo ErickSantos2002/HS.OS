@@ -1440,23 +1440,13 @@ class DmIn(BaseModel):
 
 
 @router.post("/dm/abrir")
-async def abrir_dm(dados: DmIn, usuario: Usuario = Depends(exige_papel("administrador"))):
+async def abrir_dm(dados: DmIn, usuario: Usuario = Depends(usuario_atual)):
     """Devolve o canal de DM com a pessoa, criando-o se ainda não existir.
 
-    ⚠️ **Conversa entre pessoas saiu do produto em 17/08/2026.** O HS.OS deixou
-    de ser lugar de gente falar com gente: o foco é a pessoa falando com o
-    agente. A tela de Chat não lista mais pessoas, e esta rota ficaria alcançável
-    por quem chamasse a API direto — esconder na tela e deixar a rota aberta é o
-    padrão que este repositório passou a semana corrigindo.
-
-    Restrita a `administrador` em vez de removida: a função `find_or_create_dm` e
-    os canais `type='dm'` continuam servindo às conversas com **agente**, e
-    apagar a rota agora fecharia a porta para um caminho de suporte antes de
-    existir outro. Quando a decisão assentar, o certo é remover as duas coisas
-    juntas.
-
-    Nada foi perdido ao esconder: os dois canais de DM entre pessoas que
-    existiam tinham **zero** mensagens.
+    ⚠️ **Aberta de novo em 01/09/2026.** Esta rota exigiu `administrador` entre
+    17/08 e 01/09, quando a conversa entre pessoas tinha saído do produto — o
+    chefe voltou atrás e a empresa inteira entrou. DM é livre entre todas as
+    pessoas; o que é do administrador é criar canal de grupo (ver a 015).
 
     A decisão de achar-ou-criar fica na função `find_or_create_dm` do banco, e é
     onde tem que ficar: dois cliques quase simultâneos em "conversar" criariam

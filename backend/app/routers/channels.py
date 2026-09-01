@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, usuario_atual
+from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.gateway import config as cfg
 from app.gateway.client import ErroGateway, obter_cliente, obter_cliente_de_espera
 from app.realtime import hub, topico_canal
@@ -270,8 +270,12 @@ async def listar(usuario: Usuario = Depends(usuario_atual)):
 
 
 @router.post("", response_model=CanalOut, status_code=status.HTTP_201_CREATED)
-async def criar(dados: CanalIn, usuario: Usuario = Depends(usuario_atual)):
+async def criar(dados: CanalIn, usuario: Usuario = Depends(exige_papel("administrador"))):
     """Cria o canal e as associações numa transação só.
+
+    ⚠️ **Só administrador cria canal** (decisão do Erick, 01/09/2026). A outra
+    metade da regra está na policy da `015` — fechar só aqui deixaria o banco
+    aberto a quem chamasse por fora.
 
     No hook eram quatro chamadas independentes: cria o canal, adiciona o criador,
     adiciona as pessoas, adiciona os agentes. Cada uma podia falhar sozinha, e o
