@@ -11,6 +11,7 @@ import { useAudioRecorder, getAudioFileExtension } from "@/hooks/use-audio-recor
 import { useAudioLevel } from "@/hooks/use-audio-level";
 import { useChannels, type Channel } from "@/hooks/use-channels";
 import { usePeople, findOrCreateDm, type Person } from "@/hooks/use-people";
+import NovaConversaDialog from "@/components/chat/NovaConversaDialog";
 import { useDmPeers } from "@/hooks/use-dm-members";
 import { useMobileChatViewport } from "@/hooks/use-mobile-chat-viewport";
 import { usePersistentDraft } from "@/hooks/use-persistent-draft";
@@ -2213,6 +2214,12 @@ export default function ChatPage() {
 
   /* ── Open DM with a person ── */
   const [openingDm, setOpeningDm] = useState<string | null>(null);
+  const [novaConversaAberta, setNovaConversaAberta] = useState(false);
+  // Eu mesmo não entro na lista de com quem conversar.
+  const pessoasParaConversar = useMemo(
+    () => people.filter((p) => p.id !== user?.id),
+    [people, user?.id],
+  );
   const handleOpenPersonDm = useCallback(async (person: Person) => {
     if (!user || openingDm) return;
     setOpeningDm(person.id);
@@ -2435,14 +2442,25 @@ export default function ChatPage() {
       const ts = lastMsg ? new Date(lastMsg.created_at).getTime() : 0;
       items.push({ kind: "agent", agent, lastActivity: ts });
     }
-    // ⚠️ **Pessoa não entra mais nesta lista.** O HS.OS deixou de ser lugar de
-    // gente conversar com gente: o foco é a pessoa falando com o agente
-    // (decisão do Erick com o Nicholson, 17/08/2026). Nada foi perdido — os
-    // dois canais de DM que existiam tinham ZERO mensagens.
+    // ⚠️ **Pessoa voltou a esta lista em 01/09/2026**, revertendo a decisão de
+    // 17/08 — a conversa entre pessoas voltou ao produto e a empresa inteira
+    // entrou (27 contas, contra 4).
     //
-    // O ramo `kind: "person"` continua nos dois pontos de render como código
-    // morto; removê-lo é ~100 linhas de JSX em dois lugares e fica para uma
-    // limpeza própria. Quem chegar aqui antes disso: ele não é alcançável.
+    // Só entra quem JÁ tem conversa. Com 26 pessoas, listar todas empurraria os
+    // agentes — que são o foco do produto — para baixo da dobra logo na
+    // primeira semana, quando ainda não existe conversa nenhuma. Começar uma
+    // conversa nova é o botão "Nova conversa", que busca por nome e por setor.
+    for (const person of people) {
+      if (person.id === user?.id) continue;
+      const canalId = peerIdToChannelId[person.id];
+      if (!canalId) continue;
+      const quando = dmLastActivity[canalId];
+      items.push({
+        kind: "person",
+        person,
+        lastActivity: quando ? new Date(quando).getTime() : 0,
+      });
+    }
     items.sort((a, b) => {
       if (a.lastActivity && b.lastActivity) return b.lastActivity - a.lastActivity;
       if (a.lastActivity && !b.lastActivity) return -1;
@@ -2874,6 +2892,26 @@ export default function ChatPage() {
         </AlertDialog>
   );
 
+  // Mesma razão do `dialogoNovaConversa` acima: usado pelos dois returns
+  // (mobile e desktop), fica numa variável em vez de duplicar o JSX.
+  const dialogoEscolherPessoa = (
+    <NovaConversaDialog
+      aberto={novaConversaAberta}
+      onFechar={() => setNovaConversaAberta(false)}
+      pessoas={pessoasParaConversar}
+      onEscolher={(pessoa) => {
+        setNovaConversaAberta(false);
+        const canalId = peerIdToChannelId[pessoa.id];
+        const existente = canalId ? channels.find((c) => c.id === canalId) : null;
+        // Conversa que já existe é seleção, não criação — o
+        // `find_or_create_dm` devolveria o mesmo canal, mas passar pela rede
+        // para descobrir o que a tela já sabe é volta à toa.
+        if (existente) setSelection({ type: "channel", channel: existente });
+        else void handleOpenPersonDm(pessoa);
+      }}
+    />
+  );
+
   if (isMobile) {
     const showList = !selection;
 
@@ -2892,6 +2930,11 @@ export default function ChatPage() {
                 {sidebarTab === "channels" && (
                   <button onClick={() => setCreateOpen(true)} className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors touch-target" title="Criar canal">
                     <Plus className="h-5 w-5" />
+                  </button>
+                )}
+                {sidebarTab === "dms" && (
+                  <button onClick={() => setNovaConversaAberta(true)} className="text-xs text-primary hover:underline">
+                    Nova conversa
                   </button>
                 )}
               </div>
@@ -3071,6 +3114,7 @@ export default function ChatPage() {
 
         <CreateChannelDialog open={createOpen} onOpenChange={setCreateOpen} onCreate={handleCreateChannel} />
         {dialogoNovaConversa}
+        {dialogoEscolherPessoa}
         <Dialog open={!!lightboxSrc} onOpenChange={() => setLightboxSrc(null)}>
           <DialogContent className="max-w-3xl p-2 bg-transparent border-none shadow-none">
             {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80vh] object-contain" />}
@@ -3091,6 +3135,11 @@ export default function ChatPage() {
             {sidebarTab === "channels" && (
               <button onClick={() => setCreateOpen(true)} className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" title="Criar canal">
                 <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {sidebarTab === "dms" && (
+              <button onClick={() => setNovaConversaAberta(true)} className="text-xs text-primary hover:underline">
+                Nova conversa
               </button>
             )}
           </div>
@@ -3301,6 +3350,7 @@ export default function ChatPage() {
 
       <CreateChannelDialog open={createOpen} onOpenChange={setCreateOpen} onCreate={handleCreateChannel} />
         {dialogoNovaConversa}
+        {dialogoEscolherPessoa}
       <Dialog open={!!lightboxSrc} onOpenChange={() => setLightboxSrc(null)}>
         <DialogContent className="max-w-3xl p-2 bg-transparent border-none shadow-none">
           {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80vh] object-contain" />}
