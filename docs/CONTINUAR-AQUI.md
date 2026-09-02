@@ -1,6 +1,6 @@
 # Continuar aqui
 
-Ponto de retomada da portagem. Atualizado em **01/09/2026**. Leia isto, depois
+Ponto de retomada da portagem. Atualizado em **02/09/2026**. Leia isto, depois
 `CLAUDE.md` e `docs/ROADMAP.md`.
 
 👉 **Voltando na segunda (17/08)?** Pule para
@@ -18,6 +18,42 @@ para lançar caso alguém o use. **Zero** edge functions por portar.
 da **fase da migração** (escrito em 07–10/08), e essa fase fechou. Continua útil
 para o básico — túnel, subida, login. Para o que mudou depois, veja
 [*Conferir no navegador*](#conferir-no-navegador) logo abaixo.
+
+---
+
+## O que aconteceu em 02/09/2026
+
+**A empresa entrou.** De 4 contas para **27**, e a conversa entre pessoas voltou
+ao produto. O registro medido está em
+[`CONFERENCIA-CHAT-PESSOAS.md`](CONFERENCIA-CHAT-PESSOAS.md) — leia de lá a
+seção *O que NÃO foi conferido* antes de continuar o trabalho.
+
+O que entrou em produção: as migrações `014` (a regra de quem vê um agente vira
+função SQL com trigger) e `015` (canal de grupo só o administrador cria), os
+dois canais DM órfãos apagados, e as 23 contas que faltavam do quadro do
+TalentHS. Front deployado e confirmado no bundle.
+
+**Onde pegar amanhã: os Passos 1, 2 e 4 da Tarefa 8.** As rotas de produção com
+token de colaborador e de administrador, e a conversa no navegador com duas
+contas. Nenhum dos três rodou. A conversa entre pessoas **nunca teve uma
+mensagem sequer** neste sistema — nada em produção comprova aquele caminho.
+
+⚠️ **Comparar `openapi.json` NÃO diz se o backend novo subiu.** Tentei: 195
+rotas dos dois lados, nenhuma diferença — e não prova nada, porque esta entrega
+não criou rota nenhuma, mudou o comportamento dentro das existentes. Método
+errado para a pergunta. Quem responde é o Passo 1.
+
+**Dado de pessoa em repositório público.** O `005` e o `006` descreviam a
+coordenadora do RH pelo nome, com e-mail e cargo, em comentário; o teste da
+carga tinha o mesmo registro. Trocado por gente inventada — e a branch foi
+reconstruída commit a commit antes do push, porque limpar só o arquivo deixaria
+o dado vivo no histórico que sobe junto. A branch original ficou guardada em
+`backup/chat-entre-pessoas-pre-limpeza`. **Não devolva nome real ao fixture.**
+
+**A senha antiga do superusuário do Postgres não autentica mais** em
+`62.72.11.28:2222` — a rotação, dada como pendente desde ago/2026, foi feita.
+Conferido só nesse host/porta/banco. Sobrou `backend/.env.superusuario` com a
+credencial morta dentro: vale apagar.
 
 ---
 
