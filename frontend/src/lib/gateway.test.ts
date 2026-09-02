@@ -7,7 +7,7 @@
  *
  * `podeCarregarConfigGateway` é o guard único que decide se vale a pena
  * chamar `loadGatewayConfig()` — usado tanto no boot da sessão
- * (`AuthGuard.tsx`) quanto no refresh da aba Gateway em Configurações
+ * (`AppLayout.tsx`) quanto no refresh da aba Gateway em Configurações
  * (`SettingsPage.tsx`), para não duplicar a regra em cada chamador.
  */
 import { describe, expect, it } from "vitest";

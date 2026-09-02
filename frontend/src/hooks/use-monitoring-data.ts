@@ -74,9 +74,11 @@ export function useMonitoringData(pollingInterval = 60_000) {
       // faltava era o coletor. São diagnósticos diferentes e levam a lugares
       // diferentes.
       const semColeta = !healthRow;
-      // `app/coletor_metricas.py` grava "ok" (não "online") nesta coluna — ver
-      // `frontend/src/lib/monitoring-status.ts`. Comparar com "online" direto
-      // fazia o aviso de offline aparecer com o gateway comprovadamente no ar.
+      // Dois escritores gravam aqui com vocabulários diferentes — o coletor
+      // em processo (`ok`/`down`) e o push da VPS (`online`/`offline`, ver
+      // `backend/app/routers/coletor.py`). Comparar só com "online" ignorava
+      // o primeiro e fazia o aviso de offline aparecer com o gateway
+      // comprovadamente no ar. Detalhe dos dois em `@/lib/monitoring-status`.
       const gatewayOnline = semColeta ? null : statusIndicaOnline(healthRow.status);
 
       // Find most recent collected_at across all data

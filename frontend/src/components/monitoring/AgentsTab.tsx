@@ -12,7 +12,7 @@ import {
 import { getModelLabel } from "@/lib/model-pricing";
 import { useAgentCatalog } from "@/hooks/use-agent-catalog";
 import { getOfficialAgentEntries } from "@/lib/active-agents";
-import { statusIndicaOnline } from "@/lib/monitoring-status";
+import { statusIndicaOnline, corContagemAgentesOnline } from "@/lib/monitoring-status";
 
 /* ───────── Agent catalog (loaded from agent_profiles) ───────── */
 interface KnownAgent {
@@ -46,9 +46,10 @@ type AgentStatus = "online" | "processing" | "inactive" | "error";
 function normalizeStatus(s: string | undefined): AgentStatus {
   if (!s) return "inactive";
   const l = s.toLowerCase();
-  // `agent_stats.status` chega "ok" — é o valor real que o coletor grava, não
-  // "online" (ver `@/lib/monitoring-status`). Comparar só com "online" fazia
-  // nenhum agente jamais contar como no ar.
+  // `agent_stats.status` chega "ok" (coletor em processo) ou "online" (push
+  // da VPS, `backend/app/routers/coletor.py`) — dois escritores, dois
+  // vocabulários (ver `@/lib/monitoring-status`). Comparar só com "online"
+  // fazia nenhum agente do primeiro coletor jamais contar como no ar.
   if (statusIndicaOnline(l)) return "online";
   if (l === "processing" || l === "busy") return "processing";
   if (l === "error") return "error";
@@ -208,7 +209,8 @@ export function AgentsTab({ data, isLoading, gatewayOnline }: AgentsTabProps) {
   const totalAgents = merged.length;
   const errorAgents = merged.filter((a) => a.status === "error");
   const totalMsgsToday = merged.reduce((s, a) => s + (a.msgsToday || 0), 0);
-  // "Modelo principal" = modelo usado pela maioria dos 8 agentes oficiais
+  // "Modelo principal" = modelo usado pela maioria dos agentes oficiais
+  // (`merged`/`totalAgents`, não um número fixo — ver comentário acima)
   // (1 voto por agente, baseado no modelo do snapshot mais recente de cada um)
   const modelVotes: Record<string, number> = {};
   for (const a of merged) {
@@ -280,7 +282,7 @@ export function AgentsTab({ data, isLoading, gatewayOnline }: AgentsTabProps) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="glass-card rounded-2xl p-4 space-y-1">
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Super agentes Online</span>
-          <span className={`text-2xl font-mono font-bold block ${totalAgents > 0 && onlineCount === totalAgents ? "text-success" : "text-destructive"}`}>
+          <span className={`text-2xl font-mono font-bold block ${corContagemAgentesOnline(onlineCount, totalAgents, gatewayOnline)}`}>
             {onlineCount}/{totalAgents}
           </span>
         </div>
