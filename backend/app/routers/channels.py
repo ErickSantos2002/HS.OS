@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, exige_papel, usuario_atual
+from app.dependencies import Usuario, exige_papel, normalizar_agent_id, usuario_atual
 from app.gateway import config as cfg
 from app.gateway.client import ErroGateway, obter_cliente, obter_cliente_de_espera
 from app.realtime import hub, topico_canal
@@ -63,19 +63,6 @@ def traduzir_rls(erro: Exception) -> HTTPException | None:
             status.HTTP_403_FORBIDDEN, "Você não tem permissão para adicionar estes membros."
         )
     return None
-
-
-def _normalizar_agent_id(agent_id: str) -> str:
-    """Sem espaço nas pontas, minúsculo, sem o prefixo `openclaw:` — a forma
-    que `agent_profiles.agent_id` guarda.
-
-    `agent_ids` chega cru do corpo do request. Sem normalizar antes de checar
-    E antes de gravar, `"Iris"` ou `"openclaw:iris"` não bate com a linha do
-    agente numa comparação de string exata, cai em "agente sem perfil libera"
-    (regra que existe para *exibir* lista, não para autorizar) e o invariante
-    fura com uma letra maiúscula no corpo do request.
-    """
-    return agent_id.strip().lower().removeprefix("openclaw:")
 
 
 async def _agentes_desconhecidos(conn, agent_ids: list[str]) -> list[str]:
@@ -326,7 +313,7 @@ async def criar(dados: CanalIn, usuario: Usuario = Depends(exige_papel("administ
             # ⚠️ Normalizado ANTES de checar e ANTES de gravar — é a mesma
             # forma que vai para o `INSERT` logo abaixo. Normalizar só na
             # checagem e gravar o valor cru divergiria checagem de dado.
-            agentes_norm = [_normalizar_agent_id(a) for a in dados.agent_ids]
+            agentes_norm = [normalizar_agent_id(a) for a in dados.agent_ids]
 
             desconhecidos = await _agentes_desconhecidos(conn, agentes_norm)
             if desconhecidos:
@@ -730,7 +717,7 @@ _AVISO_FALHA = (
 
 
 def _nome_de_exibicao(agent_id: str) -> str:
-    normal = _normalizar_agent_id(agent_id)
+    normal = normalizar_agent_id(agent_id)
     return " ".join(p.capitalize() for p in re.split(r"[-_\s]+", normal) if p) or normal
 
 
@@ -888,7 +875,7 @@ async def acionar_agente(
     canal inteiro ver que o agente está trabalhando. Antes disso só quem
     mencionou via o indicador, e para os outros o canal parecia parado.
     """
-    agente = _normalizar_agent_id(agent_id)
+    agente = normalizar_agent_id(agent_id)
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         canal = await conn.fetchval(
             "SELECT 1 FROM public.channels WHERE id = $1::uuid", channel_id
@@ -1156,8 +1143,8 @@ async def adicionar_membros(
       está no canal.
     """
     # ⚠️ Normalizado ANTES de checar e ANTES de gravar — é a mesma forma que
-    # vai para o `INSERT` logo abaixo. Ver `_normalizar_agent_id`.
-    agentes_norm = [_normalizar_agent_id(a) for a in dados.agent_ids]
+    # vai para o `INSERT` logo abaixo. Ver `normalizar_agent_id`.
+    agentes_norm = [normalizar_agent_id(a) for a in dados.agent_ids]
     membros = [(u, "human") for u in dados.user_ids] + [(a, "agent") for a in agentes_norm]
     if not membros:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Nenhum membro informado.")
@@ -1179,7 +1166,22 @@ async def adicionar_membros(
                 status.HTTP_403_FORBIDDEN, "Só quem está no canal adiciona alguém a ele."
             )
 
-        if tipo != "dm" and usuario.papel != "administrador":
+        # ⚠️ **DM não recebe gente** — achado do Passo 1 da Tarefa 8, 02/09/2026.
+        # Antes, `dm` era isento do guarda de admin, e um colaborador punha uma
+        # terceira pessoa dentro de uma conversa de dois: virava canal de grupo
+        # sem passar por "só admin cria canal de grupo", e ainda com
+        # `type = 'dm'`, que a tela de DM não sabe desenhar (o
+        # `GET /channels/dms/interlocutores` passa a devolver dois peers para o
+        # mesmo canal). DM tem duas pessoas por construção — quem o cria é o
+        # `find_or_create_dm`, não esta rota.
+        if tipo == "dm":
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Uma conversa direta é entre duas pessoas. "
+                "Para incluir mais gente, peça ao administrador um canal.",
+            )
+
+        if usuario.papel != "administrador":
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
                 "Só o administrador adiciona pessoas a um canal.",

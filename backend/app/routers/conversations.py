@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.database import sessao
-from app.dependencies import Usuario, exige_papel, usuario_atual
+from app.dependencies import Usuario, agente_visivel, exige_papel, usuario_atual
 from app.gateway import config as cfg
 from app.gateway.client import ErroGateway, obter_cliente, obter_cliente_de_espera
 from app.integracoes import exige_segredo
@@ -181,7 +181,7 @@ async def ultimas_por_agente(
 @router.get("/{agent_id}/respostas", response_model=list[MensagemOut])
 async def respostas_do_agente(
     agent_id: str,
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(agente_visivel),
     depois: str | None = Query(default=None, description="Só o que veio depois deste instante."),
     com_codigo: bool = Query(default=False, description="Só as que contêm bloco de código."),
     limite: int = Query(default=200, ge=1, le=500),
@@ -246,7 +246,7 @@ async def excluir_mensagem(mensagem_id: str, usuario: Usuario = Depends(usuario_
 @router.get("/{agent_id}", response_model=PaginaOut)
 async def historico(
     agent_id: str,
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(agente_visivel),
     limite: int = Query(default=_PAGINA_INICIAL, ge=1, le=_LIMITE_MAXIMO),
     antes_de: str | None = Query(
         default=None,
@@ -292,7 +292,7 @@ async def historico(
 async def anexar(
     agent_id: str,
     dados: MensagemIn,
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(agente_visivel),
 ):
     """Grava uma mensagem e devolve a linha persistida.
 
@@ -329,7 +329,7 @@ class LimpezaOut(BaseModel):
 
 
 @router.post("/{agent_id}/limpar", response_model=LimpezaOut)
-async def limpar_sessao(agent_id: str, usuario: Usuario = Depends(usuario_atual)):
+async def limpar_sessao(agent_id: str, usuario: Usuario = Depends(agente_visivel)):
     """Encerra a conversa atual e começa outra — **sem apagar nada**.
 
     ⚠️ **Este endpoint faz o oposto do que o antigo fazia, e é essa a correção.**
@@ -790,7 +790,7 @@ def _texto_a_recuperar(texto: str, existentes: list[str]) -> str | None:
 @router.post("/{agent_id}/recuperar", response_model=list[MensagemOut])
 async def recuperar(
     agent_id: str,
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(agente_visivel),
 ):
     """Traz para `conversations` a resposta que ficou só no gateway.
 
@@ -897,7 +897,7 @@ async def recuperar(
 async def enviar(
     agent_id: str,
     dados: EnvioIn,
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(agente_visivel),
 ):
     """Dispara o agente. **Não grava a mensagem do usuário.**
 
@@ -1073,7 +1073,7 @@ class ComandoIn(BaseModel):
 async def comando(
     agent_id: str,
     dados: ComandoIn,
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(agente_visivel),
 ):
     """Manda um comando de barra (`/stop`, `/new`, `/compact`) para a sessão.
 
@@ -1125,7 +1125,7 @@ async def comando(
 async def resposta(
     agent_id: str,
     run_id: str = Query(),
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(agente_visivel),
 ):
     """Espera a resposta do agente e grava quando ela vier.
 
@@ -1377,7 +1377,7 @@ class PerguntaAvulsaOut(BaseModel):
 async def pergunta_avulsa(
     agent_id: str,
     dados: PerguntaAvulsaIn,
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(agente_visivel),
 ):
     """Pergunta única, fora de qualquer conversa. É o que a Arena usa.
 
