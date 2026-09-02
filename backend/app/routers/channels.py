@@ -722,6 +722,38 @@ def _nome_de_exibicao(agent_id: str) -> str:
     return " ".join(p.capitalize() for p in re.split(r"[-_\s]+", normal) if p) or normal
 
 
+_MARCA_GATILHO = "➡️ RESPONDA A ESTA MENSAGEM"
+
+
+def _montar_pedido(historico: list, gatilho) -> str:
+    """Monta o texto mandado ao agente, marcando qual mensagem é o gatilho.
+
+    Função pura (só string a partir do que já foi buscado) de propósito: é a
+    única forma de testar a montagem do pedido sem banco e sem gateway. Até
+    aqui o texto listava as 30 mensagens e dizia "responda à última", sem
+    marcar qual linha era essa — o agente tinha que adivinhar pela posição, e
+    numa medição em produção ele adivinhou a mensagem anterior à certa.
+
+    Compara por identidade (`m is gatilho`), não por conteúdo ou por
+    `created_at`: histórico pode repetir autor e texto entre mensagens
+    diferentes (ex.: duas pessoas mandando "oi" em sequência), e `gatilho` é a
+    própria referência escolhida por `_responder_no_canal` — não uma cópia.
+    """
+    linhas = []
+    for m in historico:
+        conteudo = (m["content"] or "").strip()
+        if not conteudo:
+            continue
+        autor = m["author_name"] or m["author_id"]
+        prefixo = f"{_MARCA_GATILHO} " if m is gatilho else ""
+        linhas.append(f"{prefixo}{autor}: {conteudo}")
+    return (
+        "Você está no canal e foi mencionado. Responda à mensagem marcada com "
+        f'"{_MARCA_GATILHO}" — as demais são só contexto da conversa.\n\n'
+        "--- conversa recente ---\n" + "\n".join(linhas)
+    )
+
+
 def _chave_do_canal(agent_id: str, channel_id: str) -> str:
     """Sessão nova a cada resposta do agente no canal.
 
@@ -776,14 +808,7 @@ async def _responder_no_canal(channel_id: str, agent_id: str) -> None:
         # O contexto vai como texto porque o `chat.send` manda uma mensagem a um
         # agente configurado — não existe array de `messages` como havia no
         # /v1/chat/completions que a edge usava.
-        linhas = [
-            f"{m['author_name'] or m['author_id']}: {m['content']}"
-            for m in historico if (m["content"] or "").strip()
-        ]
-        pedido = (
-            f"Você está no canal e foi mencionado. Responda à última mensagem.\n\n"
-            f"--- conversa recente ---\n" + "\n".join(linhas)
-        )
+        pedido = _montar_pedido(historico, gatilho)
 
         c = await cfg.carregar()
         if not c.configurado:
