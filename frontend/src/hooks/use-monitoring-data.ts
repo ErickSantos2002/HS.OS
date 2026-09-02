@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "@/lib/api";
+import { statusIndicaOnline } from "@/lib/monitoring-status";
 
 interface MonitoringState {
   agents: any[] | null;
@@ -73,7 +74,10 @@ export function useMonitoringData(pollingInterval = 60_000) {
       // faltava era o coletor. São diagnósticos diferentes e levam a lugares
       // diferentes.
       const semColeta = !healthRow;
-      const gatewayOnline = semColeta ? null : healthRow.status === "online";
+      // `app/coletor_metricas.py` grava "ok" (não "online") nesta coluna — ver
+      // `frontend/src/lib/monitoring-status.ts`. Comparar com "online" direto
+      // fazia o aviso de offline aparecer com o gateway comprovadamente no ar.
+      const gatewayOnline = semColeta ? null : statusIndicaOnline(healthRow.status);
 
       // Find most recent collected_at across all data
       const collectedDates = [

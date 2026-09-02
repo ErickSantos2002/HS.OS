@@ -12,6 +12,7 @@ import {
 import { getModelLabel } from "@/lib/model-pricing";
 import { useAgentCatalog } from "@/hooks/use-agent-catalog";
 import { getOfficialAgentEntries } from "@/lib/active-agents";
+import { statusIndicaOnline } from "@/lib/monitoring-status";
 
 /* ───────── Agent catalog (loaded from agent_profiles) ───────── */
 interface KnownAgent {
@@ -45,7 +46,10 @@ type AgentStatus = "online" | "processing" | "inactive" | "error";
 function normalizeStatus(s: string | undefined): AgentStatus {
   if (!s) return "inactive";
   const l = s.toLowerCase();
-  if (l === "online" || l === "active") return "online";
+  // `agent_stats.status` chega "ok" — é o valor real que o coletor grava, não
+  // "online" (ver `@/lib/monitoring-status`). Comparar só com "online" fazia
+  // nenhum agente jamais contar como no ar.
+  if (statusIndicaOnline(l)) return "online";
   if (l === "processing" || l === "busy") return "processing";
   if (l === "error") return "error";
   return "inactive";
@@ -199,6 +203,9 @@ export function AgentsTab({ data, isLoading, gatewayOnline }: AgentsTabProps) {
   });
 
   const onlineCount = merged.filter((a) => a.status === "online").length;
+  // Denominador vem da lista (catálogo de `agent_profiles`, carregado em
+  // runtime), não de uma constante — havia 5 agentes chumbados como "/8".
+  const totalAgents = merged.length;
   const errorAgents = merged.filter((a) => a.status === "error");
   const totalMsgsToday = merged.reduce((s, a) => s + (a.msgsToday || 0), 0);
   // "Modelo principal" = modelo usado pela maioria dos 8 agentes oficiais
@@ -273,8 +280,8 @@ export function AgentsTab({ data, isLoading, gatewayOnline }: AgentsTabProps) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="glass-card rounded-2xl p-4 space-y-1">
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Super agentes Online</span>
-          <span className={`text-2xl font-mono font-bold block ${onlineCount === 8 ? "text-success" : "text-destructive"}`}>
-            {onlineCount}/8
+          <span className={`text-2xl font-mono font-bold block ${totalAgents > 0 && onlineCount === totalAgents ? "text-success" : "text-destructive"}`}>
+            {onlineCount}/{totalAgents}
           </span>
         </div>
         <div className="glass-card rounded-2xl p-4 space-y-1">

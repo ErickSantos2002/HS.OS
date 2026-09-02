@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { postProxyAction } from "@/hooks/use-monitoring-data";
+import { statusIndicaOnline } from "@/lib/monitoring-status";
 
 /* ---------- types ---------- */
 interface GatewayTabProps {
@@ -124,7 +125,9 @@ export function GatewayTab({
   const lastCollected = data?.collected_at || gatewayStatus?.collected_at;
 
   const totalChecks = healthHistory.length;
-  const onlineChecks = healthHistory.filter((h) => h.status === "online").length;
+  // Mesmo defeito do `use-monitoring-data.ts`: `gateway_health.status` chega
+  // "ok"/"down" do coletor, não "online" — ver `@/lib/monitoring-status`.
+  const onlineChecks = healthHistory.filter((h) => statusIndicaOnline(h.status)).length;
   const uptimePct = totalChecks > 0 ? ((onlineChecks / totalChecks) * 100) : null;
 
   // "SEM DADOS" é um terceiro estado de verdade: nunca houve coleta, então
@@ -140,7 +143,7 @@ export function GatewayTab({
   const statusDotColor = statusLabel === "ONLINE" ? "bg-success" : statusLabel === "OFFLINE" ? "bg-destructive" : "bg-warning";
 
   const totalAgents = agentStats?.length ?? 0;
-  const onlineAgents = agentStats?.filter((a: any) => a.status === "online").length ?? 0;
+  const onlineAgents = agentStats?.filter((a: any) => statusIndicaOnline(a.status)).length ?? 0;
   const totalCrons = cronSummary?.length ?? 0;
   const activeCrons = cronSummary?.filter((c: any) => c.enabled !== false).length ?? 0;
   const totalMsgs = agentStats?.reduce((s: number, a: any) => s + (a.messages_today ?? 0), 0) ?? 0;
@@ -262,7 +265,7 @@ export function GatewayTab({
                     >
                       <div
                         className={`h-4 w-4 rounded-md transition-all duration-200 cursor-default ${
-                          h.status === "online"
+                          statusIndicaOnline(h.status)
                             ? "bg-success/60 group-hover:bg-success group-hover:shadow-sm group-hover:shadow-success/40"
                             : "bg-destructive/60 group-hover:bg-destructive group-hover:shadow-sm group-hover:shadow-destructive/40"
                         }`}
@@ -271,7 +274,7 @@ export function GatewayTab({
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-20">
                         <div className="bg-card border border-border/50 rounded-lg px-2.5 py-1.5 shadow-lg text-[10px] font-mono whitespace-nowrap">
                           <div className="text-foreground">{formatDate(h.collected_at)}</div>
-                          <div className={h.status === "online" ? "text-success" : "text-destructive"}>
+                          <div className={statusIndicaOnline(h.status) ? "text-success" : "text-destructive"}>
                             {h.status} {h.version ? `• v${h.version}` : ""}
                           </div>
                         </div>
@@ -292,13 +295,13 @@ export function GatewayTab({
                 </span>
                 {healthHistory.slice(0, 5).map((h, i) => (
                   <div key={i} className="flex items-center gap-3 text-xs py-2.5 border-b border-border/20 last:border-0">
-                    <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${h.status === "online" ? "bg-success shadow-sm shadow-success/30" : "bg-destructive shadow-sm shadow-destructive/30"}`} />
+                    <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${statusIndicaOnline(h.status) ? "bg-success shadow-sm shadow-success/30" : "bg-destructive shadow-sm shadow-destructive/30"}`} />
                     <span className="font-mono text-muted-foreground">{formatDate(h.collected_at)}</span>
                     <span className="text-muted-foreground">{relativeTime(h.collected_at)}</span>
                     <span className="ml-auto flex items-center gap-2">
                       {h.version && <span className="font-mono text-xs text-muted-foreground">v{h.version}</span>}
-                      <Badge variant={h.status === "online" ? "default" : "destructive"} className="text-[10px] rounded-full capitalize">
-                        {h.status === "online" ? <CheckCircle2 className="h-2.5 w-2.5 mr-1" /> : <AlertTriangle className="h-2.5 w-2.5 mr-1" />}
+                      <Badge variant={statusIndicaOnline(h.status) ? "default" : "destructive"} className="text-[10px] rounded-full capitalize">
+                        {statusIndicaOnline(h.status) ? <CheckCircle2 className="h-2.5 w-2.5 mr-1" /> : <AlertTriangle className="h-2.5 w-2.5 mr-1" />}
                         {h.status}
                       </Badge>
                     </span>
