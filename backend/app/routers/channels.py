@@ -125,6 +125,26 @@ SQL_PAR_SEM_ACESSO = """
 """
 
 
+# A forma do INSERT de membro, escrita uma vez só — as duas rotas que gravam
+# membro usam esta constante, e `scripts/provar_criacao_de_canal.py` a importa
+# daqui em vez de copiar o texto.
+#
+# ⚠️ **`ON CONFLICT DO NOTHING` sem alvo, e isso não é descuido.** Nomear o alvo
+#    (`ON CONFLICT (channel_id, user_id)`) faz o Postgres sondar o índice único,
+#    e a sondagem exige SELECT na tabela. A policy de SELECT de `channel_members`
+#    é `is_public_channel(...) OR is_channel_member(...)`: num canal privado
+#    recém-criado o criador ainda não é membro — é a própria linha que ele está
+#    inserindo. Com o alvo, `POST /channels` dava 500 para o administrador, que
+#    desde a 015 é o único que pode criar canal: ninguém criava canal nenhum
+#    (produção, 02/09/2026). Sem o alvo o efeito é o mesmo — só existe um índice
+#    único aqui além da PK, e a PK é `gen_random_uuid()`.
+SQL_INSERIR_MEMBRO = """
+    INSERT INTO public.channel_members (channel_id, user_id, member_type)
+    VALUES ($1::uuid, $2, $3)
+    ON CONFLICT DO NOTHING
+"""
+
+
 async def _primeiro_par_sem_acesso(
     conn, channel_id: str, user_ids: list[str], agent_ids: list[str]
 ) -> tuple[str, str] | None:
@@ -342,14 +362,7 @@ async def criar(dados: CanalIn, usuario: Usuario = Depends(exige_papel("administ
             # rota (`find_or_create_dm`, por exemplo) não passa pelo Python.
             try:
                 for membro_id, tipo in membros:
-                    await conn.execute(
-                        """
-                        INSERT INTO public.channel_members (channel_id, user_id, member_type)
-                        VALUES ($1::uuid, $2, $3)
-                        ON CONFLICT (channel_id, user_id) DO NOTHING
-                        """,
-                        canal_id, membro_id, tipo,
-                    )
+                    await conn.execute(SQL_INSERIR_MEMBRO, canal_id, membro_id, tipo)
             except asyncpg.PostgresError as erro:
                 traduzido = traduzir_hs001(erro)
                 if traduzido is not None:
@@ -554,11 +567,7 @@ async def entrar(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
         if ja_membro:
             return
         try:
-            await conn.execute(
-                "INSERT INTO public.channel_members (channel_id, user_id, member_type) "
-                "VALUES ($1::uuid, $2, 'human') ON CONFLICT (channel_id, user_id) DO NOTHING",
-                channel_id, usuario.id,
-            )
+            await conn.execute(SQL_INSERIR_MEMBRO, channel_id, usuario.id, "human")
         except asyncpg.PostgresError as erro:
             # ⚠️ Quarta rota que insere em `channel_members` — o trigger da
             # 014 já a alcança sozinho (é o canal público com agente que este
@@ -1193,11 +1202,7 @@ async def adicionar_membros(
 
         try:
             for membro_id, tipo_membro in membros:
-                await conn.execute(
-                    "INSERT INTO public.channel_members (channel_id, user_id, member_type) "
-                    "VALUES ($1::uuid, $2, $3) ON CONFLICT DO NOTHING",
-                    channel_id, membro_id, tipo_membro,
-                )
+                await conn.execute(SQL_INSERIR_MEMBRO, channel_id, membro_id, tipo_membro)
         except asyncpg.PostgresError as erro:
             traduzido = traduzir_hs001(erro) or traduzir_rls(erro)
             if traduzido is not None:
