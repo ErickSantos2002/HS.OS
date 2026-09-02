@@ -724,6 +724,13 @@ def _nome_de_exibicao(agent_id: str) -> str:
 
 _MARCA_GATILHO = "➡️ RESPONDA A ESTA MENSAGEM"
 
+# Preenchimento para quando o gatilho não tem texto. A tela manda `content`
+# vazio quando a mensagem é só anexo/áudio (`ChannelChat.tsx`), e a consulta
+# que alimenta `_responder_no_canal` hoje não busca `audio_url`/`attachments`
+# — então não dá para dizer qual dos dois é. Genérico e verdadeiro nos dois
+# casos bate mais do que arriscar "anexo" numa mensagem de áudio.
+_SEM_TEXTO = "[mensagem sem texto — provavelmente anexo, imagem ou áudio]"
+
 
 def _montar_pedido(historico: list, gatilho) -> str:
     """Monta o texto mandado ao agente, marcando qual mensagem é o gatilho.
@@ -738,14 +745,25 @@ def _montar_pedido(historico: list, gatilho) -> str:
     `created_at`: histórico pode repetir autor e texto entre mensagens
     diferentes (ex.: duas pessoas mandando "oi" em sequência), e `gatilho` é a
     própria referência escolhida por `_responder_no_canal` — não uma cópia.
+
+    ⚠️ **O gatilho nunca pode ficar de fora, mesmo sem texto.** O filtro de
+    conteúdo vazio abaixo é o mesmo de sempre e continua valendo para o resto
+    do histórico — mas se ele comesse a linha do gatilho, a instrução abaixo
+    prometeria uma marca que não existe em lugar nenhum do texto, e o agente
+    ficaria tão perdido quanto antes desta função existir. Achado numa rodada
+    de correção depois de medir que `ChannelChat.tsx` manda mensagem de canal
+    só-anexo com `content=""` pelo caminho normal da tela.
     """
     linhas = []
     for m in historico:
+        eh_gatilho = m is gatilho
         conteudo = (m["content"] or "").strip()
         if not conteudo:
-            continue
+            if not eh_gatilho:
+                continue
+            conteudo = _SEM_TEXTO
         autor = m["author_name"] or m["author_id"]
-        prefixo = f"{_MARCA_GATILHO} " if m is gatilho else ""
+        prefixo = f"{_MARCA_GATILHO} " if eh_gatilho else ""
         linhas.append(f"{prefixo}{autor}: {conteudo}")
     return (
         "Você está no canal e foi mencionado. Responda à mensagem marcada com "
