@@ -7,7 +7,8 @@ import "./index.css";
 // qualquer sessão com token — não tinha como ler o papel antes do React
 // montar. Isso trocava um 401 (sem token, resolvido antes) por um 403 em
 // toda sessão de colaborador. O carregamento saiu daqui para
-// `AuthGuard.tsx`, que já tem o `role` que o resto da tela usa.
+// `AppLayout.tsx`, que só monta autenticado (com `role` já resolvido) e
+// nunca nas rotas públicas que `AuthGuard`/`AuthProvider` também embrulha.
 
 // Check for new versions every 30 minutes while the app is open,
 // and immediately whenever the user returns to the tab/PWA.
