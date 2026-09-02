@@ -15,22 +15,15 @@ import {
   getOfficialAgentEntries,
   setAgentCatalog,
 } from "@/lib/agent-catalog";
+import { catalogoDaResposta } from "@/lib/catalogo-de-agentes";
 
 const QUERY_KEY = ["agent-catalog"] as const;
 
 async function fetchCatalog(): Promise<AgentCatalogEntry[]> {
-  // `/agents` devolve `{agents, defaultId, gatewayOk}`, não um array.
-  const { agents: todos } = await api<{ agents: any[] }>("/agents");
-  const data = (todos ?? []).filter((a) => a.isOfficial);
-
-  return data.map((row: any) => ({
-    id: String(row.id ?? ""),
-    name: row.name ?? "",
-    emoji: row.emoji ?? null,
-    color: row.color ?? null,
-    isLeader: !!row.isLeader,
-    sortOrder: row.sortOrder ?? null,
-  })).filter((e) => e.id);
+  // `/agents` devolve `{agents, defaultId, gatewayOnline, gatewayErro}`, não um
+  // array. (O comentário antigo dizia `gatewayOk`, campo que não existe.)
+  const { agents: todos } = await api<{ agents: unknown[] }>("/agents");
+  return catalogoDaResposta(todos);
 }
 
 export function useAgentCatalog() {
