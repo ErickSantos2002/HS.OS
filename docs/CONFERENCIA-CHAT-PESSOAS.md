@@ -209,35 +209,54 @@ quando acontece, é só na tela de quem está esperando. Medir uma vez teria dad
 canal de grupo ele não existe. A primeira medição deu "falhou" porque eu o
 procurei no lugar errado; o defeito era do teste, não do produto.
 
-### O agente não responde quando é mencionado no canal
+### O agente não respondia quando era mencionado no canal — duas causas, corrigidas
 
 Embaixo do campo de texto, o canal diz: *"Use @flow para mencionar um agente —
-ele só responde quando for mencionado."* Mencionar não faz nada. Duas menções
-enviadas, nenhuma resposta, nenhum "Trabalhando".
+ele só responde quando for mencionado."* Mencionar não fazia nada. Eram **dois**
+defeitos independentes, e cada um sozinho já bastava.
 
-Observando a rede, a tela manda exatamente duas chamadas ao enviar a mensagem:
+**a) A tela não chamava a rota.** Observando a rede, o envio produzia
+`POST /channels/{id}/messages` e `POST /channels/{id}/notificar`, e nunca
+`POST /channels/{id}/agentes/{agent_id}/responder`. O gatilho existia e estava no
+caminho (`ChatPage` renderiza `ChannelChat`, que chama
+`startChannelAgentReplies`); ele filtrava os membros do canal por
+`isOfficialAgentId`, que consulta um catálogo montado de `GET /agents`
+**filtrando por `isOfficial`**. E `agent_profiles.is_official` é coluna herdada do
+schema Supabase (`001`, `DEFAULT false`) que **nada no backend jamais escreve**:
+`GET /agents` devolvia os cinco agentes da casa, todos com `isOfficial: false`.
+Catálogo vazio, ninguém "oficial", ninguém responde. O filtro ainda era
+redundante — `/agents` seleciona de `agent_profiles`, então ter perfil é ser do
+catálogo. Commit `b6c07eb`.
+
+**b) A chave de sessão tinha a forma errada.** Com a rota chamada na mão, o
+backend aceitava (202) e publicava no canal o aviso de falha, **8 segundos
+depois** — e não os 140s do `agent.wait`, que era a hipótese óbvia. Nenhuma
+sessão nascia no gateway. O gateway extrai o agente da própria chave e a confere
+contra o `agentId`; o canal mandava `channel:{id}:{agente}:{uuid}` e ouvia:
 
 ```
-POST /channels/{id}/messages     201
-POST /channels/{id}/notificar    204
+agentId "flow" does not match session key "channel:b6de841a-…:flow:…"
 ```
 
-E **nunca** `POST /channels/{id}/agentes/{agent_id}/responder`, que é a rota que
-aciona o agente. Ela existe e funciona: chamada na mão, no mesmo canal e com o
-mesmo agente, respondeu `202 {"ok":true,"status":"processando"}` e publicou no
-canal — só que publicou o aviso de falha, *"⚠️ Não consegui responder agora (o
-gateway falhou ou expirou)"*.
+Medido contra o gateway de produção antes de corrigir: forma antiga recusada em
+0,7s, forma corrigida com `chat.send` em 0,6s, `agent.wait` devolvendo `ok` em
+9,8s e o texto `pong`. A Arena tinha o mesmo defeito e devolvia 502. Três lugares
+montavam chave e só um sabia da regra. Commit `475e176`.
 
-São **dois** problemas, e vale não confundi-los:
+**Conferido na tela depois do deploy:** duas menções, duas respostas certas, em
+**7 segundos** cada — `@flow responda apenas com a palavra: alfa371729` → `alfa371729`,
+e `@flow responda apenas: pong 757509` → `pong 757509`, com o indicador de
+"trabalhando" acendendo entre as duas.
 
-1. **A tela não chama a rota.** O buraco está no front: a promessa embaixo do
-   campo de texto não é cumprida por ninguém.
-2. **O gateway não respondeu** quando a rota foi chamada direto. O backend se
-   comportou bem — publicou o aviso em vez de silêncio —, mas a resposta do
-   agente no canal continua sem prova de que funciona ponta a ponta.
+⚠️ **Uma resposta fora do lugar, não reproduzida.** Numa das medições o agente
+respondeu à instrução de uma mensagem **anterior** do canal (o contexto enviado
+são as últimas 30). Na medição limpa seguinte, com outra instrução no histórico,
+ele respondeu à mensagem certa. Fica registrado como visto uma vez e não
+reproduzido — o prompt manda "responda à última mensagem" sem marcar qual é ela.
 
-⚠️ Este achado só aparece **executando**. As rotas dos Passos 1 e 2 passaram
-todas; o caminho que ninguém chama não tem como reprovar num teste de rota.
+⚠️ A correção (a) revive mais coisa que a menção: `use-agents` e `use-results`
+também filtram por `isOfficialAgentId` e vinham recebendo lista vazia. A tela de
+Monitoramento não foi conferida depois disso.
 
 ---
 
@@ -247,11 +266,15 @@ Esta seção existe porque `docs/VARREDURAS-2026-08-31.md` registra duas varredu
 que deram limpo por fraqueza do método. Escrever o que ficou de fora é o que
 impede alguém de confiar numa conferência que não conferiu.
 
-**A resposta do agente no canal, ponta a ponta.** O caminho foi exercitado até o
-gateway e parou ali: a rota aceitou (202) e o agente publicou o aviso de falha.
-Não se sabe se, com o gateway respondendo, a resposta aparece na tela das duas
-pessoas. É o que fica para a próxima, junto com a correção da tela que não chama
-a rota.
+**A resposta do agente vista por DUAS pessoas ao mesmo tempo.** A menção foi
+conferida na tela, mas com uma janela só. Que a resposta do agente chegue à
+segunda pessoa do canal pelo realtime não foi observado — e é justamente onde a
+seção 8 já registra que a entrega tem cauda.
+
+**A tela de Monitoramento depois do catálogo voltar a existir.** `use-agents` e
+`use-results` filtravam por `isOfficialAgentId` e recebiam lista vazia; com o
+catálogo populado elas passam a devolver os cinco agentes. Ninguém abriu essas
+telas para ver o que mudou.
 
 **A cauda do realtime não tem causa.** Sabe-se que duas de seis entregas saíram
 da faixa de um segundo (11,6s e >25s) e que nada se perde. Não se sabe **por
