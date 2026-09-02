@@ -6,10 +6,12 @@ import { GlobalSearch } from "@/components/GlobalSearch";
 import { NotificationsProvider } from "@/components/NotificationsProvider";
 import { BottomNav } from "@/components/BottomNav";
 import { CompanyOnboardingBanner } from "@/components/CompanyOnboardingBanner";
+import { useEffect } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuthContext } from "@/contexts/auth-context";
 import { usePresence } from "@/hooks/use-presence";
 import { useAgentCatalog } from "@/hooks/use-agent-catalog";
+import { loadGatewayConfig, podeCarregarConfigGateway } from "@/lib/gateway";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,11 +24,18 @@ import { useNavigate, useLocation } from "react-router-dom";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const isMobile = useIsMobile();
-  const { user, profile, signOut } = useAuthContext();
+  const { user, profile, role, signOut } = useAuthContext();
   const navigate = useNavigate();
   const location = useLocation();
   usePresence(user?.id);
   useAgentCatalog(); // preload the official agents catalog once authenticated
+  // GET /gateway/config é exige_papel("administrador") — pedir pra qualquer
+  // sessão era 403 garantido pra colaborador. AppLayout só monta dentro do
+  // ProtectedRoute, então o role já está resolvido aqui (nunca o null
+  // transitório do boot).
+  useEffect(() => {
+    if (podeCarregarConfigGateway(role)) loadGatewayConfig();
+  }, [role]);
   // Chat page manages its own bottom layout (composer sits flush above bottom nav)
   const isChatRoute = location.pathname.startsWith("/chat");
 

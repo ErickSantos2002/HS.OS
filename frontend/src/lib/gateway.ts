@@ -11,6 +11,7 @@
 // apenas a URL, para exibição, e o indicador de que existe um token gravado.
 
 import { api, ErroApi } from "@/lib/api";
+import type { AppRole } from "@/hooks/use-auth";
 
 export interface GatewayConfig {
   url: string;
@@ -33,6 +34,18 @@ let cachedConfig: GatewayConfig | null = null;
 /** Acessor síncrono — devolve o cache ou a configuração vazia. */
 export function getGatewayConfig(): GatewayConfig {
   return cachedConfig ?? VAZIO;
+}
+
+/**
+ * Guard único para decidir se vale chamar `loadGatewayConfig()`. A rota é
+ * `exige_papel("administrador")` no backend, e antes ela era pedida em toda
+ * sessão com token — administrador ou não —, o que gerava um 403 registrado
+ * no console a cada carga do `/chat` para quem não é admin. O papel vem de
+ * onde o resto da tela já lê (`useAuthContext`/`role`), nunca de uma segunda
+ * leitura do token.
+ */
+export function podeCarregarConfigGateway(role: AppRole | null): boolean {
+  return role === "administrador";
 }
 
 /** Carrega a configuração do backend. Só `administrador` recebe. */

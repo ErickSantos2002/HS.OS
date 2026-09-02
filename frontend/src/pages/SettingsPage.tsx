@@ -3,7 +3,13 @@ import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { useSearchParams } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { getGatewayConfig, loadGatewayConfig, saveGatewayConfig, testConnection } from "@/lib/gateway";
+import {
+  getGatewayConfig,
+  loadGatewayConfig,
+  podeCarregarConfigGateway,
+  saveGatewayConfig,
+  testConnection,
+} from "@/lib/gateway";
 import { useBranding } from "@/hooks/use-branding";
 import { useAuthContext } from "@/contexts/auth-context";
 import { toast } from "@/hooks/use-toast";
@@ -198,6 +204,11 @@ export default function SettingsPage() {
 
 
   useEffect(() => {
+    // A aba Gateway só é renderizada para `isAdmin` (ver `tabs` abaixo), mas
+    // este efeito roda no mount da página inteira — inclusive para o
+    // colaborador que só quer a própria aba Perfil. Sem o guard, ele também
+    // tomava o 403 de `GET /gateway/config` (`exige_papel("administrador")`).
+    if (!podeCarregarConfigGateway(role)) return;
     let cancelled = false;
     (async () => {
       const config = await loadGatewayConfig();
@@ -211,7 +222,7 @@ export default function SettingsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [role]);
 
 
   useEffect(() => {
