@@ -48,7 +48,7 @@ COMMENT ON TYPE public.app_role IS
 -- ─────────────────────────────────────────────────────────────────────────────
 --
 -- Vêm do cadastro do RH, no formato:
---   Lidisay Sena Vieira ; adm01@… ; RECURSOS HUMANOS ; Coordenadora de RH Junior
+--   Beltrano de Tal ; beltrano@… ; RECURSOS HUMANOS ; Coordenadora de RH Junior
 --
 -- ⚠️ **Texto livre, e não tabela de departamentos**, por uma razão de tamanho:
 -- são 27 pessoas e uma dúzia de departamentos que mudam de nome raramente. Uma

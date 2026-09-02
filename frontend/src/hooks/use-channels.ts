@@ -90,22 +90,20 @@ export function useChannels() {
     // sozinho — dava para criar canal sem membro nenhum, inclusive sem o
     // criador, e aí o RLS escondia o canal de todo mundo. Agora é transação no
     // servidor: ou tudo entra, ou nada entra.
-    let channel: Channel;
-    try {
-      channel = await api<Channel>("/channels", {
-        method: "POST",
-        body: {
-          name,
-          description: description || null,
-          type,
-          member_ids: memberIds ?? [],
-          agent_ids: agentIds ?? [],
-        },
-      });
-    } catch (e) {
-      console.error("Erro ao criar canal:", e);
-      return null;
-    }
+    //
+    // A recusa não é silenciada aqui: quem chama precisa do `detail` que o
+    // backend escreveu — inclusive o 403 do invariante da 014 (pessoa e
+    // agente que não fecham) — não só de um `null` genérico.
+    const channel = await api<Channel>("/channels", {
+      method: "POST",
+      body: {
+        name,
+        description: description || null,
+        type,
+        member_ids: memberIds ?? [],
+        agent_ids: agentIds ?? [],
+      },
+    });
 
     await fetchChannels();
     return channel;
