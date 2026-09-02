@@ -24,7 +24,8 @@ from pydantic import BaseModel, Field
 from app.database import sessao
 from app.dependencies import Usuario, exige_papel, normalizar_agent_id, usuario_atual
 from app.gateway import config as cfg
-from app.gateway.client import ErroGateway, obter_cliente, obter_cliente_de_espera
+from app.gateway.client import (ErroGateway, chave_de_sessao, obter_cliente,
+                                obter_cliente_de_espera)
 from app.realtime import hub, topico_canal
 from app.routers.conversations import _texto_da_resposta
 
@@ -721,6 +722,23 @@ def _nome_de_exibicao(agent_id: str) -> str:
     return " ".join(p.capitalize() for p in re.split(r"[-_\s]+", normal) if p) or normal
 
 
+def _chave_do_canal(agent_id: str, channel_id: str) -> str:
+    """Sessão nova a cada resposta do agente no canal.
+
+    De propósito nova: o contexto vai inteiro na mensagem, então uma sessão
+    persistente receberia a mesma conversa de novo a cada menção. A edge era
+    stateless pelo mesmo motivo.
+
+    ⚠️ **Isto já foi `f"channel:{channel_id}:{agent_id}:{uuid4()}"`, e por isso
+    mencionar um agente num canal NUNCA funcionou.** O gateway confere o agente
+    contra a chave e recusa o `chat.send` — o canal recebia o aviso de falha 8
+    segundos depois, sem sessão nenhuma nascer do outro lado. O `channel_id`
+    continua na chave, agora no sufixo, para dar para achar a sessão pelo canal
+    ao depurar. Ver `chave_de_sessao`.
+    """
+    return chave_de_sessao(agent_id, f"canal-{channel_id}-{uuid4()}")
+
+
 async def _responder_no_canal(channel_id: str, agent_id: str) -> None:
     """Roda em segundo plano: monta o contexto, pergunta ao agente, publica.
 
@@ -772,10 +790,7 @@ async def _responder_no_canal(channel_id: str, agent_id: str) -> None:
             logger.warning("Menção a %s em %s ignorada: gateway não configurado.", agent_id, channel_id)
             return
 
-        # Sessão nova a cada resposta, de propósito: o contexto vai inteiro na
-        # mensagem, então uma sessão persistente receberia a mesma conversa de
-        # novo a cada menção. A edge era stateless pelo mesmo motivo.
-        chave = f"channel:{channel_id}:{agent_id}:{uuid4()}"
+        chave = _chave_do_canal(agent_id, channel_id)
         run_id = f"hsos-{uuid4()}"
         cliente = obter_cliente(c.url, c.token)
         espera = obter_cliente_de_espera(c.url, c.token)

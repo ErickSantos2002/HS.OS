@@ -25,7 +25,8 @@ from pydantic import BaseModel, Field
 from app.database import sessao
 from app.dependencies import Usuario, agente_visivel, exige_papel, usuario_atual
 from app.gateway import config as cfg
-from app.gateway.client import ErroGateway, obter_cliente, obter_cliente_de_espera
+from app.gateway.client import (ErroGateway, chave_de_sessao, obter_cliente,
+                                obter_cliente_de_espera)
 from app.integracoes import exige_segredo
 from app.realtime import hub, topico_usuario
 
@@ -433,9 +434,20 @@ def _chave_sessao(agent_id: str, user_id: str) -> str:
     `nina` por engano.)
 
     O sufixo é o id do usuário: sem isso, duas pessoas falando com o mesmo
-    agente cairiam na mesma sessão e leriam o histórico uma da outra.
+    agente cairiam na mesma sessão e leriam o histórico uma da outra. Ele é
+    estável de propósito — conversa de DM tem memória.
     """
-    return f"agent:{agent_id}:hsos-{user_id}"
+    return chave_de_sessao(agent_id, f"hsos-{user_id}")
+
+
+def _chave_arena(agent_id: str, user_id: str) -> str:
+    """Sessão nova a cada rodada da Arena.
+
+    O oposto da DM: aqui a pergunta vai inteira na mensagem (persona junto), e
+    uma sessão com memória faria a rodada seguinte herdar a anterior. O `uuid4`
+    é o que garante sessão limpa; a forma continua sendo a do gateway.
+    """
+    return chave_de_sessao(agent_id, f"arena-{user_id}-{uuid4()}")
 
 
 class EnvioIn(BaseModel):
@@ -1398,7 +1410,7 @@ async def pergunta_avulsa(
     if not c.configurado:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
 
-    chave = f"arena:{usuario.id}:{uuid4()}"
+    chave = _chave_arena(agent_id, usuario.id)
     run_id = f"hsos-{uuid4()}"
     texto = f"{dados.persona.strip()}\n\n---\n\n{dados.pergunta}" if dados.persona else dados.pergunta
 

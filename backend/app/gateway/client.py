@@ -195,6 +195,29 @@ def obter_cliente(url: str, token: str) -> ClienteGateway:
     return _cliente
 
 
+def chave_de_sessao(agent_id: str, sufixo: str) -> str:
+    """A chave de sessão do gateway: `agent:<agentId>:<sufixo>`.
+
+    ⚠️ **A forma não é escolha nossa.** O gateway extrai o agente da própria
+    chave e a confere contra o `agentId` do `chat.send`; qualquer outra coisa é
+    recusada com `agentId "X" does not match session key "Y"`, antes de o agente
+    rodar. E sem `agentId` é pior: ele aceita a chave crua e manda para o agente
+    padrão, que foi como uma sondagem acabou falando com a `nina` por engano.
+
+    Mora aqui, e não num dos routers, porque **três** lugares montam chave e só
+    um sabia da regra. Os outros dois montavam `channel:…` e `arena:…`:
+    mencionar um agente num canal nunca funcionou (o canal recebia
+    "⚠️ Não consegui responder agora" 8 segundos depois, sem sessão nenhuma
+    nascer no gateway — medido em produção em 02/09/2026) e a Arena devolvia 502.
+    A forma é conferida em `backend/tests/test_chave_de_sessao.py`.
+
+    O `sufixo` é quem decide se a sessão tem memória: o mesmo sufixo devolve a
+    mesma sessão (a DM com agente quer isso), um sufixo novo abre outra (canal e
+    Arena querem isso, porque mandam o contexto inteiro na mensagem).
+    """
+    return f"agent:{agent_id}:{sufixo}"
+
+
 def obter_cliente_de_espera(url: str, token: str) -> ClienteGateway:
     """Conexão **separada**, só para chamadas que ficam penduradas.
 
