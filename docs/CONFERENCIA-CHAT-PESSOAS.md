@@ -181,6 +181,64 @@ humanos. Commit `c40e408`.
 tirou conversa de ninguém. Fechar acesso sem contar quem perde é como se derruba
 usuário legítimo achando que se está corrigindo um furo.
 
+## 8. A conversa na tela, com duas contas (Passo 4)
+
+Duas janelas do Chrome, contextos isolados, token emitido localmente e injetado
+em `localStorage` sob a chave `hsos.token` — as senhas das 27 contas foram para
+o FortiPAM e o backend guarda só o hash. Duas colaboradoras de verdade: uma que
+vê os cinco agentes, outra que vê dois.
+
+| o que se olhou | resultado |
+|---|---|
+| DM: mensagem aparece na tela da outra **sem recarregar** | **sim**, nos dois sentidos |
+| tempo de entrega, 6 medições | 5 abaixo de **1s**; uma em **11,6s**; uma **não chegou em 25s** |
+| as mensagens que demoraram foram perdidas? | **não** — 15 de 15 gravadas em `channel_messages` |
+| "está digitando" | **acende** |
+| não-lidas | **conta**, com o número na lateral e nas abas |
+| canal de grupo entre duas pessoas | **funciona** |
+| agente mencionado dentro do canal | **não é acionado** — ver abaixo |
+
+⚠️ **O realtime entrega rápido quase sempre, e trava de vez em quando.** Cinco de
+seis entregas abaixo de um segundo, e duas fora da curva (11,6s e uma acima de
+25s). Nada se perde: a mensagem está no banco e aparece ao recarregar — o defeito,
+quando acontece, é só na tela de quem está esperando. Medir uma vez teria dado
+"funciona"; medir seis foi o que mostrou a cauda.
+
+⚠️ **O "está digitando" só existe em DM.** É ligado por
+`useTypingActivity(dmChannels…)` e desenhado na lista lateral — dentro de um
+canal de grupo ele não existe. A primeira medição deu "falhou" porque eu o
+procurei no lugar errado; o defeito era do teste, não do produto.
+
+### O agente não responde quando é mencionado no canal
+
+Embaixo do campo de texto, o canal diz: *"Use @flow para mencionar um agente —
+ele só responde quando for mencionado."* Mencionar não faz nada. Duas menções
+enviadas, nenhuma resposta, nenhum "Trabalhando".
+
+Observando a rede, a tela manda exatamente duas chamadas ao enviar a mensagem:
+
+```
+POST /channels/{id}/messages     201
+POST /channels/{id}/notificar    204
+```
+
+E **nunca** `POST /channels/{id}/agentes/{agent_id}/responder`, que é a rota que
+aciona o agente. Ela existe e funciona: chamada na mão, no mesmo canal e com o
+mesmo agente, respondeu `202 {"ok":true,"status":"processando"}` e publicou no
+canal — só que publicou o aviso de falha, *"⚠️ Não consegui responder agora (o
+gateway falhou ou expirou)"*.
+
+São **dois** problemas, e vale não confundi-los:
+
+1. **A tela não chama a rota.** O buraco está no front: a promessa embaixo do
+   campo de texto não é cumprida por ninguém.
+2. **O gateway não respondeu** quando a rota foi chamada direto. O backend se
+   comportou bem — publicou o aviso em vez de silêncio —, mas a resposta do
+   agente no canal continua sem prova de que funciona ponta a ponta.
+
+⚠️ Este achado só aparece **executando**. As rotas dos Passos 1 e 2 passaram
+todas; o caminho que ninguém chama não tem como reprovar num teste de rota.
+
 ---
 
 ## O que NÃO foi conferido
@@ -189,29 +247,39 @@ Esta seção existe porque `docs/VARREDURAS-2026-08-31.md` registra duas varredu
 que deram limpo por fraqueza do método. Escrever o que ficou de fora é o que
 impede alguém de confiar numa conferência que não conferiu.
 
-**Passo 4 — a conversa no navegador, com duas contas. Não rodou.** Duas janelas,
-DM e canal de grupo, agente acionado dentro do canal, e conferir na tela:
-mensagem chegando sem recarregar, "está digitando", não-lidas contando. Esbarra
-nas senhas: as 27 foram para o FortiPAM e o backend guarda só o hash. Os dois
-caminhos são injetar token emitido localmente no `localStorage` de duas janelas
-do Playwright, ou usar duas senhas de conta de teste.
+**A resposta do agente no canal, ponta a ponta.** O caminho foi exercitado até o
+gateway e parou ali: a rota aceitou (202) e o agente publicou o aviso de falha.
+Não se sabe se, com o gateway respondendo, a resposta aparece na tela das duas
+pessoas. É o que fica para a próxima, junto com a correção da tela que não chama
+a rota.
 
-⚠️ **Continua sendo o buraco maior, e a conferência de hoje aumentou o motivo.**
-As rotas foram batidas e passaram, mas **nenhuma mensagem trocada entre duas
-pessoas foi vista numa tela** — o DM foi criado, e nada foi escrito dentro dele.
-Em 01/09 dois defeitos da War room só apareceram abrindo o navegador, e hoje o
-defeito (c) só apareceu porque uma chamada foi de fato executada.
+**A cauda do realtime não tem causa.** Sabe-se que duas de seis entregas saíram
+da faixa de um segundo (11,6s e >25s) e que nada se perde. Não se sabe **por
+quê** — se é reconexão de websocket, se é o `notificar`, se é carga. Seis
+medições mostram que a cauda existe; não dizem de onde ela vem.
 
-**O caminho do agente dentro do canal não foi acionado.** O `POST
-/channels/{id}/agentes/{id}/responder` não foi chamado em produção — exigiria
-o gateway respondendo, e não era o que o Passo 2 media.
+**Só duas contas, num navegador só.** Chrome, dois contextos isolados. Nada foi
+visto em Firefox, em celular, nem com mais de duas pessoas no mesmo canal.
 
-**Sujeira deixada em produção, de propósito, para não apagar sem combinar:** o
-canal `teste 2` ganhou nada, mas nasceram três canais de conferência
-(`conferencia-tarefa8`, `conferencia-t8-nina`, `conferencia-t8-flow`) e um DM
-entre duas pessoas — e esse DM tem uma **terceira pessoa** dentro, gravada pela
-chamada que revelou o defeito (c). O defeito está fechado, a linha não: ela
-continua lá e a tela vai mostrar dois interlocutores no mesmo DM.
+**O que a tela faz além de texto** — anexo, áudio, GIF, thread, reação, edição e
+exclusão de mensagem — não foi tocado. O Passo 4 pedia a conversa; foi a conversa
+que se mediu.
+
+**`GET /gateway/config` responde 403 para colaborador, e a tela chama assim
+mesmo.** Aparece no console de toda sessão que não é de administrador. Não
+quebra nada visível e é anterior a esta entrega, mas é barulho que esconde erro
+de verdade — quem for depurar essa tela vai tropeçar nele primeiro.
+
+**Sujeira deixada em produção pelos testes: limpa, e conferida por leitura.**
+Saíram os quatro canais `conferencia-*` e os dois DMs de teste — inclusive o que
+tinha ganhado uma terceira pessoa pela chamada que revelou o defeito (c).
+Produção voltou ao estado anterior: **um canal** (`teste 2`) e **zero mensagens**
+em `channel_messages`.
+
+⚠️ Apagar o DM entre as duas contas de teste **deu 404 com token de
+administrador** e só funcionou com a conta que o criou. É o mesmo RLS da seção 5:
+o admin não é membro daquele DM, então ele não existe para ele. Vale saber antes
+de tentar limpar DM alheio pelo caminho óbvio.
 
 ## Achado de segurança, de brinde
 
