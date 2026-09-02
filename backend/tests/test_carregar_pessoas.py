@@ -6,6 +6,11 @@ conta; quem já tem conta não pode virar segunda conta.
 """
 from scripts.carregar_pessoas import quem_falta, senha_forte
 
+# ⚠️ Gente inventada, de propósito: este repositório é PÚBLICO, e nome de colega
+# com e-mail e cargo ao lado é dado de pessoa. O que o teste precisa é da FORMA
+# do registro, não de quem ele descreve — não devolva nomes reais aqui.
+# `bruce` e `carlos` são a exceção: esses dois e-mails existem literalmente em
+# `NAO_SAO_GENTE`, e trocá-los faria o teste parar de provar o filtro.
 QUADRO = [
     {"nome": "Erick Santos Dantas", "email": "ti@healthsafetytech.com",
      "setor": "TI", "cargo": "Coordenador de Dados Pleno"},

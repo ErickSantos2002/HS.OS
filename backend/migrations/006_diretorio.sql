@@ -15,7 +15,7 @@
 --        cadastrados, em texto puro
 --
 --    Um agente de vendas não precisa da senha do DataCore para saber que quem
---    escreveu foi a Lidisay do RH. E basta uma injeção de prompt vinda de um
+--    escreveu foi a coordenadora do RH. E basta uma injeção de prompt vinda
 --    cliente para transformar esse acesso num vazamento.
 --
 -- Aqui a resposta é uma view estreita e um usuário que só enxerga ela.
