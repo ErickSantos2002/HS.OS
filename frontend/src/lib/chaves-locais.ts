@@ -7,10 +7,17 @@
  * voltou ao escuro, que os favoritos sumiram, ou — pior — que uma correção de
  * estabilidade que estava ligada parou de valer.
  *
- * As flags `dnos_flag_*` são o caso grave: elas ligam quatro correções no
- * caminho do chat e vêm **desligadas por padrão**. Uma renomeação sem migração
- * desligaria as de quem as tinha ligado, e o sintoma seria a volta de um bug
- * que já parecia resolvido — sem nada apontando para o rebrand.
+ * A flag `dnos_flag_real_stop` é o caso grave, e é a única que sobrou: ela
+ * decide se "parar" aborta o agente no gateway ou só o poll do navegador, e
+ * desde 31/08/2026 vem **ligada por padrão** (grava `off` para voltar ao
+ * antigo). Uma renomeação sem migração RELIGARIA a de quem a tinha desligado
+ * de propósito, e o sintoma seria um comportamento que a pessoa já tinha
+ * recusado — sem nada apontando para o rebrand.
+ *
+ * ⚠️ Este comentário dizia "quatro correções, desligadas por padrão" até
+ * 03/09/2026. Eram três no código, duas já não faziam nada, e a que restou
+ * tinha trocado de padrão. Comentário que descreve um sistema que mudou custa
+ * o mesmo que documentação errada — só que mais perto de quem vai mexer.
  *
  * Por isso a leitura procura o nome novo e, não achando, **adota o antigo e o
  * regrava com o nome novo**. A migração acontece na primeira leitura de cada

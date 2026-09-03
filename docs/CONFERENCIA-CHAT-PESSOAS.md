@@ -276,10 +276,17 @@ seção 8 já registra que a entrega tem cauda.
 catálogo populado elas passam a devolver os cinco agentes. Ninguém abriu essas
 telas para ver o que mudou.
 
-**A cauda do realtime não tem causa.** Sabe-se que duas de seis entregas saíram
-da faixa de um segundo (11,6s e >25s) e que nada se perde. Não se sabe **por
-quê** — se é reconexão de websocket, se é o `notificar`, se é carga. Seis
-medições mostram que a cauda existe; não dizem de onde ela vem.
+**A cauda do realtime não tinha causa; passou a ter em 03/09/2026.** Eram duas,
+e a primeira suspeita registrada aqui — "reconexão de websocket" — estava certa:
+o `onclose` de uma conexão substituída agendava outra reconexão, que derrubava a
+saudável, em cascata (**7 sockets em 60s** a partir de uma troca de canal); e não
+havia vigia de silêncio, então conexão morta com `readyState` OPEN deixava a aba
+surda. A escada de espera é 1, 2, 4, 8, 16, 30s, e 11,6s cai entre 8 e 16.
+Consertado em `2d7f432`, com teste.
+
+⚠️ **Continua sem prova de que foram estes defeitos que produziram aquelas duas
+medições** — só de que eles existem e dão exatamente este sintoma. A confirmação
+é medir de novo com uso real, **trocando de canal**, que é o gatilho da cascata.
 
 **Só duas contas, num navegador só.** Chrome, dois contextos isolados. Nada foi
 visto em Firefox, em celular, nem com mais de duas pessoas no mesmo canal.

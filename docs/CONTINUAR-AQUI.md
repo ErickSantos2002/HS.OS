@@ -1,6 +1,6 @@
 # Continuar aqui
 
-Ponto de retomada da portagem. Atualizado em **02/09/2026**. Leia isto, depois
+Ponto de retomada da portagem. Atualizado em **03/09/2026**. Leia isto, depois
 `CLAUDE.md` e `docs/ROADMAP.md`.
 
 👉 **Voltando na segunda (17/08)?** Pule para
@@ -18,6 +18,55 @@ para lançar caso alguém o use. **Zero** edge functions por portar.
 da **fase da migração** (escrito em 07–10/08), e essa fase fechou. Continua útil
 para o básico — túnel, subida, login. Para o que mudou depois, veja
 [*Conferir no navegador*](#conferir-no-navegador) logo abaixo.
+
+---
+
+## O que aconteceu em 03/09/2026
+
+**A cauda do tempo real tinha causa, e eram dois defeitos no cliente.** A
+seção *O que NÃO foi conferido* de ontem registrava "a cauda existe; não se
+sabe de onde ela vem". Sabe-se agora, e nenhum dos dois é rede:
+
+1. **Reconexão fantasma, que vira cascata.** Os tópicos vão na URL, então
+   trocar de canal refaz a conexão. O `onclose` da conexão substituída chegava
+   com `socket` já apontando para a nova e **mesmo assim agendava outra
+   reconexão**; passado o backoff, ela derrubava a saudável, cujo `onclose`
+   agendava mais uma. Medido em teste: **7 sockets em 60 segundos** a partir de
+   uma única troca de canal. A escada de espera é 1, 2, 4, 8, 16, 30s — e a
+   entrega de **11,6s** cai entre 8 e 16.
+2. **Conexão aberta e morta.** Sem vigia de silêncio, `readyState` fica `OPEN`
+   para sempre e a aba fica surda até alguém recarregar. O servidor já contava
+   com esse vigia: o comentário de `_INTERVALO_PING` afirma que "o cliente usa o
+   silêncio prolongado como sinal de queda". **O cliente não usava.**
+
+E ao reconectar agora **ressincroniza** — não há replay do que passou durante a
+queda, então sem invalidar as buscas a tela fica com o estado de antes.
+
+⚠️ **Isto não prova que aquelas duas medições foram estes defeitos.** Prova que
+os defeitos existem e produzem exatamente esse sintoma. A confirmação é a
+próxima medição com uso real, e ela precisa ser feita **trocando de canal**, que
+é o gatilho.
+
+**O guardião refazia briefing no fim de semana.** `_hora_marcada` lia só o
+minuto e a hora do `expr` e ignorava `* * 1-5`. No sábado o cron corretamente
+não roda, o documento corretamente não existe, e o guardião concluía que tinha
+falhado: 20 documentos e 20 reservas `briefing_refeito:*` em sáb 22, dom 23,
+sáb 29 e dom 30/08 — vinte execuções de agente e vinte alertas ao administrador
+anunciando falha que não houve.
+
+**A tela mostrava o horário do cron em UTC sem dizer que era UTC** — "Dias úteis
+às 10:30" para um briefing que chega 07h30. Duas cópias de `describeCron`
+viraram uma função pura, agora em Brasília e com a etiqueta.
+
+**Varredura das pendências: três já não existiam.** As skills saíram para
+`backend/skills/` (o 404 morreu), o `agentToAgent.allow` tem os cinco agentes,
+e `cron` está negado em todos — inclusive na `nina`, que é quem se agendou em
+25/08. A senha do superusuário e as feature flags estavam descritas errado
+neste arquivo; corrigidas acima.
+
+**O que continua aberto:** a `nina` segue com `channels` vazio em
+`agent_profiles` (as outras quatro têm `{webchat}`), e `role` está vazio nos
+cinco — quem carrega o papel é `specialty`.
 
 ---
 
@@ -566,11 +615,12 @@ começa em 2026. Decorar a data de uma tabela não protege da próxima.
 
 - ⚠️ **Deploy pendente.** Backend e frontend mudaram bastante hoje e nada foi
   reconstruído no EasyPanel. Tudo foi verificado em `localhost`.
-- ⚠️ **`GET /skills/{slug}/conteudo` dá 404 em produção.** O `Dockerfile` do
-  backend faz `COPY . .` com contexto `backend/`, e as skills estão em `skills/`
-  na raiz — não entram na imagem. Em desenvolvimento lê o repositório direto. O
-  404 já explica o motivo; resolver é mudar o contexto do build ou montar
-  volume, e mexe no deploy.
+- ~~⚠️ **`GET /skills/{slug}/conteudo` dá 404 em produção.**~~ ✅ **Resolvido.**
+  A pasta foi movida para `backend/skills/`, dentro do contexto de build, e o
+  `Dockerfile` define `SKILLS_DIR=/app/skills`. Conferido em 03/09/2026: as sete
+  skills estão lá e não existe mais `skills/` na raiz. Mover a pasta foi o
+  conserto certo — levar o contexto para a raiz quebraria o deploy, porque o
+  EasyPanel tem o caminho fixo em `code/backend/`.
 - **Os dias 15 e 17/08 seguem zerados na série de custo.** O preço é carimbado
   quando a sessão roda, e recalcular retroativamente exigiria inventar a
   repartição entre cache e não-cache. De 17/08 em diante o valor é real.
@@ -581,10 +631,14 @@ começa em 2026. Decorar a data de uma tabela não protege da próxima.
 
 ### Pendências curtas, que cabem em qualquer intervalo
 
-- **`agentToAgent.allow` é manual.** Agente novo criado pela tela **não** entra
-  na lista: nasce sem falar com a Nina e sem ser alcançável por ela, em silêncio.
-  É o mesmo tipo de buraco que o `_deny_de_mcp` fechou. A hora certa de resolver
-  é ao criar o quarto agente.
+- **`agentToAgent.allow` é manual** — e continua sendo, embora hoje esteja
+  completo. Conferido em 03/09/2026 no `config.get`: `allow` traz os cinco
+  (`atlas`, `bruce`, `flow`, `iris`, `nina`), então `flow` e `bruce` foram
+  incluídos à mão quando nasceram. O buraco não fechou; só não está aberto agora.
+  Agente novo criado pela tela **continua** não entrando na lista, e nasce sem
+  falar com a Nina e sem ser alcançável por ela, em silêncio. É o mesmo tipo de
+  buraco que o `_deny_de_mcp` fechou — a diferença é que aquele é recalculado a
+  cada publicação e este depende de alguém lembrar.
 - **A `nina` está com `channels` vazio** em `agent_profiles`, e `iris`/`atlas`
   com `{webchat}`. Ela conversa normalmente — é o registro que está incompleto.
   Mesma família do `model` vazio que apareceu no mesmo dia. Testar
@@ -602,11 +656,18 @@ começa em 2026. Decorar a data de uma tabela não protege da próxima.
 
 Nada disso é novo de 14/08, e nada disso bloqueia o trabalho acima:
 
-- 🔴 **A senha padrão do superusuário do Postgres**, ainda não rotacionada. O
-  valor estava escrito nesta linha, em texto aberto, num repositório público —
-  removido em 01/09/2026. Removê-lo do texto **não revoga nada**: ele segue no
-  histórico do git e nos três outros repos onde vazou em set/2026. Rotacionar é
-  o que resolve, e uma rotação cobre os três bancos que compartilham a conta.
+- ~~🔴 **A senha padrão do superusuário do Postgres**~~ — **rotacionada.** A
+  senha antiga não autentica mais em `62.72.11.28:2222` (conferido em
+  02/09/2026, **só nesse host/porta/banco** — os outros dois que compartilham a
+  conta não foram testados). O valor estava escrito nesta linha, em texto
+  aberto, num repositório público; removê-lo do texto **não revogou nada** — ele
+  segue no histórico do git e nos três outros repos onde vazou em set/2026. O
+  que resolveu foi a rotação, que o torna inútil.
+
+  ⚠️ Esta linha dizia "ainda não rotacionada" até 03/09/2026, enquanto a tabela
+  de *Decisões pendentes*, no mesmo arquivo, já a dava como feita. Duas seções
+  do mesmo documento em desacordo: quem lesse esta primeiro iria rotacionar de
+  novo.
 - **`integrations.credentials` em texto puro** — nove senhas de banco.
 - **`sandbox` por agente**: um agente ainda alcança o SQLite do outro via `exec`.
   A tentativa com `tools.fs.workspaceOnly` foi revertida por não fechar isso e
@@ -900,7 +961,7 @@ Escrito e testado só nas guardas, porque o caminho feliz tem efeito real:
 | Decisão | Por quê importa |
 |---|---|
 | ~~**Trocar a senha do `super_admin`**~~ | ✅ Feito em 01/09/2026. ⚠️ Trocar não apaga o histórico do git: a antiga segue nos commits anteriores deste repositório público — o que a rotação faz é torná-la inútil. |
-| Flags `dnos_flag_*` viram padrão? | São 4 correções de estabilidade hoje **desligadas**: o sistema roda com os bugs antigos ativos. |
+| ~~Flags `dnos_flag_*` viram padrão?~~ | ✅ **Resolvida, e a pergunta estava errada.** Nunca foram 4: eram 3 no código, 2 delas já não faziam nada (morreram quando o `agent-chat.ts` substituiu o miolo de rede do `chat-sender`), e sobrou `hsos_flag_real_stop` — **ligada por padrão desde 31/08/2026**, não desligada. Conferido no código em 03/09: `cancelamentoRealLigado()` em `lib/chaves-locais.ts` é `lerChave(...) !== "off"`. |
 | Manter as 191 policies de RLS? | Funcionam, mas duplicam a autorização do FastAPI. Se aposentar, vira a `003`. |
 | **Reescrever a documentação oficial** | Ela avisa que a parte técnica está defasada (11/08), mas continua descrevendo edge functions que não existem. São 2.791 linhas misturando material que vale com material errado. Adiado de propósito: com uso real dá para saber quais seções as pessoas consultam e corrigir essas primeiro. |
 | Fluxo de "esqueci minha senha" | Sumiu com o Supabase Auth. A `ResetPasswordPage` ainda existe e não funciona. |
