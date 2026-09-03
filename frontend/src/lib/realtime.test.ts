@@ -122,4 +122,39 @@ describe("ciclo de vida da conexão", () => {
     SocketFalso.abertos[SocketFalso.abertos.length - 1].abrir();
     expect(invalidar).toHaveBeenCalled();
   });
+
+  it("voltar para a aba reconecta na hora, sem esperar o backoff", async () => {
+    // ⚠️ **Medido em 03/09/2026, na pilha local.** Com a cascata consertada, a
+    // aba passa a esperar o backoff inteiro — até 30s — depois de o backend
+    // voltar. No teste de ponta a ponta a recuperação levou 55,9s com o
+    // conserto contra 33,5s sem ele: o código antigo se recuperava mais rápido
+    // porque martelava, o que é vantagem por acidente e custa 113 conexões.
+    //
+    // Quem decide não é o relógio, é a pessoa: quando ela volta para a aba,
+    // reconectar na hora. É também o único momento em que a tela desatualizada
+    // é vista por alguém.
+    const rt = await carregar();
+    rt.assinar("canal:um", () => {});
+    const ws = SocketFalso.abertos[0];
+    ws.abrir();
+    ws.onclose?.({ code: 1006 });
+    await vi.advanceTimersByTimeAsync(1);
+    const depoisDaQueda = SocketFalso.abertos.length;
+
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(SocketFalso.abertos.length).toBeGreaterThan(depoisDaQueda);
+  });
+
+  it("voltar para a aba com a conexão viva não reconecta à toa", async () => {
+    const rt = await carregar();
+    rt.assinar("canal:um", () => {});
+    SocketFalso.abertos[0].abrir();
+
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(SocketFalso.abertos.length).toBe(1);
+  });
 });

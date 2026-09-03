@@ -197,6 +197,34 @@ function conectar() {
 }
 
 /**
+ * ⚠️ **Com a cascata de reconexões consertada, a espera passou a ser sentida.**
+ * Medido em 03/09/2026 na pilha local: derrubando o backend por dois minutos e
+ * gravando uma mensagem assim que ele volta, a aba levou **55,9s** para
+ * mostrá-la com o conserto, contra **33,5s** sem ele. O código antigo se
+ * recuperava mais rápido porque martelava — vantagem por acidente, paga com 113
+ * conexões em um minuto.
+ *
+ * Baixar o teto do backoff resolveria pelo relógio e martelaria de novo, mais
+ * devagar. Quem decide aqui não é o relógio: é a pessoa. Voltar para a aba é o
+ * único momento em que a tela desatualizada é vista por alguém — e é aí que
+ * reconectar na hora vale a pena.
+ *
+ * `tentativas` volta a zero de propósito: a espera acumulada era para poupar um
+ * backend que estava fora, e quem acabou de voltar para a aba não tem culpa
+ * dela.
+ */
+function aoVoltarParaAAba() {
+  if (document.visibilityState !== "visible") return;
+  if (socket || ouvintes.size === 0) return;
+  tentativas = 0;
+  conectar();
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", aoVoltarParaAAba);
+}
+
+/**
  * Assina um tópico. Devolve a função de cancelar.
  *
  * Tópicos: `canal:<id>` para mensagens de um canal, `usuario:<id>` para o que é
