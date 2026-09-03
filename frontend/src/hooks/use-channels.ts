@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { assinar } from "@/lib/realtime";
+import { aplicarEventoDeCanal, reconcileMessages } from "@/lib/eventos-de-canal";
 import { useAuthContext } from "@/contexts/auth-context";
 
 export interface Channel {
@@ -41,20 +42,6 @@ export interface ChannelMember {
   joined_at: string;
   member_type?: string;
 }
-
-/** Reconcile messages: merge by ID (incoming overwrites), replace optimistic, sort chronologically */
-const reconcileMessages = (prev: ChannelMessage[], incoming: ChannelMessage[]): ChannelMessage[] => {
-  const byId = new Map(prev.map(m => [m.id, m]));
-  for (const m of incoming) {
-    // Replace optimistic message with real one
-    const optimistic = [...byId.values()].find(
-      x => x.id.startsWith("optimistic-") && x.author_id === m.author_id && x.content === m.content && !x.thread_id && !m.thread_id
-    );
-    if (optimistic) byId.delete(optimistic.id);
-    byId.set(m.id, { ...(byId.get(m.id) || {}), ...m });
-  }
-  return [...byId.values()].sort((a, b) => +new Date(a.created_at) - +new Date(b.created_at));
-};
 
 let cachedChannels: Channel[] | null = null;
 
@@ -223,14 +210,17 @@ export function useChannelMessages(channelId: string | null) {
     // A mensagem chega pronta do servidor — não precisa recarregar a página
     // para descobrir o que mudou.
     const cancelarAssinatura = assinar(`canal:${channelId}`, (tipo, dados) => {
-      if (cancelled || tipo !== "mensagem") return;
-      const msg = dados as ChannelMessage;
-      if (msg.thread_id) return; // resposta de thread tem painel próprio
-      if (!loadedRef.current) {
-        pendingBuffer.push(msg);
+      if (cancelled) return;
+      // ⚠️ **Editar e apagar também são eventos, e ficavam de fora.** Este
+      // trecho tratava só `"mensagem"`; `"mensagem-editada"` e
+      // `"mensagem-removida"` chegavam e eram descartados, e a tela só se
+      // corrigia no `enquete` de 60s abaixo. Ver `lib/eventos-de-canal.ts`.
+      if (tipo === "mensagem" && !loadedRef.current) {
+        const msg = dados as ChannelMessage;
+        if (!msg.thread_id) pendingBuffer.push(msg);
         return;
       }
-      updateMessages((prev) => reconcileMessages(prev, [msg]));
+      updateMessages((prev) => aplicarEventoDeCanal(prev, tipo, dados));
     });
 
     // Rede de segurança, bem espaçada: se a conexão cair e a reconexão demorar,
