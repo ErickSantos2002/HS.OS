@@ -83,6 +83,7 @@ function ChannelStreamingActivity({ agentIds }: { agentIds: string[] }) {
   return <StreamingActivityIndicator agentId={firstAgent} isWorking={agentIds.length > 0} hasStreamingText={false} />;
 }
 import { shouldShowDateDivider } from "@/lib/chat-date-groups";
+import { caminhoDeAnexo } from "@/lib/caminho-de-anexo";
 
 function TypingDots({ className = "" }: { className?: string }) {
   return (
@@ -1585,7 +1586,11 @@ export default function ChannelChat({
       }
 
       const ext = getAudioFileExtension(blob.type);
-      const fileName = `${channel.id}/${Date.now()}.${ext}`;
+      // Mesmo motivo do anexo: `audio-messages` é bucket de leitura pública
+      // (o áudio toca em `<audio src>`, que não manda `Authorization`), e a
+      // única defesa declarada é o caminho ser difícil de adivinhar.
+      // `<canal>/<epoch em ms>.<ext>` não era. Ver `lib/caminho-de-anexo.ts`.
+      const fileName = caminhoDeAnexo(channel.id, `audio.${ext}`);
       try {
         await enviarArquivo("audio-messages", fileName, blob, `audio.${ext}`);
       } catch (uploadErr) {
