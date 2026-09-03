@@ -247,6 +247,39 @@ def _sanitizar_infra_e_nomes(
     return saida
 
 
+def _bloco_agente(a: dict, aid: str) -> dict:
+    """O bloco `agent` do arquivo exportado.
+
+    ⚠️ **`role` sai preenchido com o `specialty` quando o `role` está vazio, e
+    é o caso de todos os agentes daqui.** O `role` é o campo do schema original
+    do dn.os; nesta instalação ele está vazio nos cinco e quem carrega o papel é
+    o `specialty` (levantado em 01/09/2026, montando a War room). A importação
+    faz `specialty = agent.role || agent.description || "Agente importado do
+    HS.OS"` — então exportar a `nina`, que tem `role` **e** `description`
+    nulos, produzia um agente chamado "Agente importado do HS.OS" no lugar de
+    "Orquestradora do time"; os outros quatro degradavam para a descrição
+    longa.
+
+    Não é defeito da portagem: a edge original mandava `role` porque lá ele era
+    o campo vivo. O schema mudou embaixo e a exportação seguiu fiel a um campo
+    morto.
+
+    Preencher o `role` (em vez de criar um campo novo) mantém o arquivo legível
+    por instalação que não conheça `specialty` — e é semanticamente honesto: o
+    que está indo ali é o papel do agente, que é o que `role` sempre quis dizer.
+    """
+    return {
+        "agent_id": a.get("agent_id") or aid,
+        "name": a.get("name") or aid,
+        "role": a.get("role") or a.get("specialty"),
+        "department": a.get("department"),
+        "description": a.get("description"),
+        "author": "exportado via HS.OS",
+        "color": a.get("color"),
+        "emoji": a.get("emoji"),
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Extração de metadados
 # ─────────────────────────────────────────────────────────────────────────────
@@ -380,7 +413,7 @@ async def exportar(agent_id: str, _: Usuario = Depends(usuario_atual)):
     async with sessao(role="service_role") as conn:
         perfil_empresa = await conn.fetchrow("SELECT * FROM public.company_profile LIMIT 1")
         agente = await conn.fetchrow(
-            "SELECT agent_id, name, role, department, color, emoji, description "
+            "SELECT agent_id, name, role, specialty, department, color, emoji, description "
             "FROM public.agent_profiles WHERE agent_id = $1",
             aid,
         )
@@ -420,7 +453,6 @@ async def exportar(agent_id: str, _: Usuario = Depends(usuario_atual)):
     soul_limpo = arquivos.get("SOUL.md", "")
     identity_limpo = arquivos.get("IDENTITY.md", "")
 
-    a = dict(agente) if agente else {}
     return {
         # ⚠️ **Os dois nomes saem no arquivo, de propósito.** `hsos_version` é
         # o campo desta plataforma; `dnos_version` fica junto porque um
@@ -435,16 +467,7 @@ async def exportar(agent_id: str, _: Usuario = Depends(usuario_atual)):
         "dnos_version": "1.1",
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "source": origem,
-        "agent": {
-            "agent_id": a.get("agent_id") or aid,
-            "name": a.get("name") or aid,
-            "role": a.get("role"),
-            "department": a.get("department"),
-            "description": a.get("description"),
-            "author": "exportado via HS.OS",
-            "color": a.get("color"),
-            "emoji": a.get("emoji"),
-        },
+        "agent": _bloco_agente(dict(agente) if agente else {}, aid),
         "required_connectors": _extrair_conectores(soul_limpo, identity_limpo),
         "capabilities": _extrair_capacidades(soul_limpo),
         "skills": [
