@@ -115,6 +115,34 @@ como a régua do `MESES_ANALISE`: passa e não prova nada.
 
 Corrigido em `6540e86`. Anexo e áudio continuam sem conferir.
 
+**7. Anexo e áudio** — o que faltava da lista de 02/09.
+
+Anexo funciona de ponta a ponta: enviado pela tela (inclusive **sem texto**, que
+é o caso do conserto de ontem), gravado em disco sob `UPLOADS_DIR`, servido com
+o `Content-Type` certo, e o nome de exibição vem do registro, não da URL. Áudio
+foi exercitado pelo caminho possível sem microfone — upload no bucket e mensagem
+com `audio_url`: o player monta e, com arquivo inválido, diz "Não foi possível
+reproduzir este áudio" em vez de falhar calado. **A gravação em si não foi
+conferida.**
+
+⚠️ **E aqui apareceu o achado de segurança do dia.** Num canal **privado**, com
+uma terceira conta que não é membro:
+
+| | |
+|---|---|
+| `GET /channels/<id>/messages` como não-membro | `200 []` — correto, não vaza |
+| `GET /channels/<id>/arquivos` como não-membro | `200 []` — correto |
+| o **arquivo**, sem token nenhum | **200, conteúdo inteiro** |
+
+Ver a seção de segurança de [`CONTINUAR-AQUI.md`](CONTINUAR-AQUI.md): o bucket é
+público por dois motivos que continuam válidos, o caminho adivinhável foi
+consertado (`25714e1`, `c657a6e`) e a URL permanente é decisão em aberto.
+
+⚠️ **Quase virou um achado falso, pela segunda vez no dia.** O primeiro `200`
+me pareceu vazamento até eu olhar o **corpo** e ver `[]` — e o canal do primeiro
+teste ainda por cima era `public`, onde ler é o comportamento certo. Código de
+status não é resposta; corpo é.
+
 ## ⚠️ O que a medição derrubou do que eu tinha escrito
 
 O commit `2d7f432` afirma que sem ressincronizar "a tela fica com o estado de
@@ -138,7 +166,7 @@ três vezes.
 - **Mais de duas pessoas, e navegador que não seja o Chromium do Playwright.**
   Nada foi visto em Firefox nem em celular.
 - **O caso negativo do vigia de silêncio** — ver o ⚠️ da seção 5.
-- **Anexo, áudio e GIF.** Thread, reação, edição e exclusão foram medidos (seção 6).
+- **A gravação de áudio** (precisa de microfone) e o **GIF**. O resto do chat foi medido (seções 6 e 7).
 - **Produção.** Nada aqui rodou lá. O observador ligado no `/ws` de produção
   ficou 57 minutos sem uma queda, o que é consistente com a cascata ser
   disparada por troca de tópico — coisa que um observador não faz.
