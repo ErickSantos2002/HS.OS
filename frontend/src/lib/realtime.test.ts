@@ -91,6 +91,20 @@ describe("ciclo de vida da conexão", () => {
     expect(SocketFalso.abertos.length).toBe(1);
   });
 
+  it("trocar de canal NÃO ressincroniza — não houve queda, e invalidar tudo a cada navegação é um custo que ninguém pediu", async () => {
+    const invalidar = vi.fn();
+    const rt = await carregar();
+    rt.definirQueryClientDoRealtime({ invalidateQueries: invalidar } as never);
+
+    rt.assinar("canal:um", () => {});
+    SocketFalso.abertos[0].abrir();
+    rt.assinar("canal:dois", () => {});
+    await vi.advanceTimersByTimeAsync(1);
+    SocketFalso.abertos[SocketFalso.abertos.length - 1].abrir();
+
+    expect(invalidar).not.toHaveBeenCalled();
+  });
+
   it("ao RE-conectar, manda ressincronizar — o que passou na queda não volta pelo socket", async () => {
     // Não há replay: evento publicado enquanto a conexão estava fora não é
     // reenviado. Sem ressincronizar, a tela fica com o estado de antes da

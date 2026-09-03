@@ -28,8 +28,16 @@ let reconectarTimer: number | null = null;
 let assinaturaAtual = "";
 let ultimoFrame = 0;
 let vigiaTimer: number | null = null;
-/** Já houve uma conexão bem-sucedida? Distingue "abriu" de "REabriu". */
-let jaConectou = false;
+/**
+ * A conexão anterior caiu sem que fosse a gente que a fechou?
+ *
+ * ⚠️ **Não basta perguntar "é a segunda conexão?".** Os tópicos vão na URL,
+ * então trocar de canal refaz a conexão — e isso é rotina, não queda. Se a
+ * ressincronização olhasse só "já conectei antes", cada navegação entre canais
+ * invalidaria **todas** as buscas da aplicação. O que justifica ressincronizar
+ * é o buraco: o tempo em que a aba esteve fora e eventos podem ter passado.
+ */
+let houveQueda = false;
 let queryClient: QueryClient | null = null;
 
 /**
@@ -68,6 +76,7 @@ function iniciarVigia() {
     // reconhece como substituída e não agenda uma reconexão concorrente.
     socket = null;
     pararVigia();
+    houveQueda = true;
     try {
       atual.close();
     } catch {
@@ -124,8 +133,10 @@ function conectar() {
     // percebe — que é exatamente o sintoma de "a mensagem só apareceu ao
     // recarregar". Na PRIMEIRA conexão não há o que ressincronizar; a tela
     // acabou de carregar.
-    if (jaConectou) queryClient?.invalidateQueries();
-    jaConectou = true;
+    if (houveQueda) {
+      houveQueda = false;
+      queryClient?.invalidateQueries();
+    }
   };
 
   ws.onmessage = (evento) => {
@@ -169,6 +180,10 @@ function conectar() {
     // 1008 é token recusado — insistir com a mesma credencial só gera ruído.
     // O logout/login refaz a conexão pela próxima assinatura.
     if (evento.code === 1008 || ouvintes.size === 0) return;
+    // Daqui para baixo é queda de verdade: não fomos nós que fechamos, e vamos
+    // voltar. O que passar nesse intervalo não é reenviado, então quem voltar
+    // precisa refazer as buscas.
+    houveQueda = true;
     // Espera crescente até 30s: um backend reiniciando não deve receber uma
     // enxurrada de reconexões de todas as abas abertas ao mesmo tempo.
     const espera = Math.min(30_000, 1000 * 2 ** tentativas++);
@@ -241,7 +256,7 @@ export function encerrarRealtime() {
   ouvintes.clear();
   assinaturaAtual = "";
   pararVigia();
-  jaConectou = false;
+  houveQueda = false;
   socket?.close();
   socket = null;
 }
