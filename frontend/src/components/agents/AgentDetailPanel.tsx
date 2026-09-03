@@ -20,6 +20,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { toast } from "sonner";
 import StatCard from "@/components/dashboard/StatCard";
 import { getAgentDisplayNameById, normalizeAgentId, getModelForAgent } from "@/lib/active-agents";
+import { descreverCron } from "@/lib/descrever-cron";
 import type { GatewayAgent, ChannelConfig, AgentTool } from "@/hooks/use-agents";
 import { useAgents } from "@/hooks/use-agents";
 import { AgentEditDrawer, type EditableAgent } from "@/components/agents/AgentEditDrawer";
@@ -832,28 +833,6 @@ function relTime(iso: string | null | undefined): string {
   }
 }
 
-function describeCron(expr: string): string {
-  const parts = expr.trim().split(/\s+/);
-  if (parts.length !== 5) return expr;
-  const [min, hour, dom, mon, dow] = parts;
-  const hh = (h: string, m: string) =>
-    `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
-  // daily at H:M
-  if (dom === "*" && mon === "*" && dow === "*" && /^\d+$/.test(hour) && /^\d+$/.test(min))
-    return `Todos os dias às ${hh(hour, min)}`;
-  // hourly
-  if (hour === "*" && dom === "*" && mon === "*" && dow === "*" && /^\d+$/.test(min))
-    return `A cada hora aos ${min} min`;
-  // every N minutes
-  if (/^\*\/\d+$/.test(min) && hour === "*" && dom === "*" && mon === "*" && dow === "*")
-    return `A cada ${min.slice(2)} minutos`;
-  // weekly
-  if (dom === "*" && mon === "*" && /^\d+$/.test(dow) && /^\d+$/.test(hour) && /^\d+$/.test(min)) {
-    const days = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-    return `${days[Number(dow) % 7]} às ${hh(hour, min)}`;
-  }
-  return expr;
-}
 
 /* ── Category meta for results feed ──────────────────── */
 
@@ -1207,7 +1186,7 @@ function CronsCard({ agentId }: { agentId: string }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-[11px] font-semibold text-foreground truncate">{c.name || c.id}</p>
                   <p className="text-[9px] font-mono text-primary mt-0.5">
-                    {c.cron_expression ? describeCron(c.cron_expression) : "—"}
+                    {c.cron_expression ? descreverCron(c.cron_expression) : "—"}
                   </p>
                 </div>
                 {/* Só o que nasceu por aqui tem linha em `agent_crons` para

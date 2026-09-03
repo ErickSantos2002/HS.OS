@@ -2,35 +2,11 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Clock, AlertCircle, Bot, Timer, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { descreverCron } from "@/lib/descrever-cron";
 
 interface CronTabProps {
   data: any | null;
   isLoading: boolean;
-}
-
-/* Human-readable cron expression */
-function describeCron(expr: string | null | undefined): string {
-  if (!expr) return "";
-  const parts = expr.trim().split(/\s+/);
-  if (parts.length < 5) return expr;
-  const [min, hour, dom, mon, dow] = parts;
-
-  // Every N minutes
-  if (min.startsWith("*/") && hour === "*") return `A cada ${min.slice(2)} minutos`;
-  // Every hour at :MM
-  if (hour === "*" && !min.startsWith("*")) return `A cada hora, no minuto ${min}`;
-  // Daily at HH:MM
-  if (dom === "*" && mon === "*" && dow === "*") return `Diariamente às ${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
-  // Weekdays
-  if (dow === "1-5") return `Dias úteis às ${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
-  // Specific days
-  if (dow !== "*") return `${dowLabel(dow)} às ${hour.padStart(2, "0")}:${min.padStart(2, "0")}`;
-  return expr;
-}
-
-function dowLabel(dow: string): string {
-  const map: Record<string, string> = { "0": "Dom", "1": "Seg", "2": "Ter", "3": "Qua", "4": "Qui", "5": "Sex", "6": "Sáb" };
-  return dow.split(",").map((d) => map[d] || d).join(", ");
 }
 
 function formatDate(iso: string | null | undefined): string {
@@ -125,7 +101,7 @@ export function CronTab({ data, isLoading }: CronTabProps) {
       <div className="space-y-3">
         {cronList.map((cron: any, i: number) => {
           const status = STATUS_MAP[cron.status] || STATUS_MAP[cron.enabled === false ? "disabled" : "ok"];
-          const cronDesc = describeCron(cron.cron_expression || cron.expression);
+          const cronDesc = descreverCron(cron.cron_expression || cron.expression);
 
           return (
             <div key={cron.id || i} className="glass-card-glow rounded-2xl">
