@@ -11,6 +11,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { FileSystemProvider } from "@/contexts/FileSystemContext";
 import { setQueryClientForSender } from "@/lib/chat-sender";
+import { definirQueryClientDoRealtime } from "@/lib/realtime";
 import { useVersionCheck } from "@/hooks/use-version-check";
 
 import ChatPage from "./pages/ChatPage";
@@ -59,6 +60,9 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 setQueryClientForSender(queryClient);
+// O tempo real ressincroniza por aqui depois de uma reconexão: não há replay
+// de evento perdido, então quem volta precisa refazer as buscas.
+definirQueryClientDoRealtime(queryClient);
 
 // Home: redirect everyone to /chat as the default entry point
 function HomePage() {

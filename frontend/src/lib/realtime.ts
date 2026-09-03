@@ -10,7 +10,10 @@
  * requisito: nenhuma tela depende dele para mostrar o que já está gravado.
  */
 
+import type { QueryClient } from "@tanstack/react-query";
+
 import { lerToken } from "@/lib/api";
+import { INTERVALO_VIGIA, silencioDemais } from "@/lib/realtime-vigia";
 
 type Ouvinte = (tipo: string, dados: unknown) => void;
 
@@ -23,6 +26,56 @@ let socket: WebSocket | null = null;
 let tentativas = 0;
 let reconectarTimer: number | null = null;
 let assinaturaAtual = "";
+let ultimoFrame = 0;
+let vigiaTimer: number | null = null;
+/** Já houve uma conexão bem-sucedida? Distingue "abriu" de "REabriu". */
+let jaConectou = false;
+let queryClient: QueryClient | null = null;
+
+/**
+ * Injeta o QueryClient, como o `chat-sender` já faz. É o que permite
+ * ressincronizar depois de uma queda sem que este módulo conheça as telas.
+ */
+export function definirQueryClientDoRealtime(qc: QueryClient) {
+  queryClient = qc;
+}
+
+function pararVigia() {
+  if (vigiaTimer !== null) {
+    window.clearInterval(vigiaTimer);
+    vigiaTimer = null;
+  }
+}
+
+/**
+ * ⚠️ **A conexão tem três estados, e este cliente só conhecia dois.** Aberta,
+ * fechada — e *aberta e morta*: o TCP some no meio (wifi trocando, NAT ou proxy
+ * matando o fluxo sem FIN) e o navegador não percebe. `readyState` continua
+ * OPEN, o `onclose` nunca dispara, o backoff nunca roda, e a aba fica surda
+ * até alguém recarregar.
+ *
+ * O servidor já contava com este vigia: o comentário de `_INTERVALO_PING` em
+ * `backend/app/routers/ws.py` diz que "o cliente usa o silêncio prolongado como
+ * sinal de queda". O cliente não usava — mecanismo documentado de um lado e
+ * ausente do outro.
+ */
+function iniciarVigia() {
+  pararVigia();
+  vigiaTimer = window.setInterval(() => {
+    const atual = socket;
+    if (!atual || !silencioDemais(Date.now() - ultimoFrame)) return;
+    // Solta a referência ANTES de fechar: assim o `onclose` desta conexão se
+    // reconhece como substituída e não agenda uma reconexão concorrente.
+    socket = null;
+    pararVigia();
+    try {
+      atual.close();
+    } catch {
+      /* já estava morta; é justamente o caso que estamos tratando */
+    }
+    conectar();
+  }, INTERVALO_VIGIA);
+}
 
 function urlDoSocket(): string | null {
   const token = lerToken();
@@ -63,9 +116,22 @@ function conectar() {
 
   ws.onopen = () => {
     tentativas = 0;
+    ultimoFrame = Date.now();
+    iniciarVigia();
+    // ⚠️ **Não há replay.** Evento publicado enquanto a conexão estava fora não
+    // é reenviado quando ela volta: o `pg_notify` é ao vivo, sem histórico. Sem
+    // ressincronizar, a tela fica com o estado de antes da queda e ninguém
+    // percebe — que é exatamente o sintoma de "a mensagem só apareceu ao
+    // recarregar". Na PRIMEIRA conexão não há o que ressincronizar; a tela
+    // acabou de carregar.
+    if (jaConectou) queryClient?.invalidateQueries();
+    jaConectou = true;
   };
 
   ws.onmessage = (evento) => {
+    // Qualquer frame serve como sinal de vida, o ping inclusive — é para isso
+    // que ele existe.
+    ultimoFrame = Date.now();
     let payload: { topico?: string; tipo?: string; dados?: unknown };
     try {
       payload = JSON.parse(evento.data);
@@ -84,7 +150,22 @@ function conectar() {
   };
 
   ws.onclose = (evento) => {
-    if (socket === ws) socket = null;
+    // ⚠️ **"Fui substituído" não é "a conexão caiu".** Trocar de canal muda o
+    // conjunto de tópicos, e como eles vão na URL a conexão é refeita: o
+    // `conectar()` fecha esta e abre outra. O `onclose` desta chegava depois,
+    // com `socket` já apontando para a nova — e mesmo assim agendava uma
+    // reconexão. Passado o backoff, aquela reconexão fantasma derrubava a
+    // conexão saudável, cujo `onclose` agendava outra: cascata que se alimenta
+    // sozinha. Medido em teste: **7 sockets em 60 segundos** a partir de uma
+    // única troca de canal. Cada janela entre um socket e o seguinte é tempo em
+    // que a aba não recebe evento nenhum — a mensagem fica no banco e só
+    // aparece no próximo carregamento.
+    //
+    // É a explicação mais provável da cauda medida em 02/09/2026 (uma entrega
+    // em 11,6s, outra além de 25s): a escada de espera é 1, 2, 4, 8, 16, 30s.
+    if (socket !== ws) return;
+    socket = null;
+    pararVigia();
     // 1008 é token recusado — insistir com a mesma credencial só gera ruído.
     // O logout/login refaz a conexão pela próxima assinatura.
     if (evento.code === 1008 || ouvintes.size === 0) return;
@@ -159,6 +240,8 @@ export function enviar(mensagem: Record<string, unknown>): void {
 export function encerrarRealtime() {
   ouvintes.clear();
   assinaturaAtual = "";
+  pararVigia();
+  jaConectou = false;
   socket?.close();
   socket = null;
 }
