@@ -3,6 +3,7 @@
  */
 
 import { enviarArquivo, urlPublica, type Bucket } from "@/lib/storage";
+import { caminhoDeAnexo } from "@/lib/caminho-de-anexo";
 
 const MAX_TEXT_CHARS = 50_000;
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
@@ -177,16 +178,24 @@ export async function downloadAttachment({ url, name }: Pick<FileAttachmentMeta,
 }
 
 /**
- * Upload a file to the agent-files bucket.
- * Returns a signed URL valid for 30 days.
+ * Envia um arquivo para o bucket `agent-files` e devolve a URL pública dele.
+ *
+ * ⚠️ **Não é URL assinada.** Esta docstring dizia "Returns a signed URL valid
+ * for 30 days" até 03/09/2026, contradizendo o comentário quinze linhas abaixo,
+ * que explica justamente por que não há assinatura. Herança do texto da versão
+ * Supabase.
+ *
+ * ⚠️ **O nome do arquivo é aleatório, e isso é a defesa.** O caminho era
+ * `<epoch em ms>_<nome original>`, e o `epoch` fica a poucas dezenas de
+ * milissegundos do `created_at` da mensagem — que a API devolve com precisão de
+ * microssegundo. Como o bucket é de leitura pública, quem conhecesse o canal e
+ * o nome do arquivo reconstruía a URL. Ver `caminho-de-anexo.ts`.
  */
 export async function uploadFileToStorage(
   bucketPath: string,
   file: File
 ): Promise<string> {
-  const timestamp = Date.now();
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const path = `${bucketPath}/${timestamp}_${safeName}`;
+  const path = caminhoDeAnexo(bucketPath, file.name);
 
   // A conferência de que o objeto existe saiu junto com o `list()`: aqui o
   // upload só responde 201 depois de o arquivo estar gravado em disco, e
