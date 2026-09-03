@@ -67,11 +67,42 @@ def _mensagem_do_cron(job: dict) -> str:
     return str(p or "")
 
 
+def _campo_bate(campo: str, valores: set[int]) -> bool:
+    """Um campo de dia do `expr` casa com hoje?
+
+    Lê `*`, `5`, `1-5` e listas com vírgula — as formas que os nossos crons
+    usam. Qualquer outra coisa levanta `ValueError` de propósito, e quem chama
+    decide o que fazer: aceitar em silêncio um campo que não se sabe ler é
+    exatamente o defeito que este código veio consertar.
+    """
+    if campo == "*":
+        return True
+    for parte in campo.split(","):
+        if "-" in parte:
+            inicio, fim = parte.split("-", 1)
+            if any(int(inicio) <= v <= int(fim) for v in valores):
+                return True
+        elif int(parte) in valores:
+            return True
+    return False
+
+
 def _hora_marcada(job: dict, hoje: datetime) -> datetime | None:
     """A hora de hoje, em Brasília, em que este cron deveria ter rodado.
 
+    `None` = não é dia dele; quem chama entende como "nada a conferir".
+
     ⚠️ **O `expr` do gateway é UTC e não tem campo de fuso** — levantado em
     19/08/2026. `30 10 * * 1-5` é 07h30 de Brasília.
+
+    ⚠️ **Ler só o minuto e a hora fazia o guardião refazer briefing no fim de
+    semana.** Os cinco crons são `* * 1-5`; no sábado eles corretamente não
+    rodam, o documento corretamente não existe, e daí saía a conclusão de que
+    tinham falhado. Medido em 03/09/2026 no banco de produção: 20 documentos e
+    20 reservas `briefing_refeito:*` em sáb 22, dom 23, sáb 29 e dom 30/08 —
+    vinte execuções de agente e vinte alertas ao administrador anunciando uma
+    falha que não houve. O dia é conferido **em UTC**, junto com a hora, porque
+    é assim que o gateway lê o `expr` inteiro.
     """
     sched = job.get("schedule") or {}
     if sched.get("kind") != "cron":
@@ -85,6 +116,28 @@ def _hora_marcada(job: dict, hoje: datetime) -> datetime | None:
         return None
     em_utc = hoje.astimezone(timezone.utc).replace(
         hour=hora, minute=minuto, second=0, microsecond=0)
+
+    if len(partes) >= 5:
+        # No cron o domingo é 0 e também é 7; aceitar só um deles ignoraria
+        # metade dos crons de domingo sem dizer nada.
+        dia_da_semana = em_utc.isoweekday() % 7
+        semana = {0, 7} if dia_da_semana == 0 else {dia_da_semana}
+        try:
+            roda_hoje = (_campo_bate(partes[2], {em_utc.day})
+                         and _campo_bate(partes[3], {em_utc.month})
+                         and _campo_bate(partes[4], semana))
+        except ValueError:
+            # ⚠️ Falha ABERTA. Um `expr` que não sabemos ler (nomes de dia,
+            # `L`, `#`, `*/n`) volta ao comportamento antigo: conferir. Refazer
+            # à toa custa uma execução; não conferir devolve o estado em que
+            # ninguém descobre que o briefing sumiu — que é o motivo deste
+            # arquivo existir. Entre os dois erros, o barato é o de conferir.
+            logger.warning('Guardião: não sei ler o dia em "%s"; confiro assim mesmo.',
+                           " ".join(partes))
+        else:
+            if not roda_hoje:
+                return None
+
     return em_utc.astimezone(BRASILIA)
 
 
