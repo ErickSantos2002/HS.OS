@@ -40,12 +40,23 @@ sabe de onde ela vem". Sabe-se agora, e nenhum dos dois é rede:
    silêncio prolongado como sinal de queda". **O cliente não usava.**
 
 E ao reconectar agora **ressincroniza** — não há replay do que passou durante a
-queda, então sem invalidar as buscas a tela fica com o estado de antes.
+queda. ⚠️ **Mas medir derrubou a justificativa que eu tinha escrito para ela:**
+sem ressincronizar a tela também se recuperava, e mais rápido (33,5s contra
+55,9s), porque a cascata fazia a aba reconectar sem parar. O defeito trabalhando
+a favor, ao custo de 113 conexões por minuto.
 
-⚠️ **Isto não prova que aquelas duas medições foram estes defeitos.** Prova que
-os defeitos existem e produzem exatamente esse sintoma. A confirmação é a
-próxima medição com uso real, e ela precisa ser feita **trocando de canal**, que
-é o gatilho.
+Matar a cascata trocou um problema visível por um invisível: a aba passou a
+esperar o backoff inteiro, até 30s. O conserto disso é `0879d60` — voltar para a
+aba reconecta na hora, e a recuperação virou **124 ms** depois de a pessoa
+olhar.
+
+Tudo isto foi medido na pilha local, com navegador de verdade:
+[`CONFERENCIA-REALTIME-2026-09-03.md`](CONFERENCIA-REALTIME-2026-09-03.md) —
+incluindo o que **não** foi conferido.
+
+⚠️ **E não prova que aquelas duas medições de 02/09 foram estes defeitos.** Prova
+que os defeitos existem e produzem exatamente esse sintoma. A confirmação é a
+próxima medição com uso real, **trocando de canal**, que é o gatilho.
 
 **O guardião refazia briefing no fim de semana.** `_hora_marcada` lia só o
 minuto e a hora do `expr` e ignorava `* * 1-5`. No sábado o cron corretamente
