@@ -8,14 +8,31 @@ Schema do Postgres próprio, extraído do Supabase e validado em Postgres puro.
 |---|---|
 | `000_compat_supabase.sql` | Camada de compatibilidade. Escrito à mão. |
 | `001_initial_schema.sql` | Schema `public` completo. **Gerado** — não edite. |
+| `002` … `015` | Mudanças de schema, em ordem. |
+| ⚠️ `008_pessoas_talenths.sql` | **Não é deste banco** — ver abaixo. |
 | `_origem/` | Dump de origem + script de regeração + export do SQL editor |
 
-Aplicar em ordem, num banco vazio:
+Aplicar em ordem, num banco vazio — **pulando a `008`**:
 
 ```bash
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f 000_compat_supabase.sql
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f 001_initial_schema.sql
+# O nome do banco precisa ser `hsos`: a 006 tem
+# `GRANT CONNECT ON DATABASE hsos` com o nome escrito.
+for m in 0*.sql; do
+  case "$m" in 008_*) continue ;; esac
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$m" || break
+done
 ```
+
+⚠️ **A `008` roda no banco do TalentHS, não neste.** Está escrito na primeira
+linha dela, e mesmo assim é a armadilha mais fácil deste diretório: ela cria a
+view `public.pessoas` sobre `profiles`/`departments`, que são tabelas de lá. Num
+banco do HS.OS ela falha com `relation "public.departments" does not exist` — e
+com `ON_ERROR_STOP=1` o laço **aborta ali**, deixando `009` a `015` sem aplicar.
+Instalação nova nasceria sem limpar sessão, sem autoria do agente, sem crons no
+gateway e sem as duas regras de acesso.
+
+Levantado em 03/09/2026 montando um banco local para teste, aplicando o
+diretório inteiro de uma vez — que é exatamente o que este README mandava fazer.
 
 ## Convenção
 
