@@ -155,6 +155,12 @@ def _sanitizar_uuids(conteudo: str) -> str:
 # Passada 3 — infraestrutura e nomes de pessoas
 # ─────────────────────────────────────────────────────────────────────────────
 
+# `esquema://usuario:senha@host` — a credencial fica entre o `://` e o primeiro
+# `@`, e nem o usuário nem a senha podem conter `/`, o que impede casar um `@`
+# que apareça depois, no caminho da URL. Sem `://` antes não casa, então
+# `contato@empresa.com` no meio do texto passa intacto.
+_CREDENCIAL_EM_URL = re.compile(r"([a-z][a-z0-9+.\-]*://)[^\s/@:]+:[^\s/@]*@", re.IGNORECASE)
+
 _SSH_IP = re.compile(r"\b(?:user|root)@\d{1,3}(?:\.\d{1,3}){3}\b")
 # Loopback e 0.0.0.0 ficam: são genéricos e às vezes explicam a configuração.
 _IP = re.compile(r"\b(?!127\.0\.0\.1\b)(?!0\.0\.0\.0\b)\d{1,3}(?:\.\d{1,3}){3}\b")
@@ -186,6 +192,17 @@ def _sanitizar_infra_e_nomes(
     if not conteudo:
         return conteudo
     saida = conteudo
+
+    # ⚠️ **Primeiro de todos, e por um motivo específico.** A regra de IP mais
+    # abaixo troca o host e deixaria a senha encostada no placeholder —
+    # `postgresql://usuario:senha@{{IP_ADDRESS}}/banco`, que tem cara de arquivo
+    # já limpo e é o pior resultado possível: some o sinal e fica o segredo.
+    #
+    # O `.hsos` viaja entre instalações, e os agentes falam com os nove bancos
+    # da empresa por servidores MCP — string de conexão é exatamente o que
+    # aparece escrito num `TOOLS.md`. O host e o banco continuam no texto, que
+    # é contexto útil para quem for ler o agente noutro lugar; sai a credencial.
+    saida = _CREDENCIAL_EM_URL.sub(r"\1{{CREDENCIAL}}@", saida)
 
     # URL do Supabase da instalação. A edge lia do próprio ambiente; aqui vem da
     # config, e só existe enquanto o front ainda tiver Supabase configurado.

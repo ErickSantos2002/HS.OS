@@ -672,7 +672,21 @@ Nada disso é novo de 14/08, e nada disso bloqueia o trabalho acima:
 - **`sandbox` por agente**: um agente ainda alcança o SQLite do outro via `exec`.
   A tentativa com `tools.fs.workspaceOnly` foi revertida por não fechar isso e
   quebrar o trabalho da `nina`.
-- **O sanitizador da exportação** não remove `usuario:senha@` de URL.
+- ~~**O sanitizador da exportação** não remove `usuario:senha@` de URL.~~
+  ✅ **Fechado em 03/09/2026**, com teste (`tests/test_sanitizacao_export.py`).
+  A regra roda **antes** da de IP, e o motivo está no comentário: a de IP
+  trocava o host e deixava a senha encostada no placeholder —
+  `postgresql://usuario:senha@{{IP_ADDRESS}}/banco`, que tem cara de arquivo
+  limpo. Some o sinal e fica o segredo, que é o pior resultado possível.
+
+  ⚠️ **Lacuna que fica, e é decisão sua.** O bloco `agent` do `.hsos`
+  (`role`, `department`, `description`) sai **sem passar pelo sanitizador** —
+  só os arquivos e as skills passam. Conferido no histórico: a edge original
+  fazia igual, então a portagem é fiel e isto é herdado, não regressão. Mexer
+  tem risco real: a terceira passada é agressiva (qualquer palavra de 4+ letras
+  dos campos de gente vira `{{COMPANY_REF}}`) e o `name` do agente **precisa**
+  sobreviver, senão a importação quebra. Hoje os cinco agentes têm descrição
+  inócua ("Gerente do comercial."), então não é vazamento ativo.
 
 ---
 
