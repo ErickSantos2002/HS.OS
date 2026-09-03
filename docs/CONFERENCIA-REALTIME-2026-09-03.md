@@ -83,6 +83,38 @@ cascata cria sockets o tempo todo, então "apareceu um socket novo" não
 distinguiria vigia de cascata. O que está provado é que o mecanismo dispara e
 recupera; que a versão antiga ficava surda continua sendo leitura de código.
 
+**6. As funções que ninguém tinha exercitado** — anexo, thread, reação, edição e
+exclusão estavam na lista de "não conferido" desde 02/09.
+
+| o que | resultado |
+|---|---|
+| reagir com emoji | funciona, e propaga para a outra pessoa |
+| responder na conversa (thread) | funciona; a outra tela mostra "1 resposta · Nova" |
+| editar | funcionava, **mas não pelo tempo real** — ver abaixo |
+| apagar | **defeito**, encontrado aqui |
+
+⚠️ **Editar e apagar não usavam o tempo real.** O backend publica quatro tipos
+no tópico do canal; o front tinha um assinante e ele começava com
+`if (tipo !== "mensagem") return`. `mensagem-editada` e `mensagem-removida`
+chegavam e eram descartados em silêncio. O que corrigia a tela era a rede de
+segurança de 60s do próprio hook, escrita no comentário como "plano B" — e ela
+era o plano A desde sempre para esses dois.
+
+O pior é o apagar, e não pelo tempo: a pessoa clica, confirma, e **a mensagem
+continua na tela com o texto original**. O backend já respondeu 204 e gravou
+`deleted_at`. O reflexo de quem está na frente é clicar de novo.
+
+    edição      10,6 s  →  24 ms
+    exclusão    até 60 s (a aba de quem apagou levou mais de dez minutos)  →  30 ms
+
+⚠️ **E isto quase passou por "funciona".** A edição pareceu instantânea na
+primeira observação porque eu tinha **trocado de aba** para conferir — e trocar
+de aba dispara o `resync` do hook. O teste que serve é medir com um
+`MutationObserver` na aba que fica parada, sem tocar nela. Conferir mexendo é
+como a régua do `MESES_ANALISE`: passa e não prova nada.
+
+Corrigido em `6540e86`. Anexo e áudio continuam sem conferir.
+
 ## ⚠️ O que a medição derrubou do que eu tinha escrito
 
 O commit `2d7f432` afirma que sem ressincronizar "a tela fica com o estado de
@@ -106,7 +138,7 @@ três vezes.
 - **Mais de duas pessoas, e navegador que não seja o Chromium do Playwright.**
   Nada foi visto em Firefox nem em celular.
 - **O caso negativo do vigia de silêncio** — ver o ⚠️ da seção 5.
-- **Anexo, áudio, GIF, thread, reação, edição e exclusão.** Só texto foi medido.
+- **Anexo, áudio e GIF.** Thread, reação, edição e exclusão foram medidos (seção 6).
 - **Produção.** Nada aqui rodou lá. O observador ligado no `/ws` de produção
   ficou 57 minutos sem uma queda, o que é consistente com a cascata ser
   disparada por troca de tópico — coisa que um observador não faz.
