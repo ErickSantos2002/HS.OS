@@ -50,6 +50,39 @@ gravada assim que ele volta, aba nunca recarregada.
 | conserto, sem gatilho de visibilidade | 55,9s |
 | conserto, com gatilho (`0879d60`) | **124 ms após voltar para a aba** |
 
+**4. A segunda pessoa** — a lacuna que `CONFERENCIA-CHAT-PESSOAS.md` registrou em
+02/09 como nunca observada.
+
+Duas sessões no mesmo navegador, uma em cada **origem**: a Ana em
+`127.0.0.1:8085` e o Bruno em `localhost:8085`. São origens diferentes para o
+navegador, então cada uma tem o seu `localStorage` e o seu token — é o que
+permite duas pessoas de verdade sem dois perfis de Chrome.
+
+O Bruno gravou pela sessão dele; a mensagem apareceu na tela da Ana em **39 ms**,
+**com a aba dela em segundo plano**. Aba escondida não impede entrega.
+
+**5. A conexão aberta e morta** — o caso do vigia de silêncio, que até aqui só
+tinha teste de unidade.
+
+⚠️ **`SIGSTOP` no backend é a reprodução fiel, e matar o processo não é.** Matar
+fecha o socket direito: o navegador recebe o `close` e o backoff resolve.
+Congelar o processo deixa o TCP aberto e simplesmente para de mandar dados —
+inclusive o ping. É a falha que deixa `readyState` em `OPEN` para sempre.
+
+| | |
+|---|---|
+| socket novo criado pelo vigia | **~49s** depois do congelamento |
+| sockets criados no episódio inteiro | **1** |
+| entrega depois de descongelar | **16 ms** |
+
+Os ~49s são coerentes com o limiar de 60s: o relógio começa no **último frame**,
+e o último ping pode ter chegado até 25s antes do congelamento.
+
+⚠️ **Este é o único dos cinco que não tem caso negativo.** Com o código antigo a
+cascata cria sockets o tempo todo, então "apareceu um socket novo" não
+distinguiria vigia de cascata. O que está provado é que o mecanismo dispara e
+recupera; que a versão antiga ficava surda continua sendo leitura de código.
+
 ## ⚠️ O que a medição derrubou do que eu tinha escrito
 
 O commit `2d7f432` afirma que sem ressincronizar "a tela fica com o estado de
@@ -70,13 +103,10 @@ três vezes.
 
 ## O que NÃO foi conferido
 
-- **Duas pessoas de verdade, duas janelas.** O Bruno é um script; a entrega para
-  uma segunda tela aberta continua sem observação, que é a mesma lacuna que
-  `CONFERENCIA-CHAT-PESSOAS.md` registrou em 02/09.
-- **A conexão meio-aberta**, que é o caso do vigia de silêncio. Derrubar o
-  processo do backend fecha o socket direito; o que o vigia pega é o TCP que some
-  sem FIN, e isso não se reproduz matando o servidor. Continua provado só em
-  teste de unidade.
+- **Mais de duas pessoas, e navegador que não seja o Chromium do Playwright.**
+  Nada foi visto em Firefox nem em celular.
+- **O caso negativo do vigia de silêncio** — ver o ⚠️ da seção 5.
+- **Anexo, áudio, GIF, thread, reação, edição e exclusão.** Só texto foi medido.
 - **Produção.** Nada aqui rodou lá. O observador ligado no `/ws` de produção
   ficou 57 minutos sem uma queda, o que é consistente com a cascata ser
   disparada por troca de tópico — coisa que um observador não faz.
