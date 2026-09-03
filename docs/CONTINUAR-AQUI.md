@@ -679,6 +679,26 @@ Nada disso é novo de 14/08, e nada disso bloqueia o trabalho acima:
   de *Decisões pendentes*, no mesmo arquivo, já a dava como feita. Duas seções
   do mesmo documento em desacordo: quem lesse esta primeiro iria rotacionar de
   novo.
+- 🟠 **Anexo de conversa privada é servido sem token, e a URL é permanente.**
+  Levantado em 03/09/2026 na pilha local, com três contas: num canal
+  **privado**, a API recusa corretamente quem não é membro (devolve lista
+  vazia) e o arquivo é entregue a uma requisição anônima.
+
+  Não é regressão: `agent-files` é público desde sempre, por dois motivos que
+  continuam válidos — avatar aparece em `<img src>` (sem `Authorization`) e o
+  **agente busca o arquivo do lado do gateway**, sem o nosso token.
+
+  O que já foi feito (`25714e1`): o nome do arquivo virou uuid. O caminho era
+  `<epoch em ms>_<nome original>`, e o epoch fica a ~65 ms do `created_at` da
+  mensagem — quem conhecesse o canal e o nome reconstruía a URL. Isso fechou.
+
+  ⚠️ **O que continua aberto é maior, e é decisão sua:** URL pública é
+  permanente e repassável. Quem sai da empresa fica com o link dos anexos que
+  viu; quem recebe o link nunca precisou ter acesso. O conserto é **URL
+  assinada com prazo**, que atende `<img src>` e o agente ao mesmo tempo — e
+  muda o contrato dos três buckets públicos de uma vez (`agent-files`,
+  `audio-messages`, `wiki-uploads`), então não fiz por conta própria.
+
 - **`integrations.credentials` em texto puro** — nove senhas de banco.
 - **`sandbox` por agente**: um agente ainda alcança o SQLite do outro via `exec`.
   A tentativa com `tools.fs.workspaceOnly` foi revertida por não fechar isso e
