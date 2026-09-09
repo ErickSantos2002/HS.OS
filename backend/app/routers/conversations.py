@@ -713,7 +713,45 @@ async def _ultimo_seq(cliente, chave_completa: str, piso: int = 0) -> int:
         # sessão inteira como se fosse nova.
         return piso
     msgs = r.get("messages") or []
-    return max(piso, _maior_seq(msgs))
+    do_gateway = _maior_seq(msgs)
+    if do_gateway >= piso:
+        return do_gateway
+
+    # ⚠️ **Piso acima do gateway tem DUAS causas opostas, e a ação é inversa.**
+    #
+    # (a) fatia velha: o `limit` pequeno devolveu um trecho do meio de uma
+    #     sessão longa — o piso está certo e é ele que impede a resposta
+    #     anterior de voltar colada (17/08 e 24–30/08).
+    # (b) sessão RENUMERADA: o gateway resetou a sessão e a contagem recomeçou
+    #     do 1 — o piso descreve uma sessão que já não existe, e mantê-lo faz o
+    #     `/reply` procurar acima de tudo que há e não achar nada.
+    #
+    # O caso (b) aconteceu em 09/09/2026 com a sessão do CEO: o `.jsonl` virou
+    # `.jsonl.reset.<iso>`, o piso guardado era 11 e a sessão inteira passou a
+    # ter 2 mensagens. A tela mostrou a resposta certa e, logo abaixo,
+    # "O agente terminou sem produzir texto".
+    #
+    # **O que separa os dois é enxergar o começo.** Com `seq=1` na janela,
+    # estamos vendo a sessão inteira e o topo dela é o topo real — se ele está
+    # abaixo do piso, renumerou. Sem o `seq=1`, a janela não alcançou o início e
+    # não dá para afirmar nada: o piso fica.
+    #
+    # A segunda leitura só acontece nesta suspeita, que é rara.
+    try:
+        amplo = await cliente.chamar(
+            "chat.history",
+            {"sessionKey": chave_completa, "limit": _JANELA_RECUPERAR},
+        )
+    except ErroGateway:
+        return piso
+    msgs_amplo = amplo.get("messages") or []
+    seqs = [(m.get("__openclaw") or {}).get("seq") or 0 for m in msgs_amplo]
+    topo = max(seqs, default=0)
+    if 1 in seqs and topo < piso:
+        logger.info("Sessão %s renumerou (piso %d, topo %d) — adotando o do gateway.",
+                    chave_completa, piso, topo)
+        return topo
+    return piso
 
 
 def _maior_seq(mensagens: list) -> int:

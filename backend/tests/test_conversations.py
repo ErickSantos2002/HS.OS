@@ -217,3 +217,60 @@ def test_o_piso_anda_com_o_que_o_reply_consumiu():
     seq = asyncio.run(c._ultimo_seq(ClienteFalso([115, 116, 117, 118, 119]),
                                     "chave", piso=consumido))
     assert seq == 125, "o piso congelou em 119 e o turno anterior volta colado"
+
+
+# ── Sessão renumerada — 09/09/2026 ──────────────────────────────────────────
+#
+# O gateway pode RESETAR uma sessão e recomeçar a numeração do 1. Quando isso
+# acontece, o piso guardado em `agent_runs` fica no futuro: ele descreve uma
+# sessão que já não existe.
+#
+# Medido em produção no mesmo dia: a sessão do CEO com a `nina` foi resetada às
+# 09:18:27 (o `.jsonl` virou `.jsonl.reset.<iso>`), o `seq_antes` guardado era
+# **11** e a sessão inteira passou a ter **2** mensagens. O `/reply` procurou
+# `seq > 11`, não achou a resposta que estava em `seq=2`, e a tela mostrou
+# "O agente terminou sem produzir texto" logo abaixo da resposta certa.
+#
+# ⚠️ **Não dá para tratar todo piso alto como renumeração** — piso alto é
+# exatamente o que protege da fatia velha do `chat.history` (o defeito de 17/08
+# e 24-30/08). O que separa os dois casos é **ver o começo**: se `seq=1` está na
+# janela, estamos olhando a sessão inteira e o topo dela é o topo real. Se não
+# está, a janela não alcançou o início e o piso continua valendo.
+
+
+class ClienteDuasJanelas:
+    """Uma fatia curta para `limit` pequeno e o histórico inteiro para o grande."""
+
+    def __init__(self, curta, ampla):
+        self._curta, self._ampla, self.chamadas = curta, ampla, 0
+
+    async def chamar(self, metodo, params):
+        assert metodo == "chat.history"
+        self.chamadas += 1
+        seqs = self._curta if params["limit"] <= c._JANELA_ULTIMO_SEQ else self._ampla
+        return {"messages": [
+            {"role": "assistant", "__openclaw": {"seq": s}} for s in seqs
+        ]}
+
+
+def test_sessao_renumerada_descarta_o_piso():
+    """Os números da conversa do CEO: piso 11, sessão inteira indo até 2."""
+    cli = ClienteDuasJanelas(curta=[1, 2], ampla=[1, 2])
+    assert asyncio.run(c._ultimo_seq(cli, "chave", piso=11)) == 2
+
+
+def test_fatia_velha_sem_o_comeco_mantem_o_piso():
+    """Sem `seq=1` na janela não dá para afirmar que renumerou — o piso fica.
+
+    É o caso de 24 a 30/08: sessão de 177 mensagens em que a janela devolve um
+    trecho do meio. Tratar isso como renumeração traria o turno anterior colado.
+    """
+    cli = ClienteDuasJanelas(curta=[40, 41], ampla=[38, 39, 40, 41])
+    assert asyncio.run(c._ultimo_seq(cli, "chave", piso=48)) == 48
+
+
+def test_gateway_na_frente_nao_paga_a_segunda_leitura():
+    """Quando o gateway já vem à frente do piso, não há suspeita a investigar."""
+    cli = ClienteDuasJanelas(curta=[50, 51, 52], ampla=[1, 2])
+    assert asyncio.run(c._ultimo_seq(cli, "chave", piso=48)) == 52
+    assert cli.chamadas == 1, "leu duas vezes sem precisar"

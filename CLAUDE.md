@@ -800,6 +800,24 @@ consequência boa é que a correção de um arquivo não exige reciclar sessão 
 esperar o dia virar. A desagradável é a mesma moeda: **um erro escrito num dos
 sete atinge todas as sessões na hora**, sem janela para perceber antes.
 
+⚠️ **Cada um dos sete tem um teto de 20.000 caracteres, e passar dele não dá
+erro — o gateway trunca em silêncio.** O aviso existe, mas só no log do serviço:
+
+```
+[agent/embedded] workspace bootstrap file AGENTS.md is 21813 chars (limit 20000);
+truncating in injected context (sessionKey=agent:nina:hsos-…)
+```
+
+Descoberto em 09/09/2026 do jeito ruim: acrescentei 2.314 caracteres ao
+`AGENTS.md` da `nina`, que tinha 19.500, e **o arquivo passou a ser cortado**.
+Como o corte é no fim, o que se perde é justamente o que foi escrito por último.
+O `agents.files.set` aceita, o `agents.files.get` devolve inteiro, e a tela não
+diz nada.
+
+⚠️ **O `AGENTS.md` da `nina` vive a 500 caracteres do teto.** Qualquer parágrafo
+novo ali estoura. Antes de escrever num dos sete, **meça** — e se não couber, o
+caminho é enxugar o arquivo ou mandar o conteúdo para uma skill, não empurrar.
+
 ⚠️ **A conferência de uma edição nos sete é perguntar ao agente, não reler o
 arquivo.** O `agents.files.get` devolve o que você acabou de gravar e não
 distingue "gravou" de "está em uso" — mesma armadilha do `deny` que casa pelo

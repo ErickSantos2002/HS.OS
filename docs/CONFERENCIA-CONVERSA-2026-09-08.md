@@ -435,8 +435,8 @@ agora fica melhor: a conversa com ele deve incluir os 12 cards de 08/09.
 | 3 | **Atualizar** o ponteiro do `flow` — ele já existe e nomeia a armadilha errada (`updated_at`, não o arquivado) | `AGENTS.md` do `flow` | ✅ escrito (+772 chars) |
 | 4 | Skill nova de **contas a receber** — a régua que não existia | `backend/skills/contas-receber/` | ✅ feita |
 | 5 | `seq_depois` em `agent_runs`, gravado pelo `/reply` e lido pelo `_piso_do_seq` | `conversations.py` + migração `016` | ✅ feito, com teste |
-| 6 | Ensinar a ler `ANNOUNCE_SKIP` — ela já usa `timeoutSeconds`; o que faltou foi saber que o token quer dizer "acabou" | `AGENTS.md` da `nina` | ✅ escrito |
-| 7 | Onde gastar a conferência (o total, não a lista) + recorte de pergunta ≠ recorte de conclusão | `AGENTS.md` da `nina` | ✅ escrito (+2.314 chars) |
+| 6 | Ensinar a ler `ANNOUNCE_SKIP` — ela já usa `timeoutSeconds`; o que faltou foi saber que o token quer dizer "acabou" | `AGENTS.md` da `nina` | ⚠️ **revertido** — estourou o teto de 20 mil |
+| 7 | Onde gastar a conferência (o total, não a lista) + recorte de pergunta ≠ recorte de conclusão | `AGENTS.md` da `nina` | ⚠️ **revertido** — estourou o teto de 20 mil |
 | 8 | Remover o truncamento em 8.000 caracteres (`maxChars` no `chat.history`) | `conversations.py`, `channels.py` | ✅ feito, medido ao vivo |
 
 ⚠️ **Os itens 1, 2 e 4 valem mais do que parecem**, porque os três erros de
@@ -501,6 +501,65 @@ que casa pelo nome errado e do `skills.status` que lista skill que ninguém usa.
 Só que desta vez a resposta do agente foi melhor do que eu previa, não pior.
 
 A sessão de teste foi arquivada (`sessions.delete`) para não deixar sessão órfã.
+
+## O que eu quebrei escrevendo no `AGENTS.md`, e como apareceu
+
+Às 09:18 de 09/09 o Erick perguntou algo à `nina`. Ela **respondeu certo** — e
+logo abaixo da resposta a tela mostrou *"⚠️ O agente terminou sem produzir
+texto"*. Duas bolhas, uma boa e um erro.
+
+A cadeia, do fim para o começo:
+
+1. `agent_runs` tem **um** run, `seq_antes = 11`, `message_id` **nulo** — ou
+   seja, a resposta que apareceu **não foi gravada pelo `/reply`**.
+2. A sessão no gateway tem **duas** mensagens: `seq=1` a pergunta, `seq=2` a
+   resposta. O `/reply` procurou `seq > 11` e não achou nada.
+3. `compactionCount: 0` — não foi compactação. O `.jsonl` da sessão virou
+   **`.jsonl.reset.2026-09-09T12-18-27.705Z`**: a sessão foi **resetada** no
+   instante do envio, e a numeração recomeçou do 1.
+4. E o log do gateway, no mesmo segundo, diz o porquê:
+
+```
+[agent/embedded] workspace bootstrap file AGENTS.md is 21813 chars (limit 20000);
+truncating in injected context (sessionKey=agent:nina:hsos-77071556-…)
+```
+
+⚠️ **Eu levei o `AGENTS.md` da `nina` de 19.500 para 21.814 caracteres e estourei
+um teto de 20.000 que eu não sabia existir.** Ele não é documentado, não dá erro,
+o `agents.files.set` aceita e o `agents.files.get` devolve o arquivo inteiro. O
+único lugar onde ele aparece é o `journalctl` do serviço.
+
+**Revertido** para os 19.500 originais, conferido byte a byte contra o backup.
+
+⚠️ **E o `AGENTS.md` dela vive a 500 caracteres do teto** — qualquer parágrafo
+novo estoura. Os blocos 6 e 7 só entram depois de o arquivo ser enxugado, e isso
+é decisão de quem manda no prompt dela. O bloco do `flow` (8.170 → 8.942) está
+folgado e ficou.
+
+### O defeito que isso revelou, esse valia a pena
+
+⚠️ **Sessão resetada renumera do 1, e o piso guardado fica no futuro para
+sempre.** Não é falha da mudança de hoje: o piso é `max(seq_antes)` desde 19/08 e
+nunca soube descer. Conferido na sessão real do CEO depois do reset — o corte do
+próximo envio seria **11** contra uma sessão que vai até **2**. **A mensagem
+seguinte dele falharia igual**, e a seguinte também.
+
+O conserto está em `_ultimo_seq`, e o que ele precisou foi distinguir duas causas
+opostas do mesmo sintoma:
+
+| piso acima do gateway | o que é | o que fazer |
+|---|---|---|
+| a janela não alcança o começo | fatia velha de sessão longa (17/08, 24–30/08) | **manter** o piso |
+| `seq=1` na janela e topo < piso | sessão renumerada (09/09) | **descartar** o piso |
+
+**Ver o `seq=1` é o que separa os dois:** com ele na janela estamos olhando a
+sessão inteira, e o topo é o topo real. A segunda leitura só acontece nessa
+suspeita. Três testes, e o conserto foi validado contra a sessão real do CEO —
+o corte caiu de 11 para 2.
+
+⚠️ **Foi um erro meu que expôs um defeito que já estava lá.** O reset não teria
+acontecido sem eu estourar o teto, mas o piso que não desce esperava por qualquer
+reset — e reset acontece pelo botão "nova conversa", que é o caminho normal.
 
 ## Aplicar em produção
 
