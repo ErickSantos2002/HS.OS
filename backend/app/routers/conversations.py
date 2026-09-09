@@ -597,6 +597,28 @@ _JANELA_ULTIMO_SEQ = 5
 # recuperável — e o reset apagava a sessão antes de alguém notar.
 _JANELA_RECUPERAR = 200
 
+# Quantos caracteres o `chat.history` pode devolver por bloco de texto.
+#
+# ⚠️ **O gateway corta em 8.000 e avisa, mas o aviso é texto — não erro.** O
+# `truncateChatHistoryText` do OpenClaw devolve
+# `` `${text.slice(0, maxChars)}\n...(truncated)...` `` com
+# `DEFAULT_CHAT_HISTORY_TEXT_MAX_CHARS = 8e3`, e o corte entra na resposta como
+# se fosse conteúdo. Em 08/09/2026 as duas entregas principais do dia para o CEO
+# saíram com 8.018 caracteres — 8.000 mais o sufixo — cortadas no meio do HTML
+# do painel. **O link ia depois do corte**, e ele teve que perguntar "qual o
+# link?" às 04h00.
+#
+# ⚠️ **Não é bug do gateway: é o default de uma projeção para exibição, e o
+# `chat.history` aceita o `maxChars`.** A própria interface do OpenClaw trata o
+# sufixo como sinal (`shouldFetchFullMessage` em `control-ui/chat-page`) e vai
+# buscar a íntegra; nós líamos o texto cortado e gravávamos em `conversations`
+# como resposta final. Medido ao vivo em 09/09/2026 na `agent:atlas:main`: com o
+# default, uma mensagem truncada; com este valor, nenhuma.
+#
+# O teto existe para não trocar um corte silencioso por uma resposta sem limite
+# nenhum — 200 mil cabe folgado num painel HTML inteiro.
+_MAX_CHARS_HISTORICO = 200_000
+
 
 async def _ultima_pergunta(mensagens: list) -> str:
     """A última pergunta de gente na sessão — a que precisa ser refeita.
@@ -691,17 +713,37 @@ async def _ultimo_seq(cliente, chave_completa: str, piso: int = 0) -> int:
         # sessão inteira como se fosse nova.
         return piso
     msgs = r.get("messages") or []
-    do_gateway = (
-        max((m.get("__openclaw") or {}).get("seq") or 0 for m in msgs) if msgs else 0
-    )
-    return max(piso, do_gateway)
+    return max(piso, _maior_seq(msgs))
+
+
+def _maior_seq(mensagens: list) -> int:
+    """O maior `seq` presente numa fatia de histórico; 0 se não houver nenhum.
+
+    Zero, e não `None`, porque o valor entra num `max()`/`greatest()` — um
+    `None` ali zeraria o corte e regravaria a sessão inteira.
+    """
+    return max(((m.get("__openclaw") or {}).get("seq") or 0 for m in mensagens),
+               default=0)
 
 
 async def _piso_do_seq(chave: str, user_id: str) -> int:
-    """O maior `seq` que já registramos para esta sessão, do nosso lado."""
+    """O maior `seq` que já registramos para esta sessão, do nosso lado.
+
+    ⚠️ **`seq_antes` sozinho não serve, e isso levou três correções para
+    aparecer.** Ele é o corte que usamos ao ENVIAR, e vem do `chat.history` com
+    `limit=5` — que numa sessão longa devolve fatia velha. Tomá-lo como piso
+    congela o corte no último valor que o gateway acertou: em 08/09/2026 ficou
+    em 119 por três turnos e o CEO recebeu duas respostas com o turno anterior
+    colado na frente.
+
+    `seq_depois` é o topo do histórico que o `/reply` de fato LEU (com
+    `limit=40`) ao montar a resposta. Ele anda com a conversa, e é por isso que
+    o `greatest` dos dois nunca congela. Ver `docs/CONFERENCIA-CONVERSA-2026-09-08.md`.
+    """
     async with sessao(role="authenticated", user_id=user_id) as conn:
         v = await conn.fetchval(
-            "SELECT max(seq_antes) FROM public.agent_runs WHERE session_key = $1",
+            "SELECT max(greatest(seq_antes, coalesce(seq_depois, 0))) "
+            "  FROM public.agent_runs WHERE session_key = $1",
             chave,
         )
     return int(v or 0)
@@ -830,7 +872,7 @@ async def recuperar(
         hist = await obter_cliente(c.url, c.token).chamar(
             "chat.history",
             {"sessionKey": _chave_sessao(agent_id, usuario.id),
-             "limit": _JANELA_RECUPERAR},
+             "limit": _JANELA_RECUPERAR, "maxChars": _MAX_CHARS_HISTORICO},
         )
     except ErroGateway as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Não consegui ler o histórico: {e}")
@@ -1190,11 +1232,20 @@ async def resposta(
 
         cliente = obter_cliente(c.url, c.token)
         try:
-            hist = await cliente.chamar("chat.history", {"sessionKey": chave, "limit": 40})
+            hist = await cliente.chamar(
+                "chat.history",
+                {"sessionKey": chave, "limit": 40,
+                 "maxChars": _MAX_CHARS_HISTORICO})
         except ErroGateway as e:
             return RespostaOut(status="erro", detalhe=str(e))
 
-        texto = _texto_da_resposta(hist.get("messages") or [], seq_antes)
+        mensagens = hist.get("messages") or []
+        texto = _texto_da_resposta(mensagens, seq_antes)
+        # O topo do que ACABAMOS de ler. É o piso do próximo envio — ver
+        # `_piso_do_seq`. Sem guardá-lo, o corte fica esperando o
+        # `chat.history` com `limit=5` acertar, e numa sessão longa ele não
+        # acerta: foi assim que a resposta anterior voltou colada em 08/09/2026.
+        seq_depois = _maior_seq(mensagens)
 
         # ⚠️ **A falha de compactação não é resposta: é manutenção nossa.**
         # Compacta, reenvia a mesma pergunta e aponta este run para o novo. A
@@ -1239,10 +1290,11 @@ async def resposta(
                         agent_id, usuario.id, texto,
                     )
                     ganhou = await conn.fetchval(
-                        """UPDATE public.agent_runs SET message_id = $2
+                        """UPDATE public.agent_runs
+                              SET message_id = $2, seq_depois = $3
                             WHERE run_id = $1 AND message_id IS NULL
                         RETURNING true""",
-                        run_id, linha["id"])
+                        run_id, linha["id"], seq_depois)
                     if not ganhou:
                         raise _JaGravado
         except _JaGravado:
@@ -1436,7 +1488,9 @@ async def pergunta_avulsa(
                 status.HTTP_504_GATEWAY_TIMEOUT,
                 "O agente demorou demais para responder. Tente de novo.",
             )
-        hist = await cliente.chamar("chat.history", {"sessionKey": chave, "limit": 20})
+        hist = await cliente.chamar(
+            "chat.history",
+            {"sessionKey": chave, "limit": 20, "maxChars": _MAX_CHARS_HISTORICO})
     except ErroGateway as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Falha ao obter a resposta: {e}")
 

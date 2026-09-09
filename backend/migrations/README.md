@@ -8,7 +8,7 @@ Schema do Postgres próprio, extraído do Supabase e validado em Postgres puro.
 |---|---|
 | `000_compat_supabase.sql` | Camada de compatibilidade. Escrito à mão. |
 | `001_initial_schema.sql` | Schema `public` completo. **Gerado** — não edite. |
-| `002` … `015` | Mudanças de schema, em ordem. |
+| `002` … `016` | Mudanças de schema, em ordem. |
 | ⚠️ `008_pessoas_talenths.sql` | **Não é deste banco** — ver abaixo. |
 | `_origem/` | Dump de origem + script de regeração + export do SQL editor |
 
@@ -27,7 +27,7 @@ done
 linha dela, e mesmo assim é a armadilha mais fácil deste diretório: ela cria a
 view `public.pessoas` sobre `profiles`/`departments`, que são tabelas de lá. Num
 banco do HS.OS ela falha com `relation "public.departments" does not exist` — e
-com `ON_ERROR_STOP=1` o laço **aborta ali**, deixando `009` a `015` sem aplicar.
+com `ON_ERROR_STOP=1` o laço **aborta ali**, deixando `009` a `016` sem aplicar.
 Instalação nova nasceria sem limpar sessão, sem autoria do agente, sem crons no
 gateway e sem as duas regras de acesso.
 

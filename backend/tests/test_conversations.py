@@ -170,3 +170,50 @@ def test_recuperar_ainda_recusa_o_aviso_de_compactacao():
 def test_recuperar_devolve_resposta_limpa_intacta():
     texto = "Faturamento de agosto/2026: R$ 1.031.451,60."
     assert c._texto_a_recuperar(texto, []) == texto
+
+
+# ── O piso que virou teto — 08/09/2026 ──────────────────────────────────────
+#
+# Terceira encarnação do mesmo defeito. As duas primeiras trataram o tamanho da
+# janela do `chat.history` (`limit=1` → `limit=5`); a de 19/08 acrescentou o
+# `piso` vindo do nosso `agent_runs`. O piso resolveu subestimar-para-zero e
+# criou um problema novo: ele é `max(seq_antes)` dos runs anteriores, ou seja
+# **o último valor que o gateway acertou**, e não sobe sozinho.
+#
+# Medido na conversa do CEO em 08/09/2026: numa sessão de 120+ mensagens o
+# `seq_antes` congelou em 119 por três turnos seguidos (13:43, 13:44, 13:46) e
+# o CEO recebeu duas respostas com o turno anterior colado na frente —
+# 1.895 → 3.556 → 5.137 caracteres, cada uma contendo a anterior inteira.
+#
+# O conserto: o `/reply` já lê o histórico com `limit=40` e sabe qual foi o
+# maior `seq` que ele consumiu. Guardar esse número faz o piso andar com a
+# conversa em vez de esperar o gateway acertar de novo.
+
+
+def test_maior_seq_le_o_topo_do_historico():
+    msgs = [{"__openclaw": {"seq": s}} for s in (117, 118, 119, 124, 125)]
+    assert c._maior_seq(msgs) == 125
+
+
+def test_maior_seq_ignora_mensagem_sem_seq():
+    msgs = [{"__openclaw": {"seq": 10}}, {"role": "user"}, {"__openclaw": {}}]
+    assert c._maior_seq(msgs) == 10
+
+
+def test_maior_seq_de_historico_vazio_e_zero():
+    """Zero, não `None`: o valor vai para o `greatest()` do piso."""
+    assert c._maior_seq([]) == 0
+
+
+def test_o_piso_anda_com_o_que_o_reply_consumiu():
+    """O caso de 08/09: o gateway devolve fatia velha e o piso tem que passar à frente.
+
+    O `/reply` do turno anterior leu até `seq=125`. No turno seguinte o
+    `chat.history` com `limit=5` devolve a fatia de 119 — a mesma que congelou a
+    conversa do CEO. Com o piso vindo do que já consumimos, o corte é 125 e o
+    turno anterior não volta colado.
+    """
+    consumido = c._maior_seq([{"__openclaw": {"seq": s}} for s in (123, 124, 125)])
+    seq = asyncio.run(c._ultimo_seq(ClienteFalso([115, 116, 117, 118, 119]),
+                                    "chave", piso=consumido))
+    assert seq == 125, "o piso congelou em 119 e o turno anterior volta colado"

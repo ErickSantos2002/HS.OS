@@ -410,6 +410,37 @@ Antes de mexer aqui, leia `docs/AUDITORIA-ESTABILIDADE-2026-07-16.md` — os bug
 exatamente as armadilhas deste caminho (execução duplicada, falso-positivo de context overflow,
 heartbeat descartando resposta final).
 
+#### O `chat.history` mente por omissão em duas frentes — as duas custaram uma entrega ao CEO
+
+Levantadas em 09/09/2026 conferindo a conversa de 08/09
+(`docs/CONFERENCIA-CONVERSA-2026-09-08.md`). São defeitos do mesmo método: **ler
+o `chat.history` como se ele fosse a conversa, quando ele é uma projeção para
+exibição.**
+
+⚠️ **1. Ele corta o texto em 8.000 caracteres e o corte vem como conteúdo.** O
+`truncateChatHistoryText` do OpenClaw devolve `` `…\n...(truncated)...` `` com
+`DEFAULT_CHAT_HISTORY_TEXT_MAX_CHARS = 8e3`. Os dois panoramas que a `nina`
+entregou ao CEO em 08/09 saíram com 8.018 caracteres, cortados no meio do HTML —
+e **o link ia depois do corte**, por isso ele perguntou "qual o link?".
+
+**Passe `maxChars`**: `chat.history` aceita o parâmetro e 8.000 é só o padrão
+(`resolveEffectiveChatHistoryMaxChars`). É o que `_MAX_CHARS_HISTORICO` faz nos
+quatro pontos que montam texto de resposta. ⚠️ **O corte é por BLOCO de texto,
+não por mensagem** — resposta longa em vários parágrafos escapa, painel HTML num
+bloco só não escapa. É por isso que passou meses despercebido.
+
+⚠️ **2. `limit` pequeno devolve fatia velha, e o `piso` que conserta isso vira
+teto.** Três encarnações do mesmo defeito: `limit=1` errando aos 52 (17/08),
+`limit=5` errando aos 177 (24–30/08), e em 08/09 o `piso` — que era
+`max(seq_antes)`, ou seja **o último valor que o gateway acertou** — congelado em
+119 por três turnos, com o CEO recebendo a resposta anterior colada na frente
+duas vezes.
+
+O conserto é `agent_runs.seq_depois` (migração `016`): o `/reply` lê o histórico
+com `limit=40` e **sabe** qual `seq` consumiu; guardar esse número faz o piso
+andar com a conversa. **Ao mexer no corte, desconfie de qualquer piso que só
+olhe o que foi ENVIADO** — ele não sobe sozinho.
+
 ### Feature flags — sobrou uma, e ela vem ligada
 
 ⚠️ **Revisadas em 31/08/2026, e o que estava escrito aqui não batia com o
@@ -896,6 +927,20 @@ link do CRM.
 ⚠️ **O período era `sys.argv`.** Virou parâmetro, e os SQL de módulo carregam um
 marcador `__DIAS__` trocado em tempo de execução — as f-strings deles já foram
 avaliadas com as outras constantes, e trocar por `%s` exigiria mexer na régua.
+
+⚠️ **A `publicar_pagina` do mesmo router é o caminho OPOSTO, e isso é fácil de
+esquecer.** Ela grava `is_public = true` em `artifacts_published`, e
+`GET /artefatos/publicados/{id}` **não exige autenticação** — o que protege é o
+UUID não ser adivinhável. É deliberado: os vendedores não têm login no HS.OS
+(só três pessoas têm), então Documentos não os alcançaria.
+
+O que existe contra o vazamento é o `dias_de_validade`, **opcional**. Em
+08/09/2026 a `nina` publicou **sete** páginas num dia — entre elas a lista
+nominal dos 35 clientes que uma vendedora perdeu, com nome de contato e valor —
+e **nenhuma** com validade. A regra estava escrita no docstring de
+`_publicar_pagina`, que o agente não lê; foi movida para a `description` do
+parâmetro, que ele lê. ⚠️ **Regra que o agente precisa seguir mora na
+`description` da ferramenta, não no comentário do código.**
 
 ### Agendamento (`cron.*`) — contrato levantado em 19/08/2026
 

@@ -152,8 +152,14 @@ _FERRAMENTAS = [{
                             "description": "Id de quem pediu: o `hsos-<id>` da sua "
                                            "chave de sessão, sem o prefixo."},
             "dias_de_validade": {"type": "integer",
-                                 "description": "Opcional. Depois disso o link diz "
-                                                "'expirado'. Sem isso, não expira."},
+                                 "description": "Depois disso o link diz 'expirado'. "
+                                                "Sem isso ele vale para sempre, e "
+                                                "qualquer pessoa que o receba abre. "
+                                                "USE SEMPRE que a página tiver nome de "
+                                                "cliente, nome de contato, valor de "
+                                                "negócio ou carteira de uma pessoa — 7 "
+                                                "dias serve. Só omita para página sem "
+                                                "dado nominal."},
         },
         "required": ["titulo", "html"],
     },

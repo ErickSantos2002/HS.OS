@@ -27,7 +27,7 @@ from app.gateway import config as cfg
 from app.gateway.client import (ErroGateway, chave_de_sessao, obter_cliente,
                                 obter_cliente_de_espera)
 from app.realtime import hub, topico_canal
-from app.routers.conversations import _texto_da_resposta
+from app.routers.conversations import _MAX_CHARS_HISTORICO, _texto_da_resposta
 
 import asyncpg
 
@@ -846,7 +846,12 @@ async def _responder_no_canal(channel_id: str, agent_id: str) -> None:
             })
             r = await espera.chamar("agent.wait", {"runId": run_id, "timeoutMs": _ESPERA_CANAL_MS})
             if r.get("status") != "timeout":
-                hist = await cliente.chamar("chat.history", {"sessionKey": chave, "limit": 20})
+                # `maxChars` pelo mesmo motivo do chat: sem ele o gateway corta
+                # em 8.000 e o corte entra na mensagem do canal como texto.
+                hist = await cliente.chamar(
+                    "chat.history",
+                    {"sessionKey": chave, "limit": 20,
+                     "maxChars": _MAX_CHARS_HISTORICO})
                 texto = _texto_da_resposta(hist.get("messages") or [], 0)
         except ErroGateway as e:
             logger.warning("Agente %s falhou em %s: %s", agent_id, channel_id, e)

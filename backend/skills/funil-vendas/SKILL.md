@@ -181,6 +181,70 @@ Para "quanto tempo leva do lead ao fechamento", use essas três. Para tempo
 **dentro de uma etapa**, use `card_list_history` (`entered_at`/`exited_at`), que
 é o único lugar com a passagem card a card.
 
+## Troca de dono: a tabela óbvia está vazia e responde errado
+
+⚠️ **`card_transfers` tem ZERO linhas e o HSGrowth não a usa.** Quem a consultar
+para saber se um card mudou de responsável recebe "nunca houve transferência
+nenhuma" — para todo card, sempre. Não é ausência de movimento, é ausência de
+uso da tabela.
+
+Em 08/09/2026 isso produziu duas conclusões opostas na mesma conversa com o CEO,
+com uma hora de intervalo: primeiro "a carteira sumiu sem rastro", depois a
+correção. A tabela vazia parece resposta.
+
+**A troca de dono real é a edição do campo `assigned_to_id`, e ela está no
+`audit_logs`:**
+
+```sql
+SELECT al.created_at, al.entity_id AS card, q.name AS executou,
+       ua.name AS de, ub.name AS para, c.value
+  FROM public.audit_logs al
+  LEFT JOIN public.users q  ON q.id  = al.user_id
+  LEFT JOIN public.cards c  ON c.id  = al.entity_id::int
+  LEFT JOIN public.users ua ON ua.id = (al.data_before->>'assigned_to_id')::int
+  LEFT JOIN public.users ub ON ub.id = (al.data_after ->>'assigned_to_id')::int
+ WHERE al.entity_type = 'Card'
+   AND (al.data_before->>'assigned_to_id')
+        IS DISTINCT FROM (al.data_after->>'assigned_to_id')
+   AND al.created_at >= DATE :inicio
+ ORDER BY al.created_at;
+```
+
+⚠️ **`entity_type` é `'Card'` com C maiúsculo** — `'card'` não casa com nada e
+devolve zero linhas, que é indistinguível de "não houve troca".
+
+⚠️ **Um `para` nulo não quer dizer "ficou sem dono".** Acontece quando o
+`assigned_to_id` novo não resolve no join; olhe `cards.assigned_to_id` para saber
+quem é o dono **hoje** e feche o destino por ali.
+
+**Confira antes de entregar.** Rode a consulta com `:inicio = 2026-09-08` e
+compare — todas por Welton Kellyson, todas saindo de Sandra Silva:
+
+| para | cards | valor |
+|---|---|---|
+| Adriana Oliveira | 3 | R$ 95.000 |
+| Eduardo Luna | 3 | R$ 58.800 |
+| Karolaine Martins | 3 | R$ 49.000 |
+| Miguel Luiz | 3 | R$ 24.500 |
+| **total** | **12** | **R$ 227.300** |
+
+Vieram **zero** linhas? O `entity_type` está minúsculo, ou você foi na
+`card_transfers`. **Pare** — não responda "não houve transferência".
+
+### Ao concluir sobre uma CARTEIRA, varra as trocas todas — não só o recorte pedido
+
+⚠️ **Este é o erro que custou a conclusão de 08/09/2026, e ele não é de SQL.** A
+pergunta do CEO era sobre 35 cards perdidos; a resposta apurou os 35 corretamente
+e então afirmou, sobre a **carteira inteira**, que ela "foi abatida, não
+redistribuída". Naquela mesma manhã, uma hora antes, 12 cards vivos daquela
+vendedora (R$ 227.300) tinham sido reatribuídos a quatro colegas. Os dois fatos
+eram verdadeiros; a conclusão entregue tinha só um.
+
+**O recorte que responde à pergunta não é o recorte que sustenta a conclusão.**
+Antes de dizer o que aconteceu com a carteira de alguém, rode a consulta acima
+para **essa pessoa, sem filtrar pelos cards da pergunta**, e diga as duas coisas:
+o que foi perdido e o que mudou de dono.
+
 ## Ao responder
 
 - **Diga qual board** o número veio. "104 propostas" sem dizer que é a etapa
