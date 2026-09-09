@@ -23,7 +23,8 @@ from pydantic import BaseModel, Field
 
 from app.database import sessao
 from app.gateway import config as cfg_gateway, patch as patch_gw
-from app.gateway.client import ErroGateway as ErroGatewayCli, obter_cliente as obter_cliente_gw
+from app.gateway.client import (ErroGateway as ErroGatewayCli, TETO_ARQUIVO_AGENTE,
+                                excede_o_teto, obter_cliente as obter_cliente_gw)
 from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.integracoes import exige_segredo, ler_segredo
 from app.realtime import hub, topico_usuario
@@ -780,6 +781,12 @@ _MARCA_INICIO = "<!-- hsos:empresa:inicio -->"
 _MARCA_FIM = "<!-- hsos:empresa:fim -->"
 
 
+# O teto dos sete arquivos vive em `app/gateway/client.py`, junto do resto do
+# que se sabe sobre o protocolo. Reexportado com o nome antigo para os testes.
+_TETO_ARQUIVO = TETO_ARQUIVO_AGENTE
+_excede_o_teto = excede_o_teto
+
+
 def _com_bloco_da_empresa(atual: str, bloco: str) -> str:
     """Insere ou substitui o bloco da empresa no conteúdo do `AGENTS.md`."""
     novo = f"{_MARCA_INICIO}\n{bloco}\n{_MARCA_FIM}"
@@ -832,9 +839,20 @@ async def _distribuir_contexto(bloco: str) -> list[dict]:
         try:
             r = await cliente.chamar("agents.files.get", {"agentId": aid, "name": "AGENTS.md"})
             atual = (r.get("file") or {}).get("content") or ""
+            conteudo = _com_bloco_da_empresa(atual, bloco)
+            if _excede_o_teto(conteudo):
+                # Não grava: o gateway cortaria o fim do arquivo sem avisar.
+                resultado.append({
+                    "agent_id": aid, "ok": False,
+                    "erro": f"o AGENTS.md ficaria com {len(conteudo)} caracteres e o "
+                            f"teto é {TETO_ARQUIVO_AGENTE} — o gateway truncaria o fim do "
+                            f"arquivo em silêncio. Enxugue o AGENTS.md de {aid} ou o "
+                            f"perfil da empresa antes de distribuir.",
+                })
+                continue
             await cliente.chamar(
                 "agents.files.set",
-                {"agentId": aid, "name": "AGENTS.md", "content": _com_bloco_da_empresa(atual, bloco)},
+                {"agentId": aid, "name": "AGENTS.md", "content": conteudo},
             )
             # Relê: escrever sem conferir é como a operação de hoje relatou
             # sucesso para um arquivo que não estava lá.

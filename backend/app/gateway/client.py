@@ -195,6 +195,27 @@ def obter_cliente(url: str, token: str) -> ClienteGateway:
     return _cliente
 
 
+# ⚠️ **Teto de 20.000 caracteres por arquivo dos sete, e o gateway trunca em
+# SILÊNCIO quando passa.** O aviso existe só no log do serviço:
+#
+#   [agent/embedded] workspace bootstrap file AGENTS.md is 21813 chars
+#   (limit 20000); truncating in injected context
+#
+# O `agents.files.set` aceita, o `agents.files.get` devolve o arquivo inteiro, e
+# a tela não diz nada. Levantado em 09/09/2026 ao estourar o `AGENTS.md` da
+# `nina` — o corte é no FIM, que é onde mora o "como eu respondo".
+#
+# Mora aqui porque é fato do protocolo, e são três os lugares que escrevem
+# nesses arquivos: a distribuição do contexto da empresa, o roster automático e
+# o PUT da tela.
+TETO_ARQUIVO_AGENTE = 20_000
+
+
+def excede_o_teto(conteudo: str) -> bool:
+    """Se este conteúdo será truncado pelo gateway ao entrar no contexto."""
+    return len(conteudo) > TETO_ARQUIVO_AGENTE
+
+
 def chave_de_sessao(agent_id: str, sufixo: str) -> str:
     """A chave de sessão do gateway: `agent:<agentId>:<sufixo>`.
 

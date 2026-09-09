@@ -818,6 +818,16 @@ diz nada.
 novo ali estoura. Antes de escrever num dos sete, **meça** — e se não couber, o
 caminho é enxugar o arquivo ou mandar o conteúdo para uma skill, não empurrar.
 
+⚠️ **E 21% daquele arquivo é gerado, então ele pode estourar sem ninguém
+editá-lo.** O bloco `hsos:empresa` tem ~4.000 caracteres e é reescrito inteiro a
+cada `POST /onboarding-empresa`; o `hsos:roster` cresce quando entra agente
+novo. Um parágrafo a mais no perfil da empresa, digitado na tela por quem não
+sabe do teto, bastaria. Desde 09/09/2026 os **três** lugares que escrevem nesses
+arquivos conferem antes: a distribuição do contexto e o roster **não gravam** e
+registram o motivo, e o `PUT /agents/{id}/arquivos/{nome}` recusa com 400 e
+explica. `TETO_ARQUIVO_AGENTE` e `excede_o_teto` vivem em
+`backend/app/gateway/client.py`, que é onde mora o que se sabe do protocolo.
+
 ⚠️ **A conferência de uma edição nos sete é perguntar ao agente, não reler o
 arquivo.** O `agents.files.get` devolve o que você acabou de gravar e não
 distingue "gravou" de "está em uso" — mesma armadilha do `deny` que casa pelo
