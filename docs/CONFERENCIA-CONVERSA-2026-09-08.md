@@ -461,8 +461,8 @@ agora fica melhor: a conversa com ele deve incluir os 12 cards de 08/09.
 | 3 | **Atualizar** o ponteiro do `flow` — ele já existe e nomeia a armadilha errada (`updated_at`, não o arquivado) | `AGENTS.md` do `flow` | ✅ escrito (+772 chars) |
 | 4 | Skill nova de **contas a receber** — a régua que não existia | `backend/skills/contas-receber/` | ✅ feita |
 | 5 | `seq_depois` em `agent_runs`, gravado pelo `/reply` e lido pelo `_piso_do_seq` | `conversations.py` + migração `016` | ✅ feito, com teste |
-| 6 | Ensinar a ler `ANNOUNCE_SKIP` — ela já usa `timeoutSeconds`; o que faltou foi saber que o token quer dizer "acabou" | `AGENTS.md` da `nina` | ⚠️ **revertido** — estourou o teto de 20 mil |
-| 7 | Onde gastar a conferência (o total, não a lista) + recorte de pergunta ≠ recorte de conclusão | `AGENTS.md` da `nina` | ⚠️ **revertido** — estourou o teto de 20 mil |
+| 6 | Ensinar a ler `ANNOUNCE_SKIP` — ela já usa `timeoutSeconds`; o que faltou foi saber que o token quer dizer "acabou" | `AGENTS.md` da `nina` | ✅ escrito — coube depois de 839 chars de corte |
+| 7 | Onde gastar a conferência (o total, não a lista) + recorte de pergunta ≠ recorte de conclusão | `AGENTS.md` da `nina` | ✅ escrito — coube depois de 839 chars de corte |
 | 8 | Remover o truncamento em 8.000 caracteres (`maxChars` no `chat.history`) | `conversations.py`, `channels.py` | ✅ feito, medido ao vivo |
 
 ⚠️ **Os itens 1, 2 e 4 valem mais do que parecem**, porque os três erros de
@@ -559,9 +559,22 @@ o `agents.files.set` aceita e o `agents.files.get` devolve o arquivo inteiro. O
 **Revertido** para os 19.500 originais, conferido byte a byte contra o backup.
 
 ⚠️ **E o `AGENTS.md` dela vive a 500 caracteres do teto** — qualquer parágrafo
-novo estoura. Os blocos 6 e 7 só entram depois de o arquivo ser enxugado, e isso
-é decisão de quem manda no prompt dela. O bloco do `flow` (8.170 → 8.942) está
-folgado e ficou.
+novo estoura. O bloco do `flow` (8.170 → 8.942) está folgado e ficou.
+
+**Resolvido no fim do dia, abrindo espaço em vez de empurrando.** Três cortes,
+839 caracteres, nenhum deles conteúdo perdido:
+
+| cortado | por quê |
+|---|---|
+| "Quando Me Acionar vs. Ir Direto ao Agente" (485) | fala com **quem lê** — *"vá direto ao agente quando…"* — e a decisão dela já está em "Antes de delegar, eu pergunto" |
+| "Formato de Resposta" (240) | **duplicata literal do `IDENTITY.md`**, que também entra no contexto: as três linhas estão lá, e o `SOUL.md` repete a terceira em "## Tom" |
+| "Ferramentas" (114) | dizia "consulte o TOOLS.md" — que é um dos sete e ela já tem aberto |
+
+Os blocos entraram condensados (891 no lugar dos 2.314 originais) e o arquivo
+ficou em **19.552, com 448 de folga**. ⚠️ **A guarda escrita hoje de manhã
+abortou duas tentativas minhas antes desta** — uma que estouraria o teto e outra
+que deixaria 208 de folga, pouco para o bloco da empresa crescer sozinho.
+Conferido perguntando a ela: respondeu as duas coisas com os números certos.
 
 ### O defeito que isso revelou, esse valia a pena
 
