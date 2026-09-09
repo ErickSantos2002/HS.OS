@@ -327,7 +327,10 @@ Todo número que um agente tira direto do banco carrega esse risco, não só est
 faturamento, os dois funis, gargalos do TaskHS, pipeline do CRM, criação de
 agente e o relatório de vendedores. "Vencido em aberto" foi improvisado na hora —
 e é **o único número grande do dia que errou de forma estrutural**, não por
-janela de tempo. A skill `contas-receber` foi escrita a partir desta conferência.
+janela de tempo. A skill `contas-receber` foi escrita a partir desta conferência, e a `iris`
+ganhou o ponteiro para ela no `AGENTS.md` — sem o ponteiro a skill não é aberta,
+que é a lição de 14/08 e a que este dia inteiro repetiu. Conferido perguntando a
+ela: ela abre a skill e lista os quatro cuidados com os números certos.
 
 ⚠️ **Correção do meu próprio primeiro diagnóstico, que vale registrar.** Ao
 levantar isto eu medi **376 / R$ 968.466,57**, incluindo as três contas
