@@ -172,19 +172,46 @@ o corte de 8.000 da seção 1.1 — que também atinge o que ela lê do históri
 o quadro fecha: **os dados chegaram cortados, ela esperou pela versão íntegra que
 não vinha, e acabou digitando à mão.**
 
-## 1.5 Bastidor na tela do CEO
+## 1.5 Bastidor na tela do CEO — e por que eu NÃO consertei
 
 Foram **24 mensagens de agente para 17 perguntas**. As excedentes são raciocínio
-interno: *"Vou checar se o Flow e o Atlas já terminaram de responder"*,
-*"Deixa eu fazer isso — pedir ao Atlas para gerar a página..."*, e a conferência
-aritmética à mão de 13:29:20 (*"deixe-me conferir por contagem... 416.500+73.875
-= 490.375; +44.100 = 534.475..."*).
+interno: *"Vou acionar os agentes"*, *"Vou checar se o Flow e o Atlas já
+terminaram"*, *"Vou pedir ao Atlas para revalidar"*, e a conferência aritmética à
+mão de 13:29:20 (*"416.500+73.875 = 490.375; +44.100 = 534.475…"*).
 
 E a mensagem das 03:36:48 abre com **"Agora detesto a resposta consolidada"** —
 texto corrompido, era "Agora tenho". Foi a primeira linha da entrega principal do
 dia.
 
----
+O backend tem um aparador para isso, o `_aparar_bastidor`, com uma regex
+calibrada. Ele é chamado pelo `/recuperar` e pelo webhook — **e não pelo
+`/reply`, que é o caminho normal e o único que o CEO usa.** Parecia esquecimento
+óbvio, e eu ia corrigir.
+
+⚠️ **Medi antes, e a medição me fez desistir.** Rodando a regra sobre as **371**
+respostas de agente já gravadas:
+
+| | aparadas | **somem por completo** | corte levando dado |
+|---|---|---|---|
+| regex atual | 70 | **40** | nenhum |
+| ampliada com `acionar`/`checar`/`pedir`/`revalidar` | 75 | **44** | nenhum |
+
+**Onze por cento das respostas viraria tela vazia.** No `/recuperar` e no webhook
+descartar é barato — um é reconstrução depois do fato, o outro é push sem ninguém
+esperando. No `/reply` a tela está aberta, e mensagem que some vira *"O agente
+terminou sem produzir texto"*. **Trocar ruído por erro é piorar.**
+
+E ampliar a regex é ainda pior no saldo: pega as 5 aberturas de delegação que
+existem em todo o histórico (nenhuma com número ou tabela — são bastidor puro
+mesmo) ao custo de mais quatro telas vazias.
+
+⚠️ **Não era esquecimento; era decisão, e não estava escrita.** Agora está, num
+comentário ao lado da função — porque a "correção" é atraente e o próximo a
+olhar vai ter a mesma ideia que eu tive.
+
+**O lugar de consertar é o agente.** O `AGENTS.md` da `nina` já tem a seção
+"Bastidor não é resposta"; se ela emite um anúncio como turno próprio, é ali que
+se ajusta, e a conferência é perguntar a ela — não filtrar depois.
 
 # Parte 2 — a auditoria dos números
 

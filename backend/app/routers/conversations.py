@@ -1365,6 +1365,31 @@ _BASTIDOR = re.compile(r"""^\s*(
 )""", re.I | re.X)
 
 
+# ⚠️ **E o `/reply` NÃO chama isto de propósito. Medido em 09/09/2026, antes de
+# "corrigir o esquecimento".**
+#
+# Os chamadores são o `/recuperar` e o webhook, e não o caminho normal. Parece
+# esquecimento — o bastidor aparece na tela justamente pelo `/reply`, e em
+# 08/09/2026 o CEO recebeu 24 bolhas para 17 perguntas, três delas só anúncio
+# ("Vou acionar os agentes…", "Vou checar se o Flow e o Atlas já terminaram").
+#
+# Rodando a regra sobre as **371** respostas de agente já gravadas:
+#
+#   apara 70 · **some por completo 40** · nenhum corte leva dado (os "números"
+#   nos cortes são o ano, "agosto/2026")
+#
+# **Onze por cento viraria tela vazia.** No `/recuperar` e no webhook descartar é
+# barato: um é reconstrução depois do fato, o outro é push sem ninguém esperando.
+# No `/reply` a tela está aberta aguardando, e mensagem que some vira
+# "O agente terminou sem produzir texto" — trocar ruído por erro é piorar.
+#
+# Ampliar a regex não resolve: com os verbos de delegação que faltam
+# (`acionar`, `checar`, `pedir`, `revalidar`…) sobe para 75 aparadas e **44**
+# desaparecidas. O ganho é 5 respostas em 371; o custo, mais quatro telas vazias.
+#
+# **O lugar de consertar isto é o agente, não o aparador.** O `AGENTS.md` da
+# `nina` tem a seção "Bastidor não é resposta"; se ela emite um anúncio como
+# turno próprio, é lá que se corrige — e a conferência é perguntar a ela.
 def _aparar_bastidor(texto: str) -> str:
     """Tira a narração de bastidor do começo. Vazio = o bloco era só bastidor."""
     paragrafos = [p for p in re.split(r"\n\s*\n", texto or "") if p.strip()]
