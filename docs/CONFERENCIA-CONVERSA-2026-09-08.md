@@ -134,16 +134,31 @@ Mas a `description` do parâmetro, que é o que o agente enxerga, diz só:
 Sobrou também a **v1 errada** do painel de Eduardo e Adriana (`94866aa6…`),
 publicada às 13:47 e substituída às 13:51 pela v2. As duas continuam no ar.
 
-## 1.4 A espera pelo `announce` que nunca chega — e as 81 linhas transcritas à mão
+## 1.4 A espera pelo `announce` — que nunca ia chegar, e ela não podia saber
 
 Às 12:36:59 e às 13:28:02 a Nina escreve que está esperando a resposta completa
 do Atlas "chegar por announce" e trabalha com o bastidor incompleto. Às 13:28 ela
-diz literalmente que a resposta final "veio em ANNOUNCE_SKIP e não retive".
+diz que a resposta final "veio em **ANNOUNCE_SKIP** e não retive".
 
-⚠️ **Este gateway não tem canal nenhum** (`channels.status` devolve
-`channels: {}`) — já está no `CLAUDE.md`, foi por isso que os cinco briefings
-saíram de `announce` para `none` em 21/08. **Announce nunca entrega nada aqui**,
-e a Nina esperou por ele duas vezes.
+⚠️ **`ANNOUNCE_SKIP` não é "a resposta foi por outro canal". É o agente
+respondente dizendo que NÃO vai dizer mais nada.** No código do gateway
+(`subagent-session-cleanup-*.js`) ele é um dos `NON_DELIVERABLE_REPLY_TOKENS`, ao
+lado de `REPLY_SKIP` e `HEARTBEAT`, e o prompt que o produz é explícito:
+
+> *"If you want to remain silent, reply exactly `ANNOUNCE_SKIP`. Any other reply
+> will be posted to the target channel. **After this reply, the agent-to-agent
+> conversation is over.**"*
+
+Ou seja: **o Atlas escolheu encerrar, e o que a Nina já tinha era tudo o que
+haveria.** Ela esperou duas vezes por uma segunda entrega que não existia — e
+como este gateway não tem canal nenhum (`channels.status` devolve `channels: {}`,
+o motivo de os cinco briefings terem saído de `announce` para `none` em 21/08), o
+announce também não teria para onde entregar.
+
+⚠️ **E não é falta de instrução: o `AGENTS.md` dela já manda usar
+`timeoutSeconds`**, na primeira linha da seção "Como aciono outro agente" —
+*"com timeout a resposta volta na hora, e eu não preciso ficar checando depois"*.
+Ela usou. O que faltou foi **saber ler o sentinela**.
 
 O efeito prático está confessado às 13:48:20, com as palavras dela:
 
@@ -152,9 +167,10 @@ O efeito prático está confessado às 13:48:20, com as palavras dela:
 > manualmente 81 linhas e errar."*
 
 Ela remontou 81 linhas de cabeça a partir de "retornos truncados/remontados"
-porque a entrega íntegra ficou presa num canal que não existe. O
-`sessions_send` aceita **`timeoutSeconds`**, e com ele a resposta volta
-**inline** — é o caminho que resolve, e já está documentado no `CLAUDE.md`.
+enquanto esperava uma entrega que já tinha sido declarada encerrada. Some a isso
+o corte de 8.000 da seção 1.1 — que também atinge o que ela lê do histórico — e
+o quadro fecha: **os dados chegaram cortados, ela esperou pela versão íntegra que
+não vinha, e acabou digitando à mão.**
 
 ## 1.5 Bastidor na tela do CEO
 
@@ -389,17 +405,29 @@ agora fica melhor: a conversa com ele deve incluir os 12 cards de 08/09.
 |---|---|---|---|
 | 1 | Dizer **quando** usar `dias_de_validade` na `description` da ferramenta, não só no docstring | `backend/app/routers/relatorios.py` | ✅ feito |
 | 2 | Régua de troca de dono (`audit_logs`, não `card_transfers`) na skill `funil-vendas` | `backend/skills/funil-vendas/SKILL.md` | ✅ feita |
-| 3 | Ponteiro no `AGENTS.md` do `flow`: pergunta de parados abre `gargalos-taskhs` **antes** de consultar | gateway | 1 linha, exige túnel |
+| 3 | **Atualizar** o ponteiro do `flow` — ele já existe e nomeia a armadilha errada (`updated_at`, não o arquivado) | `AGENTS.md` do `flow` | proposta pronta, aguarda aval |
 | 4 | Skill nova de **contas a receber** — a régua que não existia | `backend/skills/contas-receber/` | ✅ feita |
 | 5 | `seq_depois` em `agent_runs`, gravado pelo `/reply` e lido pelo `_piso_do_seq` | `conversations.py` + migração `016` | ✅ feito, com teste |
-| 6 | `sessions_send` com `timeoutSeconds` em vez de esperar `announce` | `AGENTS.md` dos agentes | exige túnel |
-| 7 | Regra de conclusão: ao concluir sobre uma **carteira**, varrer todas as trocas de responsável, não só o recorte pedido | `AGENTS.md` da `nina` | exige túnel |
+| 6 | Ensinar a ler `ANNOUNCE_SKIP` — ela já usa `timeoutSeconds`; o que faltou foi saber que o token quer dizer "acabou" | `AGENTS.md` da `nina` | proposta pronta, aguarda aval |
+| 7 | Onde gastar a conferência (o total, não a lista) + recorte de pergunta ≠ recorte de conclusão | `AGENTS.md` da `nina` | proposta pronta, aguarda aval |
 | 8 | Remover o truncamento em 8.000 caracteres (`maxChars` no `chat.history`) | `conversations.py`, `channels.py` | ✅ feito, medido ao vivo |
 
 ⚠️ **Os itens 1, 2 e 4 valem mais do que parecem**, porque os três erros de
 número do dia têm a mesma forma: **régua que existe e não foi aberta (serviço),
 régua que não existe (vencido em aberto), e conferência gasta no lugar errado
 (Eduardo/Adriana)**. Nenhum deles é falta de capacidade do agente.
+
+⚠️ **E dois dos ajustes que eu tinha proposto já estavam escritos — descobri ao
+ir aplicá-los.** O ponteiro para a skill `gargalos-taskhs` está no `AGENTS.md` do
+`flow` desde 17/08; a ordem de usar `timeoutSeconds` está na primeira linha da
+seção de delegação da `nina`. **Acrescentar texto não teria consertado nada.** O
+que faltava era outra coisa nos dois casos: no `flow`, o ponteiro nomeia a
+armadilha de 17/08 (`updated_at`) e não a de 31/08 (arquivado), e nomear uma faz
+parecer que é a única; na `nina`, saber que `ANNOUNCE_SKIP` quer dizer "acabou".
+
+Vale como método: **antes de propor uma instrução para um agente, leia o
+`AGENTS.md` dele.** Metade do que eu ia escrever já estava lá, e a metade que
+importava era outra.
 
 ## Fora do sistema, para gente resolver
 
@@ -411,6 +439,25 @@ régua que não existe (vencido em aberto), e conferência gasta no lugar errado
    redistribuição dos 12 cards vivos dela em 08/09 (R$ 227.300).
 3. **Sem meta de valor cadastrada no GrowthHS** — apontado nas duas respostas do
    dia. Enquanto não houver, nenhum agente consegue dizer quanto falta em vendas.
+
+## Aplicar em produção
+
+A migração `016` precisa de superusuário — o `hsos_app` não tem `CREATE` em
+`public`. No Konsole:
+
+```bash
+psql 'postgresql://administrador:SENHA@62.72.11.28:2222/hsos' \
+     -v ON_ERROR_STOP=1 -f backend/migrations/016_seq_depois.sql
+```
+
+⚠️ **A ordem importa, e o inverso é seguro.** A coluna pode ser criada antes do
+deploy do código — o backend antigo não a usa. Fazer o contrário derruba o
+`/reply`, que passa a escrever numa coluna inexistente.
+
+As skills já foram publicadas (`bash scripts/publicar-skills.sh --enviar`) e o
+gateway as reconhece: 61 skills, `contas-receber` entre elas, `always: false`.
+⚠️ **Mas skill publicada não é skill usada** — a conferência de verdade é
+perguntar ao agente, não olhar o `skills.status`.
 
 ## Notas relacionadas
 
