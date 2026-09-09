@@ -405,11 +405,11 @@ agora fica melhor: a conversa com ele deve incluir os 12 cards de 08/09.
 |---|---|---|---|
 | 1 | Dizer **quando** usar `dias_de_validade` na `description` da ferramenta, não só no docstring | `backend/app/routers/relatorios.py` | ✅ feito |
 | 2 | Régua de troca de dono (`audit_logs`, não `card_transfers`) na skill `funil-vendas` | `backend/skills/funil-vendas/SKILL.md` | ✅ feita |
-| 3 | **Atualizar** o ponteiro do `flow` — ele já existe e nomeia a armadilha errada (`updated_at`, não o arquivado) | `AGENTS.md` do `flow` | proposta pronta, aguarda aval |
+| 3 | **Atualizar** o ponteiro do `flow` — ele já existe e nomeia a armadilha errada (`updated_at`, não o arquivado) | `AGENTS.md` do `flow` | ✅ escrito (+772 chars) |
 | 4 | Skill nova de **contas a receber** — a régua que não existia | `backend/skills/contas-receber/` | ✅ feita |
 | 5 | `seq_depois` em `agent_runs`, gravado pelo `/reply` e lido pelo `_piso_do_seq` | `conversations.py` + migração `016` | ✅ feito, com teste |
-| 6 | Ensinar a ler `ANNOUNCE_SKIP` — ela já usa `timeoutSeconds`; o que faltou foi saber que o token quer dizer "acabou" | `AGENTS.md` da `nina` | proposta pronta, aguarda aval |
-| 7 | Onde gastar a conferência (o total, não a lista) + recorte de pergunta ≠ recorte de conclusão | `AGENTS.md` da `nina` | proposta pronta, aguarda aval |
+| 6 | Ensinar a ler `ANNOUNCE_SKIP` — ela já usa `timeoutSeconds`; o que faltou foi saber que o token quer dizer "acabou" | `AGENTS.md` da `nina` | ✅ escrito |
+| 7 | Onde gastar a conferência (o total, não a lista) + recorte de pergunta ≠ recorte de conclusão | `AGENTS.md` da `nina` | ✅ escrito (+2.314 chars) |
 | 8 | Remover o truncamento em 8.000 caracteres (`maxChars` no `chat.history`) | `conversations.py`, `channels.py` | ✅ feito, medido ao vivo |
 
 ⚠️ **Os itens 1, 2 e 4 valem mais do que parecem**, porque os três erros de
@@ -439,6 +439,35 @@ importava era outra.
    redistribuição dos 12 cards vivos dela em 08/09 (R$ 227.300).
 3. **Sem meta de valor cadastrada no GrowthHS** — apontado nas duas respostas do
    dia. Enquanto não houver, nenhum agente consegue dizer quanto falta em vendas.
+
+## ⚠️ O que ainda NÃO está provado: o arquivo mudou, o agente pode não ter visto
+
+Os três blocos foram escritos por `agents.files.set` e conferidos por releitura —
+byte a byte idênticos ao que mandei. **Isso prova que gravou, e só.**
+
+⚠️ **Sessão viva carrega o prompt que tinha quando nasceu, e as nossas
+persistem.** A `agent:flow:cron:9304a0f7…` — a do briefing das 07h30 — está com
+29.801 tokens e roda desde agosto: `sessionTarget: "isolated"` **não** abre
+sessão nova a cada execução, como o `CLAUDE.md` já registra. Se o system prompt
+for montado na criação da sessão, **o briefing de amanhã ainda usa o `AGENTS.md`
+antigo** e o ajuste do arquivado não terá efeito nenhum.
+
+Não consegui decidir isso por leitura: o `agents.list` não devolve o prompt
+montado (só `agentRuntime`, `identity`, `model`, `workspace`…) e não há método de
+leitura que o exponha.
+
+**As duas conferências que serviriam**, nenhuma delas feita ainda porque as duas
+são escrita e escrita no gateway se combina antes:
+
+1. **Perguntar ao agente** — a única que vale, e a que este repositório já
+   aprendeu a exigir para skill e para `deny`. *"Quantas armadilhas você conhece
+   ao contar cards parados?"* Se responder uma, o texto não chegou.
+2. **Arquivar a sessão de cron do `flow`** (`sessions.delete`, que arquiva em vez
+   de destruir) para que a execução de amanhã nasça com o arquivo novo.
+
+⚠️ **Enquanto isso não for feito, o item 3 está "escrito", não "em vigor".** É
+exatamente a distinção que custou o número errado de 14/08 — *skill publicada não
+é skill usada* — e ela vale igual para os sete arquivos.
 
 ## Aplicar em produção
 
