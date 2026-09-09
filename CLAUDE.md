@@ -788,6 +788,24 @@ nome no workspace **não entra no contexto** — só é lido se alguém mandar o
 Não há como configurar isso: em 27 KB de `config.get` do gateway não aparece um único nome de
 arquivo. E `agents.files.set` **recusa** nome fora dos sete (`unsupported file`).
 
+⚠️ **Editar um dos sete vale no turno SEGUINTE, em toda sessão — inclusive nas
+que já estavam abertas.** O prompt de sistema é remontado a cada turno, não
+congelado quando a sessão nasce. Medido em 09/09/2026 logo depois de escrever no
+`AGENTS.md` do `flow`: a `agent:flow:main`, com 69 mil tokens e viva desde antes
+da edição, respondeu já com o texto novo.
+
+Eu tinha previsto o contrário e chegue a registrar que seria preciso arquivar a
+sessão do cron para o briefing da manhã pegar a mudança. **Não é** — e a
+consequência boa é que a correção de um arquivo não exige reciclar sessão nem
+esperar o dia virar. A desagradável é a mesma moeda: **um erro escrito num dos
+sete atinge todas as sessões na hora**, sem janela para perceber antes.
+
+⚠️ **A conferência de uma edição nos sete é perguntar ao agente, não reler o
+arquivo.** O `agents.files.get` devolve o que você acabou de gravar e não
+distingue "gravou" de "está em uso" — mesma armadilha do `deny` que casa pelo
+nome errado e do `skills.status` que lista skill que ninguém abre. Pergunte algo
+que só o texto novo responde, **sem citar o texto na pergunta**.
+
 **A consequência prática:** se o agente precisa saber sempre, tem que caber dentro de um dos sete.
 Não existe meio-termo. Duas tentativas de contornar isso já falharam aqui:
 

@@ -440,34 +440,40 @@ importava era outra.
 3. **Sem meta de valor cadastrada no GrowthHS** — apontado nas duas respostas do
    dia. Enquanto não houver, nenhum agente consegue dizer quanto falta em vendas.
 
-## ⚠️ O que ainda NÃO está provado: o arquivo mudou, o agente pode não ter visto
+## A conferência que faltava, feita — e o que ela derrubou
 
-Os três blocos foram escritos por `agents.files.set` e conferidos por releitura —
-byte a byte idênticos ao que mandei. **Isso prova que gravou, e só.**
+Perguntei ao `flow`: *"ao contar cards PARADOS no TaskHS, quais armadilhas de
+medição você conhece?"* — sem citar nenhuma, para não dar a resposta. Duas vezes,
+em duas sessões diferentes, e é a segunda que importa.
 
-⚠️ **Sessão viva carrega o prompt que tinha quando nasceu, e as nossas
-persistem.** A `agent:flow:cron:9304a0f7…` — a do briefing das 07h30 — está com
-29.801 tokens e roda desde agosto: `sessionTarget: "isolated"` **não** abre
-sessão nova a cada execução, como o `CLAUDE.md` já registra. Se o system prompt
-for montado na criação da sessão, **o briefing de amanhã ainda usa o `AGENTS.md`
-antigo** e o ajuste do arquivado não terá efeito nenhum.
+| sessão | idade | ele conhece o arquivado? |
+|---|---|---|
+| `hsos-conferencia-agentsmd-20260909` (nova) | criada no teste | ✅ sim, e separa o do **card** do da **lista** |
+| `agent:flow:main` | 69.140 tokens, viva desde antes da edição | ✅ **sim, igual** |
 
-Não consegui decidir isso por leitura: o `agents.list` não devolve o prompt
-montado (só `agentRuntime`, `identity`, `model`, `workspace`…) e não há método de
-leitura que o exponha.
+⚠️ **A segunda linha derruba a ressalva que eu tinha escrito aqui.** Eu havia
+registrado que sessão viva carrega o prompt que tinha ao nascer, e que por isso o
+briefing de amanhã — que roda na `agent:flow:cron:9304a0f7…`, viva desde agosto —
+ainda usaria o arquivo antigo. **Está errado: o system prompt é remontado a cada
+turno.** Uma sessão de 69 mil tokens, criada muito antes da edição, respondeu com
+o texto escrito quinze minutos atrás.
 
-**As duas conferências que serviriam**, nenhuma delas feita ainda porque as duas
-são escrita e escrita no gateway se combina antes:
+**Consequências práticas, e elas valem além deste caso:**
 
-1. **Perguntar ao agente** — a única que vale, e a que este repositório já
-   aprendeu a exigir para skill e para `deny`. *"Quantas armadilhas você conhece
-   ao contar cards parados?"* Se responder uma, o texto não chegou.
-2. **Arquivar a sessão de cron do `flow`** (`sessions.delete`, que arquiva em vez
-   de destruir) para que a execução de amanhã nasça com o arquivo novo.
+- **Editar um dos sete arquivos tem efeito no turno seguinte, em toda sessão** —
+  não é preciso reciclar sessão, arquivar cron nem esperar o dia virar.
+- O briefing de amanhã às 07h30 **já usa o texto novo**. Não arquivei a sessão de
+  cron, e não era para arquivar.
+- ⚠️ O inverso também vale, e é o lado desagradável: **um erro escrito num dos
+  sete atinge todas as sessões na hora**, sem janela para perceber.
 
-⚠️ **Enquanto isso não for feito, o item 3 está "escrito", não "em vigor".** É
-exatamente a distinção que custou o número errado de 14/08 — *skill publicada não
-é skill usada* — e ela vale igual para os sete arquivos.
+⚠️ **E o método continua valendo mesmo tendo eu errado a previsão: a conferência
+é perguntar ao agente.** Reler o arquivo pelo `agents.files.get` teria devolvido o
+texto novo nos dois casos e não distinguiria nada — é a mesma armadilha do `deny`
+que casa pelo nome errado e do `skills.status` que lista skill que ninguém usa.
+Só que desta vez a resposta do agente foi melhor do que eu previa, não pior.
+
+A sessão de teste foi arquivada (`sessions.delete`) para não deixar sessão órfã.
 
 ## Aplicar em produção
 
