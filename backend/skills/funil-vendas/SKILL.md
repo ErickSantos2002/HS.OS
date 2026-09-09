@@ -183,10 +183,15 @@ Para "quanto tempo leva do lead ao fechamento", use essas três. Para tempo
 
 ## Troca de dono: a tabela óbvia está vazia e responde errado
 
-⚠️ **`card_transfers` tem ZERO linhas e o HSGrowth não a usa.** Quem a consultar
-para saber se um card mudou de responsável recebe "nunca houve transferência
-nenhuma" — para todo card, sempre. Não é ausência de movimento, é ausência de
-uso da tabela.
+⚠️ **`card_transfers` e `transfer_approvals` têm ZERO linhas e o HSGrowth não
+usa nenhuma das duas.** Quem consultar qualquer uma para saber se um card mudou
+de responsável recebe "nunca houve transferência nenhuma" — para todo card,
+sempre. Não é ausência de movimento, é ausência de uso da tabela.
+
+**Transferir, no HSGrowth, não é criar registro em tabela de transferência.** É
+abrir o card e **trocar o vendedor no campo de responsável** — tira um, põe
+outro. Não existe tela de "transferir", existe edição. Por isso o rastro está
+onde ficam as edições, e não numa tabela com nome de transferência.
 
 Em 08/09/2026 isso produziu duas conclusões opostas na mesma conversa com o CEO,
 com uma hora de intervalo: primeiro "a carteira sumiu sem rastro", depois a
