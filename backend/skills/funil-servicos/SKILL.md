@@ -145,6 +145,46 @@ não recebe erro nenhum. Enquanto não for corrigido no CRM, identifique o perdi
 vendas. "Quando fechou" só existe como a entrada na lista de ganho, em
 `card_list_history`.
 
+## O GestorHS: `data_solicitacao` está morta, e ela finge que o sistema parou
+
+⚠️ **`ordens.data_solicitacao` é NULL em toda ordem a partir da id 10838
+(17/07/2026), e isso NÃO quer dizer que o sistema parou.** Quer dizer que ele
+mudou: a coluna é herança do GestorHS antigo, e o backend novo
+(`app/api/ordens.py`) cria a ordem preenchendo **`data_chegada`** e nunca aquela.
+São **367 ordens** com a coluna vazia, e o sistema segue abrindo de 40 a 60 por
+semana — as últimas chegaram hoje.
+
+⚠️ **Quem filtra ou agrupa por `data_solicitacao` vê o GestorHS congelado em
+17/07 e conclui que a operação parou.** Foi o que aconteceu, e o erro chegou ao
+CEO duas vezes em 08/09/2026, nestas três formas:
+
+| dito | medido |
+|---|---|
+| "nenhuma ordem nova desde 17/07" | 42 · 58 · 51 · 56 · 51 ordens **por semana** em agosto |
+| "a fase corrente está congelada desde 17/07" | Pós-Vendas 147 · Laboratório 51 (última hoje) · Finalizada 63 |
+| "614 OS não finalizadas" | **387** |
+
+**A régua:**
+
+- **Quando a OS foi aberta** → `data_chegada`. É o que o código grava.
+- **Quantas OS abriram no período**:
+
+```sql
+SELECT date_trunc('week', data_chegada)::date AS semana, count(*)
+  FROM ordens WHERE data_chegada >= DATE :inicio GROUP BY 1 ORDER BY 1;
+```
+
+- **O que está em aberto** → juntar com `fases` e excluir `Finalizada` e
+  `Cancelada` pela **descrição**, não pelo id.
+
+⚠️ **Não use `data_solicitacao` para nada.** Se um número seu depender dela, ele
+está errado para tudo que entrou depois de 17/07 — e o erro tem a forma mais
+perigosa que existe: um sistema ativo parecendo morto.
+
+**Confira antes de entregar:** a última ordem **com** `data_solicitacao` é a
+**id 10837**; a primeira sem é a **10838**. Se a sua consulta disser que a última
+OS do GestorHS é de julho, é esta coluna que você usou. **Pare.**
+
 ## Ao responder
 
 - **Diga o board.** Sem isso, "ganho" é ambíguo por construção.

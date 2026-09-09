@@ -401,16 +401,39 @@ agora fica melhor: a conversa com ele deve incluir os 12 cards de 08/09.
 
 # Parte 4 — o que ela acertou, e que vale preservar
 
-- **A divergência do GestorHS, marcada nas duas respostas — e ela está certa.**
-  Confirmei: `gestorhs.ordens` tem **última `data_solicitacao` em
-  17/07/2026 e zero ordens novas em agosto e setembro**, enquanto `logs_os`
-  registra **362 eventos em setembro** e `data_chegada` chega a **08/09**. O
-  sistema é operado todo dia; a gravação de ordem e fase quebrou há ~7 semanas e
-  **ninguém do time reportou**. É o achado operacional mais valioso da conversa,
-  e veio de um agente.
-  (De quebra, dado sujo na mesma tabela: `data_retorno` máximo **2100-06-29** e
-  `data_calibracao` **2027-05-14** — a mesma família dos nove registros com data
-  impossível do `CONFERIR-NA-VOLTA.md`.)
+- **A divergência do GestorHS ela marcou nas duas respostas — e eu conferi, e o
+  diagnóstico está errado. O dela e o meu.**
+
+  ⚠️ Escrevi aqui, com destaque, que *"a tabela `ordens` não recebe ordem nova
+  desde 17/07/2026"* e chamei aquilo de "o achado operacional mais valioso da
+  conversa". **Não existe.** O GestorHS abre de 40 a 60 ordens por semana e as
+  últimas chegaram hoje.
+
+  O que existe é uma coluna morta: **`ordens.data_solicitacao` é NULL a partir da
+  id 10838 (17/07/2026)**, porque o backend novo (`app/api/ordens.py`) grava
+  `data_chegada` na criação e nunca aquela. São 367 ordens. Quem filtra por ela
+  vê o sistema congelado em julho.
+
+  As três afirmações que chegaram ao CEO, contra o medido:
+
+  | dito | medido |
+  |---|---|
+  | "nenhuma ordem nova desde 17/07" | 42 · 58 · 51 · 56 · 51 **por semana** em agosto |
+  | "fase corrente congelada desde 17/07" | Pós-Vendas 147 · Laboratório 51 (última hoje) · Finalizada 63 |
+  | "614 OS não finalizadas" | **387** |
+
+  ⚠️ **E eu repeti o erro dela conferindo-o.** Rodei `where data_solicitacao >=
+  …`, vi zero em agosto e setembro, cruzei com `logs_os` ativo e concluí "o
+  sistema é operado, a gravação quebrou" — que é uma história coerente e falsa.
+  O que me salvou foi olhar as ordens **sem filtro nenhum**, ordenadas por id: as
+  cinco primeiras tinham `data_chegada` de ontem e `data_solicitacao` nula.
+
+  **A lição é a que o `AGENTS.md` da `nina` já tem escrita — "não achei" não é
+  "não existe".** Filtro por coluna que pode ser NULL faz o registro sumir, e o
+  sumiço parece um fato sobre o mundo. A régua foi para a skill
+  `funil-servicos`, com as âncoras: última ordem **com** a coluna é a id 10837, a
+  primeira sem é a 10838.
+
 - **Recusou duas vezes uma régua impossível.** O CEO pediu "quanto tempo estava
   parado **depois** da perda" e confirmou o pedido quando questionado; ela
   explicou que perdido é estado final, traduziu para "parado na etapa antes do
@@ -458,9 +481,10 @@ importava era outra.
 
 ## Fora do sistema, para gente resolver
 
-1. **GestorHS não grava ordem nova desde 17/07/2026** (~7 semanas). Prioridade
-   alta: é o sistema de calibração, e o `flow` não consegue dizer o que está
-   parado *agora* por causa disso.
+1. ~~GestorHS não grava ordem nova desde 17/07~~ — **retirado: o diagnóstico
+   estava errado**, meu e do `flow`. O sistema abre 40–60 ordens por semana; o
+   que há é a coluna morta `data_solicitacao`. Ver a Parte 4 e a skill
+   `funil-servicos`. **Nada para consertar no GestorHS.**
 2. **Welton Kellyson** — confirmar a intenção do abate em lote da Sandra
    (35 cards, R$ 649.302, 01–04/09, 28 deles "Sem budget aprovado") **e** da
    redistribuição dos 12 cards vivos dela em 08/09 (R$ 227.300).
