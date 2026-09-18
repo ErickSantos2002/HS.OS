@@ -115,7 +115,22 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env                      # preencher DATABASE_URL e JWT_SECRET
 uvicorn app.main:app --reload --port 8002 # http://localhost:8002/docs
+
+pip install -r requirements-dev.txt        # só o pytest; NÃO entra na imagem
+python -m pytest tests -q                  # 156 testes, ~0,6s, sem banco nem gateway
+python -m pytest tests/test_erro_interno.py -q
 ```
+
+⚠️ **O backend TEM suíte e ela é rápida** — 16 arquivos em `backend/tests/`, pytest puro, sem
+fixture nem banco. Não confunda com o frontend, onde a cobertura é de fato ~zero. Rodá-la leva
+menos de um segundo e não há desculpa para mexer no backend sem ela.
+
+⚠️ **O `pytest` vive no `requirements-dev.txt`, não no `requirements.txt`** — o `Dockerfile` copia
+só o segundo, de propósito. Quem instalar apenas o `requirements.txt` não terá como rodar teste
+nenhum, e o sintoma é `No module named pytest`, não uma mensagem que aponte para cá.
+
+Os testes daqui têm docstring longa explicando **o que custou** o defeito que cada um tranca —
+é o padrão do repo, e vale mantê-lo: o teste é o lugar onde a lição sobrevive ao commit.
 
 ⚠️ **Porta 8002, não 8000 nem 8001** — nesta máquina o `taskhs-backend` ocupa a 8000 e o
 `gestorhs-backend` a 8001. O proxy `/api` do Vite aponta para a 8002.
@@ -162,6 +177,32 @@ substitua por um config próprio antes de tentar rodar E2E.
 - Os docs citam a tag de restauração `v1.0-pre-consolidacao` (commit `34f4a7e8`). **Ela não existe
   neste repositório** — o remix veio sem histórico (2 commits). Não conte com esse rollback.
 
+⚠️ **Nada aplica migração sozinho. Deploy sobe código, não schema** — e a diferença fica
+invisível até alguém usar a rota. Em 18/09/2026 o chat estava quebrado **havia duas semanas**:
+a `016_seq_depois.sql` é de 09/09, o código que consulta a coluna subiu no deploy de 11/09, e a
+coluna nunca foi criada em produção. Todo `POST /conversations/{id}/send` estourava com
+`column "seq_depois" does not exist` antes mesmo de falar com o gateway. Ninguém viu porque
+**entre 04/09 e 18/09 nenhuma pessoa usou o chat** — quem exercitou a rota foi o CEO.
+
+É a mesma doença já catalogada aqui para os crons (*"rota que não tinha UM chamador"*) e para a
+`agent_context_state`, um andar acima: **rota que só o usuário final exercita é bomba-relógio**,
+porque a verificação que existe não passa por ela.
+
+Ao mexer em migração, a conferência é contra o banco, não contra a pasta:
+
+```bash
+# o que o código espera × o que o banco tem — roda da máquina do Erick
+cd ~/projetos/bancos && ./.venv/bin/python -c "
+import bancos
+print(bancos.uma_linha('hsos', \"SELECT EXISTS(SELECT 1 FROM information_schema.columns \"
+      \"WHERE table_name='agent_runs' AND column_name='seq_depois')\"))"
+```
+
+⚠️ **E aplicar exige superusuário** — o `hsos_app` não tem `CREATE` em `public`. Pelo combinado
+do repo o Claude não lê o `admin.toml`: monte um script que use `bancos.conectar(..., perfil="admin")`
+sozinho e peça ao Erick para rodar no Konsole. O script deve **conferir o efeito** ao final
+(rodar a consulta que estava falhando), não só dizer que executou.
+
 ## Arquitetura
 
 ### O estado híbrido — leia isto antes de mexer em qualquer coisa
@@ -194,6 +235,32 @@ do que aparecer quebrado. Dois mecanismos fazem isso, e ambos devem ser respeita
   gateway direto do navegador
 - O Proxy em `frontend/src/integrations/supabase/client.ts` — sem as variáveis do Supabase, o client
   não é criado e lança no primeiro uso, em vez de derrubar a aplicação no boot
+
+### "Não foi possível falar com o servidor" NÃO quer dizer problema de rede
+
+⚠️ **Essa frase é a mentira mais cara do sistema.** Ela sai de `api.ts:118` e cobre `status === 0`
+**ou** `status >= 502` (`ErroApi.indisponivel`) — ou seja, três causas muito diferentes com a mesma
+cara. Em 18/09/2026 mandou uma manhã inteira investigar firewall, túnel SSH e saturação do gateway
+enquanto o defeito era **uma coluna faltando no banco**.
+
+O que a tornava pior era um 500 que chegava disfarçado. A resposta de erro do FastAPI saía **sem
+`Access-Control-Allow-Origin`**, o navegador a bloqueava, o `fetch` rejeitava, e o front classificava
+como `status === 0`. **O DevTools mostrava o 500; a aplicação, não.**
+
+⚠️ **Corrigido em 18/09/2026, e o conserto óbvio não era o certo.** `@app.exception_handler(Exception)`
+**não** resolve: no Starlette ele é atendido pelo `ServerErrorMiddleware`, que a pilha monta **acima**
+do `CORSMiddleware` — a resposta continua saindo sem cabeçalho. Quem resolve é capturar **por dentro**
+do CORS, e é isso que `instalar_tratamento_de_erros` em `backend/app/erros.py` garante ao registrar os
+dois na ordem certa (`add_middleware` faz `insert(0, …)`: **o último registrado fica por fora**).
+Inverter as duas linhas devolve o defeito e **só** quebra `test_o_500_sai_com_cabecalho_de_cors` —
+conferido invertendo de propósito.
+
+Todo 500 agora sai como JSON com `detail` e uma **referência de 8 caracteres** que aparece na tela e
+no log junto do traceback. O detalhe interno não desce para o navegador: numa rota de conector ele
+carregaria nome de tabela e às vezes o valor recebido.
+
+**Ao diagnosticar essa frase, o primeiro passo é o código de status real** — F12 → Network, não o
+texto da bolha. O texto não distingue backend fora, gateway fora e exceção na rota.
 
 ### Gateway — protocolo e segurança
 
