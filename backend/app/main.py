@@ -7,10 +7,10 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.router import router as auth_router
 from app.config import settings
+from app.erros import instalar_tratamento_de_erros
 from app.escuta_banco import escutar
 from app.coletor_metricas import rodar as rodar_metricas
 from app.coletor_uso import rodar as rodar_coletor
@@ -135,13 +135,13 @@ app = FastAPI(
 _origens = [o.strip().rstrip("/") for o in settings.FRONTEND_URL.split(",") if o.strip()]
 _origens += ["http://localhost:8080", "http://localhost:5173"]
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=sorted(set(_origens)),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ⚠️ **O CORS é montado aqui junto com a captura de erro, e a ordem importa.**
+# Um 500 que sai sem `Access-Control-Allow-Origin` é bloqueado pelo navegador
+# antes de a aplicação ver o status, e a tela acusa queda de rede em vez do
+# defeito real — em 18/09/2026 isso mandou uma investigação inteira para rede,
+# firewall e túnel enquanto faltava uma coluna no banco. `app/erros.py` explica
+# por que `@app.exception_handler(Exception)` não resolve.
+instalar_tratamento_de_erros(app, _origens)
 
 
 @app.get("/health")
