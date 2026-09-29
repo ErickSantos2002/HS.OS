@@ -63,7 +63,7 @@ exatamente isto, e nada além:
 não interpretação.
 
 ⚠️ **O grupo 6 não é custo de operar, é compra de estoque — e é enorme e
-irregular.** Em jan–jul/2026 ele foi quase metade do custo sem impostos, e só
+irregular.** Em jan–ago/2026 ele foi mais da metade do custo sem impostos, e só
 junho teve R$ 1,5 milhão de adiantamento de importação. Uma média mensal que o
 inclui oscila com o calendário de importação, não com a operação. **Entregue os
 dois números lado a lado** — com e sem o grupo 6 — e diga o que cada um é. Quem
@@ -83,7 +83,7 @@ SELECT to_char(data_emissao, 'YYYY-MM')                       AS mes,
   FROM tiny.contas_pagar
  WHERE excluida_na_origem_em IS NULL
    AND data_emissao >= DATE '2026-01-01'
-   AND data_emissao <  DATE '2026-08-01'
+   AND data_emissao <  DATE '2026-09-01'
  GROUP BY 1, 2
  ORDER BY 1, 2;
 ```
@@ -92,14 +92,22 @@ Some os grupos na resposta, não na consulta: assim você tem o detalhe para
 mostrar "sem impostos" e "sem impostos e sem mercadoria" a partir do mesmo
 resultado.
 
-### ⚠️ Antes de usar um mês recente, confira se ele está completo
+### ⚠️ O mês corrente está sempre incompleto — e mês antigo também pode estar
 
-**Agosto/2026 está quebrado na base** — 11 contas vivas e 44 marcadas como
-excluídas, contra 98 a 141 contas nos meses anteriores; a soma sem impostos
-cai para menos de R$ 10 mil. Não é a empresa gastando pouco, é carga
-incompleta (em investigação no DataCoreHS). Setembro também está baixo.
+**O mês em curso não entra na média.** Os pagamentos de um mês são lançados no
+Tiny ao longo do mês e até depois dele; enquanto isso, a soma do mês é baixa por
+falta de lançamento, não por economia. Em 29/09/2026 setembro tinha 17 contas
+contra 147 a 184 nos meses anteriores.
 
-Toda vez, antes de responder, rode:
+⚠️ **E mês fechado já esteve quebrado sem ninguém ver.** Até 29/09/2026 a carga
+do DataCoreHS só trazia conta nova por uma janela de 14 dias de emissão, e o
+financeiro exclui a conta vencida e a reemite com id novo. Resultado: agosto
+tinha 11 contas vivas em vez de 170, e maio, junho e julho também estavam
+faltando conta. O backfill corrigiu, e a média de jan–jul entregue ao CEO na
+véspera mudou de R$ 689.859 para R$ 729.347. Não foi erro de régua: foi base
+incompleta.
+
+Por isso, toda vez, antes de responder, rode:
 
 ```sql
 SELECT to_char(data_emissao, 'YYYY-MM') AS mes,
@@ -110,10 +118,10 @@ SELECT to_char(data_emissao, 'YYYY-MM') AS mes,
  GROUP BY 1 ORDER BY 1;
 ```
 
-Mês com muito menos contas vivas que os vizinhos, ou mais excluídas que vivas,
-**fica fora da média** — e você diz isso na resposta: *"agosto e setembro ficaram
-fora porque a base deles está incompleta"*. Média com mês quebrado dentro é
-número errado com cara de certo.
+O mês corrente fica fora, sempre. Mês fechado com muito menos contas vivas que
+os vizinhos, ou mais excluídas que vivas, **também fica fora** — e você diz isso
+na resposta: *"setembro ficou fora porque os pagamentos do mês ainda estão sendo
+lançados"*. Média com mês incompleto dentro é número errado com cara de certo.
 
 ### Confira antes de responder
 
@@ -121,22 +129,26 @@ Rode a consulta para **julho/2026** e compare:
 
 | resultado sem impostos | leitura |
 |---|---|
-| **R$ 425.234,96** | ✅ certo — siga |
-| R$ 432.254,87 | esqueceu `excluida_na_origem_em IS NULL` |
-| R$ 550.758,27 | não tirou os grupos 7 e 8 |
-| R$ 418.382,85 | tirou também o grupo 6 (é o número "sem mercadoria", não o sem impostos) |
+| **R$ 462.917,93** | ✅ certo — siga |
+| R$ 469.937,84 | esqueceu `excluida_na_origem_em IS NULL` |
+| R$ 588.441,24 | não tirou os grupos 7 e 8 |
+| R$ 442.445,75 | tirou também o grupo 6 (é o número "sem mercadoria", não o sem impostos) |
+| R$ 458.955,19 | perdeu a conta sem categoria (R$ 3.962,74) — use o `coalesce` da consulta |
 
 **Bateu, siga. Não bateu, PARE** e diga o que divergiu. Julho foi escolhido por
-ter contas excluídas e grupo 6 pequeno — exercita os dois filtros que erram.
+ter contas excluídas, grupo 6 pequeno e uma conta sem categoria — exercita os
+três filtros que erram. ⚠️ Se nenhuma linha bater, pode ter entrado conta
+retroativa em julho: diga isso e não entregue o número.
 
-Retrato de jan–jul/2026, média por mês, para você saber o tamanho:
+Retrato de jan–ago/2026, média por mês (conferido em 29/09/2026), para você
+saber o tamanho:
 
 | | média/mês |
 |---|---|
-| total (com impostos) | R$ 869.311 |
-| sem impostos (fora 7 e 8) | **R$ 689.859** |
-| sem impostos e sem mercadoria (fora 6, 7 e 8) | **R$ 318.546** |
-| … dos quais equipe (grupo 1) | R$ 114.083 |
+| total (com impostos) | R$ 867.292 |
+| sem impostos (fora 7 e 8) | **R$ 674.376** |
+| sem impostos e sem mercadoria (fora 6, 7 e 8) | **R$ 321.658** |
+| … dos quais equipe (grupo 1) | R$ 113.194 |
 
 ## Parte 2 — estoque e custo de produto
 
@@ -195,8 +207,15 @@ pode entregar é o `preco_custo_medio` onde ele existir, dito como tal.
 ## Ao responder
 
 - **Diga a régua em uma linha:** "contas a pagar por data de emissão, fora os
-  grupos 7 e 8 (impostos), jan–jul/2026".
+  grupos 7 e 8 (impostos), jan–ago/2026".
 - **Diga o período e o que ficou fora** — mês incompleto, grupo 6.
+- ⚠️ **Tabela mês a mês: cada número sai de uma linha do resultado da consulta,
+  e a soma das linhas tem que dar a média × número de meses.** Em 29/09/2026 a
+  média veio certa (R$ 674.376) e a tabela mensal ao lado veio inventada —
+  janeiro com R$ 1,04 mi em vez de R$ 948.709, as linhas somando uma média de
+  R$ 905 mil. Some antes de entregar; se não fechar, refaça a consulta por mês
+  em vez de corrigir à mão. O mesmo vale para contagem: "N aparelhos sem custo"
+  é a soma das linhas sem custo, não uma estimativa.
 - **Mostre os grupos**, não só o total. "R$ 690 mil" sem dizer que metade é
   importação leva a uma decisão errada.
 - Estoque: **quantidade, preço de venda e custo por modelo**, e onde o custo
