@@ -745,6 +745,14 @@ async def _ultimo_seq(cliente, chave_completa: str, piso: int = 0) -> int:
     except ErroGateway:
         return piso
     msgs_amplo = amplo.get("messages") or []
+    # ⚠️ **Sessão vazia é o caso (b) sem o `seq=1` para provar.** Logo depois
+    # do "Limpar" o gateway devolve histórico vazio; fatia velha nunca vem
+    # vazia. Em 30/09/2026 o piso 44 sobreviveu ao "Limpar" e a primeira
+    # resposta da conversa nova sumiu como "terminou sem produzir texto".
+    if not msgs_amplo:
+        logger.info("Sessão %s vazia (piso %d) — conversa nova, corte em 0.",
+                    chave_completa, piso)
+        return 0
     seqs = [(m.get("__openclaw") or {}).get("seq") or 0 for m in msgs_amplo]
     topo = max(seqs, default=0)
     if 1 in seqs and topo < piso:

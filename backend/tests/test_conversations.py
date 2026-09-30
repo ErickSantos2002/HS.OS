@@ -321,3 +321,19 @@ def test_gravar_resposta_trava_antes_de_conferir():
     conn = ConnFalsa()
     asyncio.run(c._gravar_resposta(conn, "nina", "u", "texto"))
     assert "pg_advisory_xact_lock" in conn.sql[0]
+
+
+def test_sessao_vazia_depois_do_limpar_descarta_o_piso():
+    """Medido em 30/09/2026 na simulação do CEO, logo depois de um "Limpar".
+
+    O `/limpar` arquiva a sessão no gateway e ela recomeça vazia; o piso
+    guardado em `agent_runs` era 44. A proteção de 09/09 contra sessão
+    renumerada só reconhece o recomeço quando enxerga o `seq=1` — e numa sessão
+    vazia não há `seq=1` nenhum. O envio saiu com corte 44, a resposta chegou
+    com `seq` de 1 a 4, e a tela mostrou "O agente terminou sem produzir texto"
+    para a primeira pergunta depois de limpar. A partir da segunda, funcionava.
+
+    Histórico vazio não é fatia velha: fatia velha tem mensagens. Vazio é
+    sessão nova, e nela não há turno anterior que possa colar na resposta.
+    """
+    assert asyncio.run(c._ultimo_seq(ClienteFalso([]), "chave", piso=44)) == 0
