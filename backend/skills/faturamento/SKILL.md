@@ -329,6 +329,21 @@ Hoje, para o Phoebus, isso dá: abater **004762** (1 un, 2023) e **005745**
 marcadas como recusadas), nem **005624** (cita uma remessa `6949`, não uma
 venda), nem **005576** (não cita nota). Diga ao responder quais você abateu e por quê.
 
+⚠️ **Nunca "reincluir a origem" para depois abater.** Em 30/09/2026 a Iris montou
+um "bruto cheio − devoluções": pôs de volta as vendas que a régua tinha tirado
+por recusa e subtraiu as devoluções delas. Deu **230** Phoebus em 2025, contra
+**217**, e em cima disso um "faltam 95 para empatar" que era 83. 2024 bateu por
+acaso em 194, e ela usou isso como prova do método. Nota que a régua tirou já
+está abatida: o abatimento dela é justamente ficar fora. **Líquido = a régua de
+venda − só as devoluções marcadas `abater` acima. Nada mais entra nem sai.**
+
+| Phoebus líquido | 2024 | 2025 | 2026 (até 29/09) |
+|---|---|---|---|
+| unidades | **194** | **217** | **134** |
+| abatido | 005745 (10 un) | nada (a origem da 006377 já está fora) | nada |
+
+Confira **os três anos**. Um só pode bater por coincidência, como bateu.
+
 **O valor abatido é o `valor_total` do item na nota de devolução, somado pela
 consulta.** Não faça a conta de cabeça. Em 30/09/2026 a unidade saiu certa e o
 valor saiu R$ 91 mil errado. Âncora: **Phoebus 2024 líquido = 194 un ·
@@ -340,7 +355,9 @@ do produto X" o certo é `itens_nota.valor_total`; para faturamento é o
 
 ## Confira antes de responder
 
-**Janeiro/2026 fecha em R$ 409.592,52 de vendas e R$ 147.333,40 de serviços.**
+**Janeiro/2026 fecha em R$ 402.592,52 de vendas e R$ 147.333,40 de serviços.**
+(Era R$ 409.592,52 até a nota 007677, de R$ 7.000, ganhar o marcador "NF
+recusada". A régua passou a tirá-la, como deve.)
 Esses dois números batem com a página Financeiro do DataCoreHS.
 
 Se você mudar a consulta e quiser saber se continua certa, rode-a para janeiro
@@ -378,6 +395,10 @@ usou `ILIKE` e pegou acessório. Nos dois casos, **pare**.
   "faturamento" quase sempre quer o total, mas a abertura é o que dá confiança.
 - **Diga o período** que você usou, com dia inicial e final.
 - Mês corrente é **parcial**. Diga isso — "até hoje", não "de agosto".
+- **Comparando com o ano anterior, corte o ano anterior no mesmo dia.** Setembro
+  de 2026 até o dia 29 se compara com 1–29/09/2025, não com setembro inteiro.
+  Avisar a diferença não basta; entregue o número igual com igual (e, se
+  quiser, o do mês cheio ao lado).
 - Se o número for muito diferente de uma resposta anterior sua, **investigue
   antes de entregar**: pode ser emissão nova, e pode ser consulta errada.
 
