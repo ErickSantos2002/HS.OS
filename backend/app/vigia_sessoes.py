@@ -280,7 +280,8 @@ async def rondar_uma_vez() -> dict:
                 if corpo.get("compacted"):
                     compactadas.append(chave)
                     logger.info("Vigia: compactei %s (estava em %d/%d úteis, "
-                                "janela %d).", chave, usado, util, limite)
+                                "janela %d).", chave, usado,
+                                max(limite - reserva, 1), limite)
                 elif _sem_dono(chave):
                     # Recusou abaixo da janela — quase sempre "Already
                     # compacted", que é o aviso de que não há segunda chance.

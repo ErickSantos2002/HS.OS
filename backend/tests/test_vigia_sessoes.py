@@ -30,3 +30,62 @@ def test_o_teto_deixa_folga_sobre_a_maior_sessao_ja_vista():
 def test_reserva_maior_que_a_janela_nao_zera_o_limiar():
     """Config errada não pode virar 'compacte tudo, sempre'."""
     assert v._ponto_de_compactar(10_000, 24_000) >= 1
+
+
+def test_compactar_com_sucesso_nao_derruba_a_ronda(monkeypatch):
+    """A linha de log do sucesso citava `util`, variável que não existe.
+
+    Introduzido em 21/08/2026 junto com a janela útil: o cálculo foi para
+    `_ponto_de_compactar` e o `logger.info` ficou apontando para o nome antigo.
+    Toda compactação bem-sucedida levantava `NameError` DEPOIS de compactar —
+    e a exceção abortava a ronda inteira: as sessões seguintes da lista, o
+    guardião dos briefings e o disjuntor dos crons ficavam sem rodar até a
+    próxima volta. Os quatro testes acima são de função pura e passam por
+    cima do laço; nenhum exercitava o ramo em que o vigia de fato age.
+    """
+    import asyncio
+    from contextlib import asynccontextmanager
+
+    chamadas = []
+
+    class Cliente:
+        async def chamar(self, metodo, params):
+            chamadas.append(metodo)
+            return {
+                "models.list": {"models": [{"id": "m", "contextWindow": 1_000_000}]},
+                "agents.list": {"agents": [{"id": "iris", "model": "m"}]},
+                "config.get": {"config": {}},
+                "sessions.list": {"sessions": [
+                    {"key": "agent:iris:main", "totalTokens": 160_000},
+                ]},
+                "sessions.compact": {"compacted": True},
+            }[metodo]
+
+    class Conn:
+        async def fetchval(self, *a):
+            return True
+
+        async def execute(self, *a):
+            return None
+
+    @asynccontextmanager
+    async def sessao(**_):
+        yield Conn()
+
+    class Cfg:
+        configurado, url, token = True, "ws://x", "t"
+
+    async def carregar():
+        return Cfg()
+
+    async def nada(_):
+        return None
+
+    monkeypatch.setattr(v.cfg, "carregar", carregar)
+    monkeypatch.setattr(v, "obter_cliente", lambda *_: Cliente())
+    monkeypatch.setattr(v, "sessao", sessao)
+    monkeypatch.setattr(v, "conferir_briefings", nada)
+    monkeypatch.setattr(v, "conferir_crons", nada)
+
+    r = asyncio.run(v.rondar_uma_vez())
+    assert r["compactadas"] == ["agent:iris:main"]
