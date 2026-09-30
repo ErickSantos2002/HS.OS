@@ -329,6 +329,11 @@ Hoje, para o Phoebus, isso dá: abater **004762** (1 un, 2023) e **005745**
 marcadas como recusadas), nem **005624** (cita uma remessa `6949`, não uma
 venda), nem **005576** (não cita nota). Diga ao responder quais você abateu e por quê.
 
+**O valor abatido é o `valor_total` do item na nota de devolução, somado pela
+consulta.** Não faça a conta de cabeça. Em 30/09/2026 a unidade saiu certa e o
+valor saiu R$ 91 mil errado. Âncora: **Phoebus 2024 líquido = 194 un ·
+R$ 3.919.607,00** (204 un · R$ 4.119.107,00 menos a 005745, 10 un · R$ 199.500,00).
+
 ⚠️ **A soma dos itens não é o `valor_nota`.** Para "quanto esse cliente comprou
 do produto X" o certo é `itens_nota.valor_total`; para faturamento é o
 `valor_nota`. São perguntas diferentes e números diferentes — não misture.
@@ -362,6 +367,7 @@ A âncora dela é o Phoebus, que exercita justamente o filtro de CFOP sobre os i
 | 2025 inteiro | **217** | R$ 4.936.796,00 | 115 |
 | 2025 jan–set · out–dez | **138** · 79 | | |
 | 2024 inteiro | 204 | R$ 4.119.107,00 | 75 |
+| 2024 líquido de devolução | 194 | R$ 3.919.607,00 | |
 
 Se a sua consulta der **485** para 2025, faltou o filtro de CFOP. Se der 257, você
 usou `ILIKE` e pegou acessório. Nos dois casos, **pare**.
