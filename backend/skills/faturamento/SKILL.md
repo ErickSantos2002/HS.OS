@@ -4,7 +4,9 @@ description: >-
   A régua do faturamento da Health & Safety no DataCoreHS. Use SEMPRE que
   perguntarem faturamento, receita, quanto foi vendido, quanto entrou no mês, ou
   qualquer número de dinheiro realizado — inclusive por cliente, por período ou
-  comparando meses. Somar nota fiscal sem estas regras infla o número em ~50%.
+  comparando meses. Também para produto: quantos aparelhos saíram, quem comprou,
+  ranking de clientes, comparação de unidades entre anos, CFOP e devolução.
+  Somar nota fiscal sem estas regras infla o número em ~50%.
 emoji: 💰
 always: false
 ---
@@ -186,29 +188,148 @@ vendas; os serviços do mês (R$ X) não têm vendedor no cadastro".
 Agosto/2026 devolve: Adriana Oliveira R$ 109.501,60 · Gislayne Nunes
 R$ 100.030,20 · Eduardo Luna R$ 85.791,00 · Sandra Silva R$ 66.672,50.
 
-### Quem comprou um produto
+## Produto: unidades, compradores e devolução
 
-O produto está na **descrição do item** (`tiny.itens_nota.descricao`), e o nome do
-cliente vem de `tiny.clientes` — a nota guarda só o `id_cliente`.
+⚠️ **Em 29/09/2026 o CEO recebeu "o Phoebus caiu 41,5%" e o certo era −2,9%.**
+A comparação de aparelhos foi montada sem o filtro de CFOP: jan–set/2025 saiu
+com **193** unidades, e as de venda eram **138**. Remessa para demonstração,
+retorno de conserto e importação entraram como venda. Em cima desse número veio
+um cenário de "quantos Phoebus faltam para empatar com 2025", que também saiu
+errado. No mesmo dia, o ranking de compradores "não fechava", porque a lista usava
+a régua e o total não usava.
+
+**Pergunta de produto — quantos saíram, quem comprou, ranking, mês a mês,
+comparação entre anos — usa a mesma régua de venda do faturamento.** Não existe
+"régua de aparelho" separada. Um único bloco serve para tudo:
 
 ```sql
-SELECT c.nome AS cliente, count(DISTINCT nf.id) AS notas,
-       sum(i.valor_total)::numeric(14,2) AS total
-  FROM tiny.notas_fiscais nf
-  JOIN tiny.itens_nota i ON i.id_nota = nf.id
-  LEFT JOIN tiny.clientes c ON c.id = nf.id_cliente, cfg, mk
- WHERE i.descricao ILIKE '%' || :produto || '%'
-   AND nf.data_emissao >= DATE :inicio
-   AND lower(btrim(nf.descricao_situacao)) = 'emitida danfe'
-   AND lower(substring(nf.natureza_operacao FROM '\d{4}')) = ANY(cfg.cfops)
-   AND NOT EXISTS (SELECT 1 FROM tiny.marcadores m, unnest(mk.ruins) r(txt)
-                    WHERE m.id_nota = nf.id
-                      AND lower(m.descricao) LIKE '%' || btrim(r.txt) || '%')
- GROUP BY 1 ORDER BY 3 DESC;
+WITH cfg AS (SELECT string_to_array(lower(replace(valor,' ','')),',') cfops
+               FROM tiny.configuracoes WHERE chave='CFOP_VALIDOS'),
+     mk  AS (SELECT string_to_array(lower(valor),',') ruins
+               FROM tiny.configuracoes WHERE chave='MARCADORES_INVALIDOS'),
+     venda AS (
+  SELECT nf.id, nf.numero, nf.data_emissao, nf.id_cliente, i.descricao,
+         i.quantidade, i.valor_total
+    FROM tiny.notas_fiscais nf
+    JOIN tiny.itens_nota i ON i.id_nota = nf.id, cfg, mk
+   WHERE upper(btrim(i.descricao)) = 'BAFÔMETRO PHOEBUS'      -- o item exato
+     AND lower(btrim(nf.descricao_situacao)) = 'emitida danfe'
+     AND nf.valor_nota > 0
+     AND lower(substring(nf.natureza_operacao FROM '\d{4}')) = ANY(cfg.cfops)
+     AND NOT EXISTS (SELECT 1 FROM tiny.marcadores m, unnest(mk.ruins) r(txt)
+                      WHERE m.id_nota = nf.id
+                        AND lower(m.descricao) LIKE '%' || btrim(r.txt) || '%'))
+-- ano a ano:
+SELECT extract(year FROM data_emissao)::int AS ano,
+       sum(quantidade)::int AS unidades, sum(valor_total)::numeric(14,2) AS valor
+  FROM venda GROUP BY 1 ORDER BY 1;
 ```
 
-⚠️ **Mantenha os quatro filtros da régua também aqui.** Sem eles a lista traz
-remessa e comodato, e o cliente aparece como comprador de algo que não comprou.
+- **Unidades = `sum(itens_nota.quantidade)`**, e valor do produto =
+  `sum(itens_nota.valor_total)`. Não é o `valor_nota`: a nota inclui frete e
+  outros itens.
+- **Filtre o item pelo nome exato, não por `ILIKE '%phoebus%'`.** O `ILIKE` traz
+  junto `FONTE DE ALIMENTAÇÃO 12V - 3A (PHOEBUS)`, `Placa do Phoebus Link`,
+  `IMPRESSORA BAFÔMETRO PHOEBUS` e o `PHOEBUS PRO C/ TAMPA`: em 2025 foram +40
+  unidades que não são o aparelho. Se não souber o nome exato, liste antes os
+  `descricao` distintos que casam e escolha.
+- **Mês corrente é parcial.** Ao comparar com o ano anterior, corte o ano anterior
+  no mesmo dia. Mês cheio contra mês pela metade não é comparação.
+
+### Compradores — agrupar por raiz de CNPJ
+
+Filiais da mesma empresa têm CNPJs diferentes com os mesmos 8 primeiros
+dígitos. A Nacional Gás, por exemplo, tem 25 CNPJs. Agrupe pela raiz; quando o
+cliente não tiver CNPJ, use o nome, e **diga quantos caíram em cada caso**:
+
+```sql
+-- … o bloco `venda` acima, e então:
+SELECT coalesce(left(nullif(regexp_replace(c.cpf_cnpj,'\D','','g'),''), 8),
+                'nome:' || upper(btrim(c.nome)))   AS grupo,
+       min(c.nome) AS cliente, count(DISTINCT v.id) AS notas,
+       sum(v.quantidade)::int AS unidades, sum(v.valor_total)::numeric(14,2) AS valor
+  FROM venda v LEFT JOIN tiny.clientes c ON c.id = v.id_cliente
+ WHERE v.data_emissao >= DATE '2025-01-01' AND v.data_emissao < DATE '2026-01-01'
+ GROUP BY 1 ORDER BY 4 DESC;
+```
+
+**A soma da lista tem que ser igual ao total do período.** Se não for, a lista e
+o total estão usando réguas diferentes. Pare e ache qual, porque não existe
+"cliente órfão" nesta base: em 2025 todas as notas de venda de Phoebus casam com
+um cliente que tem CNPJ.
+
+Se pedirem para juntar "empresas de nome parecido" que têm raízes diferentes
+(Rumo Malha Sul × Rumo Malha Paulista são CNPJs distintos), mostre os dois
+agrupamentos e diga quais grupos você juntou por nome. Juntar por nome é
+aproximação, e quem lê precisa saber disso.
+
+### CFOP — o primeiro dígito diz o sentido da nota
+
+⚠️ **Em 29/09/2026 eu descrevi três CFOPs errado, e o CEO decidiu em cima da
+descrição.** Chamei o `3102` de "venda interestadual", mas é **importação**. Com
+isso, a C4 Development, que é a nossa fornecedora no exterior, apareceu como
+"maior compradora de 2026". Chamei o `6908` de "venda a não contribuinte", mas é
+**comodato**. E o `2102`, que é **compra**, também entrou como venda.
+
+**O significado está escrito na própria nota**, em `natureza_operacao`
+(`"CFOP 6908 - Remessa de bem por conta de contrato de comodato e locação"`).
+Leia de lá. Não descreva CFOP de memória.
+
+| 1º dígito | sentido |
+|---|---|
+| 1, 2, 3 | **entrada** (3 = do exterior, ou seja, importação). Nunca é venda nossa |
+| 5, 6, 7 | **saída** (5 = no estado, 6 = outro estado, 7 = exterior) |
+
+Os CFOPs de saída que aparecem nas nossas notas e **não são venda**: 6912/5912
+(demonstração), 6916/5916 (retorno de conserto), 6915 (remessa para conserto),
+6908 (comodato), 6910/5910 (bonificação), 5911 (amostra), 6923 (conta e ordem),
+6949/5949 (outra saída). As notas de importação têm `natureza_operacao =
+'Importacao'`, sem número: o `substring` devolve nulo e a nota já fica fora.
+O `3102` só aparece no `cfop` do item.
+
+**"Toda saída de venda" é a lista `CFOP_VALIDOS`.** Não existe nesta base outro
+CFOP de venda nacional fora dela. A única venda que fica de fora é a exportação
+`7102` (5 notas: uma em fev/2020 e quatro em dez/2023). Se a pergunta for sobre
+um período em que ela aparece, **avise** que ela não entra. Não a inclua por
+conta própria.
+
+### Devolução — a régua já tira a maioria; abater de novo conta duas vezes
+
+⚠️ **"Venda líquida de devolução" NÃO é `vendas − notas 2202`.** Quando o cliente
+devolve ou recusa, a nota de venda original costuma ganhar um marcador
+(`NF recusada`, `NF cancelada`…) e **já sai pela régua**. Subtrair também a nota
+de entrada `2202` desconta a mesma devolução duas vezes. Foi o que aconteceu em
+29/09/2026: das seis devoluções de Phoebus, só **duas** tinham a venda de origem
+ainda contada.
+
+A nota de devolução cita a de origem nas `observacoes` ("faturado na DANFE de
+venda 006031"). **Abata só quando a nota citada ainda conta na régua:**
+
+```sql
+-- cfg e mk como acima, e então:
+conta AS (SELECT nf.id, lpad(nf.numero, 6, '0') AS numero
+            FROM tiny.notas_fiscais nf, cfg, mk
+           WHERE lower(btrim(nf.descricao_situacao)) = 'emitida danfe' AND nf.valor_nota > 0
+             AND lower(substring(nf.natureza_operacao FROM '\d{4}')) = ANY(cfg.cfops)
+             AND NOT EXISTS (SELECT 1 FROM tiny.marcadores m, unnest(mk.ruins) r(txt)
+                              WHERE m.id_nota = nf.id
+                                AND lower(m.descricao) LIKE '%' || btrim(r.txt) || '%')),
+devol AS (SELECT nf.numero, nf.data_emissao, i.quantidade, i.valor_total,
+                 lpad(substring(nf.observacoes FROM '(?i)(?:DANFE|NF)[^0-9]{0,25}(\d{3,6})'), 6, '0') AS ref
+            FROM tiny.notas_fiscais nf JOIN tiny.itens_nota i ON i.id_nota = nf.id
+           WHERE upper(btrim(i.descricao)) = 'BAFÔMETRO PHOEBUS'
+             AND lower(btrim(nf.descricao_situacao)) = 'emitida danfe'
+             AND substring(nf.natureza_operacao FROM '\d{4}') IN ('1202','2202'))
+SELECT d.*, CASE WHEN d.ref IS NULL THEN 'sem referência: não abater, relatar'
+                 WHEN c.id IS NULL THEN 'origem já fora da régua: NÃO abater'
+                 ELSE 'abater' END AS decisao
+  FROM devol d LEFT JOIN conta c ON c.numero = d.ref;
+```
+
+Hoje, para o Phoebus, isso dá: abater **004762** (1 un, 2023) e **005745**
+(10 un, 2024). Não abater **006168** e **006377** (as vendas de origem já estão
+marcadas como recusadas), nem **005624** (cita uma remessa `6949`, não uma
+venda), nem **005576** (não cita nota). Diga ao responder quais você abateu e por quê.
 
 ⚠️ **A soma dos itens não é o `valor_nota`.** Para "quanto esse cliente comprou
 do produto X" o certo é `itens_nota.valor_total`; para faturamento é o
@@ -233,6 +354,19 @@ ela mostra Julho R$ 1.123.090,94 · Agosto R$ 578.691,20 · Setembro R$ 0,00.
 Se os meses que a sua consulta somou não forem os mesmos que aparecem naquela
 tela, o problema é o recorte, não a régua — **pare e diga qual trimestre você
 usou**, em vez de entregar o total.
+
+⚠️ **Janeiro conferido também NÃO prova que uma contagem de produto está certa.**
+Janeiro valida a soma de `valor_nota`, e a contagem de unidades é outra consulta.
+A âncora dela é o Phoebus, que exercita justamente o filtro de CFOP sobre os itens:
+
+| Phoebus (item `BAFÔMETRO PHOEBUS`) | unidades | valor | notas |
+|---|---|---|---|
+| 2025 inteiro | **217** | R$ 4.936.796,00 | 115 |
+| 2025 jan–set · out–dez | **138** · 79 | | |
+| 2024 inteiro | 204 | R$ 4.119.107,00 | 75 |
+
+Se a sua consulta der **485** para 2025, faltou o filtro de CFOP. Se der 257, você
+usou `ILIKE` e pegou acessório. Nos dois casos, **pare**.
 
 ## Ao responder
 
