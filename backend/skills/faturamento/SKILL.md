@@ -238,6 +238,13 @@ SELECT extract(year FROM data_emissao)::int AS ano,
 
 ### Compradores — agrupar por raiz de CNPJ
 
+⚠️ **Lista de compradores se pede à ferramenta `compradores_produto`, não se
+escreve.** Em 30/09/2026 a lista de 137 compradores de Phoebus passou do teto de
+saída do modelo e o turno inteiro se perdeu, três vezes. A ferramenta aplica
+esta mesma régua (inclusive a devolução abaixo), guarda a planilha completa em
+Documentos no nome de quem pediu e devolve totais e top 10. A consulta abaixo
+continua valendo para conferir um número, não para despejar a lista.
+
 Filiais da mesma empresa têm CNPJs diferentes com os mesmos 8 primeiros
 dígitos. A Nacional Gás, por exemplo, tem 25 CNPJs. Agrupe pela raiz; quando o
 cliente não tiver CNPJ, use o nome, e **diga quantos caíram em cada caso**:

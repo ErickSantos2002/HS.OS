@@ -26,6 +26,7 @@ from app.config import settings
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
 from app.integracoes import exige_segredo
+from app.relatorios import compradores
 from app.relatorios import vendedores as gerador
 from app.routers.integracoes import _url_do_banco
 from app.routers.storage import _resolver
@@ -43,6 +44,19 @@ class RelatorioOut(BaseModel):
     vendedores: int
     cards_parados: int
     tamanho_bytes: int
+
+
+async def _dsn_do_conector(conn, chave: str, nome: str) -> str:
+    """Conexão de leitura tirada do conector cadastrado em `integrations`."""
+    linha = await conn.fetchrow(
+        "SELECT * FROM public.integrations WHERE key_name = $1 LIMIT 1", chave)
+    if linha is None:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            f"O conector do {nome} não está cadastrado em Conectores.",
+        )
+    cred = linha["credentials"]
+    return _url_do_banco(linha, json.loads(cred) if isinstance(cred, str) else cred, True)
 
 
 async def _dsn_hsgrowth(conn) -> str:
@@ -186,6 +200,124 @@ _FERRAMENTAS = [{
 }]
 
 
+_FERRAMENTAS.append({
+    "name": "compradores_produto",
+    "description": (
+        "Lista TODAS as empresas que compraram um produto num período, com "
+        "unidades e valor, e guarda a planilha em Documentos, no nome de quem "
+        "pediu. Devolve o total (empresas, unidades, valor), o top 10 e as "
+        "devoluções abatidas. USE SEMPRE que pedirem lista de compradores, "
+        "ranking de clientes de um produto ou 'todas as empresas que compraram': "
+        "NÃO escreva a lista você mesmo — lista longa passa do seu limite de "
+        "resposta e o turno inteiro se perde. A régua é a da skill faturamento "
+        "(só venda, item exato, devolução abatida só quando a origem ainda conta); "
+        "não recalcule."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "produto": {"type": "string",
+                        "description": "Descrição EXATA do item na nota, ex.: "
+                                       "'BAFÔMETRO PHOEBUS'. Não é busca por "
+                                       "trecho: confira o nome antes se tiver dúvida."},
+            "inicio": {"type": "string", "description": "Data inicial, AAAA-MM-DD."},
+            "fim": {"type": "string",
+                    "description": "Data final, AAAA-MM-DD. Sem ela, vai até hoje."},
+            "abater_devolucoes": {"type": "boolean",
+                                  "description": "Padrão: sim."},
+            "agrupar": {"type": "string", "enum": list(compradores.MODOS),
+                        "description": "raiz_cnpj (padrão) junta filiais. nome "
+                                       "também junta raízes com o MESMO nome. "
+                                       "Grupo econômico com nomes diferentes "
+                                       "(Rumo Malha Sul × Malha Paulista) não é "
+                                       "juntado: se pedirem, diga quais somou."},
+            "solicitante": {"type": "string",
+                            "description": "Id de quem pediu: o `hsos-<id>` da sua "
+                                           "chave de sessão, sem o prefixo."},
+        },
+        "required": ["produto", "inicio"],
+    },
+})
+
+
+def _data(valor, campo: str):
+    try:
+        return datetime.strptime(str(valor).strip(), "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"`{campo}` precisa ser AAAA-MM-DD (veio {valor!r}).")
+
+
+async def _compradores_e_guardar(dono_id: str, args: dict, agente: str | None) -> str:
+    """Roda o relatório de compradores, guarda em Documentos e devolve o resumo."""
+    produto = str(args.get("produto") or "").strip()
+    if not produto:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Falta o `produto`.")
+    inicio = _data(args.get("inicio"), "inicio")
+    fim = _data(args["fim"], "fim") if args.get("fim") else datetime.now().date()
+    if fim < inicio:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "`fim` antes de `inicio`.")
+    modo = args.get("agrupar") or "raiz_cnpj"
+    if modo not in compradores.MODOS:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"`agrupar` é um de: {', '.join(compradores.MODOS)}.")
+    abater = args.get("abater_devolucoes", True) is not False
+
+    async with sessao(role="service_role") as conn:
+        dsn = await _dsn_do_conector(conn, "DATACOREHS_DB", "DataCoreHS")
+
+    import anyio
+    try:
+        dados, nome, r = await anyio.to_thread.run_sync(
+            compradores.gerar, dsn, produto, inicio, fim, abater, modo)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Relatório de compradores falhou: %s", e)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                            f"Não consegui montar a planilha: {e}")
+
+    if not r["empresas"]:
+        return (f"Nenhuma venda de **{produto}** entre {inicio:%d/%m/%Y} e "
+                f"{fim:%d/%m/%Y}. Confira se a descrição do item está exata — "
+                "a busca não é por trecho.")
+
+    doc_id = str(uuid4())
+    caminho = f"{dono_id}/{doc_id}.xlsx"
+    destino = _resolver("generated-documents", caminho)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_bytes(dados)
+    try:
+        async with sessao(role="service_role") as conn:
+            await conn.execute(
+                """
+                INSERT INTO public.generated_documents
+                    (id, user_id, agent_id, title, doc_type, storage_path, size_bytes)
+                VALUES ($1::uuid, $2::uuid, $3, $4, 'xlsx', $5, $6)
+                """,
+                doc_id, dono_id, agente,
+                f"Compradores de {produto} — {inicio:%d/%m/%Y} a {fim:%d/%m/%Y}",
+                caminho, len(dados),
+            )
+    except Exception:
+        destino.unlink(missing_ok=True)
+        raise
+
+    def brl(v):
+        return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    top = "\n".join(f"{i}. {n} — {u} un · {brl(v)}"
+                     for i, (n, u, v) in enumerate(r["top"], 1))
+    abat = (f"Devoluções abatidas: {', '.join(r['abatidas'])} ({r['devolvidas']} un)."
+            if r["abatidas"] else "Nenhuma devolução abatida no período.")
+    logger.info("Compradores de %s (%s a %s) gerado para %s — %d empresas",
+                produto, inicio, fim, dono_id, r["empresas"])
+    return (f"Planilha **{nome}** guardada em **Documentos** (não é link público).\n\n"
+            f"**{r['empresas']} empresas · {r['liquidas']} unidades líquidas · "
+            f"{brl(r['valor_liquido'])}** ({inicio:%d/%m/%Y} a {fim:%d/%m/%Y}; "
+            f"{r['brutas']} vendidas).\n{abat}\n\nTop 10:\n{top}\n\n"
+            "A lista completa, o ano a ano e as devoluções (com o motivo de cada "
+            "decisão) estão na planilha. Não reescreva a lista na resposta.")
+
+
 def _resposta(ident, resultado=None, erro=None):
     corpo = {"jsonrpc": "2.0", "id": ident}
     corpo["error"] = erro if erro else None
@@ -286,9 +418,10 @@ async def mcp_relatorios(
     corpo: dict = Body(...),
     _: None = Depends(exige_segredo("GUARDRAILS_API_TOKEN")),
 ):
-    """Servidor MCP com o relatório de vendedores.
+    """Servidor MCP dos relatórios: vendedores (atlas), compradores (iris) e
+    página publicada.
 
-    ⚠️ **Só o `atlas` deveria enxergar isto.** O corte é feito na configuração do
+    ⚠️ **Quem enxerga cada ferramenta é decidido no gateway.** O corte é feito na configuração do
     gateway (`tools.deny` por agente), não aqui — é onde os outros conectores já
     são cortados, e ter duas travas em lugares diferentes acaba com uma delas
     desatualizada.
@@ -312,6 +445,20 @@ async def mcp_relatorios(
 
     if nome == "publicar_pagina":
         return await _publicar_pagina(ident, args)
+
+    if nome == "compradores_produto":
+        async with sessao(role="service_role") as conn:
+            dono = await _dono_do_pedido(conn, args.get("solicitante"))
+        if not dono:
+            return _resposta(ident, {"content": [{"type": "text",
+                "text": "Não há administrador cadastrado para guardar o arquivo."}],
+                "isError": True})
+        try:
+            texto = await _compradores_e_guardar(dono, args, "iris")
+        except HTTPException as e:
+            return _resposta(ident, {"content": [{"type": "text",
+                "text": f"Não consegui gerar: {e.detail}"}], "isError": True})
+        return _resposta(ident, {"content": [{"type": "text", "text": texto}]})
 
     if nome != "relatorio_vendedores":
         return _resposta(ident, erro={"code": -32602, "message": "ferramenta desconhecida"})
