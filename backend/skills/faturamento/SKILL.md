@@ -288,10 +288,8 @@ Os CFOPs de saída que aparecem nas nossas notas e **não são venda**: 6912/591
 O `3102` só aparece no `cfop` do item.
 
 **"Toda saída de venda" é a lista `CFOP_VALIDOS`.** Não existe nesta base outro
-CFOP de venda nacional fora dela. A única venda que fica de fora é a exportação
-`7102` (5 notas: uma em fev/2020 e quatro em dez/2023). Se a pergunta for sobre
-um período em que ela aparece, **avise** que ela não entra. Não a inclua por
-conta própria.
+CFOP de venda fora dela que conte. A exportação (`7102`) **não entra, por
+decisão**: não a inclua e não a ofereça como opção.
 
 ### Devolução — a régua já tira a maioria; abater de novo conta duas vezes
 
