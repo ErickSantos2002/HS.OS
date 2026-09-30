@@ -508,6 +508,21 @@ com `limit=40` e **sabe** qual `seq` consumiu; guardar esse número faz o piso
 andar com a conversa. **Ao mexer no corte, desconfie de qualquer piso que só
 olhe o que foi ENVIADO** — ele não sobe sozinho.
 
+⚠️ **O piso sobrevivia ao "Limpar".** O `/limpar` arquiva a sessão e ela volta
+**vazia**; a proteção contra sessão renumerada (09/09) só reconhecia o recomeço ao
+ver `seq=1`, que sessão vazia não tem. O primeiro envio saía com o corte da
+conversa velha (44), a resposta vinha com `seq` 1..4 e a tela dizia "O agente
+terminou sem produzir texto". Desde 30/09/2026, histórico vazio = corte 0
+(`_ultimo_seq`, com teste).
+
+⚠️ **`/reply` e `/recuperar` gravam a mesma resposta por caminhos diferentes, e
+cada um já a duplicou numa ordem.** Em 29/09/2026 o `/recuperar` (ao abrir a
+tela) pegou no gateway a resposta de um run ainda em curso e o `/reply` gravou de
+novo 13s depois. Os dois agora passam por `_gravar_resposta`: trava por pessoa e
+agente, procura a mensagem igual e só então insere. Assinatura para diagnosticar
+bolha dobrada: o `created_at` do `/recuperar` tem milissegundos, o do `/reply`
+tem microssegundos.
+
 ### Feature flags — sobrou uma, e ela vem ligada
 
 ⚠️ **Revisadas em 31/08/2026, e o que estava escrito aqui não batia com o
@@ -750,6 +765,23 @@ lista completa e confira no `conferir` que o `alsoAllow` dos outros sobreviveu.
 after repeated failures`). A `nina` chutou três nomes de coluna e derrubou o `banco-hsos` para ela
 mesma. Volta sozinho — mas é motivo de sobra para o arquivo do agente mandar consultar
 `information_schema` em vez de adivinhar.
+
+⚠️ **O que o agente acionado manda pela ferramenta `message` NÃO volta para quem
+acionou.** O `sessions_send` devolve só o texto final do run (está na doc,
+`concepts/session-tool`); o `message` segue outro caminho. A `iris` respondia a
+`nina` assim — conteúdo pelo `message`, resumo no texto final ("reenviei o
+detalhamento") — e a `nina` ficava sem a tabela: pedia de novo ou travava. Foi
+o "preciso do conteúdo das listas… Montando o painel" de 29/09, seguido de 1h20
+de silêncio com o CEO esperando. Havia ~960 usos de `message` nas sessões
+arquivadas da `iris`. Iris, Atlas, Flow e Bruce têm no `AGENTS.md` o bloco
+`resposta-a-nina` ("a resposta inteira vai no texto final"). Se voltar a
+acontecer, o próximo passo é negar `message` a eles no `deny`.
+
+⚠️ **Sessão principal com tentativa errada na memória repete o erro, mesmo com a
+skill corrigida.** Em 30/09 a `iris` voltou duas vezes com o número errado
+("reaproveitei a apuração já conferida nesta sessão") até a `agent:iris:main` ser
+arquivada. Corrigiu régua ou regra de um agente que vinha errando na mesma
+pergunta? Arquive a `main` dele antes de conferir.
 
 ### Escopo de banco por agente: `alsoAllow` concede, só o `deny` exclui
 
@@ -1055,6 +1087,29 @@ e **nenhuma** com validade. A regra estava escrita no docstring de
 parâmetro, que ele lê. ⚠️ **Regra que o agente precisa seguir mora na
 `description` da ferramenta, não no comentário do código.**
 
+⚠️ **Lista longa não se escreve com o modelo: `compradores_produto`.** Em
+30/09/2026 a lista de 137 compradores de Phoebus que o CEO pediu fez a `iris`
+bater no teto de saída (8.192 tokens) e o turno inteiro ser descartado, três
+vezes — e a `nina` diagnosticou "contexto estourado" e pediu reset, que não
+resolveria. Quando a `iris` conseguiu, publicou a página escrevendo o HTML ela
+mesma: somava o bruto (768) sob o título "757 líquidas". A ferramenta
+(`app/relatorios/compradores.py`, só na `iris`) aplica a régua da skill
+`faturamento`, guarda a planilha em Documentos e, com `publicar_link`, monta a
+página **no servidor**, dos mesmos números. O modelo só recebe totais e top 10.
+
+⚠️ **O teto de 8.192 tokens de saída vem de dentro do OpenClaw, e a causa não foi
+achada.** A API da DeepSeek entrega mais (testado: 16.000 com `deepseek-chat`);
+config e `models.json` dos cinco agentes dizem 32.768; o log continua mostrando
+`output: 8192`. Qualquer resposta muito longa ainda corta — lista, sai por
+ferramenta.
+
+⚠️ **"Bruto cheio − devoluções" é o método errado, e a âncora de um ano só o
+aprovou.** A `iris` reincluiu as vendas que a régua tirou por recusa e subtraiu
+as devoluções delas: 230 Phoebus em 2025 (certo: 217) e "faltam 95" (certo: 83).
+2024 bateu por coincidência em 194 e ela usou isso como prova. A skill hoje traz
+âncora líquida nos três anos (194 · 217 · 134) e a regra: devolução só abate
+quando a nota de origem, citada nas `observacoes`, ainda conta na régua.
+
 ### Agendamento (`cron.*`) — contrato levantado em 19/08/2026
 
 ```
@@ -1266,3 +1321,22 @@ seja mil tokens **depois** do ponto de falha — uma faixa morta em que a sessã
 falhava em toda execução e o vigia, olhando o denominador errado, achava que
 estava folgada. O erro de 31/08 é o mesmo em outra camada: o denominador certo
 sobre um número que ninguém tinha conferido na origem.
+
+### O `models.json` de cada agente não acompanha a config
+
+⚠️ **Mudar `models.providers` na config NÃO chega aos agentes sozinho.** Cada um
+tem uma cópia do catálogo em `~/.openclaw/agents/<id>/agent/models.json`, e o
+gateway só a regrava para o agente **padrão** (`nina`), ao iniciar; nos outros,
+só quando o modelo não resolve pela cópia — e ela resolve. Levantado em
+30/09/2026 lendo o código (`server-startup-post-attach`, `embedded-agent`): a
+correção da janela de 31/08 **nunca chegou ao `flow` nem ao `bruce`**, que
+rodaram um mês com 65.536 de contexto enquanto a config dizia 1.000.000.
+
+Depois de qualquer mudança de modelo na config: confira o `models.json` dos
+cinco (o script `~/alinhar-models-agentes.sh` do Erick alinha e reinicia) e
+reinicie o gateway.
+
+⚠️ **Esse arquivo guarda a `apiKey` do provedor em texto puro.** Ao inspecioná-lo,
+leia os campos por script — nunca `cat`/`sed` do arquivo inteiro. Em 30/09 a
+chave da DeepSeek foi parar num transcript assim.
+
