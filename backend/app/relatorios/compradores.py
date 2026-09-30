@@ -26,6 +26,7 @@ silêncio:
 Valor é o do ITEM (`itens_nota.valor_total`), não o da nota: a nota tem frete e
 outros produtos.
 """
+import html as _html
 import io
 import re
 import unicodedata
@@ -347,4 +348,49 @@ def gerar(dsn: str, produto: str, inicio: date, fim: date,
     resumo["top"] = [(g["nome"], g["liquidas"], g["valor_liquido"])
                      for g in r["linhas"][:10]]
     resumo["abatidas"] = [d["numero"] for d in r["devolucoes"] if d["decisao"] == "abater"]
+    resumo["html"] = pagina_html(produto, inicio, fim, r, agrup)
     return buf.getvalue(), nome, resumo
+
+
+def _brl(v: float) -> str:
+    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def pagina_html(produto: str, inicio: date, fim: date, r: dict, agrup: str) -> str:
+    """A mesma lista da planilha, em HTML, montada aqui e não pelo modelo.
+
+    ⚠️ **Em 30/09/2026 a Iris publicou a lista escrevendo o HTML ela mesma**,
+    com a planilha certa já pronta ao lado. As 137 linhas somavam 768 unidades
+    (o bruto) sob um cabeçalho que dizia "757 líquidas", e o valor não batia nem
+    com o bruto nem com o líquido. Lista copiada por LLM erra; por isso o link
+    também sai daqui, dos mesmos números que a planilha e os totais.
+    """
+    e = _html.escape
+    linhas = "".join(
+        f"<tr><td>{n}</td><td>{e(g['nome'])}</td><td class=n>{len(g['documentos'])}</td>"
+        f"<td class=n>{g['brutas']}</td><td class=n>{g['devolvidas']}</td>"
+        f"<td class=n><b>{g['liquidas']}</b></td><td class=n>{_brl(g['valor_liquido'])}</td></tr>"
+        for n, g in enumerate(r["linhas"], 1))
+    return f"""<!doctype html><html lang=pt-BR><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Compradores de {e(produto)}</title>
+<style>body{{font-family:system-ui,sans-serif;margin:24px;color:#111}}
+table{{border-collapse:collapse;width:100%;font-size:14px}}
+th,td{{border-bottom:1px solid #ddd;padding:6px 8px;text-align:left}}
+th{{background:#1f4e78;color:#fff;position:sticky;top:0}}.n{{text-align:right}}
+.k{{display:inline-block;margin:0 24px 12px 0}}.k b{{font-size:22px;display:block}}
+small{{color:#666}}</style>
+<h1>Compradores de {e(produto)}</h1>
+<p>{inicio:%d/%m/%Y} a {fim:%d/%m/%Y} · agrupado por {e(agrup)}</p>
+<div><span class=k><b>{r['empresas']}</b>empresas</span>
+<span class=k><b>{r['liquidas']}</b>unidades líquidas</span>
+<span class=k><b>{_brl(r['valor_liquido'])}</b>valor líquido</span>
+<span class=k><b>{r['brutas']}</b>vendidas · {r['devolvidas']} devolvidas</span></div>
+<table><tr><th>#</th><th>Empresa</th><th class=n>CNPJs</th><th class=n>Vendidas</th>
+<th class=n>Devolvidas</th><th class=n>Líquidas</th><th class=n>Valor líquido</th></tr>
+{linhas}
+<tr><th></th><th>TOTAL</th><th></th><th class=n>{r['brutas']}</th><th class=n>{r['devolvidas']}</th>
+<th class=n>{r['liquidas']}</th><th class=n>{_brl(r['valor_liquido'])}</th></tr></table>
+<p><small>Fonte: DataCoreHS / ERP Tiny. Só venda (CFOP de venda, NF-e emitida, sem
+marcador de cancelamento), item pelo nome exato, devolução abatida só quando a venda
+de origem ainda conta. Gerado em {date.today():%d/%m/%Y}.</small></p></html>"""

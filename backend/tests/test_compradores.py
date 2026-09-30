@@ -86,3 +86,17 @@ def test_soma_das_linhas_fecha_com_o_total_e_so_abate_o_decidido():
     assert r["valor_liquido"] == 1300
     assert sum(g["liquidas"] for g in r["linhas"]) == r["liquidas"]
     assert r["linhas"][0]["liquidas"] == 8     # ordenado por unidades líquidas
+
+
+def test_pagina_soma_as_linhas_igual_ao_cabecalho():
+    """Em 30/09/2026 a página escrita pelo modelo somava 768 un (o bruto) sob o
+    título "757 líquidas". Montada aqui, linha e total saem do mesmo dicionário."""
+    import re
+    vendas = [_v("1", "06.980.064/0001-10", "A & Cia <SA>", 10, 1000.5),
+              _v("2", "55.024.743/0001-93", "B", 5, 500)]
+    devol = [dict(_v("9", "06.980.064/0001-10", "A & Cia <SA>", 2, 200), decisao="abater")]
+    r = c.consolidar(vendas, devol, "raiz_cnpj")
+    h = c.pagina_html("PRODUTO", date(2025, 1, 1), date(2025, 12, 31), r, "raiz")
+    liquidas = [int(x) for x in re.findall(r"<td class=n><b>(\d+)</b></td>", h)]
+    assert sum(liquidas) == r["liquidas"] == 13
+    assert "&lt;SA&gt;" in h                   # nome de cliente vai escapado

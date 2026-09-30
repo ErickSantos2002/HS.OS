@@ -231,6 +231,13 @@ _FERRAMENTAS.append({
                                        "Grupo econômico com nomes diferentes "
                                        "(Rumo Malha Sul × Malha Paulista) não é "
                                        "juntado: se pedirem, diga quais somou."},
+            "publicar_link": {"type": "boolean",
+                              "description": "Também publica a lista como página com "
+                                             "link (pública, expira em 7 dias). Use "
+                                             "quando pedirem link ou algo para mandar a "
+                                             "alguém. NUNCA escreva você a página da "
+                                             "lista com publicar_pagina — ela sai daqui, "
+                                             "dos mesmos números da planilha."},
             "solicitante": {"type": "string",
                             "description": "Id de quem pediu: o `hsos-<id>` da sua "
                                            "chave de sessão, sem o prefixo."},
@@ -301,6 +308,20 @@ async def _compradores_e_guardar(dono_id: str, args: dict, agente: str | None) -
         destino.unlink(missing_ok=True)
         raise
 
+    link = ""
+    if args.get("publicar_link"):
+        expira = datetime.now(timezone.utc) + timedelta(days=7)
+        async with sessao(role="service_role") as conn:
+            art = await conn.fetchval(
+                """INSERT INTO public.artifacts_published
+                       (title, html_content, created_by, is_public, expires_at)
+                   VALUES ($1, $2, $3::uuid, true, $4) RETURNING id::text""",
+                f"Compradores de {produto} — {inicio:%d/%m/%Y} a {fim:%d/%m/%Y}",
+                r["html"], dono_id, expira)
+        base = (settings.FRONTEND_URL or "").split(",")[0].strip().rstrip("/")
+        link = (f"\n\nLink da lista completa (público, expira em 7 dias — tem nome "
+                f"de cliente): {base}/artifact/{art}")
+
     def brl(v):
         return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
@@ -315,7 +336,8 @@ async def _compradores_e_guardar(dono_id: str, args: dict, agente: str | None) -
             f"{brl(r['valor_liquido'])}** ({inicio:%d/%m/%Y} a {fim:%d/%m/%Y}; "
             f"{r['brutas']} vendidas).\n{abat}\n\nTop 10:\n{top}\n\n"
             "A lista completa, o ano a ano e as devoluções (com o motivo de cada "
-            "decisão) estão na planilha. Não reescreva a lista na resposta.")
+            "decisão) estão na planilha. Não reescreva a lista na resposta."
+            + link)
 
 
 def _resposta(ident, resultado=None, erro=None):
