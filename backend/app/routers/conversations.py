@@ -954,26 +954,14 @@ async def recuperar(
             # depois; e o `/recuperar`, com a lista velha na mão, insere de novo.
             # Ler e depois escrever, com outro escritor no meio.
             #
-            # Por isso a última palavra é do banco, na mesma instrução: só grava
-            # se não houver mensagem igual do mesmo agente para a mesma pessoa na
-            # última meia hora. `NULL` quando alguém chegou primeiro — e aí não é
-            # erro, é o caso bom.
-            linha = await conn.fetchrow(
-                f"""
-                INSERT INTO public.conversations (agent_id, user_id, role, content, created_at)
-                SELECT $1, $2::uuid, 'agent', $3, to_timestamp($4::bigint / 1000.0)
-                 WHERE NOT EXISTS (
-                       SELECT 1 FROM public.conversations
-                        WHERE user_id = $2::uuid AND agent_id = $1 AND role = 'agent'
-                          AND created_at > now() - interval '30 minutes'
-                          AND content = $3
-                 )
-                RETURNING {_COLUNAS}
-                """,
-                agent_id, usuario.id, texto, fim_ms or 0,
-            )
+            # Por isso a gravação passa por `_gravar_resposta`, a mesma do
+            # `/reply`: trava por pessoa e agente, confere se já há mensagem
+            # igual na última meia hora e só então grava. Achar a igual não é
+            # erro, é o caso bom — alguém chegou primeiro.
+            linha, nova = await _gravar_resposta(conn, agent_id, usuario.id,
+                                                 texto, fim_ms or None)
             existentes.append(texto)
-            if linha is None:
+            if not nova:
                 continue
             recuperadas.append(_para_saida(linha))
 
@@ -1122,6 +1110,52 @@ async def _mensagem_gravada(message_id, user_id: str):
         linha = await conn.fetchrow(
             f"SELECT {_COLUNAS} FROM public.conversations WHERE id = $1", message_id)
     return _para_saida(linha) if linha else None
+
+
+async def _gravar_resposta(conn, agent_id: str, user_id: str, texto: str,
+                           fim_ms: int | None = None, so_sem_run: bool = False):
+    """Grava a resposta do agente — ou devolve a igual que já está lá.
+
+    Devolve `(linha, nova)`. É o único jeito de o `/reply` e o `/recuperar`
+    gravarem resposta, porque os dois escrevem a mesma coisa por caminhos
+    diferentes e cada um já dobrou a mensagem do CEO numa ordem:
+
+    - 24/08/2026: `/reply` primeiro, `/recuperar` depois, com a lista velha.
+    - 29/09/2026 14h38: `/recuperar` primeiro — pegou no gateway a resposta de
+      um run ainda em curso —, `/reply` treze segundos depois. O `/recuperar`
+      já conferia; o `/reply` não, e gravou a segunda bolha.
+
+    ⚠️ **A trava vem antes da conferência, na mesma transação.** Conferir e
+    inserir são duas instruções; sem a trava, dois escritores conferem juntos,
+    nenhum acha nada e os dois gravam. Ela é por pessoa e agente e cai sozinha
+    no fim da transação.
+
+    `so_sem_run` é o modo do `/reply`: só reaproveita mensagem que nenhum run
+    reivindicou. Sem isso, duas perguntas com a mesma resposta curta em meia
+    hora ("ok", "feito") virariam uma bolha só, e a segunda pergunta ficaria
+    sem resposta na tela.
+    """
+    await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))",
+                       f"resposta:{user_id}:{agent_id}")
+    igual = await conn.fetchrow(
+        f"""SELECT {_COLUNAS} FROM public.conversations
+             WHERE user_id = $1::uuid AND agent_id = $2 AND role = 'agent'
+               AND created_at > now() - interval '30 minutes'
+               AND content = $3
+               AND (NOT $4::bool OR NOT EXISTS (
+                     SELECT 1 FROM public.agent_runs r
+                      WHERE r.message_id = conversations.id))
+             ORDER BY created_at DESC LIMIT 1""",
+        user_id, agent_id, texto, so_sem_run)
+    if igual:
+        return igual, False
+    linha = await conn.fetchrow(
+        f"""INSERT INTO public.conversations (agent_id, user_id, role, content, created_at)
+            VALUES ($1, $2::uuid, 'agent', $3,
+                    COALESCE(to_timestamp($4::bigint / 1000.0), now()))
+            RETURNING {_COLUNAS}""",
+        agent_id, user_id, texto, fim_ms)
+    return linha, True
 
 
 async def _reservar_compactacao(run_id: str, user_id: str) -> bool:
@@ -1319,14 +1353,8 @@ async def resposta(
         try:
             async with sessao(role="authenticated", user_id=usuario.id) as conn:
                 async with conn.transaction():
-                    linha = await conn.fetchrow(
-                        f"""
-                        INSERT INTO public.conversations (agent_id, user_id, role, content)
-                        VALUES ($1, $2::uuid, 'agent', $3)
-                        RETURNING {_COLUNAS}
-                        """,
-                        agent_id, usuario.id, texto,
-                    )
+                    linha, _ = await _gravar_resposta(conn, agent_id, usuario.id, texto,
+                                                       so_sem_run=True)
                     ganhou = await conn.fetchval(
                         """UPDATE public.agent_runs
                               SET message_id = $2, seq_depois = $3

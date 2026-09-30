@@ -274,3 +274,50 @@ def test_gateway_na_frente_nao_paga_a_segunda_leitura():
     cli = ClienteDuasJanelas(curta=[50, 51, 52], ampla=[1, 2])
     assert asyncio.run(c._ultimo_seq(cli, "chave", piso=48)) == 52
     assert cli.chamadas == 1, "leu duas vezes sem precisar"
+
+
+class ConnFalsa:
+    """Registra o SQL e responde a busca por mensagem igual com `existente`."""
+
+    def __init__(self, existente=None):
+        self.existente = existente
+        self.sql = []
+
+    async def execute(self, sql, *args):
+        self.sql.append(sql)
+
+    async def fetchrow(self, sql, *args):
+        self.sql.append(sql)
+        if "INSERT" in sql:
+            return {"id": "nova"}
+        return self.existente
+
+
+def test_reply_reaproveita_a_resposta_que_o_recuperar_ja_gravou():
+    """A corrida de 24/08 na ordem inversa, medida em 29/09/2026 às 14h38.
+
+    O CEO abriu a conversa com um run em curso. O `/recuperar` achou a resposta
+    já pronta no gateway e a gravou (14:38:25); treze segundos depois o `/reply`
+    do mesmo run gravou de novo (14:38:38). Mesmos 2.254 caracteres, duas bolhas.
+    O `/recuperar` conferia se o `/reply` já tinha gravado; o `/reply` não
+    conferia nada. Agora os dois passam pela mesma função.
+    """
+    conn = ConnFalsa(existente={"id": "do-recuperar"})
+    linha, nova = asyncio.run(c._gravar_resposta(conn, "nina", "u", "texto"))
+    assert linha["id"] == "do-recuperar" and nova is False
+    assert not any("INSERT" in s for s in conn.sql)
+
+
+def test_gravar_resposta_insere_quando_nao_ha_igual():
+    conn = ConnFalsa(existente=None)
+    linha, nova = asyncio.run(c._gravar_resposta(conn, "nina", "u", "texto"))
+    assert linha["id"] == "nova" and nova is True
+
+
+def test_gravar_resposta_trava_antes_de_conferir():
+    """Conferir e gravar em instruções separadas só é seguro com a trava
+    tomada antes — senão dois escritores conferem ao mesmo tempo, os dois não
+    acham nada e os dois inserem."""
+    conn = ConnFalsa()
+    asyncio.run(c._gravar_resposta(conn, "nina", "u", "texto"))
+    assert "pg_advisory_xact_lock" in conn.sql[0]
