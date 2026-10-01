@@ -976,6 +976,14 @@ na véspera do fechamento. Corrigido em 21/08/2026 — o valor virou `7,8,9` e o
 `DashboardContext.tsx` passou a fazer `mes - 1`, com filtro `1..12` para
 `10,11,12` não virar janeiro de 2027 em silêncio.
 
+✅ **Em 01/10/2026 a chave foi aposentada.** No lugar dela entrou
+`TRIMESTRE_APURACAO`: `auto` (o trimestre do calendário em que hoje está) ou
+`AAAA-TN` (fixado, e pode ser de outro ano). Com ano e número de trimestre no
+valor não sobra mês para uma ponta contar a partir de zero e a outra de um — o
+defeito some por construção, não por disciplina. A skill `faturamento` lê a
+chave nova e trata a ausência como `auto`, igual ao painel. Spec do lado de lá:
+`~/github/DataCore/docs/superpowers/specs/2026-10-01-configuracoes-design.md`.
+
 **A lição de método, que é maior que o bug:** a skill mandava conferir a régua
 contra janeiro de 2026, e a conferência **passava** — porque valida a soma de
 vendas e serviços num mês fechado, e passa igual com o trimestre recortado errado.

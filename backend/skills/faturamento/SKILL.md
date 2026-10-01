@@ -104,55 +104,67 @@ outras réguas, em `tiny.configuracoes`:
 | chave | o que é |
 |---|---|
 | `META` | a meta **anual** da empresa |
-| `MESES_ANALISE` | os meses do trimestre em acompanhamento, 1-based — 1 = janeiro (hoje `7,8,9`) |
+| `TRIMESTRE_APURACAO` | o trimestre em acompanhamento: `auto` = o trimestre do calendário em que hoje está; `AAAA-TN` = trimestre fixado (ex.: `2026-T3` = jul/ago/set de 2026 — pode ser de outro ano) |
 
 ⚠️ **A meta cadastrada é ANUAL, mas ninguém acompanha por ano.** O DataCoreHS
-divide por 4 e mede o trimestre corrente — os meses de `MESES_ANALISE`. Comparar
-o realizado do trimestre com a meta anual inteira dá um percentual três vezes
-menor que o real e assusta à toa.
+divide por 4 e mede o trimestre de `TRIMESTRE_APURACAO`. Comparar o realizado do
+trimestre com a meta anual inteira dá um percentual três vezes menor que o real e
+assusta à toa.
 
 ```sql
 WITH cfg AS (SELECT string_to_array(lower(replace(valor,' ','')),',') cfops
                FROM tiny.configuracoes WHERE chave='CFOP_VALIDOS'),
      mk  AS (SELECT string_to_array(lower(valor),',') ruins
                FROM tiny.configuracoes WHERE chave='MARCADORES_INVALIDOS'),
-     meses AS (SELECT string_to_array(replace(valor,' ',''),',')::int[] m
-                 FROM tiny.configuracoes WHERE chave='MESES_ANALISE'),
+     tri AS (SELECT ini, (ini + interval '3 months')::date fim
+               FROM (SELECT CASE WHEN v ~ '^\d{4}-T[1-4]$'
+                                 THEN make_date(left(v,4)::int, (right(v,1)::int-1)*3+1, 1)
+                                 ELSE date_trunc('quarter', current_date)::date END ini
+                       FROM (SELECT coalesce((SELECT upper(btrim(valor)) FROM tiny.configuracoes
+                                               WHERE chave='TRIMESTRE_APURACAO'),'AUTO') v) c) x),
      meta AS (SELECT valor::numeric/4 m FROM tiny.configuracoes WHERE chave='META'),
      v AS (SELECT coalesce(sum(nf.valor_nota),0)::numeric t
-             FROM tiny.notas_fiscais nf, cfg, mk, meses
-            WHERE extract(year from nf.data_emissao) = extract(year from current_date)
-              AND extract(month from nf.data_emissao)::int = ANY(meses.m)
+             FROM tiny.notas_fiscais nf, cfg, mk, tri
+            WHERE nf.data_emissao >= tri.ini AND nf.data_emissao < tri.fim
               AND lower(btrim(nf.descricao_situacao))='emitida danfe' AND nf.valor_nota>0
               AND lower(substring(nf.natureza_operacao FROM '\d{4}')) = ANY(cfg.cfops)
               AND NOT EXISTS (SELECT 1 FROM tiny.marcadores mm, unnest(mk.ruins) r(txt)
                                WHERE mm.id_nota=nf.id
                                  AND lower(mm.descricao) LIKE '%'||btrim(r.txt)||'%')),
      s AS (SELECT coalesce(sum(replace("valor_dos_serviços",',','.')::numeric),0)::numeric t
-             FROM tiny.servicos, meses WHERE cancelada=false
-              AND extract(year from "data_da_emissão_nfs_e_dsr_e") = extract(year from current_date)
-              AND extract(month from "data_da_emissão_nfs_e_dsr_e")::int = ANY(meses.m))
-SELECT meta.m AS meta_trimestre, v.t+s.t AS realizado,
+             FROM tiny.servicos, tri WHERE cancelada=false
+              AND "data_da_emissão_nfs_e_dsr_e" >= tri.ini
+              AND "data_da_emissão_nfs_e_dsr_e" <  tri.fim)
+SELECT extract(year from tri.ini)||'-T'||extract(quarter from tri.ini) AS trimestre,
+       meta.m AS meta_trimestre, v.t+s.t AS realizado,
        round((v.t+s.t)/meta.m*100,1) AS pct,
        greatest(meta.m-(v.t+s.t),0) AS falta
-  FROM meta, v, s;
+  FROM tri, meta, v, s;
 ```
 
-Em 21/08/2026 isto devolve: meta do trimestre **R$ 3.166.666,68**, realizado
-**R$ 1.701.782,14**, **53,7%**, faltando **R$ 1.464.884,54**.
+⚠️ **Sempre diga qual trimestre você mediu** — é a coluna `trimestre`. No
+primeiro dia de um trimestre o realizado é zero de verdade, e "0%" sem o
+trimestre ao lado parece defeito. Se a pessoa perguntar de outro trimestre,
+troque o valor da `tri` na consulta (ex.: `'2026-T2'` no lugar do `coalesce`) —
+**não** altere a chave na tabela, que é a tela de todo mundo no DataCoreHS.
+
+Âncora — trimestre fixado em `2026-T3`, apurado em 01/10/2026: meta do trimestre
+**R$ 3.166.666,68**, realizado **R$ 2.783.902,24**, **87,9%**, faltando
+**R$ 382.764,44**.
 
 ⚠️ **Se você viu 77,0% e R$ 2.438.461,71 em algum lugar, é o número errado.** Até
-21/08/2026 `MESES_ANALISE` valia `6,7,8` e era lido com duas convenções: o painel
-do DataCoreHS jogava direto no `new Date` do JavaScript, que conta mês a partir
-de **zero**, e apurava jul/ago/set; esta consulta usa `extract(month)`, que é
-**1-based**, e apurava jun/jul/ago. Mesma chave, mesmo valor, um mês de
-diferença — e o briefing da manhã saiu dois dias seguidos com R$ 787 mil a mais,
-dizendo que faltava metade do que faltava de verdade.
+21/08/2026 a chave antiga, `MESES_ANALISE`, era uma lista de meses sem ano
+(`6,7,8`) lida com duas convenções: o painel do DataCoreHS jogava direto no
+`new Date` do JavaScript, que conta mês a partir de **zero**, e apurava
+jul/ago/set; esta consulta usava `extract(month)`, que é **1-based**, e apurava
+jun/jul/ago. Mesma chave, mesmo valor, um mês de diferença — e o briefing da
+manhã saiu dois dias seguidos com R$ 787 mil a mais, dizendo que faltava metade
+do que faltava de verdade. Em 01/10/2026 ela foi aposentada: `TRIMESTRE_APURACAO`
+traz o ano e o número do trimestre, e não há mês para contar a partir de zero.
 
-Hoje a chave é `7,8,9` e os dois lados a leem como 1 = janeiro. **A conferência
-que pega esse tipo de erro é bater com a tela Meta Trimestral do DataCoreHS**, e
-não só com a página Financeiro: os totais mensais batendo não provam que o
-recorte do trimestre está certo.
+**A conferência que pega esse tipo de erro é bater com a tela Meta Trimestral do
+DataCoreHS**, e não só com a página Financeiro: os totais mensais batendo não
+provam que o recorte do trimestre está certo.
 
 ⚠️ **Existem faixas de bônus e elas NÃO são o percentual de atingimento.** O
 DataCoreHS tem uma aba de Meta onde se escolhe uma faixa de 55% a 100% e ela
@@ -375,8 +387,10 @@ o número, diga o que divergiu.
 régua de vendas e serviços num mês fechado — ele passa igual com o trimestre
 recortado errado, e foi por isso que o erro do `MESES_ANALISE` sobreviveu a três
 conferências. A meta tem âncora própria: **a soma dos meses que você apurou tem
-que bater com a tela Meta Trimestral do DataCoreHS**, mês a mês. Em 21/08/2026
-ela mostra Julho R$ 1.123.090,94 · Agosto R$ 578.691,20 · Setembro R$ 0,00.
+que bater com a tela Meta Trimestral do DataCoreHS**, mês a mês. O
+`2026-T3` fechado dá Julho R$ 1.103.748,54 · Agosto R$ 1.112.049,60 · Setembro
+R$ 568.104,10 (apurado em 01/10/2026; notas recusadas ou marcadas depois mudam o
+mês para baixo — julho era R$ 1.123.090,94 em 21/08).
 
 Se os meses que a sua consulta somou não forem os mesmos que aparecem naquela
 tela, o problema é o recorte, não a régua — **pare e diga qual trimestre você
