@@ -17,7 +17,7 @@ link; não é coisa para URL que qualquer um abre.
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
@@ -349,6 +349,22 @@ def _resposta(ident, resultado=None, erro=None):
     return corpo
 
 
+def _uuid_ou_none(texto: str | None) -> str | None:
+    """O `solicitante` como uuid, ou None se ele não for um.
+
+    ⚠️ Sessão que não nasceu de uma pessoa (cron, `sessions_send`, conferência
+    aberta à mão) manda outra coisa, e até 01/10/2026 isso ia direto para o
+    `$1::uuid` — o cast estourava como 500. Ver `tests/test_solicitante.py`.
+    """
+    pedido = (texto or "").strip()
+    if pedido.startswith("hsos-"):
+        pedido = pedido[len("hsos-"):]
+    try:
+        return str(UUID(pedido))
+    except ValueError:
+        return None
+
+
 async def _dono_do_pedido(conn, solicitante: str | None) -> str | None:
     """Quem fica como dono do que o agente publicou.
 
@@ -356,7 +372,7 @@ async def _dono_do_pedido(conn, solicitante: str | None) -> str | None:
     `/mcp/wiki`. Um cron não tem pessoa pedindo, e artefato sem dono não
     aparece em lugar nenhum.
     """
-    pedido = (solicitante or "").strip()
+    pedido = _uuid_ou_none(solicitante)
     if pedido:
         dono = await conn.fetchval(
             "SELECT id::text FROM public.profiles WHERE id = $1::uuid", pedido)
@@ -487,18 +503,7 @@ async def mcp_relatorios(
 
     dias = int(args.get("dias") or gerador.DIAS_PADRAO)
     async with sessao(role="service_role") as conn:
-        dono = None
-        pedido = (args.get("solicitante") or "").strip()
-        if pedido:
-            dono = await conn.fetchval(
-                "SELECT id::text FROM public.profiles WHERE id = $1::uuid", pedido
-            )
-        if not dono:
-            dono = await conn.fetchval(
-                "SELECT p.id::text FROM public.profiles p "
-                " JOIN public.user_roles r ON r.user_id = p.id "
-                " WHERE r.role = 'administrador' ORDER BY p.created_at LIMIT 1"
-            )
+        dono = await _dono_do_pedido(conn, args.get("solicitante"))
     if not dono:
         return _resposta(ident, {"content": [{"type": "text",
             "text": "Não há administrador cadastrado para guardar o arquivo."}],
