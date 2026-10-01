@@ -9,22 +9,38 @@ vezes seguidas, com a Nina culpando "contexto estourado". Lista longa escrita po
 LLM também é cara, lenta e sujeita a erro de digitação. Aqui a lista sai do banco
 direto para a planilha; o agente só recebe o resumo.
 
-⚠️ **A régua é a da skill `faturamento`** (`backend/skills/faturamento/SKILL.md`,
-seção "Produto: unidades, compradores e devolução"). Mudou lá, muda aqui — as
-âncoras dos testes são as mesmas da skill, para as duas não divergirem em
-silêncio:
+⚠️ **A régua de venda é a do DataCoreHS: `gold.fato_vendas`.** Não é
+reimplementada aqui — o fato já sai filtrado por `analytics/models/silver/vendas.sql`
+(CFOP do ITEM em 5102/6102/5108/6108/7102, Emitida DANFE, sem marcador que
+exclua segundo `silver.stg_marcadores`, fora a curadoria). A skill `faturamento`
+documenta a mesma coisa; as âncoras dos testes são as dela.
 
-  1. CFOP da NOTA em `CFOP_VALIDOS`, lido de `tiny.configuracoes`.
-  2. `descricao_situacao` = Emitida DANFE e `valor_nota` > 0.
-  3. Nenhum marcador de `MARCADORES_INVALIDOS`.
-  4. Item pelo nome EXATO — `ILIKE` traz fonte, placa e impressora junto.
-  5. Devolução (CFOP 1202/2202) só é abatida quando a venda que ela cita nas
-     `observacoes` AINDA conta na régua. Se a origem já saiu por marcador,
-     abater de novo conta a mesma devolução duas vezes — o erro de 30/09, em que
-     "bruto cheio − devoluções" deu 230 Phoebus em 2025 no lugar de 217.
+Até 01/10/2026 a régua era montada aqui, lendo `CFOP_VALIDOS` e
+`MARCADORES_INVALIDOS` de `tiny.configuracoes` — CFOP tirado da natureza da
+nota e marcador por `LIKE` contra a lista. As duas réguas foram rodadas lado a
+lado antes da troca, e o Phoebus bateu nas três âncoras (2025 = 217, 2024 =
+194, 2020–2026 = 137 empresas / 757) **por outro caminho**: a régua antiga
+contava as vendas 005725 e 004743 e abatia as devoluções 005745 e 004762; o dbt
+tira as duas vendas pelo marcador ("NOTA REJEITADA", "REJEITADA SEFAZ" — o
+radical `rejeit`, que a lista não tinha) e não sobra o que abater. Na base
+inteira a antiga contava 27 notas que não são venda e deixava de fora 13 que
+são (exportação 7102 e natureza vazia).
 
-Valor é o do ITEM (`itens_nota.valor_total`), não o da nota: a nota tem frete e
-outros produtos.
+O que continua sendo nosso:
+
+  1. Item pelo nome EXATO — `ILIKE` traz fonte, placa e impressora junto.
+  2. Devolução (CFOP 1202/2202) só é abatida quando a venda que ela cita nas
+     `observacoes` ESTÁ em `gold.fato_vendas`. Se a origem já saiu por
+     marcador, abater de novo conta a mesma devolução duas vezes — o erro de
+     30/09, em que "bruto cheio − devoluções" deu 230 Phoebus em 2025 no lugar
+     de 217. ⚠️ O DataCoreHS não abate devolução nenhuma (decisão D8: a venda
+     devolvida sai pelo marcador). Em 01/10/2026, 9 das 21 devoluções da base
+     citavam venda ainda no fato — sem marcador —, e nelas o relatório e o
+     painel divergem de propósito.
+
+Valor é o do ITEM (`valor_total_item`), não o da nota: a nota tem frete e
+outros produtos. ⚠️ O fato é recalculado às 05:00: nota emitida hoje entra
+amanhã.
 """
 import html as _html
 import io
@@ -184,40 +200,26 @@ def consolidar(vendas: list[dict], devolucoes: list[dict], modo: str) -> dict:
 # Banco
 # ─────────────────────────────────────────────────────────────────────────────
 
-_REGUA = """
-WITH cfg AS (SELECT string_to_array(lower(replace(valor, ' ', '')), ',') AS cfops
-               FROM tiny.configuracoes WHERE chave = 'CFOP_VALIDOS'),
-     mk  AS (SELECT string_to_array(lower(valor), ',') AS ruins
-               FROM tiny.configuracoes WHERE chave = 'MARCADORES_INVALIDOS'),
-     conta AS (
-  SELECT nf.id FROM tiny.notas_fiscais nf, cfg, mk
-   WHERE lower(btrim(nf.descricao_situacao)) = 'emitida danfe'
-     AND nf.valor_nota > 0
-     AND lower(substring(nf.natureza_operacao FROM '\\d{4}')) = ANY(cfg.cfops)
-     AND NOT EXISTS (SELECT 1 FROM tiny.marcadores m, unnest(mk.ruins) r(txt)
-                      WHERE m.id_nota = nf.id
-                        AND lower(m.descricao) LIKE '%%' || btrim(r.txt) || '%%'))
-"""
-
-_VENDAS = _REGUA + """
-SELECT nf.numero, nf.data_emissao AS data, c.cpf_cnpj, c.nome,
-       i.quantidade, i.valor_total AS valor
-  FROM conta
-  JOIN tiny.notas_fiscais nf ON nf.id = conta.id
-  JOIN tiny.itens_nota i ON i.id_nota = nf.id
+# O fato tem o item (`sk_venda_item` = `tiny.itens_nota.id`) mas não o nome dele
+# nem o cliente da nota; esses vêm do `tiny`, por id. Nenhum filtro de régua aqui.
+_VENDAS = """
+SELECT f.numero_nota AS numero, f.data_venda AS data, c.cpf_cnpj, c.nome,
+       f.quantidade, f.valor_total_item AS valor
+  FROM gold.fato_vendas f
+  JOIN tiny.itens_nota i ON i.id = f.sk_venda_item
+  JOIN tiny.notas_fiscais nf ON nf.id = f.id_nota
   LEFT JOIN tiny.clientes c ON c.id = nf.id_cliente
  WHERE upper(btrim(i.descricao)) = upper(btrim(%(produto)s))
-   AND nf.data_emissao BETWEEN %(inicio)s AND %(fim)s
+   AND f.data_venda BETWEEN %(inicio)s AND %(fim)s
 """
 
-# A origem pode ser de um ano anterior ao período pedido: a régua da origem é
-# conferida sem filtro de data. O que decide o ano do abatimento é a data da
+# A origem pode ser de um ano anterior ao período pedido: ela é procurada no fato
+# inteiro, sem filtro de data. O que decide o ano do abatimento é a data da
 # DEVOLUÇÃO.
-_DEVOLUCOES = _REGUA + """
+_DEVOLUCOES = """
 SELECT nf.numero, nf.data_emissao AS data, c.cpf_cnpj, c.nome,
        i.quantidade, i.valor_total AS valor, nf.observacoes,
-       ARRAY(SELECT lpad(o.numero, 6, '0') FROM conta
-               JOIN tiny.notas_fiscais o ON o.id = conta.id) AS contadas
+       ARRAY(SELECT DISTINCT lpad(numero_nota, 6, '0') FROM gold.fato_vendas) AS contadas
   FROM tiny.notas_fiscais nf
   JOIN tiny.itens_nota i ON i.id_nota = nf.id
   LEFT JOIN tiny.clientes c ON c.id = nf.id_cliente
@@ -232,7 +234,7 @@ def _decidir(ref: str | None, contadas: set[str]) -> str:
     if ref is None:
         return "não cita a nota de origem — não abatida"
     if ref not in contadas:
-        return f"origem {ref} já fora da régua — não abatida (contaria duas vezes)"
+        return f"origem {ref} fora de gold.fato_vendas — não abatida (contaria duas vezes)"
     return "abater"
 
 
@@ -295,9 +297,10 @@ def gerar(dsn: str, produto: str, inicio: date, fim: date,
         ("Unidades líquidas", r["liquidas"]),
         ("Valor líquido (R$)", r["valor_liquido"]),
         ("Agrupamento", agrup),
-        ("Régua", "NF-e Emitida DANFE, CFOP de venda (CFOP_VALIDOS), sem marcador "
-                  "de cancelamento/recusa; item pelo nome exato; valor do item."),
-        ("Devolução", "abatida só quando a venda de origem ainda conta na régua"
+        ("Régua", "a do DataCoreHS (gold.fato_vendas): CFOP de venda do item, inclusive "
+                  "exportação; Emitida DANFE; sem marcador que exclua. Item pelo nome "
+                  "exato; valor do item. Dados até a carga das 05:00."),
+        ("Devolução", "abatida só quando a venda de origem está em gold.fato_vendas"
                       if abater_devolucoes else "não abatida (pedido assim)"),
         ("Fonte", f"DataCoreHS / ERP Tiny — gerado em {date.today():%d/%m/%Y}"),
     ]
@@ -391,6 +394,7 @@ small{{color:#666}}</style>
 {linhas}
 <tr><th></th><th>TOTAL</th><th></th><th class=n>{r['brutas']}</th><th class=n>{r['devolvidas']}</th>
 <th class=n>{r['liquidas']}</th><th class=n>{_brl(r['valor_liquido'])}</th></tr></table>
-<p><small>Fonte: DataCoreHS / ERP Tiny. Só venda (CFOP de venda, NF-e emitida, sem
-marcador de cancelamento), item pelo nome exato, devolução abatida só quando a venda
-de origem ainda conta. Gerado em {date.today():%d/%m/%Y}.</small></p></html>"""
+<p><small>Fonte: DataCoreHS (gold.fato_vendas, carga das 05:00). Só venda (CFOP de
+venda do item, NF-e emitida, sem marcador de cancelamento), item pelo nome exato,
+devolução abatida só quando a venda de origem está no fato. Gerado em
+{date.today():%d/%m/%Y}.</small></p></html>"""

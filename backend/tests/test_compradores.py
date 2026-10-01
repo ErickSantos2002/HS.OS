@@ -11,6 +11,11 @@ Conferido contra o DataCoreHS em 30/09/2026 com o módulo real: 2025 = 54
 empresas / 217 un / R$ 4.936.796,00; 2024 líquido = 194 un / R$ 3.919.607,00
 (abate só a 005745); 2020–2026 = 137 empresas / 757 un / R$ 15.733.671,84
 (abate a 005745 e a 004762). São as âncoras da skill `faturamento`.
+
+Reconferido em 01/10/2026 na régua do DataCoreHS (`gold.fato_vendas`): os
+mesmos três números, mas **sem abater nada** — as vendas 005725 e 004743 já
+saem pelo marcador de rejeição, então 2024 vem 194 direto. O que estes testes
+trancam (a quem a nota pertence, quando uma devolução abate) não mudou.
 """
 from datetime import date
 

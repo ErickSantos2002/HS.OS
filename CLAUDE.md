@@ -1118,6 +1118,17 @@ as devoluções delas: 230 Phoebus em 2025 (certo: 217) e "faltam 95" (certo: 83
 âncora líquida nos três anos (194 · 217 · 134) e a regra: devolução só abate
 quando a nota de origem, citada nas `observacoes`, ainda conta na régua.
 
+✅ **Desde 01/10/2026 a régua de venda é a do DataCoreHS: `gold.fato_vendas`**
+(o dbt de `~/github/DataCore/analytics`), na ferramenta e na skill. Antes, as
+duas remontavam a régua lendo `CFOP_VALIDOS` e `MARCADORES_INVALIDOS` de
+`tiny.configuracoes` — chaves que o DataCore aposentou. Rodadas lado a lado, as
+três âncoras de Phoebus bateram **por outro caminho** (as vendas 005725 e 004743
+saem pelo marcador de rejeição em vez de serem abatidas), e na base inteira a
+régua antiga contava 27 notas que não são venda e perdia 13 que são. O
+cabeçalho de `compradores.py` tem a conta. **Não reintroduza filtro de CFOP ou
+marcador do lado de cá**: duas réguas foi o que fez o faturamento divergir por
+anos. ⚠️ O fato é recalculado às 05:00 — nota de hoje entra amanhã.
+
 ### Agendamento (`cron.*`) — contrato levantado em 19/08/2026
 
 ```

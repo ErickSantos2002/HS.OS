@@ -209,9 +209,9 @@ _FERRAMENTAS.append({
         "devoluções abatidas. USE SEMPRE que pedirem lista de compradores, "
         "ranking de clientes de um produto ou 'todas as empresas que compraram': "
         "NÃO escreva a lista você mesmo — lista longa passa do seu limite de "
-        "resposta e o turno inteiro se perde. A régua é a da skill faturamento "
-        "(só venda, item exato, devolução abatida só quando a origem ainda conta); "
-        "não recalcule."
+        "resposta e o turno inteiro se perde. A régua é a do DataCoreHS "
+        "(gold.fato_vendas, a mesma da skill faturamento: só venda, item exato, "
+        "devolução abatida só quando a origem está no fato); não recalcule."
     ),
     "inputSchema": {
         "type": "object",

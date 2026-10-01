@@ -25,52 +25,60 @@ cancelamento. São notas de verdade, emitidas de verdade, que **não são venda*
 
 | | de onde vem | o que é |
 |---|---|---|
-| **Vendas** | `tiny.notas_fiscais` (NF-e) | produto vendido |
+| **Vendas** | `gold.fato_vendas` (NF-e, régua já aplicada) | produto vendido |
 | **Serviços** | `tiny.servicos` (NFS-e) | calibração, anuidade de software, outros |
 
 **Nada mais entra.** Não existe uma terceira fonte, e nenhuma outra tabela do
 DataCoreHS é faturamento.
 
-## Vendas — as quatro condições, todas obrigatórias
+## Vendas — a régua é a do DataCoreHS, e já vem aplicada
 
-1. **CFOP da NOTA está na lista de venda.** O CFOP que vale é o extraído do
-   `natureza_operacao` **da nota**, não o `cfop` do item. Uma nota pode ter item
-   com CFOP de venda e não ser venda.
-2. **`descricao_situacao` = `Emitida DANFE`.** Qualquer outra situação está fora.
-3. **`valor_nota > 0`.**
-4. **Nenhum marcador da lista de inválidos** (cancelar, nf devolvida, nf
-   recusada, inutilizada…).
+**Venda é o que está em `gold.fato_vendas`.** A régua mora no dbt do DataCoreHS
+(`analytics/models/silver/vendas.sql`) e a tabela já sai filtrada por ela:
 
-E o valor somado é o **`valor_nota`**, nunca a soma dos itens: a nota inclui
-frete e desconto, então os dois não batem — e o certo é o da nota.
+1. **CFOP do ITEM é de venda** — 5102, 6102, 5108, 6108 e **7102** (exportação,
+   marcada em `mercado = 'externo'`). Não a natureza de operação, que é texto
+   livre: há nota com natureza vazia e nota cuja natureza diz 6102 com item 2202.
+2. **Situação `emitida danfe`.**
+3. **Nenhum marcador que exclua** — a classificação de `silver.stg_marcadores`,
+   por radical (`cancel`, `devol`, `recusad`, `rejeit`, `inutiliz`, `nao quis`)
+   mais uma seed de exceções.
+4. **Não retirada à mão** pela curadoria (`notas_fora_do_faturamento`).
 
-⚠️ **As duas listas vêm do banco, não deste arquivo.** Elas moram em
-`tiny.configuracoes`, nas chaves `CFOP_VALIDOS` e `MARCADORES_INVALIDOS`. Leia
-de lá **sempre**. Se alguém mudar a régua no sistema, a sua resposta acompanha
-em vez de divergir em silêncio. Hoje os CFOP são 6102, 5102, 6108 e 5108 — mas
-isto aqui é referência para você reconhecer, não valor para copiar na consulta.
+⚠️ **Não refaça esses filtros sobre o `tiny`, nem para "conferir".** Duas cópias
+da régua foram o que fez o faturamento divergir entre relatórios por anos. Se o
+número do `gold` parecer errado, diga o que viu — quem corrige é o DataCoreHS.
+
+**Grão: ITEM da nota.** Faturamento é **`sum(valor_nota_rateado)`** — o valor da
+nota repartido entre os itens; somado, devolve exatamente o `valor_nota` (frete e
+desconto inclusos). Nota se conta com `count(DISTINCT id_nota)`. A data é
+`data_venda`.
+
+⚠️ **Nunca junte `tiny.notas_fiscais` e some `valor_nota`**: a nota se repete em
+cada item e o total infla ~28%. Do `tiny`, por `id`, só o que o fato não traz —
+o nome do item (`tiny.itens_nota i ON i.id = f.sk_venda_item`), o vendedor, o
+cliente e as observações (`tiny.notas_fiscais nf ON nf.id = f.id_nota`).
+
+⚠️ **A tabela é recalculada uma vez por dia, às 05:00.** Nota emitida hoje só
+aparece amanhã. Em pergunta sobre hoje ou o mês corrente, diga **"até
+DD/MM"** com o `max(data_venda)` — não "até hoje".
 
 ```sql
-WITH cfg AS (
-  SELECT string_to_array(lower(replace(valor, ' ', '')), ',') AS cfops
-    FROM tiny.configuracoes WHERE chave = 'CFOP_VALIDOS'
-), mk AS (
-  SELECT string_to_array(lower(valor), ',') AS ruins
-    FROM tiny.configuracoes WHERE chave = 'MARCADORES_INVALIDOS'
-)
-SELECT count(*) AS notas,
-       sum(nf.valor_nota)::numeric(14,2) AS total
-FROM tiny.notas_fiscais nf, cfg, mk
-WHERE nf.data_emissao >= DATE '2026-08-01'
-  AND nf.data_emissao <  DATE '2026-09-01'
-  AND lower(btrim(nf.descricao_situacao)) = 'emitida danfe'
-  AND nf.valor_nota > 0
-  AND lower(substring(nf.natureza_operacao FROM '\d{4}')) = ANY(cfg.cfops)
-  AND NOT EXISTS (
-        SELECT 1 FROM tiny.marcadores m, unnest(mk.ruins) AS r(txt)
-         WHERE m.id_nota = nf.id
-           AND lower(m.descricao) LIKE '%' || btrim(r.txt) || '%');
+SELECT count(DISTINCT id_nota) AS notas,
+       sum(valor_nota_rateado)::numeric(14,2) AS total,
+       max(data_venda) AS dados_ate
+FROM gold.fato_vendas
+WHERE data_venda >= DATE '2026-08-01'
+  AND data_venda <  DATE '2026-09-01';
 ```
+
+⚠️ **Até 01/10/2026 a régua vinha de `tiny.configuracoes`** (`CFOP_VALIDOS` e
+`MARCADORES_INVALIDOS`, com CFOP lido da natureza e marcador por `LIKE`). As
+chaves foram aposentadas e saem do banco; consulta que as leia está errada. Medido na troca: a régua
+antiga contava 27 notas que não são venda (natureza dizendo venda com item de
+devolução; marcador "MATERIAL DEVOLVIDO", "NOTA REJEITADA" fora da lista) e
+deixava de fora 13 que são (exportação, natureza vazia). Em 2025 o total cai
+R$ 13.230 e em 2026 R$ 14.700; janeiro/2026 e o T3 de 2026 não mudam.
 
 ## Serviços — duas condições
 
@@ -112,25 +120,16 @@ trimestre com a meta anual inteira dá um percentual três vezes menor que o rea
 assusta à toa.
 
 ```sql
-WITH cfg AS (SELECT string_to_array(lower(replace(valor,' ','')),',') cfops
-               FROM tiny.configuracoes WHERE chave='CFOP_VALIDOS'),
-     mk  AS (SELECT string_to_array(lower(valor),',') ruins
-               FROM tiny.configuracoes WHERE chave='MARCADORES_INVALIDOS'),
-     tri AS (SELECT ini, (ini + interval '3 months')::date fim
+WITH tri AS (SELECT ini, (ini + interval '3 months')::date fim
                FROM (SELECT CASE WHEN v ~ '^\d{4}-T[1-4]$'
                                  THEN make_date(left(v,4)::int, (right(v,1)::int-1)*3+1, 1)
                                  ELSE date_trunc('quarter', current_date)::date END ini
                        FROM (SELECT coalesce((SELECT upper(btrim(valor)) FROM tiny.configuracoes
                                                WHERE chave='TRIMESTRE_APURACAO'),'AUTO') v) c) x),
      meta AS (SELECT valor::numeric/4 m FROM tiny.configuracoes WHERE chave='META'),
-     v AS (SELECT coalesce(sum(nf.valor_nota),0)::numeric t
-             FROM tiny.notas_fiscais nf, cfg, mk, tri
-            WHERE nf.data_emissao >= tri.ini AND nf.data_emissao < tri.fim
-              AND lower(btrim(nf.descricao_situacao))='emitida danfe' AND nf.valor_nota>0
-              AND lower(substring(nf.natureza_operacao FROM '\d{4}')) = ANY(cfg.cfops)
-              AND NOT EXISTS (SELECT 1 FROM tiny.marcadores mm, unnest(mk.ruins) r(txt)
-                               WHERE mm.id_nota=nf.id
-                                 AND lower(mm.descricao) LIKE '%'||btrim(r.txt)||'%')),
+     v AS (SELECT coalesce(sum(f.valor_nota_rateado),0)::numeric t
+             FROM gold.fato_vendas f, tri
+            WHERE f.data_venda >= tri.ini AND f.data_venda < tri.fim),
      s AS (SELECT coalesce(sum(replace("valor_dos_serviços",',','.')::numeric),0)::numeric t
              FROM tiny.servicos, tri WHERE cancelada=false
               AND "data_da_emissão_nfs_e_dsr_e" >= tri.ini
@@ -138,11 +137,13 @@ WITH cfg AS (SELECT string_to_array(lower(replace(valor,' ','')),',') cfops
 SELECT extract(year from tri.ini)||'-T'||extract(quarter from tri.ini) AS trimestre,
        meta.m AS meta_trimestre, v.t+s.t AS realizado,
        round((v.t+s.t)/meta.m*100,1) AS pct,
-       greatest(meta.m-(v.t+s.t),0) AS falta
+       greatest(meta.m-(v.t+s.t),0) AS falta,
+       (SELECT max(data_venda) FROM gold.fato_vendas) AS vendas_ate
   FROM tri, meta, v, s;
 ```
 
-⚠️ **Sempre diga qual trimestre você mediu** — é a coluna `trimestre`. No
+⚠️ **Sempre diga qual trimestre você mediu** — é a coluna `trimestre` — **e até
+que dia vão as vendas** (`vendas_ate`: a carga é das 05:00, nota de hoje entra amanhã). No
 primeiro dia de um trimestre o realizado é zero de verdade, e "0%" sem o
 trimestre ao lado parece defeito. Se a pessoa perguntar de outro trimestre,
 troque o valor da `tri` na consulta (ex.: `'2026-T2'` no lugar do `coalesce`) —
@@ -181,14 +182,17 @@ comigo" e nunca foram respondidas. As duas são respondíveis aqui.
 
 ### Por vendedor
 
-`tiny.notas_fiscais` tem **`nome_vendedor`** (e `id_vendedor`). Basta agrupar a
-mesma consulta de vendas:
+O vendedor é o `nome_vendedor` da nota, em `tiny.notas_fiscais`. O valor continua
+saindo do fato:
 
 ```sql
--- … a CTE de vendas da seção acima, e então:
-SELECT coalesce(nullif(btrim(nome_vendedor),''),'(sem vendedor)') AS vendedor,
-       count(*) AS notas, sum(valor_nota)::numeric(14,2) AS total
-  FROM v GROUP BY 1 ORDER BY 3 DESC;
+SELECT coalesce(nullif(btrim(nf.nome_vendedor),''),'(sem vendedor)') AS vendedor,
+       count(DISTINCT f.id_nota) AS notas,
+       sum(f.valor_nota_rateado)::numeric(14,2) AS total
+  FROM gold.fato_vendas f
+  JOIN tiny.notas_fiscais nf ON nf.id = f.id_nota
+ WHERE f.data_venda >= DATE '2026-08-01' AND f.data_venda < DATE '2026-09-01'
+ GROUP BY 1 ORDER BY 3 DESC;
 ```
 
 ⚠️ **Só vale para VENDAS. `tiny.servicos` não tem vendedor.** Se eu somar os dois
@@ -197,8 +201,8 @@ o faturamento total — e a diferença é justamente a receita de serviços, que
 tem a quem atribuir. **Diga isso ao responder**: "por vendedor cobre só as
 vendas; os serviços do mês (R$ X) não têm vendedor no cadastro".
 
-Agosto/2026 devolve: Adriana Oliveira R$ 109.501,60 · Gislayne Nunes
-R$ 100.030,20 · Eduardo Luna R$ 85.791,00 · Sandra Silva R$ 66.672,50.
+Agosto/2026 inteiro devolve: Eduardo Luna R$ 441.521,00 · Gislayne Nunes
+R$ 214.367,20 · Adriana Oliveira R$ 137.116,60 · Sandra Silva R$ 90.564,50.
 
 ## Produto: unidades, compradores e devolução
 
@@ -215,31 +219,23 @@ comparação entre anos — usa a mesma régua de venda do faturamento.** Não e
 "régua de aparelho" separada. Um único bloco serve para tudo:
 
 ```sql
-WITH cfg AS (SELECT string_to_array(lower(replace(valor,' ','')),',') cfops
-               FROM tiny.configuracoes WHERE chave='CFOP_VALIDOS'),
-     mk  AS (SELECT string_to_array(lower(valor),',') ruins
-               FROM tiny.configuracoes WHERE chave='MARCADORES_INVALIDOS'),
-     venda AS (
-  SELECT nf.id, nf.numero, nf.data_emissao, nf.id_cliente, i.descricao,
-         i.quantidade, i.valor_total
-    FROM tiny.notas_fiscais nf
-    JOIN tiny.itens_nota i ON i.id_nota = nf.id, cfg, mk
-   WHERE upper(btrim(i.descricao)) = 'BAFÔMETRO PHOEBUS'      -- o item exato
-     AND lower(btrim(nf.descricao_situacao)) = 'emitida danfe'
-     AND nf.valor_nota > 0
-     AND lower(substring(nf.natureza_operacao FROM '\d{4}')) = ANY(cfg.cfops)
-     AND NOT EXISTS (SELECT 1 FROM tiny.marcadores m, unnest(mk.ruins) r(txt)
-                      WHERE m.id_nota = nf.id
-                        AND lower(m.descricao) LIKE '%' || btrim(r.txt) || '%'))
+WITH venda AS (
+  SELECT f.id_nota AS id, f.numero_nota AS numero, f.data_venda AS data_emissao,
+         nf.id_cliente, i.descricao, f.cfop, f.quantidade,
+         f.valor_total_item AS valor_total
+    FROM gold.fato_vendas f
+    JOIN tiny.itens_nota i ON i.id = f.sk_venda_item
+    JOIN tiny.notas_fiscais nf ON nf.id = f.id_nota
+   WHERE upper(btrim(i.descricao)) = 'BAFÔMETRO PHOEBUS')      -- o item exato
 -- ano a ano:
 SELECT extract(year FROM data_emissao)::int AS ano,
        sum(quantidade)::int AS unidades, sum(valor_total)::numeric(14,2) AS valor
   FROM venda GROUP BY 1 ORDER BY 1;
 ```
 
-- **Unidades = `sum(itens_nota.quantidade)`**, e valor do produto =
-  `sum(itens_nota.valor_total)`. Não é o `valor_nota`: a nota inclui frete e
-  outros itens.
+- **Unidades = `sum(quantidade)`**, e valor do produto = `sum(valor_total_item)`.
+  Não é o `valor_nota_rateado`: aquele inclui o frete rateado; o do item é o
+  preço do produto.
 - **Filtre o item pelo nome exato, não por `ILIKE '%phoebus%'`.** O `ILIKE` traz
   junto `FONTE DE ALIMENTAÇÃO 12V - 3A (PHOEBUS)`, `Placa do Phoebus Link`,
   `IMPRESSORA BAFÔMETRO PHOEBUS` e o `PHOEBUS PRO C/ TAMPA`: em 2025 foram +40
@@ -292,7 +288,8 @@ isso, a C4 Development, que é a nossa fornecedora no exterior, apareceu como
 
 **O significado está escrito na própria nota**, em `natureza_operacao`
 (`"CFOP 6908 - Remessa de bem por conta de contrato de comodato e locação"`).
-Leia de lá. Não descreva CFOP de memória.
+Leia de lá para DESCREVER. Não descreva CFOP de memória. Para decidir se é
+venda, quem vale é o `cfop` do item — e o `gold.fato_vendas` já decidiu.
 
 | 1º dígito | sentido |
 |---|---|
@@ -302,13 +299,13 @@ Leia de lá. Não descreva CFOP de memória.
 Os CFOPs de saída que aparecem nas nossas notas e **não são venda**: 6912/5912
 (demonstração), 6916/5916 (retorno de conserto), 6915 (remessa para conserto),
 6908 (comodato), 6910/5910 (bonificação), 5911 (amostra), 6923 (conta e ordem),
-6949/5949 (outra saída). As notas de importação têm `natureza_operacao =
-'Importacao'`, sem número: o `substring` devolve nulo e a nota já fica fora.
-O `3102` só aparece no `cfop` do item.
+6949/5949 (outra saída). Importação (`3102`) é entrada e nunca está no fato.
 
-**"Toda saída de venda" é a lista `CFOP_VALIDOS`.** Não existe nesta base outro
-CFOP de venda fora dela que conte. A exportação (`7102`) **não entra, por
-decisão**: não a inclua e não a ofereça como opção.
+**"Toda saída de venda" é o que está em `gold.fato_vendas`**: 5102, 6102, 5108,
+6108 e 7102. A exportação (`7102`) **entra**, por decisão do DataCoreHS (D2), e
+vem marcada em `mercado = 'externo'` — se a pergunta for só mercado interno,
+filtre `mercado = 'interno'` e diga que filtrou. São 5 notas na base inteira
+(2020 e dez/2023, R$ 467.523,36).
 
 ### Devolução — a régua já tira a maioria; abater de novo conta duas vezes
 
@@ -317,20 +314,16 @@ devolve ou recusa, a nota de venda original costuma ganhar um marcador
 (`NF recusada`, `NF cancelada`…) e **já sai pela régua**. Subtrair também a nota
 de entrada `2202` desconta a mesma devolução duas vezes. Foi o que aconteceu em
 29/09/2026: das seis devoluções de Phoebus, só **duas** tinham a venda de origem
-ainda contada.
+ainda contada — e com a régua do DataCoreHS, nenhuma: as duas vendas de origem
+têm marcador de rejeição, que a lista antiga não pegava.
 
 A nota de devolução cita a de origem nas `observacoes` ("faturado na DANFE de
-venda 006031"). **Abata só quando a nota citada ainda conta na régua:**
+venda 006031"). **Abata só quando a nota citada ainda está em
+`gold.fato_vendas`:**
 
 ```sql
--- cfg e mk como acima, e então:
-conta AS (SELECT nf.id, lpad(nf.numero, 6, '0') AS numero
-            FROM tiny.notas_fiscais nf, cfg, mk
-           WHERE lower(btrim(nf.descricao_situacao)) = 'emitida danfe' AND nf.valor_nota > 0
-             AND lower(substring(nf.natureza_operacao FROM '\d{4}')) = ANY(cfg.cfops)
-             AND NOT EXISTS (SELECT 1 FROM tiny.marcadores m, unnest(mk.ruins) r(txt)
-                              WHERE m.id_nota = nf.id
-                                AND lower(m.descricao) LIKE '%' || btrim(r.txt) || '%')),
+WITH conta AS (SELECT DISTINCT lpad(numero_nota, 6, '0') AS numero
+                 FROM gold.fato_vendas),
 devol AS (SELECT nf.numero, nf.data_emissao, i.quantidade, i.valor_total,
                  lpad(substring(nf.observacoes FROM '(?i)(?:DANFE|NF)[^0-9]{0,25}(\d{3,6})'), 6, '0') AS ref
             FROM tiny.notas_fiscais nf JOIN tiny.itens_nota i ON i.id_nota = nf.id
@@ -338,15 +331,18 @@ devol AS (SELECT nf.numero, nf.data_emissao, i.quantidade, i.valor_total,
              AND lower(btrim(nf.descricao_situacao)) = 'emitida danfe'
              AND substring(nf.natureza_operacao FROM '\d{4}') IN ('1202','2202'))
 SELECT d.*, CASE WHEN d.ref IS NULL THEN 'sem referência: não abater, relatar'
-                 WHEN c.id IS NULL THEN 'origem já fora da régua: NÃO abater'
+                 WHEN c.numero IS NULL THEN 'origem fora do gold: NÃO abater'
                  ELSE 'abater' END AS decisao
   FROM devol d LEFT JOIN conta c ON c.numero = d.ref;
 ```
 
-Hoje, para o Phoebus, isso dá: abater **004762** (1 un, 2023) e **005745**
-(10 un, 2024). Não abater **006168** e **006377** (as vendas de origem já estão
-marcadas como recusadas), nem **005624** (cita uma remessa `6949`, não uma
-venda), nem **005576** (não cita nota). Diga ao responder quais você abateu e por quê.
+Hoje, para o Phoebus, isso dá: **nenhuma abatida.** As origens de **004762**
+(1 un, 2023) e **005745** (10 un, 2024) saíram pelo marcador de rejeição; as de
+**006168** e **006377** estão marcadas como recusadas; a **005624** cita uma
+remessa `6949`, não uma venda; a **005576** não cita nota. Na base inteira, 9 das
+21 devoluções ainda abatem (2023–2024, todas de outros produtos) — são vendas
+sem marcador, que o DataCoreHS conta como faturamento cheio. Diga ao responder
+quais você abateu e por quê.
 
 ⚠️ **Nunca "reincluir a origem" para depois abater.** Em 30/09/2026 a Iris montou
 um "bruto cheio − devoluções": pôs de volta as vendas que a régua tinha tirado
@@ -359,18 +355,19 @@ venda − só as devoluções marcadas `abater` acima. Nada mais entra nem sai.*
 | Phoebus líquido | 2024 | 2025 | 2026 (até 29/09) |
 |---|---|---|---|
 | unidades | **194** | **217** | **134** |
-| abatido | 005745 (10 un) | nada (a origem da 006377 já está fora) | nada |
+| abatido | nada (a origem da 005745 saiu pelo marcador) | nada (a origem da 006377 já está fora) | nada |
 
 Confira **os três anos**. Um só pode bater por coincidência, como bateu.
 
 **O valor abatido é o `valor_total` do item na nota de devolução, somado pela
 consulta.** Não faça a conta de cabeça. Em 30/09/2026 a unidade saiu certa e o
 valor saiu R$ 91 mil errado. Âncora: **Phoebus 2024 líquido = 194 un ·
-R$ 3.919.607,00** (204 un · R$ 4.119.107,00 menos a 005745, 10 un · R$ 199.500,00).
+R$ 3.919.607,00** — até 01/10/2026 isso era 204 un menos a 005745 (10 un ·
+R$ 199.500,00); hoje a venda 005725 já não está no fato, e o 194 sai direto.
 
-⚠️ **A soma dos itens não é o `valor_nota`.** Para "quanto esse cliente comprou
-do produto X" o certo é `itens_nota.valor_total`; para faturamento é o
-`valor_nota`. São perguntas diferentes e números diferentes — não misture.
+⚠️ **A soma dos itens não é o faturamento.** Para "quanto esse cliente comprou
+do produto X" o certo é `valor_total_item`; para faturamento é o
+`valor_nota_rateado`. São perguntas diferentes e números diferentes — não misture.
 
 ## Confira antes de responder
 
@@ -397,18 +394,19 @@ tela, o problema é o recorte, não a régua — **pare e diga qual trimestre vo
 usou**, em vez de entregar o total.
 
 ⚠️ **Janeiro conferido também NÃO prova que uma contagem de produto está certa.**
-Janeiro valida a soma de `valor_nota`, e a contagem de unidades é outra consulta.
+Janeiro valida a soma de `valor_nota_rateado`, e a contagem de unidades é outra consulta.
 A âncora dela é o Phoebus, que exercita justamente o filtro de CFOP sobre os itens:
 
 | Phoebus (item `BAFÔMETRO PHOEBUS`) | unidades | valor | notas |
 |---|---|---|---|
 | 2025 inteiro | **217** | R$ 4.936.796,00 | 115 |
 | 2025 jan–set · out–dez | **138** · 79 | | |
-| 2024 inteiro | 204 | R$ 4.119.107,00 | 75 |
-| 2024 líquido de devolução | 194 | R$ 3.919.607,00 | |
+| 2024 inteiro | **194** | R$ 3.919.607,00 | 74 |
+| 2026 até 29/09 | **134** | | |
 
-Se a sua consulta der **485** para 2025, faltou o filtro de CFOP. Se der 257, você
-usou `ILIKE` e pegou acessório. Nos dois casos, **pare**.
+Se a sua consulta der **485** para 2025, você somou do `tiny` sem a régua. Se der
+257, usou `ILIKE` e pegou acessório. Se der 204 para 2024, está usando a régua
+antiga. Em todos os casos, **pare**.
 
 ## Ao responder
 
