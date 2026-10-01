@@ -34,9 +34,11 @@ O que continua sendo nosso:
      marcador, abater de novo conta a mesma devolução duas vezes — o erro de
      30/09, em que "bruto cheio − devoluções" deu 230 Phoebus em 2025 no lugar
      de 217. ⚠️ O DataCoreHS não abate devolução nenhuma (decisão D8: a venda
-     devolvida sai pelo marcador). Em 01/10/2026, 9 das 21 devoluções da base
-     citavam venda ainda no fato — sem marcador —, e nelas o relatório e o
-     painel divergem de propósito.
+     devolvida sai pelo marcador). Na troca, 9 das 21 devoluções da base
+     citavam venda ainda no fato, sem marcador; o DataCoreHS marcou as 9 no
+     mesmo dia e hoje nenhuma abate. Devolução que voltar a abater aqui é
+     venda devolvida sem marcador — é lá que se corrige, e as duas pontas
+     voltam a concordar sozinhas.
 
 Valor é o do ITEM (`valor_total_item`), não o da nota: a nota tem frete e
 outros produtos. ⚠️ O fato é recalculado às 05:00: nota emitida hoje entra

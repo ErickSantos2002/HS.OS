@@ -77,8 +77,10 @@ WHERE data_venda >= DATE '2026-08-01'
 chaves foram aposentadas e saem do banco; consulta que as leia está errada. Medido na troca: a régua
 antiga contava 27 notas que não são venda (natureza dizendo venda com item de
 devolução; marcador "MATERIAL DEVOLVIDO", "NOTA REJEITADA" fora da lista) e
-deixava de fora 13 que são (exportação, natureza vazia). Em 2025 o total cai
-R$ 13.230 e em 2026 R$ 14.700; janeiro/2026 e o T3 de 2026 não mudam.
+deixava de fora 13 que são (exportação, natureza vazia). Uma delas, a 006586
+(3 aparelhos, "Devolvido um aparelho"), o DataCoreHS reavaliou no mesmo dia e
+voltou a contar. Em 2026 o total cai R$ 14.700 (a 008332, "NOTA REJEITADA");
+2025, janeiro/2026 e o T3 de 2026 não mudam.
 
 ## Serviços — duas condições
 
@@ -339,10 +341,12 @@ SELECT d.*, CASE WHEN d.ref IS NULL THEN 'sem referência: não abater, relatar'
 Hoje, para o Phoebus, isso dá: **nenhuma abatida.** As origens de **004762**
 (1 un, 2023) e **005745** (10 un, 2024) saíram pelo marcador de rejeição; as de
 **006168** e **006377** estão marcadas como recusadas; a **005624** cita uma
-remessa `6949`, não uma venda; a **005576** não cita nota. Na base inteira, 9 das
-21 devoluções ainda abatem (2023–2024, todas de outros produtos) — são vendas
-sem marcador, que o DataCoreHS conta como faturamento cheio. Diga ao responder
-quais você abateu e por quê.
+remessa `6949`, não uma venda; a **005576** não cita nota. Na base inteira,
+**nenhuma das 21 devoluções abate hoje**: as 9 que ainda citavam venda sem
+marcador (2023–2024, outros produtos) ganharam marcador no DataCoreHS em
+01/10/2026, e a venda saiu do fato. Se aparecer uma que abata, é venda
+devolvida que ninguém marcou — diga isso ao responder, junto de quais você
+abateu e por quê.
 
 ⚠️ **Nunca "reincluir a origem" para depois abater.** Em 30/09/2026 a Iris montou
 um "bruto cheio − devoluções": pôs de volta as vendas que a régua tinha tirado
