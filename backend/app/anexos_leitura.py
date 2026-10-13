@@ -274,9 +274,18 @@ def _paginar_texto(texto: str, pagina: int) -> str:
     return f"Texto · página {pagina}/{total}\n\n" + texto[ini: ini + CARACTERES_POR_PAGINA]
 
 
+# Documentos que a linha do anexo chama de "documento" mas que não temos como
+# ler: `.doc` é binário OLE, `.odt` é zip e `.rtf` é marcação. Decodificá-los
+# como texto entregava lixo ao agente, que respondia em cima dele.
+_DOCUMENTO_SEM_LEITOR = ("doc", "odt", "rtf")
+
+
 def conteudo_legivel(nome: str, mime: str, dados: bytes, aba: str | None = None, pagina: int = 1) -> str:
     pagina = max(1, int(pagina or 1))
     tipo = tipo_legivel(nome, mime)
+    ext = nome.rsplit(".", 1)[-1].lower() if "." in (nome or "") else ""
+    if tipo == "documento" and ext in _DOCUMENTO_SEM_LEITOR:
+        return f"formato .{ext} não é legível por aqui; peça o arquivo em .docx ou .pdf"
     if tipo == "planilha":
         return _planilha(nome, dados, aba, pagina)
     if tipo in ("pdf", "documento", "texto"):

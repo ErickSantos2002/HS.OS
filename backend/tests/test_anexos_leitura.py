@@ -99,6 +99,20 @@ def test_imagem_devolve_so_metadados():
     assert "não é legível por ferramenta" in t
 
 
+def test_doc_odt_rtf_nao_viram_lixo_e_pedem_docx_ou_pdf():
+    """⚠️ `.doc` (binário OLE), `.odt` (zip) e `.rtf` (marcação) estavam em
+    "documento" e caíam no `_decodificar`: o agente recebia bytes de zip ou
+    `{\\rtf1\\ansi…` como se fosse o texto, e respondia em cima disso. Não temos
+    leitor para nenhum dos três; a resposta certa é pedir outro formato."""
+    for nome, dados in (("a.doc", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1lixo"),
+                        ("a.odt", b"PK\x03\x04lixo"),
+                        ("A.RTF", b"{\\rtf1\\ansi texto}")):
+        t = L.conteudo_legivel(nome, "application/octet-stream", dados)
+        ext = nome.rsplit(".", 1)[-1].lower()
+        assert t == (f"formato .{ext} não é legível por aqui; "
+                     "peça o arquivo em .docx ou .pdf"), t
+
+
 # --- Teto de recursos: xlsx é zip, 100 MB viram GB ao expandir -------------
 
 def test_xlsx_com_tamanho_descompactado_acima_do_teto_nem_abre(monkeypatch):
