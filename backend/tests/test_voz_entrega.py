@@ -102,3 +102,23 @@ def test_resposta_ja_gravada_pelo_recuperar_nao_gera_segundo_audio(monkeypatch):
     assert disparados == []
     c._audio_se_nova({"id": MSG}, True, "nina", PESSOA, "texto")
     assert len(disparados) == 1
+
+
+def test_aviso_de_falha_do_canal_nao_vira_audio():
+    """Quando o agente não responde, o canal recebe 'Não consegui responder
+    agora…'. Falar isso para todos os membros seria ruído."""
+    from app.routers import channels as ch
+    assert ch._merece_audio("Fechei o faturamento.") is True
+    assert ch._merece_audio(ch._AVISO_FALHA) is False
+
+
+def test_resposta_recuperada_antiga_nao_gera_audio():
+    """O `/recuperar` pode trazer dezenas de respostas órfãs de dias atrás de
+    uma vez; gerar áudio para todas seria rajada de chamadas e áudio que ninguém
+    vai ouvir. Só a recente (até 30 min) ganha resumo."""
+    from datetime import datetime, timedelta, timezone
+    from app.routers import conversations as c
+    agora = datetime(2026, 10, 13, 18, 0, tzinfo=timezone.utc)
+    assert c._recente("2026-10-13T17:45:00.000Z", agora) is True
+    assert c._recente("2026-10-13T17:00:00.000Z", agora) is False
+    assert c._recente("lixo", agora) is False

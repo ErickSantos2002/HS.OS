@@ -30,10 +30,21 @@ _EMOJI = re.compile(
     "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF‍️]")
 
 
+_SEPARADOR = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$")
+_REGUA = re.compile(r"^\s*([-*_])(\s*\1){2,}\s*$")
+
+
 def limpar_markdown(texto: str) -> str:
     """O que se fala: sem tabela, código, link cru, marcação nem emoji."""
     t = re.sub(r"```.*?```", " ", texto or "", flags=re.S)
-    t = "\n".join(l for l in t.splitlines() if not l.lstrip().startswith("|"))
+    linhas = t.splitlines()
+    # Tabela também existe sem `|` nas pontas ("Mês | Valor / --- | ---"): quando
+    # há linha separadora, toda linha com `|` é tabela. Linha horizontal sai.
+    tem_tabela = any(_SEPARADOR.match(l) and "|" in l for l in linhas)
+    t = "\n".join(l for l in linhas
+                  if not l.lstrip().startswith("|")
+                  and not (tem_tabela and "|" in l)
+                  and not _REGUA.match(l))
     t = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", t)        # [texto](url) → texto
     t = re.sub(r"https?://\S+", " ", t)
     t = re.sub(r"`([^`]*)`", r"\1", t)

@@ -87,3 +87,16 @@ def test_longa_fala_o_resumo_na_voz_do_agente():
 def test_falha_vira_none_e_nao_levanta(kw):
     r, _ = _gerar("palavra " * 60, **kw)
     assert r is None
+
+
+# ── revisão final, 13/10/2026 ───────────────────────────────────────────────
+
+def test_tabela_sem_barras_nas_pontas_nao_e_lida():
+    """O markdown aceita tabela sem `|` no começo da linha; antes ela passava
+    pela limpeza e o edge-tts lia 'Mês barra Valor, traço traço traço'."""
+    t = "Mês | Valor\n--- | ---\nJul | 10\nAgo | 12"
+    assert voz.texto_para_falar(t) is None
+
+
+def test_linha_horizontal_some():
+    assert voz.limpar_markdown("Antes.\n\n---\n\nDepois.") == "Antes. Depois."

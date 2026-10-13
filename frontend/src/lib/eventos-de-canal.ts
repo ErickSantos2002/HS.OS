@@ -51,6 +51,10 @@ export function aplicarEventoDeCanal(
     // Resposta de thread tem painel próprio; aqui ela abriria uma linha solta
     // no meio da conversa.
     if (!msg?.id || msg.thread_id) return prev;
+    // Edição pode vir parcial (o resumo em áudio manda só `{id, audio_url}`).
+    // Sem a mensagem na tela, inserir o pedaço criaria uma bolha sem `content`;
+    // ela chega inteira no próximo carregamento.
+    if (tipo === "mensagem-editada" && !prev.some((m) => m.id === msg.id)) return prev;
     return reconcileMessages(prev, [msg]);
   }
 

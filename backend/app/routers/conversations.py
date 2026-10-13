@@ -15,7 +15,7 @@ import asyncio
 import json
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import asyncpg
@@ -1045,7 +1045,8 @@ async def recuperar(
             recuperadas.append(_para_saida(linha))
 
     for m in recuperadas:
-        voz_entrega.disparar(voz_entrega.audio_da_conversa(m.id, agent_id, usuario.id, m.content))
+        if _recente(m.created_at):
+            voz_entrega.disparar(voz_entrega.audio_da_conversa(m.id, agent_id, usuario.id, m.content))
     if recuperadas:
         logger.info(
             "Recuperadas %d resposta(s) órfã(s) de %s para %s",
@@ -1339,6 +1340,22 @@ async def comando(
 
     logger.info("Comando %s em %s por %s", texto.split()[0], agent_id, usuario.id)
     return {"ok": True}
+
+
+_JANELA_AUDIO = timedelta(minutes=30)
+
+
+def _recente(created_at: str, agora: datetime | None = None) -> bool:
+    """Resposta recuperada só ganha resumo em áudio se for dos últimos 30 min.
+
+    O `/recuperar` pode trazer dezenas de respostas órfãs antigas de uma vez:
+    áudio para todas seria rajada de chamadas e áudio que ninguém vai ouvir.
+    """
+    try:
+        quando = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return False
+    return (agora or datetime.now(timezone.utc)) - quando <= _JANELA_AUDIO
 
 
 def _audio_se_nova(linha, nova: bool, agent_id: str, user_id: str, texto: str) -> None:

@@ -944,6 +944,11 @@ async def _responder_no_canal(channel_id: str, agent_id: str) -> None:
             )
 
 
+def _merece_audio(texto: str) -> bool:
+    """O aviso de que o agente não respondeu não vira resumo falado para o canal."""
+    return texto != _AVISO_FALHA
+
+
 async def _publicar_do_agente(
     channel_id: str, agent_id: str, nome: str, texto: str, marco: str
 ) -> None:
@@ -994,7 +999,8 @@ async def _publicar_do_agente(
     logger.info("Agente %s respondeu em %s.", agent_id, channel_id)
     # Resumo em áudio: um por resposta, para todos do canal — quem desligou a
     # preferência só não vê o player. Em segundo plano, fora da transação.
-    voz_entrega.disparar(voz_entrega.audio_do_canal(saida.id, channel_id, agent_id, texto))
+    if _merece_audio(texto):
+        voz_entrega.disparar(voz_entrega.audio_do_canal(saida.id, channel_id, agent_id, texto))
 
 
 @router.post("/{channel_id}/agentes/{agent_id}/responder",

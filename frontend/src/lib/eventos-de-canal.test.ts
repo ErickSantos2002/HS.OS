@@ -92,3 +92,28 @@ describe("threadDepoisDeApagar", () => {
     expect(threadDepoisDeApagar(null, "m1")).toBeNull();
   });
 });
+
+
+// ── Edição parcial de mensagem que a tela ainda não tem — 13/10/2026 ────────
+//
+// O resumo em áudio publica `mensagem-editada` só com `{id, audio_url}`. Se a
+// mensagem ainda não chegou à lista (a pessoa abriu o canal no meio), inserir
+// esse pedaço criava uma mensagem sem `content` e a bolha quebrava a tela.
+
+describe("mensagem-editada parcial", () => {
+  const existente = {
+    id: "m1", channel_id: "c1", author_id: "nina", author_type: "agent", author_name: "Nina",
+    content: "Resposta.", thread_id: null, created_at: "2026-10-13T17:00:00Z", deleted_at: null,
+  } as unknown as ChannelMessage;
+
+  it("mescla na mensagem que já está na tela, sem apagar o resto", () => {
+    const [m] = aplicarEventoDeCanal([existente], "mensagem-editada", { id: "m1", audio_url: "anexo:x" });
+    expect(m.content).toBe("Resposta.");
+    expect(m.audio_url).toBe("anexo:x");
+  });
+
+  it("ignora quando a mensagem ainda não está na tela", () => {
+    const prev = [existente];
+    expect(aplicarEventoDeCanal(prev, "mensagem-editada", { id: "m9", audio_url: "anexo:x" })).toBe(prev);
+  });
+});

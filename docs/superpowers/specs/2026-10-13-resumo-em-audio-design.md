@@ -107,9 +107,9 @@ Reaproveita o que existe para anexo de agente (`_entregar` mostra o padrão):
 ### Preferência
 
 Migração `019_resumo_em_audio.sql`: `ALTER TABLE public.profiles ADD COLUMN IF
-NOT EXISTS resumo_em_audio boolean NOT NULL DEFAULT true`. Exposta no `GET
-/auth/me` e no `GET/PATCH` do próprio perfil (o mesmo endpoint que hoje troca
-nome e avatar).
+NOT EXISTS resumo_em_audio boolean NOT NULL DEFAULT true`. Exposta no `GET/PATCH
+/profiles/me` (o mesmo endpoint que hoje troca nome e avatar) — o front lê de lá,
+então o `GET /auth/me` não precisou mudar.
 
 ### Vozes iniciais (dado, no deploy)
 
@@ -120,7 +120,8 @@ nome e avatar).
 | `atlas`, `flow`, `bruce` | `pt-BR-AntonioNeural` |
 
 Gravadas pela própria migração `019` (`UPDATE agent_profiles SET tts_voice_id`
-onde está nulo — não sobrescreve escolha feita depois).
+onde a voz **não** começa com `pt-BR-` — nula ou id herdado do ElevenLabs, que o
+edge-tts não entende; uma voz `pt-BR-` escolhida depois é preservada).
 
 ### Dependência
 
