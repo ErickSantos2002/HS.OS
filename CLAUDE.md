@@ -198,9 +198,12 @@ print(bancos.uma_linha('hsos', \"SELECT EXISTS(SELECT 1 FROM information_schema.
       \"WHERE table_name='agent_runs' AND column_name='seq_depois')\"))"
 ```
 
-⚠️ **E aplicar exige superusuário** — o `hsos_app` não tem `CREATE` em `public`. Pelo combinado
-do repo o Claude não lê o `admin.toml`: monte um script que use `bancos.conectar(..., perfil="admin")`
-sozinho e peça ao Erick para rodar no Konsole. O script deve **conferir o efeito** ao final
+⚠️ **E aplicar exige superusuário** — o `hsos_app` não tem `CREATE` em `public`. O Claude
+continua **sem ler** o `admin.toml`, mas desde 13/10/2026 **ele mesmo roda** a migração (decisão
+do Erick): um script `~/aplicar-hsos-NNN.py` que usa `bancos.conectar(..., perfil="admin")`
+sozinho, executado com o Python do venv do cadastro —
+`~/projetos/bancos/.venv/bin/python ~/aplicar-hsos-NNN.py`. Com o `python3` do sistema
+falha em `No module named 'psycopg'`. O script deve **conferir o efeito** ao final
 (rodar a consulta que estava falhando), não só dizer que executou.
 
 ## Arquitetura
