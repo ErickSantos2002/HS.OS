@@ -16,8 +16,18 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:8080"
 
-    # Uploads — substitui supabase.storage. Em produção, volume persistente.
+    # ⚠️ NÃO É MAIS USADO — o storage foi para o R2 em 13/10/2026. Continua
+    # declarado só porque o pydantic-settings recusa chave desconhecida no
+    # `.env` e derrubaria o boot de quem ainda a tem. Remover depois que sair
+    # do EasyPanel e dos `.env`.
     UPLOADS_DIR: str = "/app/uploads"
+
+    # Cloudflare R2 — onde todo arquivo mora. API compatível com S3. Sem as
+    # quatro, a API sobe e as rotas de arquivo respondem 503.
+    R2_ACCOUNT_ID: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_BUCKET: str = ""
 
     # OpenAI — usada pela plataforma **fora** do caminho dos agentes: transcrever
     # áudio, ler imagem colada no chat e extrair o perfil da empresa. Os agentes
