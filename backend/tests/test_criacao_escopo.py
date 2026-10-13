@@ -125,3 +125,24 @@ def test_alerta_concedido_e_o_hsos_alerta_mesmo_com_anexos_de_id_alerta(monkeypa
     monkeypatch.setattr(patch_gw, "aplicar_patch", gw.aplicar_patch)
     asyncio.run(ag._conceder_alerta("novo"))
     assert _do_novo(gw)["alsoAllow"] == ["mcp__hsos-alerta__avisar_administrador"]
+
+
+def test_desfazer_que_tambem_falha_deixa_erro_nomeado_no_log(monkeypatch, caplog):
+    """Se o escopo falha e o `agents.delete` do desfazer TAMBÉM falha, o agente
+    fica no gateway enxergando a identidade dos outros. Isso não pode morrer
+    num warning genérico: o log diz qual agente e o que fazer."""
+    import logging
+
+    gw = GatewayFalso(falhar=True)
+    monkeypatch.setattr(integ, "patch_gw", gw)
+
+    async def desfazer(aid):
+        return False  # o gateway não removeu
+
+    monkeypatch.setattr(ag, "_desfazer_criacao", desfazer)
+    with caplog.at_level(logging.ERROR), pytest.raises(HTTPException):
+        asyncio.run(ag._fechar_agente_novo("novo", especialista=True))
+    assert any(
+        r.levelno == logging.ERROR
+        and "agente novo ficou no gateway SEM escopo de MCP — remova à mão" in r.getMessage()
+        for r in caplog.records)

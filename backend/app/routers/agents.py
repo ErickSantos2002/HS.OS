@@ -1810,23 +1810,28 @@ async def _publicar_conectores(agent_id: str, nomes: list[str]) -> tuple[list, l
     return publicados, falhos
 
 
-async def _desfazer_criacao(openclaw_id: str) -> None:
+async def _desfazer_criacao(openclaw_id: str) -> bool:
     """Apaga o que a criação já tinha feito, quando ela não pôde terminar.
 
     Best-effort de propósito, e na ordem inversa da criação: primeiro o
     gateway, depois o banco. Se um dos dois falhar, o outro é limpo mesmo
     assim — sobra menos lixo do que abortar no meio do desfazer.
 
+    Devolve se o agente saiu do gateway — quem chama precisa saber quando ele
+    ficou lá (ver `_fechar_agente_novo`).
+
     O `agent_creation_log` **fica**: é a trilha de que a tentativa existiu, e
     apagá-la esconderia justamente o que se quer investigar depois.
     """
+    removido_do_gateway = True
     try:
         c = await cfg.carregar()
         if c.configurado:
             await obter_cliente(c.url, c.token).chamar("agents.delete", {"agentId": openclaw_id})
             logger.info("Desfazendo: %s removido do gateway.", openclaw_id)
     except ErroGateway as e:
-        logger.warning("Desfazendo: gateway não removeu %s: %s", openclaw_id, e)
+        removido_do_gateway = False
+        logger.error("Desfazendo: gateway não removeu %s: %s", openclaw_id, e)
 
     try:
         async with sessao(role="service_role") as conn:
@@ -1834,6 +1839,7 @@ async def _desfazer_criacao(openclaw_id: str) -> None:
         logger.info("Desfazendo: %s removido do banco.", openclaw_id)
     except Exception as e:  # noqa: BLE001
         logger.error("Desfazendo: banco não removeu %s: %s", openclaw_id, e)
+    return removido_do_gateway
 
 
 async def _fechar_agente_novo(agent_id: str, especialista: bool) -> None:
@@ -1872,7 +1878,10 @@ async def _fechar_agente_novo(agent_id: str, especialista: bool) -> None:
         logger.error(
             "Agente %s está no gateway SEM escopo de MCP (enxerga as entradas "
             "de anexos dos outros) — desfazendo a criação: %s", agent_id, e)
-        await _desfazer_criacao(agent_id)
+        if not await _desfazer_criacao(agent_id):
+            logger.error(
+                "agente %s ficou no gateway SEM escopo de MCP — remova à mão "
+                "(o agents.delete do desfazer também falhou)", agent_id)
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
             f"O agente não foi criado: não consegui fechar o escopo de ferramentas "
