@@ -1151,7 +1151,8 @@ ticket e o upload recusa token de login — sem isso um serve de passe para o ou
 `DELETE` em bucket privado conferem o dono; `anexos` não passa por `/storage/privado`
 nem por `extrair-texto`: só pelas rotas de `routers/anexos.py`.
 
-⚠️ **O mime é do servidor, não do cliente.** `mime_normalizado` decide; o `iniciar`
+⚠️ **No `anexos`, o mime é do servidor, não do cliente.** `mime_normalizado` decide (no
+fluxo genérico o assinado é o que o cliente mandou); em todo caso o `iniciar`
 devolve o `mime` assinado e o cliente tem que usar **esse** no `PUT`, senão o R2 responde
 403 `SignatureDoesNotMatch`. Abre inline só o que está na allowlist exata (imagens raster,
 pdf, `text/plain`, alguns áudio/vídeo); o resto baixa como attachment — html/svg enviado
@@ -1163,17 +1164,25 @@ No canal a linha só sai para id confirmado em `public.anexos` **daquele canal**
 do JSON que o cliente mandou. Ele lê pelo `ler_anexo` do servidor **`hsos-anexos-<agente>`**:
 uma entrada por agente no gateway, com o HMAC (`ANEXOS_MCP_SEGREDO`) do id dele na URL.
 É o único MCP nosso em que a identidade do agente é **verificada**; os outros confiam no
-argumento. Agente novo: rodar `scripts/publicar-anexos-mcp.py` e `scripts/escopo-mcp.py`.
+argumento. Agente novo: rodar `scripts/publicar-anexos-mcp.py` — o mesmo patch declara
+as entradas **e** regrava o `deny` de todo agente do `agents.list` (cada um nega as dos
+outros), porque `alsoAllow` só acrescenta. Agente criado pela tela já nasce com o deny
+de MCP (`aplicar_escopo_mcp`) e fica sem anexos até o script rodar, mas nunca enxerga a
+entrada de outro — que seria agir com a identidade do outro.
 
 ⚠️ **Limite honesto do `ler_anexo`:** garante "anexo de uma conversa com ESTE agente (ou
 de canal em que ele está)", **não** "desta sessão/pessoa" — o gateway não repassa a
 sessão ao MCP. O agente numa sessão de A lê anexo que B mandou ao mesmo agente se tiver
 o id; o uuid só aparece na sessão de B, então o risco é o agente repetir um id, não
-adivinhá-lo. Fechar isso exige o gateway passar a sessão.
+adivinhá-lo. Fechar isso exige o gateway passar a sessão. **Pendente com o Erick:** a
+alternativa de amarrar o `ler_anexo` ao turno em curso (`agent_runs` — só anexo da
+conversa que tem run aberto agora para este agente) ainda não foi decidida.
 
 ⚠️ **Planilha lê-se em thread, só a aba pedida, preguiçosa**, com teto nomeado ao agente:
-200.000 linhas, 200 colunas, 300 MB descompactados (xlsx), 50 MB de arquivo e 1 MB por
-registro (CSV). Sem teto, um zip-bomb ou um CSV sem quebra de linha trava o worker.
+200.000 linhas e 200 colunas para todo formato; no **xlsx**, 300 MB descompactados; no
+**CSV**, 50 MB de arquivo e 1 MB por registro. Sem teto, um zip-bomb ou um CSV sem quebra
+de linha trava o worker. `.doc`, `.odt` e `.rtf` não têm leitor: o agente recebe "peça
+em .docx ou .pdf" em vez de bytes decodificados como texto.
 
 ⚠️ **O agente devolve arquivo escrevendo TEXTO.** `enviar_arquivo` recebe CSV ou Markdown
 e o servidor monta xlsx/docx/pdf (em thread, depois de conferir o destino); célula xlsx
