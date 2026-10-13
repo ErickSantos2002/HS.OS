@@ -127,3 +127,36 @@ def test_conferir_reprova_quem_ve_a_entrada_de_outro():
     sem_servidor = copy.deepcopy(depois)
     del sem_servidor["mcp"]["servers"]["hsos-anexos-nina"]
     assert not pub.conferir_escopo(sem_servidor, novos)
+
+
+# ── O cabeçalho redigido (13/10/2026) ───────────────────────────────────────
+#
+# A primeira aplicação copiou os cabeçalhos do `hsos-relatorios` como vieram do
+# `config.get` — redigidos — e o gateway recusou: `Sentinel value
+# "__OPENCLAW_REDACTED__" in key mcp.servers.*.headers.* is not valid as real
+# data`. Nada foi gravado, mas o script só servia de ensaio.
+
+MODELO_REDIGIDO = {
+    "url": "https://api.exemplo.invalido/mcp/relatorios",
+    "transport": "streamable-http",
+    "headers": {"Authorization": "__OPENCLAW_REDACTED__"},
+}
+
+
+def test_token_entra_no_cabecalho_com_bearer():
+    e = pub.montar_entradas(MODELO_REDIGIDO, "segredo", ["bruce"], token="tok")["hsos-anexos-bruce"]
+    assert e["headers"] == {"Authorization": "Bearer tok"}
+
+
+def test_cabecalho_proprio_leva_o_token_cru():
+    modelo = {**MODELO_REDIGIDO, "headers": {"X-Bridge-Token": "__OPENCLAW_REDACTED__"}}
+    e = pub.montar_entradas(modelo, "segredo", ["bruce"], token="tok")["hsos-anexos-bruce"]
+    assert e["headers"] == {"X-Bridge-Token": "tok"}
+
+
+def test_sem_token_e_cabecalho_redigido_falha_antes_do_gateway():
+    """Melhor recusar aqui, com o nome da variável que falta, do que mandar o
+    sentinela e ler a recusa do gateway num traceback."""
+    import pytest
+    with pytest.raises(ValueError, match="GUARDRAILS_API_TOKEN"):
+        pub.montar_entradas(MODELO_REDIGIDO, "segredo", ["bruce"])

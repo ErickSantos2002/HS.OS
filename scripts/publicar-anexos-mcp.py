@@ -1,7 +1,7 @@
 """Declara no gateway uma entrada `hsos-anexos-<agente>` por agente.
 
-    ANEXOS_MCP_SEGREDO=… OPENCLAW_ADMIN_TOKEN=… python scripts/publicar-anexos-mcp.py           # ensaio
-    ANEXOS_MCP_SEGREDO=… OPENCLAW_ADMIN_TOKEN=… python scripts/publicar-anexos-mcp.py --aplicar
+    ANEXOS_MCP_SEGREDO=… GUARDRAILS_API_TOKEN=… python scripts/publicar-anexos-mcp.py           # ensaio
+    ANEXOS_MCP_SEGREDO=… GUARDRAILS_API_TOKEN=… python scripts/publicar-anexos-mcp.py --aplicar
 
 URL base e cabeçalhos são copiados da entrada `hsos-relatorios`, que já
 funciona — o mesmo backend, o mesmo `GUARDRAILS_API_TOKEN`. O que muda é o
@@ -37,7 +37,25 @@ from app.routers.mcp_anexos import assinatura_do_agente  # noqa: E402
 FERRAMENTAS = list(FERRAMENTAS_ANEXOS)
 
 
-def montar_entradas(modelo: dict, segredo: str, agentes) -> dict:
+REDIGIDO = "__OPENCLAW_REDACTED__"
+
+
+def cabecalhos_com_token(modelo: dict, token: str) -> dict:
+    """Os cabeçalhos do modelo com o valor real do token.
+
+    ⚠️ **O `config.get` nunca devolve segredo em claro**: o valor de cada
+    cabeçalho de `mcp.servers` volta como `__OPENCLAW_REDACTED__`, e o
+    `config.patch` recusa esse sentinela ("is not valid as real data"). Copiar o
+    cabeçalho do `hsos-relatorios` foi exatamente o que a primeira aplicação
+    tentou, em 13/10/2026 — o gateway recusou antes de gravar. Os NOMES dos
+    cabeçalhos vêm do modelo; o VALOR vem do `GUARDRAILS_API_TOKEN`, que é o que
+    o `exige_segredo` confere (Bearer em `Authorization`, cru nos outros).
+    """
+    nomes = list((modelo.get("headers") or {}).keys()) or ["Authorization"]
+    return {n: (f"Bearer {token}" if n.lower() == "authorization" else token) for n in nomes}
+
+
+def montar_entradas(modelo: dict, segredo: str, agentes, token: str = "") -> dict:
     """Uma entrada `hsos-anexos-<id>` por agente, copiada do `modelo`.
 
     Tudo que não é `url`/`toolFilter` (cabeçalhos, transporte) vem do modelo; a
@@ -48,6 +66,11 @@ def montar_entradas(modelo: dict, segredo: str, agentes) -> dict:
     novos = {}
     for aid in agentes:
         entrada = {k: v for k, v in modelo.items() if k not in ("url", "toolFilter")}
+        if token:
+            entrada["headers"] = cabecalhos_com_token(modelo, token)
+        elif REDIGIDO in json.dumps(entrada.get("headers") or {}):
+            raise ValueError("os cabeçalhos do modelo vieram redigidos pelo config.get; "
+                             "passe GUARDRAILS_API_TOKEN no ambiente")
         entrada["url"] = f"{base}/mcp/anexos/{aid}/{assinatura_do_agente(segredo, aid)}"
         entrada["toolFilter"] = {"include": list(FERRAMENTAS)}
         novos[f"hsos-anexos-{aid}"] = entrada
@@ -85,7 +108,7 @@ def mascarar_entradas(novos: dict) -> dict:
     return saida
 
 
-def montar_patch(conf: dict, segredo: str) -> tuple[dict, dict]:
+def montar_patch(conf: dict, segredo: str, token: str = "") -> tuple[dict, dict]:
     """O patch inteiro: entradas novas + `agents.list` com o escopo de todos.
 
     ⚠️ `agents.list` é ARRAY e array SUBSTITUI no merge patch: a lista vai
@@ -101,7 +124,7 @@ def montar_patch(conf: dict, segredo: str) -> tuple[dict, dict]:
     if not agentes:
         raise ValueError("agents.list vazio na config — sem agentes, não há o que publicar")
     ids = [str(a["id"]) for a in agentes]
-    novos = montar_entradas(modelo, segredo, ids)
+    novos = montar_entradas(modelo, segredo, ids, token)
     depois = {**servidores, **novos}
     for a in agentes:
         a["tools"] = escopo_mcp_do_agente(str(a["id"]), a.get("tools") or {}, depois)
@@ -136,7 +159,7 @@ async def main() -> int:
         return 1
     conf, base_hash = await config_do_gateway()
     try:
-        patch, novos = montar_patch(conf, segredo)
+        patch, novos = montar_patch(conf, segredo, os.environ.get("GUARDRAILS_API_TOKEN", ""))
     except ValueError as e:
         print(f"❌ {e}")
         return 1
