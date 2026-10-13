@@ -1043,6 +1043,9 @@ antiga levaria alguém a procurar a resolução no lugar errado.
 
 ## Convenções
 
+- **Fim de branch: merge local na `main` e depois `git push`.** É o fluxo padrão — nem PR,
+  nem branch parado. **O push não dispara deploy**: o deploy no EasyPanel é manual, então não
+  há o que conferir antes de empurrar. Passos de produção (migração, R2, gateway) são separados.
 - **Gerenciador de pacotes: `npm`** (decidido em 10/08/2026). Fixado em `packageManager` e
   `engines` no `frontend/package.json`; o lockfile canônico é `package-lock.json`. Os
   `bun.lock` e `bun.lockb` eram resto do Lovable e foram apagados — nada os usava: o
