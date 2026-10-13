@@ -130,3 +130,60 @@ def test_anexo_nao_e_lido_pela_porta_privada_generica():
     `/storage/privado/` só conhece dono por pasta — se aceitasse `anexos`,
     seria uma segunda regra para o mesmo arquivo."""
     assert s._pode_ler_privado("anexos", f"{DONO}/x/a.pdf", DONO) is False
+
+
+# ── Rodada de correção 1: ticket não é login, e as portas conferem dono ─────
+import jwt as _jwt
+
+from app.auth import security
+
+
+def test_ticket_nao_serve_de_token_de_login():
+    """O ticket é assinado com o mesmo segredo do login. Sem `aud`, ele valeria
+    como Bearer de sessão completa por 15 min. Com `aud`, o `ler_token` do
+    login (que não passa `audience`) o recusa."""
+    t = s.emitir_ticket({"bucket": "agent-files", "caminho": "a/b.png", "tamanho": 3}, DONO)
+    with pytest.raises(_jwt.PyJWTError):
+        security.ler_token(t)
+
+
+def test_token_de_login_nao_serve_de_ticket():
+    token, _ = security.emitir_token(DONO, "colaborador", "a@b.c")
+    with pytest.raises(HTTPException) as e:
+        s.ler_ticket(token, DONO)
+    assert e.value.status_code == 400
+
+
+def test_extracao_recusa_anexos():
+    """Anexo tem porta própria; esta seria uma segunda regra de leitura."""
+    with pytest.raises(HTTPException) as e:
+        s._conferir_extracao("anexos", f"{DONO}/x/a.pdf", DONO)
+    assert e.value.status_code == 400
+    assert "anexos" in e.value.detail
+
+
+def test_extracao_nao_le_documento_gerado_de_outro():
+    with pytest.raises(HTTPException) as e:
+        s._conferir_extracao("generated-documents", CAMINHO, OUTRO)
+    assert e.value.status_code == 404
+
+
+def test_extracao_le_o_proprio_documento_gerado_e_company_docs():
+    s._conferir_extracao("generated-documents", CAMINHO, DONO)
+    s._conferir_extracao("company-docs", "perfil/x.pdf", OUTRO)
+
+
+def test_cliente_nao_escreve_em_generated_documents():
+    """Só o servidor grava ali (gerar_documento, relatórios). Se o cliente
+    pudesse, escreveria na pasta de outra pessoa."""
+    assert s._cliente_pode_escrever("generated-documents") is False
+    assert s._cliente_pode_escrever("company-docs") is True
+    assert s._cliente_pode_escrever("agent-files") is True
+
+
+def test_remover_privado_exige_dono():
+    with pytest.raises(HTTPException) as e:
+        s._conferir_remocao("generated-documents", CAMINHO, OUTRO)
+    assert e.value.status_code == 404
+    s._conferir_remocao("generated-documents", CAMINHO, DONO)
+    s._conferir_remocao("agent-files", "avatars/x.png", OUTRO)

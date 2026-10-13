@@ -51,6 +51,7 @@ router = APIRouter(prefix="/storage", tags=["storage"])
 _URL_PUBLICA_S = 3600
 _URL_PRIVADA_S = 300
 _PUT_S = 900
+_AUDIENCIA_TICKET = "hsos-upload"
 
 
 def _validar_tamanho(tamanho: int) -> None:
@@ -65,7 +66,9 @@ def _validar_tamanho(tamanho: int) -> None:
 
 def emitir_ticket(dados: dict, usuario_id: str, segundos: int = _PUT_S) -> str:
     """O que o `iniciar` autorizou, assinado — o `concluir` não confia no cliente."""
-    corpo = {**dados, "sub": usuario_id, "uso": "upload",
+    # `aud` é o que separa o ticket do token de login: o `ler_token` do login
+    # decodifica sem `audience`, e o PyJWT recusa token que traz `aud` assim.
+    corpo = {**dados, "sub": usuario_id, "uso": "upload", "aud": _AUDIENCIA_TICKET,
              "exp": datetime.now(timezone.utc) + timedelta(seconds=segundos)}
     return jwt.encode(corpo, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
@@ -74,12 +77,40 @@ def ler_ticket(ticket: str, usuario_id: str) -> dict:
     # O campo `uso` é o que impede o token de login de passar por ticket: o
     # login é assinado com o mesmo segredo, mas não carrega `uso: "upload"`.
     try:
-        corpo = jwt.decode(ticket, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        corpo = jwt.decode(ticket, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM],
+                           audience=_AUDIENCIA_TICKET)
     except jwt.PyJWTError:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Envio expirado ou inválido. Tente anexar de novo.")
     if corpo.get("uso") != "upload" or corpo.get("sub") != usuario_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Envio expirado ou inválido. Tente anexar de novo.")
     return corpo
+
+
+# Buckets que só o servidor grava (documentos gerados e relatórios). Nenhuma
+# tela escreve lá; permitir ao cliente deixaria qualquer pessoa autenticada
+# gravar na pasta de outra.
+_SO_SERVIDOR_ESCREVE = {"generated-documents"}
+
+
+def _cliente_pode_escrever(bucket: str) -> bool:
+    return bucket not in _SO_SERVIDOR_ESCREVE
+
+
+def _exigir_escrita_do_cliente(bucket: str) -> None:
+    if not _cliente_pode_escrever(bucket):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Este bucket é gravado só pelo servidor.")
+
+
+def _conferir_extracao(bucket: str, caminho: str, usuario_id: str) -> None:
+    if bucket == "anexos":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Use o fluxo de anexos.")
+    if bucket in _PRIVADOS and not _pode_ler_privado(bucket, caminho, usuario_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Arquivo não encontrado.")
+
+
+def _conferir_remocao(bucket: str, caminho: str, usuario_id: str) -> None:
+    if bucket in _PRIVADOS and not _pode_ler_privado(bucket, caminho, usuario_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Arquivo não encontrado.")
 
 
 def _conferir_conclusao(obj: Objeto | None, tamanho: int) -> None:
@@ -128,7 +159,7 @@ class TextoExtraidoOut(BaseModel):
 async def extrair_texto(
     bucket: str,
     caminho: str,
-    _: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(usuario_atual),
 ):
     """Texto de um arquivo já enviado. Aceita `.txt`, `.md`, `.pdf` e `.docx`.
 
@@ -139,6 +170,7 @@ async def extrair_texto(
     trabalha: ela sobe o documento primeiro e depois pede o processamento,
     mandando só `storagePath`.
     """
+    _conferir_extracao(bucket, caminho, str(usuario.id))
     k = arm.chave(bucket, caminho)
     dados = await arm.ler(k)
     if dados is None:
@@ -424,6 +456,7 @@ async def iniciar_upload(dados: InicioIn, usuario: Usuario = Depends(usuario_atu
     """
     if dados.bucket == "anexos":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Use o fluxo de anexos.")
+    _exigir_escrita_do_cliente(dados.bucket)
     _validar_tamanho(dados.tamanho)
     k = arm.chave(dados.bucket, dados.caminho)
     url = await arm.url_put(k, dados.mime, dados.tamanho, _PUT_S)
@@ -477,6 +510,7 @@ async def enviar(
     """
     if bucket == "anexos":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Use o fluxo de anexos.")
+    _exigir_escrita_do_cliente(bucket)
     k = arm.chave(bucket, caminho)
     pedacos, tamanho = [], 0
     while pedaco := await arquivo.read(1024 * 1024):
@@ -622,7 +656,7 @@ async def baixar(bucket: str, caminho: str):
 
 
 @router.delete("/{bucket}/{caminho:path}", status_code=status.HTTP_204_NO_CONTENT)
-async def remover(bucket: str, caminho: str, _: Usuario = Depends(usuario_atual)):
+async def remover(bucket: str, caminho: str, usuario: Usuario = Depends(usuario_atual)):
     """Apaga o arquivo. Apagar o que não existe não é erro.
 
     O `remove()` do Supabase também não reclamava, e a tela usa isso para
@@ -630,6 +664,7 @@ async def remover(bucket: str, caminho: str, _: Usuario = Depends(usuario_atual)
     """
     if bucket == "anexos":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Anexo não se apaga por esta porta.")
+    _conferir_remocao(bucket, caminho, str(usuario.id))
     await arm.apagar(arm.chave(bucket, caminho))
 
 
