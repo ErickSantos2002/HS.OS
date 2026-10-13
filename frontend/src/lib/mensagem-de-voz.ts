@@ -7,7 +7,7 @@
  * `chat-sender` avisar o agente de que o texto pode ter erro de reconhecimento.
  *
  * O áudio em si não é guardado — no chat com agente não há player, e o bucket
- * `audio-messages` é de leitura pública.
+ * `audio-messages` foi fechado (era de leitura pública).
  */
 const MARCA = "🎤 ";
 

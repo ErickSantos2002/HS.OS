@@ -1,7 +1,6 @@
 import { threadDepoisDeApagar } from "@/lib/eventos-de-canal";
 import { api } from "@/lib/api";
 import { Fragment, memo, useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from "react";
-import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useChannelMessages, useChannelMembers, Channel, ChannelMessage, ChannelAttachment } from "@/hooks/use-channels";
 import { usePeople } from "@/hooks/use-people";
@@ -17,7 +16,8 @@ import { getAudioFileExtension, useAudioRecorder } from "@/hooks/use-audio-recor
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import { uploadFileToStorage, formatFileSize, isImageFile } from "@/lib/file-upload";
 import FileAttachmentCard from "./FileAttachmentCard";
-import AudioMessagePlayer from "./AudioMessagePlayer";
+import AudioDaMensagem from "./AudioDaMensagem";
+import { enviarAudioDoCanal } from "@/lib/audio-de-mensagem";
 import CollapsibleTranscription from "./CollapsibleTranscription";
 import CopyMessageButton from "./CopyMessageButton";
 import MarkUnreadButton from "./MarkUnreadButton";
@@ -85,7 +85,6 @@ function ChannelStreamingActivity({ agentIds }: { agentIds: string[] }) {
   return <StreamingActivityIndicator agentId={firstAgent} isWorking={agentIds.length > 0} hasStreamingText={false} />;
 }
 import { shouldShowDateDivider } from "@/lib/chat-date-groups";
-import { caminhoDeAnexo } from "@/lib/caminho-de-anexo";
 
 function TypingDots({ className = "" }: { className?: string }) {
   return (
@@ -528,7 +527,7 @@ export const MessageBubble = memo(function MessageBubble({
 
             {hasAudio && (
               <div className="mt-1.5 mb-1">
-                <AudioMessagePlayer src={msg.audio_url!} />
+                <AudioDaMensagem audioUrl={msg.audio_url!} />
               </div>
             )}
             <div ref={bubbleRef} className={`relative mt-1 inline-block w-fit max-w-full text-left ${bubbleClass}`}>
@@ -1606,21 +1605,17 @@ export default function ChannelChat({
       }
 
       const ext = getAudioFileExtension(blob.type);
-      // Mesmo motivo do anexo: `audio-messages` é bucket de leitura pública
-      // (o áudio toca em `<audio src>`, que não manda `Authorization`), e a
-      // única defesa declarada é o caminho ser difícil de adivinhar.
-      // `<canal>/<epoch em ms>.<ext>` não era. Ver `lib/caminho-de-anexo.ts`.
-      const fileName = caminhoDeAnexo(channel.id, `audio.${ext}`);
+      // Anexo privado do canal desde 13/10/2026 — antes ia para o bucket
+      // público `audio-messages`, que qualquer um com o link ouvia.
+      let audioUrl: string;
       try {
-        await enviarArquivo("audio-messages", fileName, blob, `audio.${ext}`);
+        audioUrl = await enviarAudioDoCanal(channel.id, blob);
       } catch (uploadErr) {
         console.error("Upload error:", uploadErr);
         toast.error("Falha ao enviar o áudio.");
         recorder.setIsProcessing(false);
         return;
       }
-
-      const audioUrl = urlPublica("audio-messages", fileName);
       const formData = new FormData();
       // ⚠️ O campo chama `arquivo` (a rota é nossa agora, não a edge).
       formData.append("arquivo", blob, `audio.${ext}`);

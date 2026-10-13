@@ -208,10 +208,35 @@ def test_iniciar_generico_devolve_o_mime_usado_na_assinatura(monkeypatch):
         return "https://r2.exemplo/put-assinado"
 
     monkeypatch.setattr(s.arm, "url_put", url_put_falso)
-    dados = s.InicioIn(bucket="audio-messages", caminho=f"{DONO}/voz.webm",
+    dados = s.InicioIn(bucket="agent-files", caminho=f"{DONO}/voz.webm",
                        mime="audio/webm;codecs=opus", tamanho=10)
     out = asyncio.run(s.iniciar_upload(dados, Usuario(id=DONO, email="x@x", papel="colaborador")))
-    assert assinado == {"chave": f"audio-messages/{DONO}/voz.webm",
+    assert assinado == {"chave": f"agent-files/{DONO}/voz.webm",
                         "mime": "audio/webm;codecs=opus", "tamanho": 10}
     assert out.mime == assinado["mime"]
     assert out.url_put == "https://r2.exemplo/put-assinado"
+
+
+
+# ── audio-messages fechado — 13/10/2026 ─────────────────────────────────────
+#
+# Era público: quem tivesse o link ouvia a mensagem de voz sem login, inclusive
+# a de conversa privada entre duas pessoas. Áudio novo vai para `anexos` (regra
+# de membro do canal, `GET /anexos/{id}/url`); este bucket só guarda os antigos
+# até a migração e não se lê por caminho — nem logado, nem pela porta privada.
+
+def test_audio_messages_nao_e_mais_publico():
+    import asyncio
+    from fastapi import HTTPException
+    import pytest
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(s.baixar("audio-messages", f"{DONO}/voz.webm"))
+    assert e.value.status_code == 401
+
+
+def test_audio_messages_nao_se_le_pela_porta_privada():
+    assert s._pode_ler_privado("audio-messages", f"{DONO}/voz.webm", DONO) is False
+
+
+def test_cliente_nao_grava_mais_em_audio_messages():
+    assert s._cliente_pode_escrever("audio-messages") is False

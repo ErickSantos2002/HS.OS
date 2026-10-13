@@ -26,8 +26,11 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-BUCKETS_PUBLICOS = {"agent-files", "audio-messages", "wiki-uploads"}
-BUCKETS_PRIVADOS = {"company-docs", "generated-documents", "anexos"}
+BUCKETS_PUBLICOS = {"agent-files", "wiki-uploads"}
+# `audio-messages` era público até 13/10/2026 — quem tivesse o link ouvia a
+# mensagem de voz sem login. Áudio novo vai para `anexos`; este fica só com os
+# antigos, ilegível por caminho (ver `_pode_ler_privado` em routers/storage.py).
+BUCKETS_PRIVADOS = {"company-docs", "generated-documents", "anexos", "audio-messages"}
 BUCKETS = BUCKETS_PUBLICOS | BUCKETS_PRIVADOS
 
 TAMANHO_MAXIMO = 100 * 1024 * 1024

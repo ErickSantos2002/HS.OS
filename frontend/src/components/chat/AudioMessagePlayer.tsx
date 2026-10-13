@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 interface AudioMessagePlayerProps {
   src: string;
   className?: string;
+  /** Chamado quando o arquivo não carrega — ex.: URL assinada que venceu. */
+  onErro?: () => void;
 }
 
 function formatTime(seconds: number) {
@@ -32,7 +34,9 @@ function readDuration(audio: HTMLAudioElement): number | null {
   return null;
 }
 
-export default function AudioMessagePlayer({ src, className }: AudioMessagePlayerProps) {
+export default function AudioMessagePlayer({ src, className, onErro }: AudioMessagePlayerProps) {
+  const onErroRef = useRef(onErro);
+  onErroRef.current = onErro;
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressRef = useRef<HTMLButtonElement | null>(null);
   const suppressTransitionRef = useRef(false);
@@ -87,6 +91,7 @@ export default function AudioMessagePlayer({ src, className }: AudioMessagePlaye
     const handleError = () => {
       setHasError(true);
       setIsPlaying(false);
+      onErroRef.current?.();
     };
 
     audio.addEventListener("loadedmetadata", handleLoadedMetadata);

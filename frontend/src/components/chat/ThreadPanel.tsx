@@ -1,6 +1,5 @@
 import { api } from "@/lib/api";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { format } from "date-fns";
 import { FileText, Loader2, MessageSquare, Mic, Paperclip, Pencil, Send, Smile, Trash2, Users, X, Check, Bot } from "lucide-react";
 import EmojiPickerReact, { Theme as EmojiTheme } from "emoji-picker-react";
@@ -16,7 +15,8 @@ import { formatFileSize } from "@/lib/file-upload";
 import { hasEveryoneMention } from "@/lib/channel-notifications";
 import { useTheme } from "next-themes";
 import FileAttachmentCard from "@/components/chat/FileAttachmentCard";
-import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
+import AudioDaMensagem from "@/components/chat/AudioDaMensagem";
+import { enviarAudioDoCanal } from "@/lib/audio-de-mensagem";
 import CollapsibleTranscription from "@/components/chat/CollapsibleTranscription";
 import FileAttachmentPreviewDialog from "@/components/chat/FileAttachmentPreviewDialog";
 import ImageLightbox from "@/components/chat/ImageLightbox";
@@ -265,7 +265,7 @@ function ThreadMessageCard({
                 </div>
               )}
 
-              {hasAudio && message.audio_url && <AudioMessagePlayer src={message.audio_url} />}
+              {hasAudio && message.audio_url && <AudioDaMensagem audioUrl={message.audio_url} />}
 
               {hasAudio ? (
                 <CollapsibleTranscription text={message.content} />
@@ -501,16 +501,16 @@ export default function ThreadPanel({
         return;
       }
       const ext = getAudioFileExtension(blob.type);
-      const fileName = `${channelId}/thread-${rootMessage.id}/${Date.now()}.${ext}`;
+      // Anexo privado do canal — ver `lib/audio-de-mensagem.ts`.
+      let audioUrl: string;
       try {
-        await enviarArquivo("audio-messages", fileName, blob, `audio.${ext}`);
+        audioUrl = await enviarAudioDoCanal(channelId, blob);
       } catch (uploadErr) {
         console.error("Thread audio upload error:", uploadErr);
         toast.error("Falha ao enviar o áudio.");
         recorder.setIsProcessing(false);
         return;
       }
-      const audioUrl = urlPublica("audio-messages", fileName);
       const formData = new FormData();
       // ⚠️ O campo chama `arquivo` (a rota é nossa agora, não a edge).
       formData.append("arquivo", blob, `audio.${ext}`);

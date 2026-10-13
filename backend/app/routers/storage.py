@@ -8,7 +8,7 @@ mesmos que o código herdado usa, com a mesma divisão entre público e privado:
 | bucket                | quem lê                                             |
 |-----------------------|-----------------------------------------------------|
 | `agent-files`         | qualquer um — avatares aparecem em `<img>` sem token |
-| `audio-messages`      | qualquer um — áudio toca em `<audio src>`            |
+| `audio-messages`      | **ninguém por caminho** — aposentado em 13/10/2026; áudio novo vai para `anexos` |
 | `wiki-uploads`        | qualquer um — imagem dentro de documento             |
 | `company-docs`        | autenticado                                          |
 | `generated-documents` | **só o dono** — um diretório por pessoa               |
@@ -94,7 +94,7 @@ def ler_ticket(ticket: str, usuario_id: str) -> dict:
 # Buckets que só o servidor grava (documentos gerados e relatórios). Nenhuma
 # tela escreve lá; permitir ao cliente deixaria qualquer pessoa autenticada
 # gravar na pasta de outra.
-_SO_SERVIDOR_ESCREVE = {"generated-documents"}
+_SO_SERVIDOR_ESCREVE = {"generated-documents", "audio-messages"}
 
 
 def _cliente_pode_escrever(bucket: str) -> bool:
@@ -604,7 +604,7 @@ def _pode_ler_privado(bucket: str, caminho: str, usuario_id: str) -> bool:
     valendo para qualquer pessoa autenticada. `generated-documents` guarda um
     diretório por pessoa, e o dono é o primeiro segmento do caminho.
     """
-    if bucket == "anexos":
+    if bucket in ("anexos", "audio-messages"):
         # Anexo tem regra própria — participar da conversa — e porta própria
         # (`GET /anexos/{id}/url`). Duas regras para o mesmo arquivo é o que
         # produz o próximo buraco.
