@@ -117,8 +117,10 @@ export async function enviarArquivo(
     method: "POST",
     body: { bucket, caminho, mime, tamanho: arquivo.size },
   });
-  // O PUT é assinado com o mime NORMALIZADO pelo backend; mandar outro Content-Type
-  // (ex.: `audio/webm;codecs=opus`) dá 403 SignatureDoesNotMatch.
+  // O PUT é assinado com o mime que o backend DEVOLVE em `inicio.mime`: no
+  // fluxo genérico é o mesmo que mandamos; só no bucket `anexos` ele vem
+  // normalizado. Mandar outro Content-Type (ex.: `audio/webm;codecs=opus` contra
+  // um `audio/webm` assinado) dá 403 SignatureDoesNotMatch.
   await interno.putDireto(inicio.url_put, arquivo, inicio.mime ?? mime, aoProgredir);
   return api<ArquivoEnviado>("/storage/upload/concluir", {
     method: "POST",
