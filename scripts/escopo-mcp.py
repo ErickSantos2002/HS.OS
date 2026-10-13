@@ -39,7 +39,9 @@ async def main() -> int:
     servidores = (conf.get("mcp") or {}).get("servers") or {}
 
     todas = {f"{s}__{t}"
-             for s, c in servidores.items() if "alerta" not in s
+             # o alerta é isento pelo nome EXATO: "alerta" por substring isentaria
+             # também um `hsos-anexos-<id com alerta>` — a identidade de um agente
+             for s, c in servidores.items() if s != "hsos-alerta"
              for t in ((((c or {}).get("toolFilter") or {}).get("include")) or ["query"])}
 
     agentes = json.loads(json.dumps(conf.get("agents", {}).get("list") or []))

@@ -66,3 +66,16 @@ def test_nao_altera_o_dicionario_recebido():
     original = {"alsoAllow": ["mcp__banco-hsos__query"], "deny": ["cron"]}
     escopo_mcp_do_agente("bruce", original, SERVIDORES)
     assert original == {"alsoAllow": ["mcp__banco-hsos__query"], "deny": ["cron"]}
+
+
+def test_isencao_do_alerta_e_pelo_nome_exato_nao_por_substring():
+    """A isenção era `"alerta" not in s`: qualquer servidor com "alerta" no nome
+    escapava do deny. Um agente de id `alerta-x` publicaria `hsos-anexos-alerta-x`
+    — e a entrada dele, com o HMAC dele, ficaria visível a TODOS os outros, que
+    passariam a ler os anexos e mandar arquivo em nome dele. Só o servidor
+    `hsos-alerta` é infraestrutura; o resto é negado como qualquer conector."""
+    servidores = {**SERVIDORES, "hsos-anexos-alerta-x": ANEXOS}
+    t = escopo_mcp_do_agente("nina", {}, servidores)
+    assert "hsos-anexos-alerta-x__ler_anexo" in t["deny"]
+    assert "hsos-anexos-alerta-x__enviar_arquivo" in t["deny"]
+    assert "hsos-alerta__avisar_administrador" not in t["deny"]

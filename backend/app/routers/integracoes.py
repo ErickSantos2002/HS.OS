@@ -1768,6 +1768,10 @@ def _nome_mcp(nome: str) -> str:
 _DENY_NAO_MCP = ("sessions_send", "sessions_spawn", "skill_workshop", "cron")
 
 
+# O único servidor MCP que nunca entra no deny — ver `_deny_de_mcp`.
+SERVIDOR_ALERTA = "hsos-alerta"
+
+
 def _sem_prefixo(nome: str) -> str:
     return nome[len("mcp__"):] if nome.startswith("mcp__") else nome
 
@@ -1796,10 +1800,15 @@ def _deny_de_mcp(also_allow: list[str], deny_atual: list[str],
     # `SOUL.md` de todo agente manda avisar o administrador; deixar essa
     # ferramenta depender da ordem das operações é frágil demais para uma regra
     # de segurança.
+    #
+    # ⚠️ **A isenção é pelo NOME EXATO.** Era `"alerta" not in s`, e qualquer
+    # servidor com "alerta" no nome escapava junto: um agente de id `alerta-x`
+    # ganharia `hsos-anexos-alerta-x` fora do deny de todo mundo — a identidade
+    # (HMAC) dele visível a todos os outros. Revisão de segurança, 13/10/2026.
     todas = {
         f"{s}__{t}"
         for s, cfg in servidores.items()
-        if "alerta" not in s
+        if s != SERVIDOR_ALERTA
         for t in ((((cfg or {}).get("toolFilter") or {}).get("include")) or ["query"])
     }
     meus = {_sem_prefixo(x) for x in also_allow}
