@@ -44,6 +44,8 @@ class PerfilOut(BaseModel):
     # falando" que a orquestradora recebe.
     departamento: str | None = None
     cargo: str | None = None
+    # Resumo em áudio das respostas dos agentes (migração 019). Ligado por padrão.
+    resumo_em_audio: bool = True
 
 
 class PerfilPatch(BaseModel):
@@ -56,3 +58,5 @@ class PerfilPatch(BaseModel):
     # porque é o mesmo gesto — a pessoa editando o próprio perfil.
     custom_status: str | None = Field(default=None, max_length=200)
     custom_status_emoji: str | None = Field(default=None, max_length=16)
+    # Desligar o resumo em áudio é decisão da própria pessoa (13/10/2026).
+    resumo_em_audio: bool | None = None

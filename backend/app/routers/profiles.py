@@ -23,7 +23,7 @@ router = APIRouter(prefix="/profiles", tags=["profiles"])
 _COLUNAS = """
     p.id::text AS id, p.email, p.full_name, p.avatar_url, p.status,
     to_char(p.last_seen_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS last_seen_at,
-    p.custom_status, p.custom_status_emoji, p.departamento, p.cargo,
+    p.custom_status, p.custom_status_emoji, p.departamento, p.cargo, p.resumo_em_audio,
     to_char(p.custom_status_set_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS custom_status_set_at
 """
 
