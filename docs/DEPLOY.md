@@ -108,6 +108,7 @@ R2_ACCOUNT_ID=<id da conta Cloudflare>
 R2_ACCESS_KEY_ID=<chave do token R2>
 R2_SECRET_ACCESS_KEY=<segredo do token R2>
 R2_BUCKET=hsos-arquivos
+ANEXOS_MCP_SEGREDO=<hex de 64; ver "Anexos para os agentes" abaixo>
 OPENCLAW_GATEWAY_URL=http://172.18.0.1:18789
 OPENCLAW_ADMIN_TOKEN=<token do gateway>
 ```
@@ -170,6 +171,23 @@ Todo arquivo (avatar, áudio, anexo, documento gerado) mora no bucket R2
 ⚠️ **CORS errado não dá erro no backend.** O PUT morre no navegador e a tela
 diz "Falha ao enviar o arquivo ao armazenamento (rede ou CORS do bucket)". Se
 aparecer isso, olhe a política acima antes de qualquer outra coisa.
+
+### Anexos para os agentes — `ANEXOS_MCP_SEGREDO`
+
+Cada agente lê os anexos da própria conversa (e devolve arquivo) por uma
+entrada `hsos-anexos-<agente>` no gateway, cuja URL leva
+`HMAC(ANEXOS_MCP_SEGREDO, id do agente)`. É esse HMAC que diz ao backend quem
+chama — o gateway não repassa a identidade.
+
+1. Gerar: `python -c "import secrets; print(secrets.token_hex(32))"`.
+2. Gravar em `public.integration_secrets` (`name = 'ANEXOS_MCP_SEGREDO'`), que o
+   `ler_segredo` consulta antes do ambiente, **ou** como variável do backend no
+   EasyPanel. Sem ele as rotas `/mcp/anexos/...` recusam.
+3. Publicar as entradas no gateway com o mesmo valor:
+   `ANEXOS_MCP_SEGREDO=… OPENCLAW_ADMIN_TOKEN=… python scripts/publicar-anexos-mcp.py`
+   (ensaio; mostrar ao Erick) e depois com `--aplicar`.
+
+⚠️ Trocar o segredo invalida todas as URLs já declaradas: rode o passo 3 de novo.
 
 **Migração do disco antigo** (uma vez): `/app/scripts/migrar-uploads-r2.py`
 (fonte em `backend/scripts/`), dentro do container, primeiro em ensaio e depois
