@@ -323,3 +323,41 @@ def test_pdf_pequeno_nao_ganha_nota(monkeypatch):
 
     monkeypatch.setattr(pypdf, "PdfReader", LeitorFalso)
     assert "lidas as primeiras" not in L.conteudo_legivel("r.pdf", "", b"%PDF")
+
+
+def test_pdf_com_texto_gigante_para_em_5_mb(monkeypatch):
+    """O teto de páginas não basta: uma página pode ter content stream enorme,
+    ou reaproveitar o mesmo stream em todas. O texto é acumulado página a
+    página e a extração PARA ao passar de 5 MB — o leitor falso devolveria
+    1 MB por página para sempre, e só é consultado até o teto."""
+    import pypdf
+
+    chamadas = []
+
+    class Pagina:
+        def extract_text(self):
+            chamadas.append(1)
+            return "x" * (1024 * 1024)
+
+    class LeitorFalso:
+        def __init__(self, *_a, **_k):
+            self.pages = [Pagina()] * 150
+
+    monkeypatch.setattr(pypdf, "PdfReader", LeitorFalso)
+    t = L.conteudo_legivel("r.pdf", "", b"%PDF")
+    assert len(chamadas) <= 6
+    assert "(texto cortado em 5 MB)" in t.splitlines()[0]
+
+
+def test_docx_com_paragrafos_infinitos_para_em_5_mb(monkeypatch):
+    import itertools
+
+    import docx
+
+    class DocFalso:
+        paragraphs = (type("P", (), {"text": "y" * 1024 * 1024})() for _ in itertools.count())
+
+    dados = _docx("pequeno")
+    monkeypatch.setattr(docx, "Document", lambda *_a, **_k: DocFalso())
+    t = L.conteudo_legivel("c.docx", "", dados)
+    assert "(texto cortado em 5 MB)" in t.splitlines()[0]

@@ -266,6 +266,25 @@ def _planilha(nome: str, dados: bytes, aba: str | None, pagina: int) -> str:
 TETO_PAGINAS_PDF = 200
 
 
+# E página não é a única medida: uma só pode ter content stream enorme, ou o
+# PDF pode reaproveitar o mesmo stream em todas. O texto é acumulado pedaço a
+# pedaço e a extração PARA ao passar deste teto (revisão de segurança, 13/10).
+TETO_TEXTO = 5 * 1024 * 1024
+_NOTA_TEXTO_CORTADO = f" (texto cortado em {TETO_TEXTO // (1024 * 1024)} MB)"
+
+
+def _acumular(pedacos) -> tuple[str, bool]:
+    """Junta com "\n" até passar de `TETO_TEXTO`; diz se cortou. Consome o
+    iterável preguiçosamente — o que vem depois do teto nem é extraído."""
+    partes, tamanho = [], 0
+    for p in pedacos:
+        partes.append(p)
+        tamanho += len(p) + 1
+        if tamanho > TETO_TEXTO:
+            return "\n".join(partes)[:TETO_TEXTO], True
+    return "\n".join(partes), False
+
+
 def _texto(nome: str, dados: bytes) -> tuple[str, str]:
     """O texto e uma nota para o cabeçalho (vazia quando nada foi cortado)."""
     ext = nome.rsplit(".", 1)[-1].lower()
@@ -275,15 +294,18 @@ def _texto(nome: str, dados: bytes) -> tuple[str, str]:
         paginas = pypdf.PdfReader(io.BytesIO(dados)).pages
         total = len(paginas)
         lidas = min(total, TETO_PAGINAS_PDF)
-        texto = "\n".join((paginas[i].extract_text() or "") for i in range(lidas))
+        texto, cortou = _acumular(
+            (paginas[i].extract_text() or "") for i in range(lidas))
         nota = (f" (lidas as primeiras {TETO_PAGINAS_PDF} de {total} páginas)"
                 if total > TETO_PAGINAS_PDF else "")
-        return texto, nota
+        return texto, nota + (_NOTA_TEXTO_CORTADO if cortou else "")
     if ext == "docx":
         import docx
 
         _conferir_zip(dados)
-        return "\n".join(p.text for p in docx.Document(io.BytesIO(dados)).paragraphs), ""
+        texto, cortou = _acumular(
+            p.text for p in docx.Document(io.BytesIO(dados)).paragraphs)
+        return texto, _NOTA_TEXTO_CORTADO if cortou else ""
     return _decodificar(dados), ""
 
 
