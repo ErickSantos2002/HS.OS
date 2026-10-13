@@ -933,6 +933,16 @@ distingue "gravou" de "está em uso" — mesma armadilha do `deny` que casa pelo
 nome errado e do `skills.status` que lista skill que ninguém abre. Pergunte algo
 que só o texto novo responde, **sem citar o texto na pergunta**.
 
+⚠️ **"Não invente dado" não cobria fato sobre a empresa.** Até 13/10/2026 a regra dos
+agentes era sobre NÚMERO ("fato é o que eu medi"). O `bruce`, lendo uma planilha de
+ponto, afirmou que "ponto é do Flow (Operações)" — dedução dele, escrita em lugar
+nenhum; o ponto vive no **Flash**, sistema externo, e é do próprio `bruce` com a RH.
+Os cinco `SOUL.md` ganharam a seção "Não afirmo o que não sei — nem número, nem
+fato", e o `AGENTS.md` do `bruce` a seção "Ponto eletrônico é meu". Conferido
+perguntando: o `flow` passou a responder "não sei" e o `bruce`, "Flash, é meu".
+**Fato organizacional que um agente precisa saber tem que estar escrito** — senão
+ele deduz, e a dedução sai com a mesma confiança de um dado.
+
 **A consequência prática:** se o agente precisa saber sempre, tem que caber dentro de um dos sete.
 Não existe meio-termo. Duas tentativas de contornar isso já falharam aqui:
 
