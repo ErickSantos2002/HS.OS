@@ -821,7 +821,10 @@ parametrizada. Assim a decisão vira configuração, não código.
 
 ## Próximo passo, em ordem de valor
 
-### 0. Régua do ponto (Lindsay/RH) — PRÓXIMA SESSÃO COMEÇA AQUI
+### 0. Régua do ponto (Lidisay/RH) — PRÓXIMA SESSÃO COMEÇA AQUI
+
+⚠️ O nome é **Lidisay** (Sena Vieira, `adm01@healthsafetytech.com`, coordenadora
+de RH) — "Lindsay" era grafia errada e fazia a busca no banco não achar ninguém.
 
 **Estado em 13/10/2026 (fim da sessão):** anexos e storage no R2 estão **em
 produção e testados de ponta a ponta** — bucket `hsos-arquivos`, migração `017`
@@ -835,10 +838,13 @@ O `bruce` já sabe (está no `AGENTS.md` dele) que **ponto vive no Flash, sistem
 externo, e é dele com a RH** — e os cinco `SOUL.md` têm "Não afirmo o que não sei
 — nem número, nem fato". Antes disso ele deduziu que ponto era do Flow.
 
+✅ **Login com Microsoft em produção desde 13/10/2026** (migração `018`, desenho
+do DataCoreHS — ver `DEPLOY.md`). Quem já tem conta aqui com o mesmo e-mail entra
+sem senha; conta convidada do tenant não entra.
+
 **O que falta, em ordem:**
-1. **Liberar a Lindsay**: conta `colaborador`, acesso só ao `bruce`
-   (`allowedUserIds`). Ela entra pelo FortiPAM — senha quem define é o admin.
-   Conferir com o token dela que `GET /agents` só devolve o `bruce`.
+1. ✅ **Lidisay liberada** (13/10): `colaborador`, `pode_ver_agente` verdadeiro
+   só para o `bruce`. Ela entra pelo botão "Entrar com Microsoft".
 2. Ela manda pelo chat com o `bruce` a **planilha bruta do Flash** e a **ajustada**
    do mesmo mês.
 3. Levantar a régua comparando as duas (o que ela corta, recalcula, agrupa) e
