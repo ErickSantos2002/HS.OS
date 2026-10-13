@@ -24,3 +24,6 @@ psycopg[binary]==3.2.3
 # O agente escreve markdown na base de conhecimento e o editor da tela
 # (TipTap) guarda HTML — a conversão acontece em app/routers/mcp_wiki.py.
 markdown==3.7
+
+# Leitura de planilha .xls (formato binário antigo) em app/anexos_leitura.py.
+xlrd==2.0.2

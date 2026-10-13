@@ -7,3 +7,5 @@
 # Os testes async usam `asyncio.run` direto, sem plugin: são funções puras com
 # um cliente falso, não precisam de event loop compartilhado.
 pytest==9.1.1
+# Só para gerar um .xls de verdade no teste de anexos_leitura.
+xlwt==1.3.0
