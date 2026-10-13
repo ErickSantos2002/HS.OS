@@ -100,7 +100,7 @@ async def iniciar_anexo(dados, usuario: Usuario):
         "anexo_id": anexo_id, "nome": dados.nome.strip()[:200], "contexto": dados.contexto,
         "alvo": alvo,
     }, usuario.id)
-    return InicioOut(url_put=url, ticket=ticket, expira_em=_PUT_S)
+    return InicioOut(url_put=url, ticket=ticket, expira_em=_PUT_S, mime=mime)
 
 
 async def concluir_anexo(t: dict, usuario: Usuario) -> AnexoOut:

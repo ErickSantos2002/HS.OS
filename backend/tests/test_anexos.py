@@ -283,6 +283,7 @@ def test_iniciar_anexo_grava_o_mime_normalizado(monkeypatch):
     monkeypatch.setattr(arm, "url_put", url_put)
     monkeypatch.setattr("app.routers.storage.emitir_ticket",
                         lambda d, u, *a: vistos.setdefault("ticket", d) and "t")
-    asyncio.run(rota.iniciar_anexo(_In(mime="audio/x, text/html"), _eu(PESSOA)))
+    out = asyncio.run(rota.iniciar_anexo(_In(mime="audio/x, text/html"), _eu(PESSOA)))
     assert vistos["mime"] == "application/octet-stream"
     assert vistos["ticket"]["mime"] == "application/octet-stream"
+    assert out.mime == "application/octet-stream", "o front precisa saber o que foi assinado"

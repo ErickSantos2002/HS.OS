@@ -448,6 +448,9 @@ class InicioOut(BaseModel):
     url_put: str
     ticket: str
     expira_em: int
+    # O Content-Type exato que foi assinado no PUT. O cliente tem que mandar
+    # este, e não o `arquivo.type` cru, senão o R2 responde 403.
+    mime: str = "application/octet-stream"
 
 
 class ConclusaoIn(BaseModel):
@@ -477,7 +480,7 @@ async def iniciar_upload(dados: InicioIn, usuario: Usuario = Depends(usuario_atu
         {"bucket": dados.bucket, "caminho": k.split("/", 1)[1], "tamanho": dados.tamanho},
         usuario.id,
     )
-    return InicioOut(url_put=url, ticket=ticket, expira_em=_PUT_S)
+    return InicioOut(url_put=url, ticket=ticket, expira_em=_PUT_S, mime=dados.mime)
 
 
 @router.post("/upload/concluir", response_model=None)
