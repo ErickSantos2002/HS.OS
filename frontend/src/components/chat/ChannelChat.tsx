@@ -1,3 +1,4 @@
+import { threadDepoisDeApagar } from "@/lib/eventos-de-canal";
 import { api } from "@/lib/api";
 import { Fragment, memo, useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from "react";
 import { enviarArquivo, urlPublica } from "@/lib/storage";
@@ -1543,10 +1544,16 @@ export default function ChannelChat({
 
   const handleDeleteConfirm = async () => {
     if (!deleteConfirmId) return;
-    await api(`/channels/${channel.id}/messages/${deleteConfirmId}`, {
-      method: "DELETE",
-    }).catch(() => { /* idem */ });
+    const id = deleteConfirmId;
     setDeleteConfirmId(null);
+    try {
+      await api(`/channels/${channel.id}/messages/${id}`, { method: "DELETE" });
+    } catch (erro) {
+      // Antes o erro era engolido: a pessoa clicava em apagar e nada acontecia.
+      toast.error(erro instanceof Error ? erro.message : "Não consegui apagar a mensagem.");
+      return;
+    }
+    setActiveThreadMessage((aberta) => threadDepoisDeApagar(aberta, id));
   };
 
   const handleSendThreadReply = useCallback(async (content: string, rootMessageId: string, attachments?: ChannelAttachment[] | null) => {

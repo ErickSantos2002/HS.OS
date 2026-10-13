@@ -17,7 +17,8 @@
  * eventos que ninguém escutava.
  */
 import { describe, it, expect } from "vitest";
-import { aplicarEventoDeCanal } from "./eventos-de-canal";
+import { aplicarEventoDeCanal, threadDepoisDeApagar } from "./eventos-de-canal";
+import type { ChannelMessage } from "@/hooks/use-channels";
 
 const msg = (id: string, extra: Record<string, unknown> = {}) => ({
   id, channel_id: "c1", author_id: "a1", content: "oi", message_type: "text",
@@ -69,5 +70,25 @@ describe("aplicarEventoDeCanal", () => {
   it("edição dentro de thread também é ignorada aqui", () => {
     const antes = [msg("m1")];
     expect(aplicarEventoDeCanal(antes, "mensagem-editada", msg("m9", { thread_id: "m1" }))).toBe(antes);
+  });
+});
+
+
+// ── Apagar a raiz fecha a thread — 13/10/2026 ───────────────────────────────
+//
+// A coordenadora de RH apagou um 👍 com o painel da thread dele aberto e
+// escreveu ali "tentei excluir e não foi." — achando que era a conversa. A
+// mensagem virou resposta de uma raiz apagada e sumiu para o outro lado.
+
+describe("threadDepoisDeApagar", () => {
+  const aberta = { id: "m1" } as ChannelMessage;
+
+  it("apagar a mensagem cuja thread está aberta fecha o painel", () => {
+    expect(threadDepoisDeApagar(aberta, "m1")).toBeNull();
+  });
+
+  it("apagar outra mensagem não mexe no painel", () => {
+    expect(threadDepoisDeApagar(aberta, "m2")).toBe(aberta);
+    expect(threadDepoisDeApagar(null, "m1")).toBeNull();
   });
 });

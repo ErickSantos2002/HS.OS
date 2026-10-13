@@ -73,3 +73,17 @@ export function aplicarEventoDeCanal(
 
   return prev;
 }
+
+/**
+ * A thread aberta depois de apagar `apagadaId`: fecha se era a raiz dela.
+ *
+ * ⚠️ Em 13/10/2026 o painel ficou aberto na raiz recém-apagada, a pessoa
+ * escreveu ali achando que era a conversa, e a mensagem virou resposta de uma
+ * raiz apagada — invisível para o outro lado.
+ */
+export function threadDepoisDeApagar(
+  aberta: ChannelMessage | null,
+  apagadaId: string,
+): ChannelMessage | null {
+  return aberta && aberta.id === apagadaId ? null : aberta;
+}
