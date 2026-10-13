@@ -22,6 +22,7 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from app import voz_entrega
 from app.anexos import Anexo, linha_de_anexo
 from app.database import sessao
 from app.dependencies import (Usuario, agente_visivel, exige_papel,
@@ -1043,6 +1044,8 @@ async def recuperar(
                 continue
             recuperadas.append(_para_saida(linha))
 
+    for m in recuperadas:
+        voz_entrega.disparar(voz_entrega.audio_da_conversa(m.id, agent_id, usuario.id, m.content))
     if recuperadas:
         logger.info(
             "Recuperadas %d resposta(s) órfã(s) de %s para %s",
@@ -1338,6 +1341,16 @@ async def comando(
     return {"ok": True}
 
 
+def _audio_se_nova(linha, nova: bool, agent_id: str, user_id: str, texto: str) -> None:
+    """Dispara o resumo em áudio só para resposta recém-gravada.
+
+    Se o `/recuperar` gravou antes, ele já disparou — um segundo disparo daria
+    dois players na mesma mensagem (`_gravar_resposta` devolve `nova=False`).
+    """
+    if nova:
+        voz_entrega.disparar(voz_entrega.audio_da_conversa(str(linha["id"]), agent_id, user_id, texto))
+
+
 @router.get("/{agent_id}/reply", response_model=RespostaOut)
 async def resposta(
     agent_id: str,
@@ -1444,7 +1457,7 @@ async def resposta(
         try:
             async with sessao(role="authenticated", user_id=usuario.id) as conn:
                 async with conn.transaction():
-                    linha, _ = await _gravar_resposta(conn, agent_id, usuario.id, texto,
+                    linha, nova = await _gravar_resposta(conn, agent_id, usuario.id, texto,
                                                        so_sem_run=True)
                     ganhou = await conn.fetchval(
                         """UPDATE public.agent_runs
@@ -1463,6 +1476,10 @@ async def resposta(
             return RespostaOut(status="executando")
 
         saida = _para_saida(linha)
+        # Resumo em áudio, depois do commit e em segundo plano — o texto não
+        # espera. Só se a resposta for nova: se o `/recuperar` gravou antes, ele
+        # já disparou o áudio, e disparar de novo daria dois.
+        _audio_se_nova(linha, nova, agent_id, usuario.id, texto)
         # Vai para o próprio usuário: é ele quem tem a conversa aberta, e assim uma
         # segunda aba do mesmo dono também recebe a resposta.
         hub.publicar(topico_usuario(usuario.id), "resposta-agente",

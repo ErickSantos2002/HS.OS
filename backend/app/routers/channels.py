@@ -21,6 +21,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from app import voz_entrega
 from app.database import sessao
 from app.dependencies import Usuario, exige_papel, normalizar_agent_id, usuario_atual
 from app.gateway import config as cfg
@@ -991,6 +992,9 @@ async def _publicar_do_agente(
     saida = _msg_saida(linha)
     hub.publicar(topico_canal(channel_id), "mensagem", saida.model_dump())
     logger.info("Agente %s respondeu em %s.", agent_id, channel_id)
+    # Resumo em áudio: um por resposta, para todos do canal — quem desligou a
+    # preferência só não vê o player. Em segundo plano, fora da transação.
+    voz_entrega.disparar(voz_entrega.audio_do_canal(saida.id, channel_id, agent_id, texto))
 
 
 @router.post("/{channel_id}/agentes/{agent_id}/responder",
