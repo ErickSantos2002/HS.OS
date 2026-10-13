@@ -141,3 +141,26 @@ def test_so_a_aba_pedida_e_lida_e_a_outra_aparece_no_resumo():
     t = L.conteudo_legivel("p.xlsx", "", b.getvalue(), aba="Resumo")
     assert "Ponto" in t and "Aba: Resumo" in t and "Total" in t
     assert "Ana" not in t
+
+
+# --- Teto de colunas: uma linha com milhões de campos escapava do de linhas --
+
+def test_csv_com_mil_colunas_mostra_200_e_avisa():
+    bruto = (",".join(f"c{i}" for i in range(1000)) + "\n"
+             + ",".join(str(i) for i in range(1000)) + "\n").encode()
+    t = L.conteudo_legivel("p.csv", "text/csv", bruto)
+    linhas = t.split("\n")
+    assert "(mostrando as primeiras 200 colunas)" in t
+    assert len(linhas[-1].split("\t")) == 200 and len(linhas[-2].split("\t")) == 200
+
+
+def test_xlsx_com_300_colunas_mostra_200_e_avisa():
+    t = L.conteudo_legivel("p.xlsx", "", _xlsx([list(range(300)), list(range(300))]))
+    linhas = t.split("\n")
+    assert "(mostrando as primeiras 200 colunas)" in t
+    assert len(linhas[-1].split("\t")) == 200
+
+
+def test_sem_excesso_de_colunas_nao_ha_nota():
+    t = L.conteudo_legivel("p.xlsx", "", _xlsx([["A", "B"], [1, 2]]))
+    assert "colunas)" not in t

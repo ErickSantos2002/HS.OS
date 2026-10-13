@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import io
+import itertools
 from datetime import date, datetime, time
 
 from app.anexos import tipo_legivel
@@ -17,6 +18,10 @@ CARACTERES_POR_PAGINA = 20_000
 
 # Tetos de recursos (xlsx é zip: 100 MB de arquivo podem virar GB em memória).
 TETO_LINHAS = 200_000
+# Linha com milhões de colunas (dimensão declarada absurda, CSV sem quebra)
+# escapava do teto de linhas. Cortar coluna não é erro: vira nota no cabeçalho.
+TETO_COLUNAS = 200
+TETO_CAMPO_CSV = 1024 * 1024
 TETO_BYTES_DESCOMPACTADOS = 300 * 1024 * 1024
 
 
@@ -43,8 +48,16 @@ def _fatiar(linhas, ini: int):
     ⚠️ **Preguiçoso de propósito.** Antes, cada página expandia o workbook
     inteiro em listas; xlsx é zip, e 100 MB viram GB. Linha vazia não conta.
     """
-    cabecalho, fatia, total, vistas = None, [], 0, 0
+    cabecalho, fatia, total, vistas, cortou = None, [], 0, 0, False
     for linha in linhas:
+        # openpyxl com `max_col` preenche a linha com vazios até o teto: sem
+        # aparar a cauda, toda linha pareceria cortada.
+        while linha and linha[-1] == "":
+            linha = linha[:-1]
+        # Os leitores entregam até TETO_COLUNAS + 1 células: a extra só denuncia o corte.
+        if len(linha) > TETO_COLUNAS:
+            cortou = True
+            linha = linha[:TETO_COLUNAS]
         vistas += 1
         if vistas > TETO_LINHAS:
             raise _GrandeDemais(f"a aba passa de {TETO_LINHAS} linhas")
@@ -56,7 +69,7 @@ def _fatiar(linhas, ini: int):
         if ini <= total < ini + LINHAS_POR_PAGINA:
             fatia.append(linha)
         total += 1
-    return cabecalho, fatia, total
+    return cabecalho, fatia, total, cortou
 
 
 def _lido_xlsx(dados: bytes, aba, ini: int):
@@ -77,11 +90,12 @@ def _lido_xlsx(dados: bytes, aba, ini: int):
         contagens = {n: getattr(wb[n], "max_row", None) for n in nomes}
         escolhida = aba if aba is not None else (nomes[0] if nomes else None)
         if escolhida not in nomes:
-            return nomes, contagens, escolhida, None, [], 0
+            return nomes, contagens, escolhida, None, [], 0, False
         ws = wb[escolhida]
-        cab, fatia, total = _fatiar(
-            ([_celula(c) for c in linha] for linha in ws.iter_rows(values_only=True)), ini)
-        return nomes, contagens, escolhida, cab, fatia, total
+        cab, fatia, total, cortou = _fatiar(
+            ([_celula(c) for c in linha]
+             for linha in ws.iter_rows(values_only=True, max_col=TETO_COLUNAS + 1)), ini)
+        return nomes, contagens, escolhida, cab, fatia, total, cortou
     finally:
         wb.close()
 
@@ -95,7 +109,7 @@ def _lido_xls(dados: bytes, aba, ini: int):
         nomes = wb.sheet_names()
         escolhida = aba if aba is not None else (nomes[0] if nomes else None)
         if escolhida not in nomes:
-            return nomes, {n: None for n in nomes}, escolhida, None, [], 0
+            return nomes, {n: None for n in nomes}, escolhida, None, [], 0, False
         sh = wb.sheet_by_name(escolhida)
         if sh.nrows > TETO_LINHAS:
             raise _GrandeDemais(f"a aba passa de {TETO_LINHAS} linhas")
@@ -104,10 +118,10 @@ def _lido_xls(dados: bytes, aba, ini: int):
             for r in range(sh.nrows):
                 yield [_celula(xlrd.xldate_as_datetime(c.value, wb.datemode))
                        if c.ctype == xlrd.XL_CELL_DATE else _celula(c.value)
-                       for c in sh.row(r)]
+                       for c in sh.row(r)[:TETO_COLUNAS + 1]]
 
-        cab, fatia, total = _fatiar(linhas(), ini)
-        return nomes, {n: None for n in nomes}, escolhida, cab, fatia, total
+        cab, fatia, total, cortou = _fatiar(linhas(), ini)
+        return nomes, {n: None for n in nomes}, escolhida, cab, fatia, total, cortou
     finally:
         wb.release_resources()
 
@@ -132,11 +146,18 @@ def _lido_csv(dados: bytes, aba, ini: int):
         class dialeto(csv.excel):
             delimiter = ";" if amostra.count(";") > amostra.count(",") else ","
     if aba is not None and aba != "CSV":
-        return ["CSV"], {"CSV": None}, aba, None, [], 0
-    # Linha a linha: o reader é um iterador.
-    cab, fatia, total = _fatiar(
-        ([_celula(c) for c in l] for l in csv.reader(io.StringIO(texto), dialeto)), ini)
-    return ["CSV"], {"CSV": None}, "CSV", cab, fatia, total
+        return ["CSV"], {"CSV": None}, aba, None, [], 0, False
+    # Linha a linha: o reader é um iterador. `islice` corta a linha em
+    # TETO_COLUNAS + 1 células; o limite de campo barra um campo único gigante
+    # (estoura `csv.Error`, que o router trata como arquivo ilegível).
+    antigo = csv.field_size_limit(TETO_CAMPO_CSV)
+    try:
+        cab, fatia, total, cortou = _fatiar(
+            ([_celula(c) for c in itertools.islice(l, TETO_COLUNAS + 1)]
+             for l in csv.reader(io.StringIO(texto), dialeto)), ini)
+    finally:
+        csv.field_size_limit(antigo)
+    return ["CSV"], {"CSV": None}, "CSV", cab, fatia, total, cortou
 
 
 def _planilha(nome: str, dados: bytes, aba: str | None, pagina: int) -> str:
@@ -146,7 +167,7 @@ def _planilha(nome: str, dados: bytes, aba: str | None, pagina: int) -> str:
         return f"Formato de planilha .{ext} não suportado. Peça o arquivo em .xlsx, .xls ou .csv."
     ini = (pagina - 1) * LINHAS_POR_PAGINA
     try:
-        nomes, contagens, nome_aba, cabecalho, fatia, total = leitor(dados, aba, ini)
+        nomes, contagens, nome_aba, cabecalho, fatia, total, cortou = leitor(dados, aba, ini)
     except _GrandeDemais as e:
         return (f"planilha grande demais para ler por aqui: {e}. "
                 "Peça à pessoa uma exportação menor (um período ou uma aba só).")
@@ -171,7 +192,8 @@ def _planilha(nome: str, dados: bytes, aba: str | None, pagina: int) -> str:
     return "\n".join([
         resumo,
         f"Aba: {nome_aba} · página {pagina}/{paginas} · linhas {ini + 1}–{ini + len(fatia)} de {total}"
-        " (a 1ª linha da planilha é o cabeçalho e se repete em toda página)",
+        " (a 1ª linha da planilha é o cabeçalho e se repete em toda página)"
+        + (f" (mostrando as primeiras {TETO_COLUNAS} colunas)" if cortou else ""),
         "\t".join(cabecalho),
         *("\t".join(l) for l in fatia),
     ])
