@@ -1702,36 +1702,6 @@ async def _atualizar_roster_do_lider(lider_id: str | None) -> None:
     logger.info("Roster da orquestradora %s atualizado", lider_id)
 
 
-async def _travar_especialista(agent_id: str) -> None:
-    """Tira do agente o que só a orquestradora deve ter."""
-    from app.gateway import patch as patch_gw
-
-    parsed, base_hash = await patch_gw.config_do_gateway()
-    lista = [dict(a) for a in (parsed.get("agents") or {}).get("list") or []]
-    alvo = next((a for a in lista if str(a.get("id")) == agent_id), None)
-    if alvo is None:
-        raise ErroGateway(f"Agente {agent_id} não está no gateway.")
-
-    tools = dict(alvo.get("tools") or {})
-    deny = list(tools.get("deny") or [])
-    faltando = [t for t in _TRAVAS_DE_ESPECIALISTA if t not in deny]
-    if not faltando:
-        return
-    tools["deny"] = sorted(deny + faltando)
-    alvo["tools"] = tools
-
-    await patch_gw.aplicar_patch(
-        {"agents": {"list": lista}}, base_hash,
-        conferir=lambda c: all(
-            t in ((x.get("tools") or {}).get("deny") or [])
-            for x in ((c.get("agents") or {}).get("list") or [])
-            if str(x.get("id")) == agent_id
-            for t in _TRAVAS_DE_ESPECIALISTA
-        ),
-    )
-    logger.info("Travas de especialista aplicadas a %s: %s", agent_id, faltando)
-
-
 async def _conceder_alerta(agent_id: str) -> None:
     """Dá ao agente a ferramenta de avisar o administrador.
 
@@ -1862,6 +1832,51 @@ async def _desfazer_criacao(openclaw_id: str) -> None:
         logger.error("Desfazendo: banco não removeu %s: %s", openclaw_id, e)
 
 
+async def _fechar_agente_novo(agent_id: str, especialista: bool) -> None:
+    """Aplica travas e escopo de MCP ao agente recém-criado, ou desfaz a criação.
+
+    ⚠️ **Travas de especialista.** Descoberto auditando o `flow` em 17/08/2026:
+    ele nasceu podendo acionar outros agentes e editar as próprias skills — as
+    duas coisas tiradas da `iris` e do `atlas` à mão, que nenhuma linha de
+    código conhecia. Quem coordena é a orquestradora, e quem escreve skill é
+    ela ou o administrador: um especialista capaz de reescrever a régua que o
+    governa deixa de ser governado por ela. A orquestradora não as recebe.
+
+    ⚠️ **Escopo de MCP.** O `deny` de MCP só era recalculado ao publicar um
+    banco, e agente criado sem conector nascia sem deny nenhum — enxergando,
+    como `alsoAllow` só acrescenta, todo servidor declarado, inclusive as
+    `hsos-anexos-<outro>`, que carregam a identidade do outro agente
+    (13/10/2026).
+
+    ⚠️ **Falha FECHADA.** Até a revisão de segurança de 13/10/2026 eram dois
+    patches, cada um num `try/except` que só anotava em `conectores_com_falha`:
+    se o do escopo falhasse, a tela dizia "criado" e o agente ficava vivo
+    enxergando a identidade dos outros. Agora é um patch só, e se ele não
+    passar a criação é desfeita — no gateway e no banco — e a resposta é 502.
+
+    Por que não "o agente nunca existe sem o deny": `agents.create` não leva
+    `tools` (e não se sonda escrita naquele método), então entre ele e este
+    patch há um instante em que o agente está na config sem escopo. Ninguém
+    conversa com ele nesse instante, e ele não sobrevive à falha.
+    """
+    from app.routers.integracoes import aplicar_escopo_mcp
+
+    travas = _TRAVAS_DE_ESPECIALISTA if especialista else ()
+    try:
+        await aplicar_escopo_mcp(agent_id, travas=travas)
+    except Exception as e:  # noqa: BLE001
+        logger.error(
+            "Agente %s está no gateway SEM escopo de MCP (enxerga as entradas "
+            "de anexos dos outros) — desfazendo a criação: %s", agent_id, e)
+        await _desfazer_criacao(agent_id)
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            f"O agente não foi criado: não consegui fechar o escopo de ferramentas "
+            f"dele ({str(e)[:300]}). Sem isso ele enxergaria as ferramentas dos "
+            "outros agentes, então a criação foi desfeita. Tente de novo.",
+        ) from e
+
+
 @router.post("", response_model=AgenteNovoOut, status_code=status.HTTP_201_CREATED)
 async def criar(
     dados: AgenteNovoIn,
@@ -1982,33 +1997,14 @@ async def criar(
         logger.error("Alerta não concedido a %s: %s", dados.openclaw_id, e)
         falhos.append({"conector": "Alerta ao administrador", "motivo": str(e)[:300]})
 
-    # ⚠️ **Agente novo nasce com as travas de especialista.** Também descoberto
-    # auditando o `flow`: ele nasceu podendo acionar outros agentes e editar as
-    # próprias skills — as duas coisas que foram tiradas da `iris` e do `atlas`
-    # em 17/08/2026, à mão, e que nenhuma linha de código conhecia.
-    #
-    # Quem coordena é a orquestradora, e quem escreve skill é ela ou o
-    # administrador: um especialista capaz de reescrever a régua que o governa
-    # deixa de ser governado por ela.
-    if dados.openclaw_id != (lider_id or ''):
-        try:
-            await _travar_especialista(dados.openclaw_id)
-        except Exception as e:  # noqa: BLE001
-            logger.error("Travas de especialista não aplicadas a %s: %s", dados.openclaw_id, e)
-            falhos.append({"conector": "Travas de especialista", "motivo": str(e)[:300]})
-
-    # ⚠️ **Agente novo nasce com o escopo de MCP fechado.** O `deny` de MCP só
-    # era recalculado ao publicar um banco — e agente criado sem conector nunca
-    # passava por lá. Nascia sem deny nenhum e, como `alsoAllow` só acrescenta,
-    # enxergava todo servidor declarado, inclusive as `hsos-anexos-<outro>`, que
-    # carregam a identidade do outro agente (13/10/2026). Vem depois das travas
-    # porque o recálculo preserva as delas (`_DENY_NAO_MCP`).
-    try:
-        from app.routers.integracoes import aplicar_escopo_mcp
-        await aplicar_escopo_mcp(dados.openclaw_id)
-    except Exception as e:  # noqa: BLE001
-        logger.error("Escopo de MCP não aplicado a %s: %s", dados.openclaw_id, e)
-        falhos.append({"conector": "Escopo de ferramentas", "motivo": str(e)[:300]})
+    # ⚠️ **Agente novo nasce com as travas de especialista E o escopo de MCP
+    # fechado — num patch só, e sem ele o agente não fica.** Ver
+    # `_fechar_agente_novo`. Vem depois dos conectores e do alerta porque o
+    # deny é "tudo menos o que está no alsoAllow": calculado antes, negaria o
+    # que eles acabaram de conceder.
+    await _fechar_agente_novo(
+        dados.openclaw_id, especialista=dados.openclaw_id != (lider_id or '')
+    )
 
     # Sem isto o agente nasce inalcançável pela orquestradora, e a recusa não
     # chega a quem perguntou.

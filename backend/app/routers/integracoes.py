@@ -1852,12 +1852,17 @@ def escopo_mcp_do_agente(agent_id: str, tools: dict, servidores: dict) -> dict:
     return t
 
 
-async def aplicar_escopo_mcp(agent_id: str) -> None:
+async def aplicar_escopo_mcp(agent_id: str, travas: tuple[str, ...] = ()) -> None:
     """Grava no gateway o escopo de MCP de UM agente (o recém-criado).
 
     Mesmo caminho do `publicar_banco`: lê a config com o hash, manda a lista de
     agentes INTEIRA (array substitui no merge patch) e confere o efeito no
     `deny` relido, não só que o patch voltou sem erro.
+
+    `travas` são denies que não são de MCP (as de especialista) e entram no
+    MESMO patch. Eram um patch à parte, e a criação podia terminar com um
+    aplicado e o outro não — ver `_fechar_agente_novo` em `agents.py`. Todas
+    estão em `_DENY_NAO_MCP`, por isso o recálculo as preserva.
     """
     parsed, base_hash = await patch_gw.config_do_gateway()
     servidores = ((parsed.get("mcp") or {}).get("servers")) or {}
@@ -1866,7 +1871,10 @@ async def aplicar_escopo_mcp(agent_id: str) -> None:
     if alvo is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             f"Agente {agent_id} não está no gateway.")
-    novo = escopo_mcp_do_agente(agent_id, alvo.get("tools") or {}, servidores)
+    tools = dict(alvo.get("tools") or {})
+    deny = list(tools.get("deny") or [])
+    tools["deny"] = deny + [t for t in travas if t not in deny]
+    novo = escopo_mcp_do_agente(agent_id, tools, servidores)
     if novo == (alvo.get("tools") or {}):
         return
     alvo["tools"] = novo
