@@ -27,3 +27,6 @@ markdown==3.7
 
 # Leitura de planilha .xls (formato binário antigo) em app/anexos_leitura.py.
 xlrd==2.0.2
+
+# Voz do resumo em áudio dos agentes (app/voz.py) — vozes neurais da Microsoft.
+edge-tts==7.3.0
