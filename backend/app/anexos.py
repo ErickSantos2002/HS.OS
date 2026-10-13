@@ -117,16 +117,30 @@ def linha_de_anexo(anexo: Anexo) -> str:
 
 
 _INLINE_EXATOS = {"image/png", "image/jpeg", "image/gif", "image/webp",
-                  "application/pdf", "text/plain"}
-_INLINE_PREFIXOS = ("audio/", "video/")
+                  "application/pdf", "text/plain",
+                  "audio/mpeg", "audio/ogg", "audio/webm", "audio/mp4", "audio/wav",
+                  "video/mp4", "video/webm"}
+_MIME_VALIDO = re.compile(r"^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$")
+
+
+def mime_normalizado(mime: str) -> str:
+    """Tipo MIME limpo: sem parâmetros, minúsculo, ou `application/octet-stream`.
+
+    O mime vem do cliente e vira Content-Type do objeto no R2 (é assinado no
+    PUT). Valor malformado (`audio/x, text/html`) é lido de outro jeito pelo
+    navegador do que pelo nosso código; o que não for `tipo/subtipo` puro cai
+    no genérico, que o navegador só baixa.
+    """
+    m = (mime or "").split(";")[0].strip().lower()
+    return m if _MIME_VALIDO.match(m) else "application/octet-stream"
 
 
 def exibe_inline(mime: str) -> bool:
     """O navegador pode abrir este tipo na própria aba?
 
-    Só uma allowlist de tipos inofensivos. HTML e SVG abertos inline pela URL
-    assinada viram página ativa no domínio do R2 (XSS armazenado); o resto vai
-    como `attachment`. Lista de bloqueio não serve: tipo novo nasce permitido.
+    Só allowlist EXATA de tipos inofensivos, sem prefixo. HTML e SVG abertos
+    inline pela URL assinada viram página ativa no domínio do R2 (XSS
+    armazenado); o resto vai como `attachment`. Lista de bloqueio não serve:
+    tipo novo nasce permitido.
     """
-    m = (mime or "").split(";")[0].strip().lower()
-    return m in _INLINE_EXATOS or m.startswith(_INLINE_PREFIXOS)
+    return mime_normalizado(mime) in _INLINE_EXATOS

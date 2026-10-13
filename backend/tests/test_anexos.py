@@ -252,9 +252,37 @@ def test_agente_sem_perfil_e_404_mesmo_com_pode_ver(monkeypatch):
     ("text/xml", False), ("", False), ("application/octet-stream", False),
     ("image/png", True), ("image/jpeg", True), ("application/pdf", True),
     ("audio/mpeg", True), ("video/mp4", True), ("text/plain", True),
+    ("audio/x, text/html", False), ("audio/x-evil", False), ("video/x-msvideo", False),
     ("TEXT/HTML; charset=utf-8", False), ("text/plain; charset=utf-8", True),
 ])
 def test_so_tipo_inofensivo_abre_no_navegador(mime, esperado):
     """HTML e SVG abertos inline pela URL assinada viram página ativa servida
     pelo domínio do R2 (XSS armazenado). Só a allowlist abre; o resto baixa."""
     assert ax.exibe_inline(mime) is esperado
+
+
+@pytest.mark.parametrize("mime,esperado", [
+    ("audio/x, text/html", "application/octet-stream"),
+    ("text/html foo", "application/octet-stream"),
+    ("", "application/octet-stream"),
+    ("sem-barra", "application/octet-stream"),
+    ("Image/PNG; charset=x", "image/png"),
+])
+def test_mime_malformado_vira_generico(mime, esperado):
+    """O mime do cliente vira Content-Type no R2; só `tipo/subtipo` puro passa."""
+    assert ax.mime_normalizado(mime) == esperado
+
+
+def test_iniciar_anexo_grava_o_mime_normalizado(monkeypatch):
+    _usa(monkeypatch, ConnFalsa())
+    vistos = {}
+
+    async def url_put(k, mime, tamanho, s):
+        vistos["mime"] = mime
+        return "u"
+    monkeypatch.setattr(arm, "url_put", url_put)
+    monkeypatch.setattr("app.routers.storage.emitir_ticket",
+                        lambda d, u, *a: vistos.setdefault("ticket", d) and "t")
+    asyncio.run(rota.iniciar_anexo(_In(mime="audio/x, text/html"), _eu(PESSOA)))
+    assert vistos["mime"] == "application/octet-stream"
+    assert vistos["ticket"]["mime"] == "application/octet-stream"

@@ -90,12 +90,13 @@ async def iniciar_anexo(dados, usuario: Usuario):
     if not pode:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Você não participa desta conversa.")
 
+    mime = ax.mime_normalizado(dados.mime)
     anexo_id = str(uuid4())
     caminho = ax.caminho_do_anexo(anexo_id, dados.contexto, alvo, dados.nome)
     k = arm.chave("anexos", caminho)
-    url = await arm.url_put(k, dados.mime, dados.tamanho, _PUT_S)
+    url = await arm.url_put(k, mime, dados.tamanho, _PUT_S)
     ticket = emitir_ticket({
-        "bucket": "anexos", "caminho": caminho, "tamanho": dados.tamanho, "mime": dados.mime,
+        "bucket": "anexos", "caminho": caminho, "tamanho": dados.tamanho, "mime": mime,
         "anexo_id": anexo_id, "nome": dados.nome.strip()[:200], "contexto": dados.contexto,
         "alvo": alvo,
     }, usuario.id)
