@@ -389,6 +389,16 @@ def montar_xlsx(r: Relatorio) -> bytes:
         ws.cell(ws.max_row, 3).number_format = "dd/mm/yyyy"
         ws.cell(ws.max_row, 7).number_format = "hh:mm"
 
+    # Injeção de fórmula: nome, motivo e justificativa são texto que o
+    # funcionário digita no Flash. Começando com = + - @, o Excel da RH os
+    # executaria (ex.: =HYPERLINK). Força tipo texto — o mesmo do
+    # `enviar_arquivo` em `anexos_escrita.py`.
+    for planilha in wb.worksheets:
+        for linha in planilha.iter_rows():
+            for c in linha:
+                if isinstance(c.value, str) and c.value[:1] in ("=", "+", "-", "@"):
+                    c.data_type = "s"
+
     saida = io.BytesIO()
     wb.save(saida)
     return saida.getvalue()

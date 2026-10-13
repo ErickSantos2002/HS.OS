@@ -279,3 +279,15 @@ def test_resumo_ao_agente_tem_totais_e_quem_precisa_de_atencao():
     assert "SETEMBRO/2026" in texto and "2 colaboradores" in texto
     assert "Ana Teste" in texto and "ATENÇÃO" in texto and "-07:42" in texto
     assert "Bia Teste" not in texto
+
+
+def test_texto_do_funcionario_nao_vira_formula_no_excel():
+    """A justificativa é texto livre que o funcionário digita no Flash. Aberta
+    no Excel da RH, `=HYPERLINK(...)` viraria fórmula — o mesmo cuidado do
+    `enviar_arquivo` (`anexos_escrita.py`)."""
+    r = rel([marc("Ana Teste", "000001", "01/09/2026",
+                  ("07:30", "Justificada", "Esquecimento de marcação", '=HYPERLINK("http://x","clique")'))])
+    ws = _livro(r)["Ajustes"]
+    celula = ws.cell(2, 6)
+    assert celula.value == '=HYPERLINK("http://x","clique")'
+    assert celula.data_type == "s"
