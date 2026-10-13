@@ -17,11 +17,11 @@ import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import { uploadFileToStorage, formatFileSize, isImageFile } from "@/lib/file-upload";
 import FileAttachmentCard from "./FileAttachmentCard";
 import AudioDaMensagem from "./AudioDaMensagem";
+import MenuDaMensagem, { type AcaoDaMensagem } from "./MenuDaMensagem";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useResumoEmAudio } from "@/hooks/use-resumo-em-audio";
 import { enviarAudioDoCanal } from "@/lib/audio-de-mensagem";
 import CollapsibleTranscription from "./CollapsibleTranscription";
-import CopyMessageButton from "./CopyMessageButton";
-import MarkUnreadButton from "./MarkUnreadButton";
 import { useTypingIndicator, formatTypingLabel } from "@/hooks/use-typing-indicator";
 import { useNotificationsContext } from "@/components/NotificationsProvider";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type } from "lucide-react";
+import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, Copy } from "lucide-react";
 import { format } from "date-fns";
 import ChannelMembersPanel from "./ChannelMembersPanel";
 import ChannelFilesPanel from "./ChannelFilesPanel";
@@ -283,38 +283,7 @@ export const MessageBubble = memo(function MessageBubble({
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const bubbleRef = useRef<HTMLDivElement | null>(null);
-  const [actionBarPlacement, setActionBarPlacement] = useState<"side" | "meta">("side");
 
-  useLayoutEffect(() => {
-    const wrapper = wrapperRef.current;
-    const bubble = bubbleRef.current;
-    if (!wrapper || !bubble) return;
-
-    let frame = 0;
-    const estimatedActionWidth = isOwn ? 204 : 148;
-    const updatePlacement = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        const wrapperRect = wrapper.getBoundingClientRect();
-        const bubbleRect = bubble.getBoundingClientRect();
-        const sideSpace = isOwn ? bubbleRect.left - wrapperRect.left : wrapperRect.right - bubbleRect.right;
-        const nextPlacement = bubbleRect.width > 360 || sideSpace < estimatedActionWidth + 12 ? "meta" : "side";
-        setActionBarPlacement((current) => (current === nextPlacement ? current : nextPlacement));
-      });
-    };
-
-    updatePlacement();
-    const resizeObserver = new ResizeObserver(updatePlacement);
-    resizeObserver.observe(wrapper);
-    resizeObserver.observe(bubble);
-    window.addEventListener("resize", updatePlacement);
-
-    return () => {
-      cancelAnimationFrame(frame);
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", updatePlacement);
-    };
-  }, [isOwn, msg.content, msg.attachments?.length, hasAudio]);
 
   // Auto-clear "marked as unread" highlight once the message is actually seen
   useEffect(() => {
@@ -352,22 +321,19 @@ export const MessageBubble = memo(function MessageBubble({
       ? "rounded-2xl border border-primary/30 bg-primary/10 px-3.5 py-2 text-foreground backdrop-blur-sm shadow-[0_0_0_1px_hsl(var(--primary)/0.08)]"
       : "rounded-2xl border border-border/60 bg-card/60 px-3.5 py-2 text-foreground backdrop-blur-sm";
 
-  const renderActionBar = (placement: "side" | "meta") => {
-    if (msg.id.startsWith("optimistic-")) return null;
-    const displayClass = showMobileMenu || emojiOpen
-      ? placement === "meta" ? "inline-flex" : "flex"
-      : placement === "meta" ? "hidden group-hover:inline-flex" : "hidden group-hover:flex";
-    const placementClass = placement === "side"
-      ? `absolute top-1/2 -translate-y-1/2 ${isOwn ? "right-full mr-1" : "left-full ml-1"}`
-      : "relative align-middle";
-
+  // Estilo WhatsApp (13/10/2026): ao passar o mouse aparece só o reagir, ao
+  // lado da bolha; o resto fica no menu da seta. Antes era uma barra de seis
+  // ícones, que ia para BAIXO da mensagem quando ela era larga.
+  const renderReagir = () => {
+    if (msg.id.startsWith("optimistic-") || isDeleted) return null;
+    const visivel = showMobileMenu || emojiOpen ? "flex" : "hidden group-hover:flex";
     return (
-      <div className={`${placementClass} ${displayClass} shrink-0 items-center gap-0.5 bg-popover border border-border rounded-md shadow-md p-0.5 z-30 whitespace-nowrap`}>
+      <div className={`absolute top-1/2 -translate-y-1/2 ${isOwn ? "right-full mr-1.5" : "left-full ml-1.5"} ${visivel} z-30`}>
         <Popover open={emojiOpen} onOpenChange={setEmojiOpen}>
           <PopoverTrigger asChild>
             <button
               type="button"
-              className="p-1.5 rounded hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-border/60 bg-popover text-muted-foreground shadow-sm hover:text-foreground transition-colors"
               title="Reagir"
               onClick={(e) => {
                 e.preventDefault();
@@ -397,26 +363,25 @@ export const MessageBubble = memo(function MessageBubble({
             />
           </PopoverContent>
         </Popover>
-        <button onClick={() => { onReply(); setShowMobileMenu(false); }} className="p-1.5 rounded hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors" title="Responder na conversa">
-          <MessageSquare className="h-3.5 w-3.5" />
-        </button>
-        {!isDeleted && msg.content && (
-          <CopyMessageButton text={msg.content} />
-        )}
-        <MarkUnreadButton onMark={onMarkUnread} />
-        {isOwn && (
-          <>
-            <button onClick={() => { onEdit(); setShowMobileMenu(false); }} className="p-1.5 rounded hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors" title="Editar">
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-            <button onClick={() => { onDelete(); setShowMobileMenu(false); }} className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors" title="Apagar">
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </>
-        )}
       </div>
     );
   };
+
+  const acoesDoMenu: AcaoDaMensagem[] = msg.id.startsWith("optimistic-") || isDeleted ? [] : [
+    { rotulo: "Responder em thread", icone: MessageSquare, aoEscolher: () => { onReply(); setShowMobileMenu(false); } },
+    ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => {
+      void copyToClipboard(msg.content).then((ok) => (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar")));
+    } }] : []),
+    { rotulo: "Marcar como não lida", icone: BellDot, aoEscolher: () => {
+      void Promise.resolve(onMarkUnread()).then(
+        (ok) => (ok ? toast.success("Marcada como não lida") : toast.error("Não foi possível marcar como não lida")),
+        () => toast.error("Não foi possível marcar como não lida"));
+    } },
+    ...(isOwn ? [
+      { rotulo: "Editar", icone: Pencil, aoEscolher: () => { onEdit(); setShowMobileMenu(false); } },
+      { rotulo: "Apagar", icone: Trash2, perigo: true, aoEscolher: () => { onDelete(); setShowMobileMenu(false); } },
+    ] : []),
+  ];
 
 
   // ⚠️ Fora do ramo de "não apagada" de propósito. Em 13/10/2026 uma resposta
@@ -496,7 +461,6 @@ export const MessageBubble = memo(function MessageBubble({
               {isAgent && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Agente</Badge>}
               {hasAudio && <Mic className="h-3 w-3 text-muted-foreground" />}
               <span className="text-[10px] text-muted-foreground">{format(new Date(msg.created_at), "HH:mm")}</span>
-              {actionBarPlacement === "meta" && renderActionBar("meta")}
               {isMarkedUnread && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-primary/20">
                   <BellDot className="h-3 w-3" />
@@ -525,7 +489,7 @@ export const MessageBubble = memo(function MessageBubble({
             {indicadorDeRespostas}
           </>
         ) : (
-          <div className={`relative max-w-full flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
+          <div className={`relative max-w-[70%] flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
             {mentionsEveryone && (
               <div className="mt-1.5 mb-2 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-primary/20">
                 <Users className="h-3 w-3" />
@@ -538,7 +502,7 @@ export const MessageBubble = memo(function MessageBubble({
                 <AudioDaMensagem audioUrl={msg.audio_url!} />
               </div>
             )}
-            <div ref={bubbleRef} className={`relative mt-1 inline-block w-fit max-w-full text-left ${bubbleClass}`}>
+            <div ref={bubbleRef} className={`relative mt-1 inline-block w-fit max-w-full pr-7 text-left ${bubbleClass}`}>
               {(() => {
                 // Strip @todos prefix from rendered text when the "Aviso para todos" badge is already shown
                 const displayContent = mentionsEveryone
@@ -549,7 +513,8 @@ export const MessageBubble = memo(function MessageBubble({
                 return <MarkdownMessageContent text={displayContent} highlightMentions={hasMention} className="text-sm text-foreground/90" />;
               })()}
 
-              {actionBarPlacement === "side" && renderActionBar("side")}
+              {renderReagir()}
+              <MenuDaMensagem acoes={acoesDoMenu} className={showMobileMenu ? "opacity-100" : undefined} />
             </div>
 
             {audioDeAgente && (
@@ -561,8 +526,7 @@ export const MessageBubble = memo(function MessageBubble({
             {isOwn && (
               <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
                 <span>{format(new Date(msg.created_at), "HH:mm")}</span>
-                {actionBarPlacement === "meta" && renderActionBar("meta")}
-                {isEdited && !isDeleted && <span className="italic">(editado)</span>}
+                  {isEdited && !isDeleted && <span className="italic">(editado)</span>}
                 {isMarkedUnread && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-primary/20">
                     <BellDot className="h-3 w-3" />

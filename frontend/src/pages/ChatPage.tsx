@@ -99,7 +99,6 @@ import LiveArtifactViewer from "@/components/LiveArtifactViewer";
 import ArtifactsList from "@/components/chat/ArtifactsList";
 import { ContextWindowIndicator } from "@/components/chat/ContextWindowIndicator";
 import { ModelSelector } from "@/components/chat/ModelSelector";
-import CopyMessageButton from "@/components/chat/CopyMessageButton";
 import AudioRecordingOverlay from "@/components/chat/AudioRecordingOverlay";
 import { type ArtifactType, extractAllArtifacts, type ConversationArtifact } from "@/lib/artifact-extractor";
 
@@ -115,6 +114,7 @@ import { shouldShowDateDivider } from "@/lib/chat-date-groups";
 import { resetComposerTextarea, resizeComposerTextarea } from "@/lib/chat-composer";
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
+import MenuDaMensagem from "@/components/chat/MenuDaMensagem";
 import { copyToClipboard, hasActiveTextSelection } from "@/lib/clipboard";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 
@@ -369,7 +369,6 @@ function StagedPreview({ items, onRemove }: { items: MediaAttachment[]; onRemove
 
 const agentMessageActionClassName = "inline-flex h-6 w-6 items-center justify-center rounded-full border border-border/40 bg-secondary/20 text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground";
 
-/* CopyMessageButton is now imported from @/components/chat/CopyMessageButton */
 
 /* ── Streaming indicator (isolated to avoid re-rendering entire page) ── */
 
@@ -440,7 +439,7 @@ interface AgentMessageListProps {
   trailingActivities?: AgentActivity[];
 }
 
-const AgentMessageList = React.memo(function AgentMessageList({
+export const AgentMessageList = React.memo(function AgentMessageList({
   messages,
   isMobile,
   isAgentWorking,
@@ -525,7 +524,7 @@ const AgentMessageList = React.memo(function AgentMessageList({
 
                 <div className={`relative w-full flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
                   <div
-                    className={`relative mt-1 text-left ${isOwn ? "inline-block w-max max-w-[85%]" : "block w-full"} ${bubbleClass}`}
+                    className={`relative mt-1 inline-block max-w-[70%] pr-7 text-left ${isOwn ? "w-max" : "w-fit"} ${bubbleClass}`}
                   >
                     <div className="chat-message-content-selectable break-words" data-message-select-scope={msg.id}>
                       {msg.content && (
@@ -549,41 +548,22 @@ const AgentMessageList = React.memo(function AgentMessageList({
                       ))}
                     </div>
 
-                    {/* Hover action bar — anchored to bubble edge */}
+                    {/* Estilo WhatsApp (13/10/2026): uma seta no canto abre as
+                        ações. Saíram a barra do hover e o "copiar" solto embaixo
+                        da resposta. "Ouvir" segue pausado — ver EM-CONSTRUCAO. */}
                     {!msg.id.startsWith("optimistic-") && !msg.isError && (
-                      <div
-                        className={`absolute top-1 ${isOwn ? "-left-1 -translate-x-full" : "-right-1 translate-x-full"} hidden group-hover:flex items-center gap-0.5 bg-popover border border-border rounded-md shadow-md p-0.5 z-10`}
-                      >
-                        {/* Botão "ouvir" pausado em 10/08/2026 junto com a
-                            integração de voz — ver `docs/EM-CONSTRUCAO.md`. */}
-                        <CopyMessageButton text={msg.content || ""} />
-                        {isAgent && effectiveAgentId && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              markAgentUnread(effectiveAgentId);
-                              toast.success("Marcada como não lida");
-                            }}
-                            className="p-1.5 rounded hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
-                            title="Marcar como não lida"
-                            aria-label="Marcar como não lida"
-                          >
-                            <BellDot className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
+                      <MenuDaMensagem acoes={[
+                        ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => {
+                          void copyToClipboard(msg.content).then((ok) =>
+                            (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar")));
+                        } }] : []),
+                        ...(isAgent && effectiveAgentId ? [{ rotulo: "Marcar como não lida", icone: BellDot, aoEscolher: () => {
+                          markAgentUnread(effectiveAgentId);
+                          toast.success("Marcada como não lida");
+                        } }] : []),
+                      ]} />
                     )}
                   </div>
-
-                  {/* Bottom action bar for agent responses — avoids scrolling up to copy */}
-                  {isAgent && !msg.id.startsWith("optimistic-") && !msg.isError && msg.content && (
-                    <div className="mt-1 flex items-center gap-0.5 opacity-60 hover:opacity-100 transition-opacity">
-                      {/* "ouvir" pausado — ver `docs/EM-CONSTRUCAO.md` */}
-                      <CopyMessageButton text={msg.content} />
-                    </div>
-                  )}
-
 
                   {/* Own timestamp below bubble */}
                   {isOwn && (
