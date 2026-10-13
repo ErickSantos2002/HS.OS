@@ -1129,6 +1129,60 @@ cabeçalho de `compradores.py` tem a conta. **Não reintroduza filtro de CFOP ou
 marcador do lado de cá**: duas réguas foi o que fez o faturamento divergir por
 anos. ⚠️ O fato é recalculado às 05:00 — nota de hoje entra amanhã.
 
+### Anexos — R2, privados, e o agente lê por ferramenta
+
+Desde 13/10/2026 todo arquivo mora no **Cloudflare R2** (`app/armazenamento.py`, único
+módulo que fala com ele; bucket físico `hsos-arquivos`, o bucket lógico é o primeiro
+segmento da chave) e o `UPLOADS_DIR` está aposentado. Ler é 302 para URL assinada
+(1 h público, **5 min** privado/anexo); enviar é `PUT` assinado de 15 min direto do
+navegador — a VPS não vê os bytes. Teto de 100 MB. Sem R2 configurado o backend sobe e
+as rotas de arquivo respondem 503 dizendo o que falta. Migração do disco:
+`backend/scripts/migrar-uploads-r2.py` (confere por chave e tamanho). URLs
+`/storage/<bucket>/<caminho>` já gravadas continuam valendo.
+
+Anexo de conversa vai para o bucket lógico **`anexos`** e vira linha em `public.anexos`
+(`017`). Quem lê: membro do canal, ou a pessoa da conversa com o agente. **Sem atalho
+para administrador.** A regra é `app/anexos.py`, pura e testada.
+
+⚠️ **Ticket de upload é um JWT com `aud: "hsos-upload"`.** O `ler_token` do login recusa
+ticket e o upload recusa token de login — sem isso um serve de passe para o outro.
+
+⚠️ **`generated-documents` só o servidor grava** (o cliente recebe 403). `extrair-texto` e
+`DELETE` em bucket privado conferem o dono; `anexos` não passa por `/storage/privado`
+nem por `extrair-texto`: só pelas rotas de `routers/anexos.py`.
+
+⚠️ **O mime é do servidor, não do cliente.** `mime_normalizado` decide; o `iniciar`
+devolve o `mime` assinado e o cliente tem que usar **esse** no `PUT`, senão o R2 responde
+403 `SignatureDoesNotMatch`. Abre inline só o que está na allowlist exata (imagens raster,
+pdf, `text/plain`, alguns áudio/vídeo); o resto baixa como attachment — html/svg enviado
+por usuário não executa no domínio. A URL vale 5 min: a tela pede uma nova **no clique**
+(`urlAgora`), nunca guarda a do carregamento.
+
+⚠️ **O agente recebe uma linha, não o conteúdo:** `[anexo: nome · tamanho · tipo · id=…]`.
+No canal a linha só sai para id confirmado em `public.anexos` **daquele canal** — nunca
+do JSON que o cliente mandou. Ele lê pelo `ler_anexo` do servidor **`hsos-anexos-<agente>`**:
+uma entrada por agente no gateway, com o HMAC (`ANEXOS_MCP_SEGREDO`) do id dele na URL.
+É o único MCP nosso em que a identidade do agente é **verificada**; os outros confiam no
+argumento. Agente novo: rodar `scripts/publicar-anexos-mcp.py` e `scripts/escopo-mcp.py`.
+
+⚠️ **Limite honesto do `ler_anexo`:** garante "anexo de uma conversa com ESTE agente (ou
+de canal em que ele está)", **não** "desta sessão/pessoa" — o gateway não repassa a
+sessão ao MCP. O agente numa sessão de A lê anexo que B mandou ao mesmo agente se tiver
+o id; o uuid só aparece na sessão de B, então o risco é o agente repetir um id, não
+adivinhá-lo. Fechar isso exige o gateway passar a sessão.
+
+⚠️ **Planilha lê-se em thread, só a aba pedida, preguiçosa**, com teto nomeado ao agente:
+200.000 linhas, 200 colunas, 300 MB descompactados (xlsx), 50 MB de arquivo e 1 MB por
+registro (CSV). Sem teto, um zip-bomb ou um CSV sem quebra de linha trava o worker.
+
+⚠️ **O agente devolve arquivo escrevendo TEXTO.** `enviar_arquivo` recebe CSV ou Markdown
+e o servidor monta xlsx/docx/pdf (em thread, depois de conferir o destino); célula xlsx
+começando por `= + - @` vira texto, não fórmula. A entrega na tela vem do trigger de
+`conversations`, **não** de `hub.publicar` — não acrescente um segundo caminho.
+
+⚠️ **CORS errado no bucket não dá erro no backend** — o PUT morre no navegador. A tela
+diz "rede ou CORS do bucket"; a política está em `docs/DEPLOY.md`.
+
 ### Agendamento (`cron.*`) — contrato levantado em 19/08/2026
 
 ```

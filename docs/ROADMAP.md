@@ -116,6 +116,11 @@ A metade determinística do `extract-file-text` também já foi portada e funcio
 sem LLM nenhuma: `POST /storage/extrair-texto/{bucket}/{caminho}` devolve o texto
 de txt, md, pdf e docx.
 
+⚠️ **Storage mudou de disco para R2 em 13/10/2026** (`app/armazenamento.py`), e
+anexo de conversa ganhou bucket privado `anexos` com leitura pelo agente
+(`hsos-anexos`). Ver *Anexos* no `CLAUDE.md`. `extrair-texto` continua valendo para
+os buckets de documentos, não para `anexos`.
+
 **O que sobrou de externo é só a ElevenLabs**, e só para voz — decisão de
 assinatura, não de engenharia. Ver [`EM-CONSTRUCAO.md`](EM-CONSTRUCAO.md).
 

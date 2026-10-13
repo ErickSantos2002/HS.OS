@@ -821,6 +821,15 @@ parametrizada. Assim a decisão vira configuração, não código.
 
 ## Próximo passo, em ordem de valor
 
+### 0. Régua do ponto (Lindsay/RH) — depois dos anexos no R2
+
+A Lindsay manda pelo chat com o `bruce` a planilha bruta do Flash e a ajustada.
+Levantar a régua comparando as duas, conferir com ela, e transformar em ferramenta
+determinística + skill `ponto-flash` + ponteiro no `AGENTS.md` do bruce (**medir o
+teto de 20.000 caracteres antes** de escrever). Pré-requisito: o GATE dos anexos
+(13/10/2026) conferido em produção — `ler_anexo` com xlsx e csv, `enviar_arquivo`,
+404 para quem não é da conversa e a `nina` recusando id alheio.
+
 ### 1. O banco — é o que sobrou
 
 **124 chamadas `.from("…")` vivas.** Eram ~222 no início de 07/08, então já caiu
