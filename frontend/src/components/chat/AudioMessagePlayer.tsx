@@ -35,8 +35,6 @@ function readDuration(audio: HTMLAudioElement): number | null {
 export default function AudioMessagePlayer({ src, className }: AudioMessagePlayerProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const progressRef = useRef<HTMLButtonElement | null>(null);
-  const seekTrickAttempted = useRef(false);
-  const seekTrickResolved = useRef(false);
   const suppressTransitionRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -51,64 +49,27 @@ export default function AudioMessagePlayer({ src, className }: AudioMessagePlaye
     setCurrentTime(0);
     setDuration(0);
     setHasError(false);
-    seekTrickAttempted.current = false;
-    seekTrickResolved.current = false;
 
     const tryResolveDuration = () => {
       const d = readDuration(audio);
-      if (d != null) {
-        setDuration(d);
-        seekTrickResolved.current = true;
-        return true;
-      }
-      return false;
+      if (d != null) setDuration(d);
     };
 
-    const triggerSeekTrick = () => {
-      if (seekTrickAttempted.current || seekTrickResolved.current) return;
-      seekTrickAttempted.current = true;
-      try {
-        audio.currentTime = Number.MAX_SAFE_INTEGER;
-      } catch {
-        // some browsers throw — ignore
-      }
-    };
-
+    // ⚠️ Não pular para o fim para descobrir a duração. Era o que este player
+    // fazia (`currentTime = MAX_SAFE_INTEGER`), e no webm sem índice o pulo às
+    // vezes quebra o `<audio>` com "demuxer seek failed": 0:00 na tela e áudio
+    // mudo para quem recebe (13/10/2026). Áudio gravado daqui em diante já nasce
+    // com a duração (`lib/duracao-gravacao.ts`); o antigo mostra a duração
+    // quando termina de tocar.
     const handleLoadedMetadata = () => {
       setHasError(false);
-      if (!tryResolveDuration()) triggerSeekTrick();
+      tryResolveDuration();
     };
 
-    const handleDurationChange = () => {
-      if (tryResolveDuration() && audio.currentTime > 1e6) {
-        try {
-          audio.currentTime = 0;
-        } catch {
-          // ignore
-        }
-      }
-    };
-
-    const handleSeeked = () => {
-      if (audio.currentTime > 1e6) {
-        tryResolveDuration();
-        try {
-          audio.currentTime = 0;
-        } catch {
-          // ignore
-        }
-        setCurrentTime(0);
-      }
-    };
+    const handleDurationChange = tryResolveDuration;
 
     const handleTimeUpdate = () => {
-      if (audio.currentTime <= 1e6) {
-        setCurrentTime(audio.currentTime);
-      }
-    };
-
-    const handleProgress = () => {
-      if (duration === 0) tryResolveDuration();
+      setCurrentTime(audio.currentTime);
     };
 
     const handlePlay = () => setIsPlaying(true);
@@ -130,9 +91,7 @@ export default function AudioMessagePlayer({ src, className }: AudioMessagePlaye
 
     audio.addEventListener("loadedmetadata", handleLoadedMetadata);
     audio.addEventListener("durationchange", handleDurationChange);
-    audio.addEventListener("seeked", handleSeeked);
     audio.addEventListener("timeupdate", handleTimeUpdate);
-    audio.addEventListener("progress", handleProgress);
     audio.addEventListener("play", handlePlay);
     audio.addEventListener("pause", handlePause);
     audio.addEventListener("ended", handleEnded);
@@ -145,15 +104,12 @@ export default function AudioMessagePlayer({ src, className }: AudioMessagePlaye
       audio.pause();
       audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
       audio.removeEventListener("durationchange", handleDurationChange);
-      audio.removeEventListener("seeked", handleSeeked);
       audio.removeEventListener("timeupdate", handleTimeUpdate);
-      audio.removeEventListener("progress", handleProgress);
       audio.removeEventListener("play", handlePlay);
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [src]);
 
   const hasResolvedDuration = duration > 0;
@@ -178,6 +134,8 @@ export default function AudioMessagePlayer({ src, className }: AudioMessagePlaye
     }
 
     try {
+      // Elemento em erro não toca de novo sozinho: recarrega antes de tentar.
+      if (audio.error) audio.load();
       await audio.play();
       setHasError(false);
     } catch {

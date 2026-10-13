@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { comDuracao } from "@/lib/duracao-gravacao";
+
 const AUDIO_RECORDING_MIME_CANDIDATES = [
   "audio/webm;codecs=opus",
   "audio/webm",
@@ -44,6 +46,8 @@ export function useAudioRecorder() {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const preferredMimeTypeRef = useRef("");
+  // Para gravar a duração no webm, que o MediaRecorder não declara.
+  const inicioRef = useRef(0);
 
   const resetState = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -106,6 +110,7 @@ export function useAudioRecorder() {
       // iOS Safari requires an explicit timeslice or `dataavailable` never fires
       // and the recorded blob ends up empty on stop. Emit a chunk every second.
       recorder.start(1000);
+      inicioRef.current = performance.now();
 
       setIsRecording(true);
       setDuration(0);
@@ -167,7 +172,11 @@ export function useAudioRecorder() {
         resetState();
 
         console.log("[audio-recorder] final blob:", blob ? `${blob.size} bytes, type=${blob.type}` : "null");
-        resolve(blob && blob.size > 0 ? blob : null);
+        if (!blob || blob.size === 0) {
+          resolve(null);
+          return;
+        }
+        void comDuracao(blob, performance.now() - inicioRef.current).then(resolve);
       };
 
       const tryFinalize = () => {
