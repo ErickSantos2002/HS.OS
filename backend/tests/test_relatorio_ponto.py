@@ -291,3 +291,30 @@ def test_texto_do_funcionario_nao_vira_formula_no_excel():
     celula = ws.cell(2, 6)
     assert celula.value == '=HYPERLINK("http://x","clique")'
     assert celula.data_type == "s"
+
+
+# ── revisão final, 13/10/2026 ───────────────────────────────────────────────
+
+@pytest.mark.parametrize("justificativa", [
+    "atendimento aos clientes", "atividade externa", "viagens a trabalho",
+    "home-office", "homeoffice",
+])
+def test_variantes_de_motivo_de_trabalho_nao_contam(justificativa):
+    """A spec diz "contém"; com `\\b` nas pontas, plural e hífen escapavam e o
+    ajuste contava — o que empurra a pessoa para ACOMPANHAMENTO sem motivo."""
+    r = rel([marc("Ana Teste", "000001", "01/09/2026",
+                  ("07:30", "Justificada", "Ajuste de horário", justificativa))])
+    assert r.ajustes[0].conta is False
+
+
+def test_data_invalida_nomeia_o_arquivo_e_a_linha():
+    for data in ("2026-09-01", "", "01/09/26"):
+        with pytest.raises(p.ErroPonto, match=r"m\.csv.*linha 2"):
+            rel([marc("Ana Teste", "000001", data, "07:30")])
+
+
+def test_caractere_de_controle_no_texto_do_flash_nao_derruba_a_planilha():
+    r = rel([marc("Ana Teste", "000001", "01/09/2026",
+                  ("07:30", "Justificada", "Esquecimento", "esqueci\x01 de bater"))])
+    ws = _livro(r)["Ajustes"]
+    assert ws.cell(2, 6).value == "esqueci de bater"

@@ -71,7 +71,12 @@ _PADRAO = {
     "apos_jornada": "Permanência após jornada recorrente",
 }
 # Ajuste por motivo de trabalho não conta (confirmado por ela em 13/10/2026).
-_TRABALHO = re.compile(r"\b(externo|viagem|home office|cliente)\b")
+# "Contém", sem fronteira de palavra: com `\b` nas pontas, "clientes",
+# "externa", "viagens" e "home-office" escapavam e o ajuste contava.
+_TRABALHO = re.compile(r"extern|viag|home.?office|client")
+# Caractere de controle num campo do Flash faria o openpyxl recusar a célula
+# e derrubar a planilha inteira; não há uso legítimo para eles aqui.
+_CONTROLE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 _COL_MARC = {"Nome", "Data da Marcação", "Hora da Marcação 1", "Tipo Marcação 1"}
 _COL_BANCO = {"Nome", "Matrícula", "Saldo banco total"}
@@ -139,7 +144,10 @@ def _decodificar(dados: bytes) -> str:
 def identificar(nome: str, dados: bytes) -> tuple[str, list[dict]]:
     """`("marcacoes" | "banco", registros)` — decidido pelo cabeçalho, não pelo nome."""
     leitor = csv.DictReader(io.StringIO(_decodificar(dados)), delimiter=";")
-    colunas = {(c or "").strip() for c in (leitor.fieldnames or [])}
+    try:
+        colunas = {(c or "").strip() for c in (leitor.fieldnames or [])}
+    except csv.Error as e:
+        raise ErroPonto(f"{nome} não pôde ser lido como CSV: {e}.") from e
     if _COL_MARC <= colunas:
         tipo = "marcacoes"
     elif _COL_BANCO <= colunas:
@@ -148,8 +156,11 @@ def identificar(nome: str, dados: bytes) -> tuple[str, list[dict]]:
         raise ErroPonto(
             f"{nome} não parece um export do Flash: esperava o CSV de marcações "
             "(MarcacoesOriginaisJustificadas) ou o de banco de horas (BancoHoras).")
-    registros = [{(k or "").strip(): (v or "").strip() for k, v in r.items()}
-                 for r in leitor if any((v or "").strip() for v in r.values())]
+    try:
+        registros = [{(k or "").strip(): _CONTROLE.sub("", (v or "")).strip() for k, v in r.items()}
+                     for r in leitor if any((v or "").strip() for v in r.values())]
+    except csv.Error as e:
+        raise ErroPonto(f"{nome} não pôde ser lido como CSV: {e}.") from e
     if len(registros) > TETO_LINHAS:
         raise ErroPonto(f"{nome} tem {len(registros)} linhas; o limite é {TETO_LINHAS}.")
     return tipo, registros
@@ -160,9 +171,15 @@ def _minutos(texto: str) -> int | None:
     return int(m.group(1)) * 60 + int(m.group(2)) if m else None
 
 
-def _data(texto: str) -> date:
-    d, m, a = (int(x) for x in texto.strip().split("/"))
-    return date(a, m, d)
+def _data(texto: str) -> date | None:
+    """`dd/mm/aaaa` do Flash; qualquer outra forma é `None` (quem chama nomeia a linha)."""
+    m = re.match(r"^(\d{2})/(\d{2})/(\d{4})$", (texto or "").strip())
+    if not m or int(m.group(3)) < 2000:
+        return None
+    try:
+        return date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+    except ValueError:
+        return None
 
 
 def _saldo(texto: str) -> tuple[int | None, str]:
@@ -223,18 +240,25 @@ def _classificar(pessoa: Pessoa) -> None:
 def gerar(arquivos: list[tuple[str, bytes]]) -> Relatorio:
     """`arquivos` = [(nome, bytes)] com os dois CSV do Flash, em qualquer ordem."""
     lidos: dict[str, list[dict]] = {}
+    nomes: dict[str, str] = {}
     for nome, dados in arquivos:
         tipo, registros = identificar(nome, dados)
-        lidos[tipo] = registros
+        lidos[tipo], nomes[tipo] = registros, nome
     faltam = [r for t, r in (("marcacoes", "marcações (MarcacoesOriginaisJustificadas)"),
                              ("banco", "banco de horas (BancoHoras)")) if t not in lidos]
     if faltam:
-        achou = ", ".join(sorted(lidos)) or "nenhum"
+        achou = ", ".join(nomes.values()) or "nenhum"
         raise ErroPonto(f"Falta o CSV de {' e '.join(faltam)}. Reconhecido: {achou}.")
 
     linhas = lidos["marcacoes"]
-    meses = sorted({(_data(l["Data da Marcação"]).month, _data(l["Data da Marcação"]).year)
-                    for l in linhas if l.get("Data da Marcação")})
+    datas = []
+    for n, l in enumerate(linhas, start=2):   # linha 1 é o cabeçalho
+        d = _data(l.get("Data da Marcação", ""))
+        if d is None:
+            raise ErroPonto(f"{nomes['marcacoes']}: data inválida "
+                            f"{l.get('Data da Marcação', '')!r} na linha {n} (esperado dd/mm/aaaa).")
+        datas.append(d)
+    meses = sorted({(d.month, d.year) for d in datas})
     if len(meses) != 1:
         rotulos = ", ".join(f"{m:02d}/{a}" for m, a in meses) or "nenhum"
         raise ErroPonto(f"O CSV de marcações precisa ser de um mês só; veio: {rotulos}.")
@@ -243,12 +267,11 @@ def gerar(arquivos: list[tuple[str, bytes]]) -> Relatorio:
     pessoas: dict[str, Pessoa] = {}
     ocorrencias: list[Ocorrencia] = []
     ajustes: list[Ajuste] = []
-    for l in linhas:
+    for l, dia in zip(linhas, datas):
         nome = l["Nome"]
         chave = _matricula(l.get("Matrícula", "")) or nome
         pessoa = pessoas.setdefault(chave, Pessoa(nome, _matricula(l.get("Matrícula", "")),
                                                   l.get("Departamento", "")))
-        dia = _data(l["Data da Marcação"])
         marcadas = [(i, _minutos(l.get(f"Hora da Marcação {i}", ""))) for i in range(1, 7)]
         marcadas = [(i, mins) for i, mins in marcadas if mins is not None]
         batidas = [mins for _, mins in marcadas]

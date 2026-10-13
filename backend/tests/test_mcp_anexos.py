@@ -499,3 +499,14 @@ def test_relatorio_ponto_com_dois_csv_de_marcacoes_diz_o_que_falta(ponto):
     ponto["anexos"]["b"] = dataclasses.replace(ponto["anexos"]["b"], caminho="m")
     texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "b"]}))
     assert erro and "banco de horas" in texto and ponto["entregas"] == []
+
+
+def test_enviar_arquivo_com_erro_que_nao_e_valueerror_vira_resposta_mcp(monkeypatch):
+    """Depois de extrair o `_entregar`, só `ValueError` era tratado na montagem.
+    Um caractere de controle no CSV faz o openpyxl levantar `IllegalCharacterError`
+    — e o gateway recebia 500 cru, que pausa o servidor MCP."""
+    import asyncio
+    log, gravados, _ = _ambiente(monkeypatch)
+    texto, erro = asyncio.run(m._enviar_arquivo("bruce", {
+        "para": PESSOA, "nome": "x", "formato": "xlsx", "conteudo": "a\x01b;c"}))
+    assert erro and "Falha interna" in texto and gravados == []

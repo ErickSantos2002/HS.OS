@@ -342,6 +342,11 @@ async def _enviar_arquivo(agent_id: str, args: dict) -> tuple[str, bool]:
                                    str(args.get("nome") or ""), str(args.get("conteudo") or "")))
     except ValueError as e:
         return str(e), True
+    except Exception:  # noqa: BLE001
+        # Ex.: caractere de controle no CSV → IllegalCharacterError do openpyxl.
+        # Sem isto o gateway recebe 500 cru, e erro repetido pausa o servidor MCP.
+        logger.exception("enviar_arquivo: falha ao montar (agente %s, destino %s)", agent_id, para)
+        return "Falha interna ao enviar o arquivo; avise o administrador.", True
     return await _entregar(agent_id, para, nome, dados, mime)
 
 
