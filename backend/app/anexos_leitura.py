@@ -144,6 +144,52 @@ def _decodificar(dados: bytes) -> str:
     return dados.decode("latin-1")
 
 
+class _LinhasContadas:
+    """Entrega ao `csv.reader` as linhas físicas do texto, uma por vez, e conta
+    quanto ele já consumiu desde o último registro que devolveu.
+
+    ⚠️ **O teto é do REGISTRO, não da linha física.** Um campo entre aspas pode
+    conter `\n`, e então um registro só atravessa milhares de linhas físicas
+    curtas — 300 mil campos `"a\nb",` passam em qualquer teto por linha e viram
+    uma lista de 300 mil itens. A rodada 3 pré-varria o texto com
+    `str.splitlines`, que ainda por cima quebra em `\x0c`, `\x85`, `\u2028`...
+    onde o reader NÃO quebra: dois tokenizadores discordando é o furo. Aqui só
+    existe um, e o limite é medido no que ele de fato consumiu.
+
+    Quebra só em `\n` e mantém o `\n` na linha, como o `io.StringIO` faria — o
+    reader precisa dele para montar o campo multilinha. `str.find` a partir da
+    posição: nenhuma lista com as linhas do texto inteiro.
+    """
+
+    def __init__(self, texto: str):
+        self.texto = texto
+        self.pos = 0
+        self.consumido = 0  # zerado por quem lê, a cada registro devolvido
+
+    def __iter__(self):
+        return self
+
+    def __next__(self) -> str:
+        if self.pos >= len(self.texto):
+            raise StopIteration
+        fim = self.texto.find("\n", self.pos)
+        fim = len(self.texto) if fim < 0 else fim + 1
+        # Confere ANTES de fatiar: a linha que estoura nem chega ao parser.
+        if self.consumido + (fim - self.pos) > TETO_LINHA_CSV:
+            raise _GrandeDemais(f"há uma linha com mais de {TETO_LINHA_CSV // 1024} KB")
+        linha = self.texto[self.pos:fim]
+        self.consumido += fim - self.pos
+        self.pos = fim
+        return linha
+
+
+def _registros_csv(texto: str, dialeto):
+    linhas = _LinhasContadas(texto)
+    for registro in csv.reader(linhas, dialeto):
+        linhas.consumido = 0
+        yield registro
+
+
 def _lido_csv(dados: bytes, aba, ini: int):
     texto = _decodificar(dados)
     amostra = texto[:5000]
@@ -155,18 +201,16 @@ def _lido_csv(dados: bytes, aba, ini: int):
             delimiter = ";" if amostra.count(";") > amostra.count(",") else ","
     if len(texto) > TETO_CSV_BYTES:
         raise _GrandeDemais(f"o CSV passa de {TETO_CSV_BYTES // (1024 * 1024)} MB")
-    if texto and max(map(len, texto.splitlines())) > TETO_LINHA_CSV:
-        raise _GrandeDemais(f"há uma linha com mais de {TETO_LINHA_CSV // 1024} KB")
     if aba is not None and aba != "CSV":
         return ["CSV"], {"CSV": None}, aba, None, [], 0, False
-    # Linha a linha: o reader é um iterador. `islice` corta a linha em
-    # TETO_COLUNAS + 1 células; o limite de campo barra um campo único gigante
-    # (estoura `csv.Error`, que o router trata como arquivo ilegível).
-    # ⚠️ Mas o `islice` age DEPOIS de o reader parsear a linha inteira (20M de
-    # vírgulas = lista de 20M itens, 313 MB). Por isso a recusa vem antes.
+    # Registro a registro. `islice` corta em TETO_COLUNAS + 1 células, mas age
+    # DEPOIS de o reader montar a lista do registro inteiro — quem segura um
+    # registro com milhões de campos é o `_LinhasContadas`, durante a leitura.
+    # O limite de campo barra um campo único gigante (`csv.Error`, que o router
+    # trata como arquivo ilegível).
     cab, fatia, total, cortou = _fatiar(
         ([_celula(c) for c in itertools.islice(l, TETO_COLUNAS + 1)]
-         for l in csv.reader(io.StringIO(texto), dialeto)), ini)
+         for l in _registros_csv(texto, dialeto)), ini)
     return ["CSV"], {"CSV": None}, "CSV", cab, fatia, total, cortou
 
 

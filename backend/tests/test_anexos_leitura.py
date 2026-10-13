@@ -166,18 +166,72 @@ def test_sem_excesso_de_colunas_nao_ha_nota():
     assert "colunas)" not in t
 
 
-# --- CSV: recusar ANTES de o csv.reader parsear a linha inteira ------------
+# --- CSV: o teto vale para o REGISTRO, medido enquanto o reader lê ----------
+
+def _espiao_do_reader(monkeypatch):
+    """Troca `csv.reader` por um que anota o que entrou (linhas físicas
+    entregues ao parser) e o que saiu (registros devolvidos)."""
+    real = csv.reader
+    visto = {"entrou": [], "saiu": []}
+
+    def espiao(linhas, *a, **k):
+        def entregue():
+            for l in linhas:
+                visto["entrou"].append(len(l))
+                yield l
+        for registro in real(entregue(), *a, **k):
+            visto["saiu"].append(len(registro))
+            yield registro
+
+    monkeypatch.setattr(L.csv, "reader", espiao)
+    return visto
+
 
 def test_csv_com_linha_de_2_milhoes_de_virgulas_e_recusado_sem_parse(monkeypatch):
-    """`islice` depois do reader não protege: a lista de 20M itens já existe.
-    A linha física grande demais é recusada antes de o reader ser criado."""
-    def nao_deve_parsear(*a, **k):
-        raise AssertionError("csv.reader chamado")
-
-    monkeypatch.setattr(L.csv, "reader", nao_deve_parsear)
+    """`islice` depois do reader não protege: a lista de 2M itens já existiria.
+    A linha física que estoura o teto nem chega ao parser."""
+    visto = _espiao_do_reader(monkeypatch)
     bruto = ("A,B\n" + "," * 2_000_000 + "\n").encode()
     t = L.conteudo_legivel("p.csv", "text/csv", bruto)
     assert t.startswith("planilha grande demais para ler por aqui")
+    assert max(visto["entrou"], default=0) < L.TETO_LINHA_CSV
+    assert visto["saiu"] == [2]  # só o cabeçalho
+
+
+def test_csv_registro_multilinha_acima_de_1_mb_e_recusado(monkeypatch):
+    """Campo entre aspas pode conter `\n`: um registro só, com 300 mil campos,
+    espalhado em 300 mil linhas físicas de 6 caracteres. A pré-varredura por
+    linha física (rodada 3) deixava passar, e o reader montava a lista inteira.
+    O teto conta o que o reader consumiu desde o último registro devolvido."""
+    visto = _espiao_do_reader(monkeypatch)
+    bruto = ("A,B\n" + '"a\nb",' * 300_000 + "\n").encode()
+    t = L.conteudo_legivel("p.csv", "text/csv", bruto)
+    assert t.startswith("planilha grande demais para ler por aqui")
+    assert visto["saiu"] == [2]  # só o cabeçalho; o registro gigante nunca saiu
+    assert sum(visto["entrou"]) <= len("A,B\n") + L.TETO_LINHA_CSV
+
+
+def test_csv_linha_de_1_mb_partida_por_form_feed_e_recusada():
+    """`str.splitlines` quebra em `\x0c`, `\x85`, `\u2028`...; o `csv.reader`
+    não. Uma linha de 1,2 MB picada em `\x0c` passava na pré-varredura antiga
+    e era parseada inteira — o diferencial entre os dois tokenizadores."""
+    bruto = ("A,B\n" + "x,\x0c" * 400_000 + "\n").encode()
+    t = L.conteudo_legivel("p.csv", "text/csv", bruto)
+    assert t.startswith("planilha grande demais para ler por aqui")
+
+
+def test_form_feed_no_meio_da_linha_e_conteudo_nao_quebra():
+    """Só `\n` separa linha física; `\x0c` no meio é conteúdo do campo."""
+    bruto = "Nome,Obs\nAna,a\x0cb\nBia,c\n".encode()
+    t = L.conteudo_legivel("p.csv", "text/csv", bruto)
+    assert "Ana\ta\x0cb" in t and "Bia\tc" in t
+    assert "de 2 (a 1ª linha" in t
+
+
+def test_campo_multilinha_pequeno_continua_lido():
+    bruto = 'Nome,Obs\nAna,"linha 1\nlinha 2"\nBia,ok\n'.encode()
+    t = L.conteudo_legivel("p.csv", "text/csv", bruto)
+    assert "Ana\tlinha 1 linha 2" in t and "Bia\tok" in t
 
 
 def test_csv_decodificado_acima_de_50_mb_e_recusado(monkeypatch):
