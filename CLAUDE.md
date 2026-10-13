@@ -1183,13 +1183,23 @@ outros), porque `alsoAllow` só acrescenta. Agente criado pela tela já nasce co
 de MCP (`aplicar_escopo_mcp`) e fica sem anexos até o script rodar, mas nunca enxerga a
 entrada de outro — que seria agir com a identidade do outro.
 
-⚠️ **Limite honesto do `ler_anexo`:** garante "anexo de uma conversa com ESTE agente (ou
-de canal em que ele está)", **não** "desta sessão/pessoa" — o gateway não repassa a
-sessão ao MCP. O agente numa sessão de A lê anexo que B mandou ao mesmo agente se tiver
-o id; o uuid só aparece na sessão de B, então o risco é o agente repetir um id, não
-adivinhá-lo. Fechar isso exige o gateway passar a sessão. **Pendente com o Erick:** a
-alternativa de amarrar o `ler_anexo` ao turno em curso (`agent_runs` — só anexo da
-conversa que tem run aberto agora para este agente) ainda não foi decidida.
+⚠️ **`ler_anexo` e `enviar_arquivo` só valem durante o turno em curso** (decisão do
+Erick, 13/10/2026). O gateway não repassa ao MCP a sessão nem a pessoa, então sem amarra
+o agente lia qualquer anexo de conversa com ele e enviava a qualquer pessoa que um dia
+falou com ele — um id de anexo de B que vazasse para a sessão de A (`MEMORY.md`, a
+`main`, delegação da `nina`) abria o arquivo de B para A, **sempre**. Hoje anexo
+`conversa_agente` exige que o `dono_conversa` tenha run aberto com aquele agente, e o
+envio exige o mesmo do `para`: linha em `agent_runs` sem `message_id`, de menos de 30
+min (`turno_em_curso` em `routers/mcp_anexos.py`, testada com conexão falsa). A
+checagem vem antes do R2 e antes de montar o arquivo. Anexo de **canal** continua só
+com a regra de membro — canal não usa `agent_runs`.
+
+**O que sobra, e é o limite honesto de agora:** (1) duas pessoas falando com o mesmo
+agente **ao mesmo tempo** — durante o turno de B, a sessão de A ainda lê o anexo de B se
+tiver o id; (2) a janela de 30 min — run que nunca recebe `message_id` (aba fechada antes
+do `/reply`, ou o run original de uma compactação, que aponta para o novo por
+`redireciona_para`) conta como turno aberto até a janela vencer. Fechar de vez continua
+exigindo o gateway passar a sessão ao MCP.
 
 ⚠️ **Planilha lê-se em thread, só a aba pedida, preguiçosa**, com teto nomeado ao agente:
 200.000 linhas e 200 colunas para todo formato; no **xlsx**, 300 MB descompactados; no

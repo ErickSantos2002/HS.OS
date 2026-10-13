@@ -78,9 +78,26 @@ def _anexo(**kw):
     return ax.Anexo(**base)
 
 
+RUN_ABERTO = {"message_id": None, "idade_s": 60.0}
+
+
+class _ConnRuns:
+    """Conexão falsa: `fetch` devolve os runs que o teste puser em `estado`."""
+
+    def __init__(self, estado):
+        self.estado = estado
+
+    async def fetch(self, sql, *a):
+        self.estado["consultas"].append((sql, a))
+        return self.estado["runs"]
+
+
 class _Sessao:
+    def __init__(self, estado):
+        self.estado = estado
+
     async def __aenter__(self):
-        return object()
+        return _ConnRuns(self.estado)
 
     async def __aexit__(self, *a):
         return False
@@ -89,7 +106,7 @@ class _Sessao:
 @pytest.fixture
 def isolado(monkeypatch):
     """Banco e R2 falsos; `arm.ler` FALHA se for chamado."""
-    estado = {"anexo": None, "membro": False}
+    estado = {"anexo": None, "membro": False, "runs": [RUN_ABERTO], "consultas": []}
 
     async def buscar(conn, anexo_id):
         return estado["anexo"]
@@ -100,7 +117,7 @@ def isolado(monkeypatch):
     async def ler_proibido(chave):
         raise AssertionError("arm.ler chamado para anexo que o agente não pode ler")
 
-    monkeypatch.setattr(m, "sessao", lambda **k: _Sessao())
+    monkeypatch.setattr(m, "sessao", lambda **k: _Sessao(estado))
     monkeypatch.setattr(m, "buscar_anexo", buscar)
     monkeypatch.setattr(m, "membro_do_canal", membro)
     monkeypatch.setattr(m.arm, "ler", ler_proibido)
@@ -168,12 +185,14 @@ def test_description_diz_o_que_o_codigo_garante():
     ler = next(f for f in m._FERRAMENTAS if f["name"] == "ler_anexo")
     assert "conversa com você" in ler["description"]
     assert "Use apenas ids que apareceram nesta conversa." in ler["description"]
+    assert "conversando com você agora" in ler["description"]
 
 
 def test_enviar_arquivo_existe_e_exige_destino_formato_e_conteudo():
     f = next(f for f in m._FERRAMENTAS if f["name"] == "enviar_arquivo")
     assert set(f["inputSchema"]["required"]) == {"para", "nome", "formato", "conteudo"}
     assert "já conversa" in f["description"]
+    assert "conversando com você agora" in f["description"]
 
 
 def test_pode_enviar_so_para_quem_ja_conversa_com_o_agente():
@@ -204,8 +223,12 @@ PESSOA = "77071556-7a52-41d5-805a-cbbd3923da45"
 
 
 class _Conn:
-    def __init__(self, existe, falha_em=None, log=None):
+    def __init__(self, existe, falha_em=None, log=None, runs=None):
         self.existe, self.falha_em, self.log = existe, falha_em, log
+        self.runs = [RUN_ABERTO] if runs is None else runs
+
+    async def fetch(self, sql, *a):
+        return self.runs
 
     async def fetchval(self, sql, *a):
         return self.existe
@@ -216,14 +239,14 @@ class _Conn:
             raise RuntimeError("banco caiu")
 
 
-def _ambiente(monkeypatch, existe=True, falha_em=None):
+def _ambiente(monkeypatch, existe=True, falha_em=None, runs=None):
     import contextlib
 
     log, gravados, apagados, publicados = [], [], [], []
 
     @contextlib.asynccontextmanager
     async def sessao(role=None):
-        yield _Conn(existe, falha_em, log)
+        yield _Conn(existe, falha_em, log, runs)
 
     async def gravar(chave, dados, mime):
         gravados.append(chave)
@@ -274,3 +297,100 @@ def test_para_que_nao_e_uuid_e_recusado(monkeypatch):
     log, gravados, _ = _ambiente(monkeypatch)
     texto, erro = asyncio.run(m._enviar_arquivo("bruce", _args("../x")))
     assert erro and gravados == [] and log == []
+
+
+# ── A amarra ao turno em curso (decisão do Erick, 13/10/2026) ───────────────
+#
+# O gateway não diz ao MCP qual sessão nem qual pessoa chama. Sem amarra, o
+# agente lia qualquer anexo de conversa com ele e enviava arquivo a qualquer
+# pessoa que um dia falou com ele: um id de anexo de B que vazasse para a
+# sessão de A (MEMORY.md do agente, a sessão `main`, uma delegação da nina)
+# abria o arquivo de B para A, sempre. Com a amarra, só enquanto B tem um
+# turno em curso com aquele agente — a janela vai de "sempre" para "durante a
+# conversa ativa".
+
+def test_turno_em_curso_exige_run_aberto_e_recente():
+    """Run aberto = sem `message_id` (a resposta ainda não foi gravada) e
+    criado há menos de 30 minutos. Run respondido ou velho não conta."""
+    assert m.algum_turno_aberto([RUN_ABERTO]) is True
+    assert m.algum_turno_aberto([]) is False
+    assert m.algum_turno_aberto([{"message_id": "m1", "idade_s": 10.0}]) is False
+    assert m.algum_turno_aberto([{"message_id": None, "idade_s": 31 * 60.0}]) is False
+    assert m.algum_turno_aberto([{"message_id": "m1", "idade_s": 5.0}, RUN_ABERTO]) is True
+
+
+def test_turno_em_curso_consulta_agente_normalizado_e_a_pessoa():
+    """O `agent_id` em `agent_runs` é o da URL do `/send`, cru; o da consulta é
+    normalizado, e o SQL normaliza a coluna do mesmo jeito — senão `"Bruce"`
+    gravado não casaria com `"bruce"` pedido."""
+    estado = {"runs": [RUN_ABERTO], "consultas": []}
+    assert asyncio.run(m.turno_em_curso(_ConnRuns(estado), " Openclaw:Bruce ", PESSOA)) is True
+    sql, a = estado["consultas"][0]
+    assert "public.agent_runs" in sql and "message_id" in sql
+    assert a[:2] == ("bruce", PESSOA)
+
+
+def test_turno_em_curso_com_pessoa_invalida_nem_consulta():
+    estado = {"runs": [RUN_ABERTO], "consultas": []}
+    assert asyncio.run(m.turno_em_curso(_ConnRuns(estado), "bruce", None)) is False
+    assert asyncio.run(m.turno_em_curso(_ConnRuns(estado), "bruce", "nao-e-uuid")) is False
+    assert estado["consultas"] == []
+
+
+def test_ler_anexo_sem_turno_da_dona_e_recusado_sem_tocar_o_r2(isolado):
+    """Anexo do próprio bruce, mas a pessoa que o enviou não está conversando
+    com ele agora: recusa, e `arm.ler` (que no fixture explode) nunca roda."""
+    isolado["anexo"] = _anexo(dono_conversa=PESSOA)
+    isolado["runs"] = []
+    texto, erro = asyncio.run(m._ler_anexo("bruce", {"id": "a1"}))
+    assert erro is True
+    assert texto == ("Este anexo só pode ser lido enquanto a pessoa que o enviou está "
+                     "conversando com você agora. Peça a ela para mandar a mensagem de novo.")
+    assert isolado["consultas"][0][1][:2] == ("bruce", PESSOA)
+
+
+def test_ler_anexo_com_run_ja_respondido_e_recusado(isolado):
+    isolado["anexo"] = _anexo(dono_conversa=PESSOA)
+    isolado["runs"] = [{"message_id": "m1", "idade_s": 30.0}]
+    texto, erro = asyncio.run(m._ler_anexo("bruce", {"id": "a1"}))
+    assert erro is True and "conversando com você agora" in texto
+
+
+def test_ler_anexo_com_turno_em_curso_passa(isolado, monkeypatch):
+    async def ler(chave):
+        return b"a;b\n1;2\n"
+
+    monkeypatch.setattr(m.arm, "ler", ler)
+    isolado["anexo"] = _anexo(dono_conversa=PESSOA, nome="r.csv", mime="text/csv")
+    texto, erro = asyncio.run(m._ler_anexo("bruce", {"id": "a1"}))
+    assert erro is False and texto.startswith("r.csv")
+
+
+def test_anexo_de_canal_nao_depende_de_turno(isolado, monkeypatch):
+    """Canal não passa por `agent_runs`: vale a regra de membro, e só ela."""
+    async def ler(chave):
+        return b"a;b\n1;2\n"
+
+    monkeypatch.setattr(m.arm, "ler", ler)
+    isolado["anexo"] = _anexo(contexto="canal", channel_id="c1", agent_id=None,
+                              dono_conversa=None, nome="r.csv", mime="text/csv")
+    isolado["membro"] = True
+    isolado["runs"] = []
+    texto, erro = asyncio.run(m._ler_anexo("bruce", {"id": "a1"}))
+    assert erro is False and isolado["consultas"] == []
+
+
+def test_enviar_sem_turno_do_destino_nao_escreve_nada(monkeypatch):
+    """Destino que já conversou com o bruce, mas não está conversando agora:
+    recusa antes de montar o arquivo, sem R2 e sem banco."""
+    log, gravados, apagados = _ambiente(monkeypatch, runs=[])
+    texto, erro = asyncio.run(m._enviar_arquivo("bruce", _args()))
+    assert erro is True
+    assert texto == "Só posso enviar arquivo para quem está conversando comigo agora."
+    assert gravados == [] and log == []
+
+
+def test_enviar_com_run_ja_respondido_nao_escreve_nada(monkeypatch):
+    log, gravados, _ = _ambiente(monkeypatch, runs=[{"message_id": "m1", "idade_s": 5.0}])
+    texto, erro = asyncio.run(m._enviar_arquivo("bruce", _args()))
+    assert erro is True and gravados == [] and log == []

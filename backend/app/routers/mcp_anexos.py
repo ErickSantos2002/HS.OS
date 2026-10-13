@@ -49,7 +49,9 @@ def assinatura_confere(segredo: str, agent_id: str, assinatura: str) -> bool:
 # ⚠️ A description NÃO promete "só desta conversa": o gateway não repassa ao MCP
 # qual sessão nem qual pessoa chama (ver mcp_alerta.py, 14/08/2026). O que o
 # código garante é o escopo do AGENTE — anexo de conversa com ele, ou de canal
-# de que ele é membro. Prometer mais seria mentir ao próprio agente.
+# de que ele é membro — e, desde 13/10/2026, que a pessoa dona do anexo (ou o
+# destino do envio) esteja com um turno em curso com ele. Prometer mais seria
+# mentir ao próprio agente.
 _FERRAMENTAS = [{
     "name": "ler_anexo",
     "description": (
@@ -57,8 +59,9 @@ _FERRAMENTAS = [{
         "[anexo: … id=…]. Planilha volta por páginas de 200 linhas com o cabeçalho "
         "repetido; leia todas as páginas antes de concluir qualquer total. Só abre "
         "anexo de uma conversa com você (ou de canal em que você está): id de outra "
-        "conversa é recusado, e não adianta tentar de novo. Use apenas ids que "
-        "apareceram nesta conversa."
+        "conversa é recusado, e não adianta tentar de novo. Anexo de conversa só abre "
+        "enquanto a pessoa que o enviou está conversando com você agora. Use apenas ids "
+        "que apareceram nesta conversa."
     ),
     "inputSchema": {
         "type": "object",
@@ -76,7 +79,8 @@ _FERRAMENTAS = [{
         "você e na Documentos. Você escreve TEXTO: CSV (separado por ;) para csv/xlsx, "
         "Markdown (# título, ## seção, **negrito**) para md/docx/pdf. O servidor monta "
         "o arquivo. `para` é o id da pessoa, o mesmo que aparece na sua sessão "
-        "(hsos-<id>); só funciona para quem já conversa com você."
+        "(hsos-<id>); só funciona para quem já conversa com você e está conversando com "
+        "você agora."
     ),
     "inputSchema": {
         "type": "object",
@@ -101,6 +105,64 @@ def _texto(ident, texto: str, erro: bool = False):
     return _resposta(ident, {"content": [{"type": "text", "text": texto}], "isError": erro})
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# A amarra ao turno em curso — decisão do Erick, 13/10/2026
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# O gateway não diz ao MCP qual sessão nem qual pessoa chama. Sem amarra, o
+# agente lia qualquer anexo de conversa com ele e enviava arquivo a qualquer
+# pessoa que um dia falou com ele: um id de anexo de B que vazasse para a
+# sessão de A (MEMORY.md do agente, a sessão `main`, uma delegação da nina)
+# abria o arquivo de B para A — sempre. Com a amarra, só enquanto B tem um
+# turno em curso com aquele agente.
+#
+# "Turno em curso" é um run do `/send` ainda sem `message_id` (a resposta não
+# foi gravada) e criado há menos de `JANELA_TURNO_S`. A janela existe porque
+# run sem `/reply` (a pessoa fechou a aba) e o run original de uma compactação
+# (que aponta para o novo por `redireciona_para` e nunca recebe `message_id`)
+# ficam abertos para sempre — sem teto, a amarra voltaria a ser "sempre".
+JANELA_TURNO_S = 30 * 60
+
+SQL_RUNS_RECENTES = """
+    SELECT message_id, extract(epoch FROM now() - criado_em)::float AS idade_s
+      FROM public.agent_runs
+     WHERE regexp_replace(lower(btrim(agent_id)), '^openclaw:', '') = $1
+       AND user_id = $2::uuid
+       AND criado_em > now() - make_interval(secs => $3)
+     ORDER BY criado_em DESC
+     LIMIT 50
+"""
+
+
+def algum_turno_aberto(linhas) -> bool:
+    """A decisão, sem banco: algum run sem resposta gravada e dentro da janela.
+
+    A idade é conferida aqui de novo, e não só no `WHERE`, para a regra inteira
+    ficar num lugar que o teste alcança."""
+    return any(l["message_id"] is None and float(l["idade_s"]) < JANELA_TURNO_S
+               for l in linhas)
+
+
+async def turno_em_curso(conn, agent_id: str, user_id) -> bool:
+    """A pessoa está conversando com este agente agora?
+
+    ⚠️ O `agent_id` em `agent_runs` é o da URL do `/send`, gravado cru; o SQL
+    normaliza a coluna como `normalizar_agent_id` normaliza o argumento.
+    """
+    try:
+        pessoa = str(uuid.UUID(str(user_id)))
+    except (ValueError, AttributeError, TypeError):
+        return False
+    linhas = await conn.fetch(SQL_RUNS_RECENTES, normalizar_agent_id(agent_id),
+                              pessoa, float(JANELA_TURNO_S))
+    return algum_turno_aberto(linhas)
+
+
+_FORA_DO_TURNO_LER = ("Este anexo só pode ser lido enquanto a pessoa que o enviou está "
+                      "conversando com você agora. Peça a ela para mandar a mensagem de novo.")
+_FORA_DO_TURNO_ENVIAR = "Só posso enviar arquivo para quem está conversando comigo agora."
+
+
 async def _ler_anexo(agent_id: str, args: dict) -> tuple[str, bool]:
     anexo_id = str(args.get("id") or "").strip()
     try:
@@ -114,10 +176,17 @@ async def _ler_anexo(agent_id: str, args: dict) -> tuple[str, bool]:
             anexo = await buscar_anexo(conn, anexo_id)
             no_canal = bool(anexo and anexo.contexto == "canal"
                             and await membro_do_canal(conn, anexo.channel_id, agent_id, "agent"))
-        if anexo is None or not ax.agente_pode_ler(anexo, agent_id, no_canal):
+            pode = anexo is not None and ax.agente_pode_ler(anexo, agent_id, no_canal)
+            # Canal não passa por `agent_runs`: lá vale a regra de membro, e só ela.
+            no_turno = pode and (anexo.contexto != "conversa_agente"
+                                 or await turno_em_curso(conn, agent_id, anexo.dono_conversa))
+        if not pode:
             logger.warning("ler_anexo recusado: agente %s, anexo %s", agent_id, anexo_id)
             return ("Este anexo não pertence a uma conversa sua. Não tente de novo; "
                     "peça à pessoa para anexar o arquivo aqui."), True
+        if not no_turno:
+            logger.warning("ler_anexo fora do turno: agente %s, anexo %s", agent_id, anexo_id)
+            return _FORA_DO_TURNO_LER, True
         dados = await arm.ler(arm.chave("anexos", anexo.caminho))
     except Exception:  # noqa: BLE001
         # Erro de banco ou de R2 não pode virar 500 cru para o gateway: o agente
@@ -175,6 +244,9 @@ async def _enviar_arquivo(agent_id: str, args: dict) -> tuple[str, bool]:
             if not await _ja_conversa(conn, agent_id, para):
                 return ("Só posso enviar arquivo para quem já conversa com você. "
                         "Não tente outro destino; responda na conversa em curso."), True
+            if not await turno_em_curso(conn, agent_id, para):
+                logger.warning("enviar_arquivo fora do turno: agente %s, destino %s", agent_id, para)
+                return _FORA_DO_TURNO_ENVIAR, True
         try:
             # Numa thread: reportlab/docx/openpyxl são síncronos e pesados; no
             # loop travariam o worker (chat, /ws, /reply).
