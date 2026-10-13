@@ -204,7 +204,9 @@ export function useChatMedia() {
               name: att.name,
               size: enviado.size,
               url: "",
-              extractedText: att.extractedText,
+              // Sem `extractedText` de propósito: com `id` o conteúdo vai por referência
+              // (o agente lê pelo `ler_anexo`); carregar o texto inflaria
+              // `conversations.media` e duplicaria o conteúdo no prompt.
             });
           } catch (err: any) {
             toast.error(`Falha no upload de "${att.name}": ${err.message}`);

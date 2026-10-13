@@ -8,7 +8,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/api", () => ({ api: vi.fn(), lerToken: () => "tok" }));
 
 import { api } from "@/lib/api";
-import { esquecerUrl, urlDoAnexo } from "@/lib/anexos";
+import { esquecerUrl, urlDoAnexo, enviarAnexo } from "@/lib/anexos";
+import * as storage from "@/lib/storage";
 
 beforeEach(() => {
   (api as any).mockReset();
@@ -42,5 +43,16 @@ describe("urlDoAnexo", () => {
     await urlDoAnexo("a1", () => 0);
     esquecerUrl("a1");
     expect(await urlDoAnexo("a1", () => 0)).toBe("https://r2/2");
+  });
+});
+
+describe("enviarAnexo", () => {
+  it("o PUT usa o mime que o iniciar devolveu (o assinado)", async () => {
+    vi.mocked(api)
+      .mockResolvedValueOnce({ url_put: "https://r2/put", ticket: "T", mime: "audio/webm" })
+      .mockResolvedValueOnce({ id: "x", name: "a", size: 1, mimeType: "audio/webm", url: "" });
+    const put = vi.spyOn(storage.interno, "putDireto").mockResolvedValue();
+    await enviarAnexo({ contexto: "canal", channelId: "c" }, new File(["a"], "a.webm", { type: "Audio/WebM;codecs=opus" }));
+    expect(put.mock.calls[0][2]).toBe("audio/webm");
   });
 });

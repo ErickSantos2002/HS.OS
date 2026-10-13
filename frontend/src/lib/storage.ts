@@ -113,11 +113,13 @@ export async function enviarArquivo(
   aoProgredir?: (fracao: number) => void,
 ): Promise<ArquivoEnviado> {
   const mime = arquivo.type || "application/octet-stream";
-  const inicio = await api<{ url_put: string; ticket: string }>("/storage/upload/iniciar", {
+  const inicio = await api<{ url_put: string; ticket: string; mime?: string }>("/storage/upload/iniciar", {
     method: "POST",
     body: { bucket, caminho, mime, tamanho: arquivo.size },
   });
-  await interno.putDireto(inicio.url_put, arquivo, mime, aoProgredir);
+  // O PUT é assinado com o mime NORMALIZADO pelo backend; mandar outro Content-Type
+  // (ex.: `audio/webm;codecs=opus`) dá 403 SignatureDoesNotMatch.
+  await interno.putDireto(inicio.url_put, arquivo, inicio.mime ?? mime, aoProgredir);
   return api<ArquivoEnviado>("/storage/upload/concluir", {
     method: "POST",
     body: { ticket: inicio.ticket },

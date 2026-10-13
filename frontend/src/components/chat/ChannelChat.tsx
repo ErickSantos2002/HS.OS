@@ -519,11 +519,11 @@ const MessageBubble = memo(function MessageBubble({
               <div className="flex flex-col gap-1 mt-1">
                 {msg.attachments.map((att, i) => (
                   <AnexoResolvido key={i} id={att.id} url={att.url}>
-                    {(url, renovar) =>
+                    {(url, renovar, urlAgora) =>
                       att.mimeType?.startsWith("image/") ? (
                         <button
                           type="button"
-                          onClick={() => onImageClick(url, att.name)}
+                          onClick={async () => onImageClick(await urlAgora().catch(() => url), att.name)}
                           className="mt-1 overflow-hidden rounded-md"
                         >
                           <img src={url} onError={renovar} alt={att.name} className="max-h-48 max-w-[240px] rounded-md object-cover transition-transform hover:scale-[1.01]" />
@@ -532,6 +532,7 @@ const MessageBubble = memo(function MessageBubble({
                         <FileAttachmentCard
                           name={att.name}
                           url={url}
+                          urlAgora={urlAgora}
                           size={att.size}
                           mimeType={att.mimeType}
                           onPreview={onAttachmentPreview}

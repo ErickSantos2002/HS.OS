@@ -14,7 +14,8 @@ import { esquecerUrl, urlDoAnexo } from "@/lib/anexos";
 interface Props {
   id?: string;
   url?: string;
-  children: (url: string, renovar: () => void) => ReactNode;
+  /** `urlAgora` entrega uma URL válida NA HORA do clique (abrir, baixar, preview). */
+  children: (url: string, renovar: () => void, urlAgora: () => Promise<string>) => ReactNode;
 }
 
 export default function AnexoResolvido({ id, url, children }: Props) {
@@ -41,7 +42,14 @@ export default function AnexoResolvido({ id, url, children }: Props) {
     setTentativa(1);
   }, [id, tentativa]);
 
+  // A URL do mount vale 5 min; clique depois disso abriria AccessDenied do R2.
+  // `urlDoAnexo` tem cache, então enquanto vale não vai à rede.
+  const urlAgora = useCallback(
+    () => (id ? urlDoAnexo(id) : Promise.resolve(url ?? "")),
+    [id, url],
+  );
+
   if (erro) return <p className="text-[11px] text-muted-foreground">Anexo indisponível.</p>;
   if (resolvida === null) return <div className="h-9 w-40 animate-pulse rounded-lg bg-secondary/50" />;
-  return <>{children(resolvida, renovar)}</>;
+  return <>{children(resolvida, renovar, urlAgora)}</>;
 }

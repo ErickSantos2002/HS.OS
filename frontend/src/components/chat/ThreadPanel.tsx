@@ -279,11 +279,11 @@ function ThreadMessageCard({
                 <div className="flex flex-col gap-2">
                   {message.attachments.map((attachment, index) => (
                     <AnexoResolvido key={`${attachment.id ?? attachment.url}-${index}`} id={attachment.id} url={attachment.url}>
-                      {(url, renovar) =>
+                      {(url, renovar, urlAgora) =>
                         attachment.mimeType?.startsWith("image/") ? (
                           <button
                             type="button"
-                            onClick={() => onImageClick(url, attachment.name)}
+                            onClick={async () => onImageClick(await urlAgora().catch(() => url), attachment.name)}
                             className="overflow-hidden rounded-xl"
                           >
                             <img
@@ -297,6 +297,7 @@ function ThreadMessageCard({
                           <FileAttachmentCard
                             name={attachment.name}
                             url={url}
+                            urlAgora={urlAgora}
                             size={attachment.size}
                             mimeType={attachment.mimeType}
                             onPreview={onAttachmentPreview}

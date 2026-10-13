@@ -30,7 +30,7 @@ export async function enviarAnexo(
   aoProgredir?: (fracao: number) => void,
 ): Promise<AnexoEnviado> {
   const mime = arquivo.type || "application/octet-stream";
-  const inicio = await api<{ url_put: string; ticket: string }>("/storage/upload/iniciar", {
+  const inicio = await api<{ url_put: string; ticket: string; mime?: string }>("/storage/upload/iniciar", {
     method: "POST",
     body: {
       bucket: "anexos",
@@ -41,7 +41,8 @@ export async function enviarAnexo(
       ...(destino.contexto === "canal" ? { channel_id: destino.channelId } : { agent_id: destino.agentId }),
     },
   });
-  await putDireto(inicio.url_put, arquivo, mime, aoProgredir);
+  // Content-Type exato que o backend assinou (mime normalizado).
+  await putDireto(inicio.url_put, arquivo, inicio.mime ?? mime, aoProgredir);
   return api<AnexoEnviado>("/storage/upload/concluir", { method: "POST", body: { ticket: inicio.ticket } });
 }
 

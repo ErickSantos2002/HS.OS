@@ -244,7 +244,7 @@ function SidebarTypingDots() {
 
 /* ── Media Bubble ─────────────────────────────────────── */
 
-function MediaBubble({ attachment, onImageClick, onErroImagem }: { attachment: MediaAttachment; onImageClick: (src: string) => void; onErroImagem?: () => void }) {
+function MediaBubble({ attachment, onImageClick, onErroImagem, urlAgora }: { attachment: MediaAttachment; onImageClick: (src: string) => void; onErroImagem?: () => void; urlAgora?: () => Promise<string> }) {
   // Auto-detect type from mimeType when type is missing or generic
   const effectiveType: MediaAttachment["type"] =
     attachment.type ??
@@ -276,15 +276,18 @@ function MediaBubble({ attachment, onImageClick, onErroImagem }: { attachment: M
       ? `data:${attachment.mimeType || "image/png"};base64,${rawSrc.replace(/\s/g, "")}`
       : rawSrc;
     
+    // URL do render vence em 5 min (anexo privado): zoom e download pedem uma fresca.
+    const srcAgora = async () => (urlAgora && !src.startsWith("data:") ? urlAgora().catch(() => src) : src);
+
     return (
       <div className="relative group rounded-md overflow-hidden max-w-[240px] mt-1">
-        <img src={src} onError={onErroImagem} alt={attachment.name ?? "image"} className="rounded-md max-h-48 object-cover cursor-pointer" onClick={() => onImageClick(src)} />
+        <img src={src} onError={onErroImagem} alt={attachment.name ?? "image"} className="rounded-md max-h-48 object-cover cursor-pointer" onClick={async () => onImageClick(await srcAgora())} />
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center gap-2 pointer-events-none">
-          <button onClick={() => onImageClick(src)} className="pointer-events-auto h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={async () => onImageClick(await srcAgora())} className="pointer-events-auto h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
             <ZoomIn className="h-4 w-4" />
           </button>
           <button
-            onClick={(e) => { e.stopPropagation(); handleDownload(src, attachment.name || "image.png"); }}
+            onClick={(e) => { e.stopPropagation(); srcAgora().then((u) => handleDownload(u, attachment.name || "image.png")); }}
             className="pointer-events-auto h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
             title="Download"
           >
@@ -298,7 +301,16 @@ function MediaBubble({ attachment, onImageClick, onErroImagem }: { attachment: M
     const isPdf = attachment.mimeType === "application/pdf";
     const Icon = isPdf ? FileText : FileIcon;
     return (
-      <a href={attachment.url || attachment.base64} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 mt-1 px-3 py-2 rounded-md bg-secondary/60 hover:bg-secondary/80 transition-colors max-w-[280px]">
+      <a
+        href={attachment.url || attachment.base64}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={urlAgora ? async (e) => {
+          // Link do render vence em 5 min: abre com a URL do momento do clique.
+          e.preventDefault();
+          try { window.open(await urlAgora(), "_blank", "noopener,noreferrer"); } catch { /* sem URL, sem abrir */ }
+        } : undefined}
+        className="flex items-center gap-2 mt-1 px-3 py-2 rounded-md bg-secondary/60 hover:bg-secondary/80 transition-colors max-w-[280px]">
         <Icon className="h-5 w-5 text-primary shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-medium text-foreground truncate">{attachment.name ?? "arquivo"}</p>
@@ -521,8 +533,8 @@ const AgentMessageList = React.memo(function AgentMessageList({
                         )
                       )}
                       {Array.isArray(msg.media) && msg.media.map((att, i) => (
-                        <AnexoResolvido key={i} id={att.id} url={att.url || att.base64}>
-                          {(url, renovar) => <MediaBubble attachment={{ ...att, url, base64: att.base64 || url }} onImageClick={onSetLightboxSrc} onErroImagem={renovar} />}
+                        <AnexoResolvido key={i} id={att.base64?.startsWith("data:") ? undefined : att.id} url={att.base64?.startsWith("data:") ? att.base64 : (att.url || att.base64)}>
+                          {(url, renovar, urlAgora) => <MediaBubble attachment={{ ...att, url, base64: att.base64 || url }} onImageClick={onSetLightboxSrc} onErroImagem={renovar} urlAgora={urlAgora} />}
                         </AnexoResolvido>
                       ))}
                     </div>

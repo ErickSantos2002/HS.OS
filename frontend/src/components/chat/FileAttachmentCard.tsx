@@ -17,9 +17,11 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
 
 interface FileAttachmentCardProps extends FileAttachmentMeta {
   onPreview?: (attachment: FileAttachmentMeta) => void;
+  /** Anexo privado: URL fresca no clique (a do render vence em 5 min). */
+  urlAgora?: () => Promise<string>;
 }
 
-export default function FileAttachmentCard({ name, url, size, mimeType, onPreview }: FileAttachmentCardProps) {
+export default function FileAttachmentCard({ name, url, size, mimeType, onPreview, urlAgora }: FileAttachmentCardProps) {
   const iconType = getFileTypeIcon(name, mimeType);
   const Icon = ICON_MAP[iconType] ?? FileIcon;
   const attachment = { name, url, size, mimeType };
@@ -28,13 +30,20 @@ export default function FileAttachmentCard({ name, url, size, mimeType, onPrevie
     <div className="mt-1.5 flex max-w-[320px] items-center gap-2 rounded-lg border border-border/30 bg-secondary/50 px-2 py-2 transition-colors group hover:bg-secondary/70">
       <button
         type="button"
-        onClick={() => {
+        onClick={async () => {
+          let atual = url;
+          try {
+            if (urlAgora) atual = await urlAgora();
+          } catch {
+            toast.error("Não foi possível abrir este arquivo.");
+            return;
+          }
           if (onPreview) {
-            onPreview(attachment);
+            onPreview({ ...attachment, url: atual });
             return;
           }
 
-          window.open(url, "_blank", "noopener,noreferrer");
+          window.open(atual, "_blank", "noopener,noreferrer");
         }}
         className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
       >
@@ -53,7 +62,7 @@ export default function FileAttachmentCard({ name, url, size, mimeType, onPrevie
           event.preventDefault();
           event.stopPropagation();
           try {
-            await downloadAttachment(attachment);
+            await downloadAttachment(urlAgora ? { ...attachment, url: await urlAgora() } : attachment);
           } catch (err: any) {
             toast.error(err?.message || "Não foi possível baixar este arquivo.");
           }
