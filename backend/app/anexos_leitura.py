@@ -80,16 +80,24 @@ def _fatiar(linhas, ini: int):
     return cabecalho, fatia, total, cortou
 
 
-def _lido_xlsx(dados: bytes, aba, ini: int):
+def _conferir_zip(dados: bytes) -> None:
+    """xlsx e docx são zip: soma o tamanho descompactado DECLARADO antes de abrir.
+
+    Um zip de poucos KB pode declarar GB. O docx ia direto para o
+    `docx.Document` sem esta conta até a revisão de segurança de 13/10/2026.
+    """
     import zipfile
 
-    import openpyxl
-
-    # xlsx é zip: soma o tamanho descompactado DECLARADO antes de abrir.
     with zipfile.ZipFile(io.BytesIO(dados)) as z:
         if sum(i.file_size for i in z.infolist()) > TETO_BYTES_DESCOMPACTADOS:
             raise _GrandeDemais(
                 f"o arquivo descompactado passa de {TETO_BYTES_DESCOMPACTADOS // (1024 * 1024)} MB")
+
+
+def _lido_xlsx(dados: bytes, aba, ini: int):
+    import openpyxl
+
+    _conferir_zip(dados)
     # `data_only=True`: o valor calculado, não a fórmula. Exportação de
     # sistema (Flash) já vem com valor; fórmula crua não diz nada ao agente.
     wb = openpyxl.load_workbook(io.BytesIO(dados), read_only=True, data_only=True)
@@ -253,25 +261,38 @@ def _planilha(nome: str, dados: bytes, aba: str | None, pagina: int) -> str:
     ])
 
 
-def _texto(nome: str, dados: bytes) -> str:
+# PDF de milhares de páginas extraía todas antes de paginar o texto: CPU e
+# memória proporcionais a um número que quem envia escolhe.
+TETO_PAGINAS_PDF = 200
+
+
+def _texto(nome: str, dados: bytes) -> tuple[str, str]:
+    """O texto e uma nota para o cabeçalho (vazia quando nada foi cortado)."""
     ext = nome.rsplit(".", 1)[-1].lower()
     if ext == "pdf":
-        from pypdf import PdfReader
+        import pypdf
 
-        return "\n".join((p.extract_text() or "") for p in PdfReader(io.BytesIO(dados)).pages)
+        paginas = pypdf.PdfReader(io.BytesIO(dados)).pages
+        total = len(paginas)
+        lidas = min(total, TETO_PAGINAS_PDF)
+        texto = "\n".join((paginas[i].extract_text() or "") for i in range(lidas))
+        nota = (f" (lidas as primeiras {TETO_PAGINAS_PDF} de {total} páginas)"
+                if total > TETO_PAGINAS_PDF else "")
+        return texto, nota
     if ext == "docx":
         import docx
 
-        return "\n".join(p.text for p in docx.Document(io.BytesIO(dados)).paragraphs)
-    return _decodificar(dados)
+        _conferir_zip(dados)
+        return "\n".join(p.text for p in docx.Document(io.BytesIO(dados)).paragraphs), ""
+    return _decodificar(dados), ""
 
 
-def _paginar_texto(texto: str, pagina: int) -> str:
+def _paginar_texto(texto: str, pagina: int, nota: str = "") -> str:
     total = max(1, -(-len(texto) // CARACTERES_POR_PAGINA))
     if pagina > total:
-        return f"O texto só tem {total} página{'s' if total > 1 else ''}."
+        return f"O texto só tem {total} página{'s' if total > 1 else ''}.{nota}"
     ini = (pagina - 1) * CARACTERES_POR_PAGINA
-    return f"Texto · página {pagina}/{total}\n\n" + texto[ini: ini + CARACTERES_POR_PAGINA]
+    return f"Texto · página {pagina}/{total}{nota}\n\n" + texto[ini: ini + CARACTERES_POR_PAGINA]
 
 
 # Documentos que a linha do anexo chama de "documento" mas que não temos como
@@ -289,9 +310,12 @@ def conteudo_legivel(nome: str, mime: str, dados: bytes, aba: str | None = None,
     if tipo == "planilha":
         return _planilha(nome, dados, aba, pagina)
     if tipo in ("pdf", "documento", "texto"):
-        texto = _texto(nome, dados)
+        try:
+            texto, nota = _texto(nome, dados)
+        except _GrandeDemais as e:
+            return f"documento grande demais para ler por aqui: {e}"
         if not texto.strip():
-            return "Arquivo sem texto extraível (PDF escaneado precisa de OCR)."
-        return _paginar_texto(texto, pagina)
+            return "Arquivo sem texto extraível (PDF escaneado precisa de OCR)." + nota
+        return _paginar_texto(texto, pagina, nota)
     return (f"Arquivo {nome} ({tipo}) — o conteúdo não é legível por ferramenta. "
             "Diga à pessoa o que você consegue fazer com ele e peça outro formato se precisar.")

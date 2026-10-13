@@ -252,3 +252,74 @@ def test_csv_decodificado_acima_de_50_mb_e_recusado(monkeypatch):
     monkeypatch.setattr(L, "TETO_CSV_BYTES", 10)
     t = L.conteudo_legivel("p.csv", "text/csv", b"A,B\n1,2\n3,4\n")
     assert t.startswith("planilha grande demais para ler por aqui")
+
+
+# --- Teto de recursos: docx também é zip, PDF pode ter milhares de páginas ---
+
+def _docx(texto: str) -> bytes:
+    import docx
+
+    d = docx.Document()
+    d.add_paragraph(texto)
+    buf = io.BytesIO()
+    d.save(buf)
+    return buf.getvalue()
+
+
+def test_docx_com_tamanho_descompactado_acima_do_teto_nem_abre(monkeypatch):
+    """O `.docx` ia direto para `docx.Document`, sem o teto que o xlsx tem: um
+    zip de poucos KB declarando GB descompactados derrubava o worker. A mesma
+    soma de `ZipInfo.file_size` roda antes, com mensagem nomeada."""
+    import docx
+
+    dados = _docx("conteúdo")
+    monkeypatch.setattr(L, "TETO_BYTES_DESCOMPACTADOS", 10)
+
+    def nao_deve_abrir(*a, **k):
+        raise AssertionError("abriu o docx grande demais")
+
+    monkeypatch.setattr(docx, "Document", nao_deve_abrir)
+    t = L.conteudo_legivel("c.docx", "", dados)
+    assert t.startswith("documento grande demais para ler por aqui")
+    assert "descompactado" in t
+
+
+def test_docx_dentro_do_teto_continua_lido():
+    assert "conteúdo do contrato" in L.conteudo_legivel("c.docx", "", _docx("conteúdo do contrato"))
+
+
+def test_pdf_com_mais_de_200_paginas_le_so_as_primeiras_e_avisa(monkeypatch):
+    """PDF de milhares de páginas extraía TODAS antes de paginar o texto — CPU
+    e memória proporcionais a um número que quem envia escolhe. Lê 200 e diz
+    quantas havia, para o agente pedir o trecho em vez de supor que leu tudo."""
+    import pypdf
+
+    lidas = []
+
+    class Pagina:
+        def __init__(self, n):
+            self.n = n
+
+        def extract_text(self):
+            lidas.append(self.n)
+            return f"pag{self.n}"
+
+    class LeitorFalso:
+        def __init__(self, *_a, **_k):
+            self.pages = [Pagina(i) for i in range(1, 251)]
+
+    monkeypatch.setattr(pypdf, "PdfReader", LeitorFalso)
+    t = L.conteudo_legivel("r.pdf", "application/pdf", b"%PDF-falso")
+    assert len(lidas) == 200 and max(lidas) == 200
+    assert "(lidas as primeiras 200 de 250 páginas)" in t
+
+
+def test_pdf_pequeno_nao_ganha_nota(monkeypatch):
+    import pypdf
+
+    class LeitorFalso:
+        def __init__(self, *_a, **_k):
+            self.pages = [type("P", (), {"extract_text": lambda s: "oi"})()]
+
+    monkeypatch.setattr(pypdf, "PdfReader", LeitorFalso)
+    assert "lidas as primeiras" not in L.conteudo_legivel("r.pdf", "", b"%PDF")
