@@ -114,3 +114,19 @@ def tamanho_legivel(n: int) -> str:
 def linha_de_anexo(anexo: Anexo) -> str:
     return (f"[anexo: {anexo.nome} · {tamanho_legivel(anexo.tamanho)} · "
             f"{tipo_legivel(anexo.nome, anexo.mime)} · id={anexo.id}]")
+
+
+_INLINE_EXATOS = {"image/png", "image/jpeg", "image/gif", "image/webp",
+                  "application/pdf", "text/plain"}
+_INLINE_PREFIXOS = ("audio/", "video/")
+
+
+def exibe_inline(mime: str) -> bool:
+    """O navegador pode abrir este tipo na própria aba?
+
+    Só uma allowlist de tipos inofensivos. HTML e SVG abertos inline pela URL
+    assinada viram página ativa no domínio do R2 (XSS armazenado); o resto vai
+    como `attachment`. Lista de bloqueio não serve: tipo novo nasce permitido.
+    """
+    m = (mime or "").split(";")[0].strip().lower()
+    return m in _INLINE_EXATOS or m.startswith(_INLINE_PREFIXOS)

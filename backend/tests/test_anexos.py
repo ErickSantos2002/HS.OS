@@ -121,3 +121,140 @@ def test_tipo_legivel_pela_extensao_quando_o_mime_e_generico():
     assert ax.tipo_legivel("ponto.csv", "text/csv") == "planilha"
     assert ax.tipo_legivel("a.pdf", "application/pdf") == "pdf"
     assert ax.tipo_legivel("a.png", "image/png") == "imagem"
+
+
+# ── a rota e o banco ────────────────────────────────────────────────────────
+import asyncio
+from contextlib import asynccontextmanager
+
+import pytest
+from fastapi import HTTPException
+
+from app import armazenamento as arm
+from app.dependencies import Usuario
+from app.routers import anexos as rota
+
+
+class ConnFalsa:
+    """Responde só o que a rota pergunta; registra se foi tocada."""
+
+    def __init__(self, linha=None, membro=False, agente_existe=True, pode_ver=True, erro=None):
+        self.linha, self.membro, self.agente_existe = linha, membro, agente_existe
+        self.pode_ver, self.erro, self.chamadas = pode_ver, erro, 0
+
+    async def fetchrow(self, sql, *a):
+        self.chamadas += 1
+        if self.erro:
+            raise self.erro
+        return self.linha
+
+    async def fetchval(self, sql, *a):
+        self.chamadas += 1
+        if "channel_members" in sql:
+            return self.membro
+        if "agent_profiles" in sql:
+            return self.agente_existe
+        return self.pode_ver
+
+
+def _usa(monkeypatch, conn):
+    @asynccontextmanager
+    async def sessao(**kw):
+        yield conn
+    monkeypatch.setattr(rota, "sessao", sessao)
+
+    async def url_get(k, s, nome_download=None, inline=True):
+        return f"https://r2/{k}?inline={inline}"
+    monkeypatch.setattr(arm, "url_get", url_get)
+
+
+def _linha(**kw):
+    base = dict(id="a1", caminho="conversa/bruce/a1/ponto.xlsx", nome="ponto.xlsx", mime="x",
+                tamanho=10, contexto="conversa_agente", channel_id=None, agent_id="bruce",
+                dono_conversa=PESSOA)
+    base.update(kw)
+    return base
+
+
+def _eu(i):
+    return Usuario(id=i, email="x@x", papel="colaborador")
+
+
+def test_id_malformado_nao_toca_o_banco():
+    c = ConnFalsa()
+    assert asyncio.run(rota.buscar_anexo(c, "nao-e-uuid")) is None
+    assert c.chamadas == 0
+
+
+def test_erro_de_banco_propaga_e_nao_vira_404():
+    """017 não aplicada = `relation "anexos" does not exist`; isso tem que
+    aparecer como erro, não como "Anexo não encontrado" (lição de 18/09)."""
+    c = ConnFalsa(erro=RuntimeError("relation anexos does not exist"))
+    with pytest.raises(RuntimeError):
+        asyncio.run(rota.buscar_anexo(c, "5b0d2a43-8f1e-4a7b-9b4e-1d2c3f4a5b6c"))
+
+
+UUID_A = "5b0d2a43-8f1e-4a7b-9b4e-1d2c3f4a5b6c"
+
+
+def test_url_dono_recebe_url(monkeypatch):
+    _usa(monkeypatch, ConnFalsa(linha=_linha()))
+    r = asyncio.run(rota.url_do_anexo(UUID_A, _eu(PESSOA)))
+    assert r.url == "https://r2/anexos/conversa/bruce/a1/ponto.xlsx?inline=False"
+
+
+def test_url_outra_pessoa_recebe_404(monkeypatch):
+    _usa(monkeypatch, ConnFalsa(linha=_linha()))
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(rota.url_do_anexo(UUID_A, _eu(OUTRA)))
+    assert e.value.status_code == 404
+
+
+def test_url_canal_sem_ser_membro_recebe_404(monkeypatch):
+    _usa(monkeypatch, ConnFalsa(linha=_linha(contexto="canal", channel_id=CANAL, agent_id=None,
+                                             dono_conversa=None), membro=False))
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(rota.url_do_anexo(UUID_A, _eu(OUTRA)))
+    assert e.value.status_code == 404
+
+
+def test_url_canal_membro_recebe_url(monkeypatch):
+    _usa(monkeypatch, ConnFalsa(linha=_linha(contexto="canal", channel_id=CANAL, agent_id=None,
+                                             dono_conversa=None), membro=True))
+    assert asyncio.run(rota.url_do_anexo(UUID_A, _eu(OUTRA))).url.startswith("https://r2/")
+
+
+class _In:
+    def __init__(self, **kw):
+        base = dict(tamanho=10, nome="a.xlsx", mime="x", contexto="conversa_agente",
+                    channel_id=None, agent_id="bruce")
+        base.update(kw)
+        self.__dict__.update(base)
+
+
+def test_canal_com_id_invalido_e_400(monkeypatch):
+    _usa(monkeypatch, ConnFalsa())
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(rota.iniciar_anexo(_In(contexto="canal", channel_id="xx", agent_id=None), _eu(PESSOA)))
+    assert e.value.status_code == 400
+
+
+def test_agente_sem_perfil_e_404_mesmo_com_pode_ver(monkeypatch):
+    """`pode_ver_agente` libera id sem perfil; para anexar o agente tem que existir."""
+    _usa(monkeypatch, ConnFalsa(agente_existe=False, pode_ver=True))
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(rota.iniciar_anexo(_In(agent_id="fantasma"), _eu(PESSOA)))
+    assert e.value.status_code == 404
+
+
+@pytest.mark.parametrize("mime,esperado", [
+    ("image/svg+xml", False), ("text/html", False), ("application/xhtml+xml", False),
+    ("text/xml", False), ("", False), ("application/octet-stream", False),
+    ("image/png", True), ("image/jpeg", True), ("application/pdf", True),
+    ("audio/mpeg", True), ("video/mp4", True), ("text/plain", True),
+    ("TEXT/HTML; charset=utf-8", False), ("text/plain; charset=utf-8", True),
+])
+def test_so_tipo_inofensivo_abre_no_navegador(mime, esperado):
+    """HTML e SVG abertos inline pela URL assinada viram página ativa servida
+    pelo domínio do R2 (XSS armazenado). Só a allowlist abre; o resto baixa."""
+    assert ax.exibe_inline(mime) is esperado

@@ -5,7 +5,7 @@ O agente lê por outra porta (`mcp_anexos.py`), com outra identidade; as duas
 usam a mesma regra, de `app/anexos.py`.
 """
 import logging
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -35,10 +35,14 @@ class UrlOut(BaseModel):
 
 
 async def buscar_anexo(conn, anexo_id: str) -> ax.Anexo | None:
+    # Valida o formato ANTES de consultar e deixa o resto propagar: engolir
+    # `Exception` aqui transformava banco fora ou 017 não aplicada em 404
+    # "Anexo não encontrado", o diagnóstico enganoso de 18/09.
     try:
-        linha = await conn.fetchrow(ax.SQL_ANEXO, anexo_id)
-    except Exception:  # id que não é uuid
+        UUID(anexo_id)
+    except (ValueError, AttributeError, TypeError):
         return None
+    linha = await conn.fetchrow(ax.SQL_ANEXO, anexo_id)
     return ax.Anexo.de_linha(linha) if linha else None
 
 
@@ -66,10 +70,19 @@ async def iniciar_anexo(dados, usuario: Usuario):
 
     async with sessao(role="service_role") as conn:
         if dados.contexto == "canal" and dados.channel_id:
+            try:
+                UUID(dados.channel_id)
+            except ValueError:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "channel_id inválido.")
             alvo = dados.channel_id
             pode = await membro_do_canal(conn, alvo, usuario.id, "human")
         elif dados.contexto == "conversa_agente" and dados.agent_id:
             alvo = normalizar_agent_id(dados.agent_id)
+            # `pode_ver_agente` libera id sem perfil (regra de exibição); para
+            # anexar, o agente tem que existir.
+            if not await conn.fetchval(
+                    "SELECT EXISTS (SELECT 1 FROM public.agent_profiles WHERE agent_id = $1)", alvo):
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Agente não encontrado.")
             pode = await _pode_ver_agente(conn, usuario.id, alvo)
         else:
             raise HTTPException(status.HTTP_400_BAD_REQUEST,
@@ -136,5 +149,6 @@ async def url_do_anexo(anexo_id: str, usuario: Usuario = Depends(usuario_atual))
                       and await membro_do_canal(conn, anexo.channel_id, usuario.id, "human"))
     if anexo is None or not ax.pessoa_pode_ler(anexo, usuario.id, membro):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Anexo não encontrado.")
-    url = await arm.url_get(arm.chave("anexos", anexo.caminho), _URL_S, nome_download=anexo.nome)
+    url = await arm.url_get(arm.chave("anexos", anexo.caminho), _URL_S, nome_download=anexo.nome,
+                          inline=ax.exibe_inline(anexo.mime))
     return UrlOut(url=url, expira_em=_URL_S)

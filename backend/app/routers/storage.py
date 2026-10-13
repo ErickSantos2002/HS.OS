@@ -37,12 +37,17 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
+from typing import TYPE_CHECKING
+
 from app import armazenamento as arm
 from app.armazenamento import (BUCKETS_PRIVADOS as _PRIVADOS, BUCKETS_PUBLICOS as _PUBLICOS,
                                TAMANHO_MAXIMO as _TAMANHO_MAXIMO, Objeto)
 from app.config import settings
 from app.database import sessao
 from app.dependencies import Usuario, exige_papel, usuario_atual
+
+if TYPE_CHECKING:
+    from app.routers.anexos import AnexoOut
 
 logger = logging.getLogger(__name__)
 
@@ -476,7 +481,7 @@ async def iniciar_upload(dados: InicioIn, usuario: Usuario = Depends(usuario_atu
 
 
 @router.post("/upload/concluir", response_model=None)
-async def concluir_upload(dados: ConclusaoIn, usuario: Usuario = Depends(usuario_atual)) :
+async def concluir_upload(dados: ConclusaoIn, usuario: Usuario = Depends(usuario_atual)) -> "ArquivoOut | AnexoOut":
     """Confere no R2 que o objeto chegou com o tamanho autorizado.
 
     ⚠️ É o único ponto em que o servidor vê o que chegou de fato. Se o PUT
