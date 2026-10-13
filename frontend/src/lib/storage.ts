@@ -12,6 +12,9 @@
  * O `upsert` sumiu do contrato porque virou o padrão: o servidor sempre
  * sobrescreve. Era o que o código já pedia em todo upload de avatar, e o
  * caminho identifica o dono (`avatars/<id>.png`), então versionar criaria lixo.
+ *
+ * O envio é em dois passos (`iniciar` → PUT direto no R2 → `concluir`); ver
+ * `backend/app/routers/storage.py`. O arquivo nunca passa pelo backend.
  */
 
 import { api, lerToken } from "@/lib/api";
@@ -44,39 +47,81 @@ export function urlPublica(bucket: Bucket, caminho: string): string {
   return `${BASE}/storage/${bucket}/${partes}`;
 }
 
-/** Envia o arquivo e devolve a URL de exibição. Sobrescreve se já existir. */
+/**
+ * Sobe direto para o R2 com o PUT assinado, reportando progresso.
+ *
+ * `XMLHttpRequest` e não `fetch` porque `fetch` não tem progresso de envio —
+ * e com 100 MB a pessoa precisa ver que está andando.
+ *
+ * ⚠️ O `Content-Type` tem que ser EXATAMENTE o que foi assinado no `iniciar`.
+ * Outro valor e o R2 responde 403 SignatureDoesNotMatch.
+ */
+function putDiretoImpl(
+  url: string,
+  arquivo: Blob,
+  mime: string,
+  aoProgredir?: (fracao: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", mime);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && aoProgredir) aoProgredir(e.loaded / e.total);
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`O armazenamento recusou o envio (HTTP ${xhr.status}).`));
+    // Erro de rede aqui é quase sempre CORS do bucket — o navegador não deixa
+    // ver o motivo. Dizer isso poupa a tarde de procurar no backend.
+    xhr.onerror = () =>
+      reject(new Error("Falha ao enviar o arquivo ao armazenamento (rede ou CORS do bucket)."));
+    xhr.send(arquivo);
+  });
+}
+
+/**
+ * Indireção de propósito: o teste espiona `interno.putDireto`. Espionar a
+ * exportação `putDireto` não interceptaria a chamada feita de dentro deste
+ * módulo, porque o ESM não reavalia o nome local.
+ */
+export const interno = { putDireto: putDiretoImpl };
+
+/** Exportada para a Task 7 reutilizar o mesmo PUT assinado. */
+export function putDireto(
+  url: string,
+  arquivo: Blob,
+  mime: string,
+  aoProgredir?: (fracao: number) => void,
+): Promise<void> {
+  return interno.putDireto(url, arquivo, mime, aoProgredir);
+}
+
+/**
+ * Envia o arquivo e devolve a URL de exibição. Sobrescreve se já existir.
+ *
+ * `nomeSugerido` não é mais usado: o nome gravado é o último segmento do
+ * `caminho`, e é ele que o servidor autoriza. Mantido na assinatura para não
+ * mexer nos chamadores.
+ */
 export async function enviarArquivo(
   bucket: Bucket,
   caminho: string,
   arquivo: Blob,
-  nomeSugerido?: string,
+  _nomeSugerido?: string,
+  aoProgredir?: (fracao: number) => void,
 ): Promise<ArquivoEnviado> {
-  const corpo = new FormData();
-  // O nome importa: o servidor deduz o content-type pela extensão ao servir.
-  corpo.append("arquivo", arquivo, nomeSugerido ?? caminho.split("/").pop() ?? "arquivo");
-
-  const partes = caminho.split("/").map(encodeURIComponent).join("/");
-  const token = lerToken();
-  // `fetch` direto em vez do `api()`: o helper força `Content-Type: application/json`
-  // quando há corpo, e com FormData quem precisa definir o cabeçalho (com o
-  // boundary do multipart) é o próprio navegador.
-  const resposta = await fetch(`${BASE}/storage/${bucket}/${partes}`, {
+  const mime = arquivo.type || "application/octet-stream";
+  const inicio = await api<{ url_put: string; ticket: string }>("/storage/upload/iniciar", {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: corpo,
+    body: { bucket, caminho, mime, tamanho: arquivo.size },
   });
-
-  if (!resposta.ok) {
-    let detalhe = `Erro ${resposta.status}`;
-    try {
-      const corpoErro = await resposta.json();
-      if (corpoErro?.detail) detalhe = String(corpoErro.detail);
-    } catch {
-      /* resposta sem JSON — fica o código */
-    }
-    throw new Error(detalhe);
-  }
-  return (await resposta.json()) as ArquivoEnviado;
+  await interno.putDireto(inicio.url_put, arquivo, mime, aoProgredir);
+  return api<ArquivoEnviado>("/storage/upload/concluir", {
+    method: "POST",
+    body: { ticket: inicio.ticket },
+  });
 }
 
 /**

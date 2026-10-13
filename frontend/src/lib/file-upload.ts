@@ -6,7 +6,7 @@ import { enviarArquivo, urlPublica, type Bucket } from "@/lib/storage";
 import { caminhoDeAnexo } from "@/lib/caminho-de-anexo";
 
 const MAX_TEXT_CHARS = 50_000;
-const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB — mesmo limite do backend
 
 export interface FileAttachmentMeta {
   name: string;
@@ -35,7 +35,7 @@ export function isDocumentFile(file: File) {
   return !isImageFile(file);
 }
 
-/** Any file is accepted now — up to 50MB */
+/** Any file is accepted now — up to 100MB */
 export function isAcceptedFile(file: File) {
   return file.size <= MAX_FILE_SIZE_BYTES;
 }
