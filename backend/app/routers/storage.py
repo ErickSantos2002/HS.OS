@@ -431,6 +431,12 @@ class InicioIn(BaseModel):
     caminho: str = ""
     mime: str = "application/octet-stream"
     tamanho: int
+    # Só o bucket `anexos` usa: o caminho dele é decidido no servidor, a partir
+    # do nome e do contexto da conversa (ver `app/routers/anexos.py`).
+    nome: str | None = None
+    contexto: str | None = None
+    channel_id: str | None = None
+    agent_id: str | None = None
 
 
 class InicioOut(BaseModel):
@@ -455,7 +461,9 @@ async def iniciar_upload(dados: InicioIn, usuario: Usuario = Depends(usuario_atu
     rotas de prefixo fixo.
     """
     if dados.bucket == "anexos":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Use o fluxo de anexos.")
+        # Import tardio: `routers/anexos.py` importa daqui.
+        from app.routers.anexos import iniciar_anexo
+        return await iniciar_anexo(dados, usuario)
     _exigir_escrita_do_cliente(dados.bucket)
     _validar_tamanho(dados.tamanho)
     k = arm.chave(dados.bucket, dados.caminho)
@@ -467,8 +475,8 @@ async def iniciar_upload(dados: InicioIn, usuario: Usuario = Depends(usuario_atu
     return InicioOut(url_put=url, ticket=ticket, expira_em=_PUT_S)
 
 
-@router.post("/upload/concluir", response_model=ArquivoOut)
-async def concluir_upload(dados: ConclusaoIn, usuario: Usuario = Depends(usuario_atual)):
+@router.post("/upload/concluir", response_model=None)
+async def concluir_upload(dados: ConclusaoIn, usuario: Usuario = Depends(usuario_atual)) :
     """Confere no R2 que o objeto chegou com o tamanho autorizado.
 
     ⚠️ É o único ponto em que o servidor vê o que chegou de fato. Se o PUT
@@ -477,7 +485,8 @@ async def concluir_upload(dados: ConclusaoIn, usuario: Usuario = Depends(usuario
     """
     t = ler_ticket(dados.ticket, usuario.id)
     if t["bucket"] == "anexos":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Use o fluxo de anexos.")
+        from app.routers.anexos import concluir_anexo
+        return await concluir_anexo(t, usuario)
     k = arm.chave(t["bucket"], t["caminho"])
     obj = await arm.cabecalho(k)
     try:

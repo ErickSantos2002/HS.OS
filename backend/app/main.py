@@ -19,6 +19,7 @@ from app.database import close_db, init_db
 from app.gateway.client import encerrar_cliente
 from app.routers.agent_export import router as agent_export_router
 from app.routers.agents import router as agents_router
+from app.routers.anexos import router as anexos_router
 from app.routers.automacoes import router as automacoes_router
 from app.routers.artefatos import router as artefatos_router
 from app.routers.arenas import router as arenas_router
@@ -196,6 +197,7 @@ async def registrar_validacao(request: Request, exc: RequestValidationError):
 
 
 app.include_router(agents_router)
+app.include_router(anexos_router)
 app.include_router(arenas_router)
 app.include_router(artefatos_router)
 app.include_router(automacoes_router)
