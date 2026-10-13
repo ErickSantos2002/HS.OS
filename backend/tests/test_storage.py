@@ -51,3 +51,82 @@ def test_caminho_sem_dono_reconhecivel_falha_fechado():
 def test_prefixo_parecido_nao_engana():
     """`<uuid-do-dono>maiscoisa/` não é o diretório do dono."""
     assert s._pode_ler_privado("generated-documents", f"{DONO}x/a.xlsx", DONO) is False
+
+
+# ── Fase R2: o upload em dois passos ────────────────────────────────────────
+#
+# O navegador sobe direto para o R2 com um PUT assinado; o backend só autoriza
+# (`iniciar`) e confere (`concluir`). O ticket carrega o que foi autorizado,
+# para o `concluir` não confiar no que o cliente manda de novo.
+import pytest
+from fastapi import HTTPException
+
+from app.armazenamento import TAMANHO_MAXIMO, Objeto
+
+
+@pytest.mark.parametrize("tamanho", [1, TAMANHO_MAXIMO])
+def test_tamanho_dentro_do_limite_passa(tamanho):
+    s._validar_tamanho(tamanho)
+
+
+def test_cem_mega_e_um_byte_e_recusado_com_413():
+    with pytest.raises(HTTPException) as e:
+        s._validar_tamanho(TAMANHO_MAXIMO + 1)
+    assert e.value.status_code == 413
+    assert "100 MB" in e.value.detail
+
+
+def test_arquivo_vazio_e_recusado_com_mensagem():
+    """Arquivo de 0 byte é quase sempre engano (atalho, exportação que falhou).
+    Aceitar criaria uma bolha de anexo que abre em branco."""
+    with pytest.raises(HTTPException) as e:
+        s._validar_tamanho(0)
+    assert e.value.status_code == 400
+    assert "vazio" in e.value.detail
+
+
+def test_ticket_ida_e_volta_para_a_mesma_pessoa():
+    t = s.emitir_ticket({"bucket": "agent-files", "caminho": "a/b.png", "tamanho": 3}, DONO)
+    assert s.ler_ticket(t, DONO)["caminho"] == "a/b.png"
+
+
+def test_ticket_de_outra_pessoa_e_recusado():
+    """Sem isto, quem interceptasse o ticket de alguém concluiria o upload
+    dele — e, nos anexos, gravaria a linha em nome dele."""
+    t = s.emitir_ticket({"bucket": "agent-files", "caminho": "a/b.png", "tamanho": 3}, DONO)
+    with pytest.raises(HTTPException) as e:
+        s.ler_ticket(t, OUTRO)
+    assert e.value.status_code == 400
+
+
+def test_ticket_adulterado_e_recusado():
+    t = s.emitir_ticket({"bucket": "agent-files", "caminho": "a/b.png", "tamanho": 3}, DONO)
+    with pytest.raises(HTTPException):
+        s.ler_ticket(t[:-2] + "xx", DONO)
+
+
+def test_conclusao_sem_objeto_no_r2_diz_que_nao_chegou():
+    """É o sintoma de CORS errado: o PUT morreu no navegador e o `concluir`
+    chega mesmo assim. A mensagem precisa apontar para o envio, não para o
+    servidor."""
+    with pytest.raises(HTTPException) as e:
+        s._conferir_conclusao(None, 10)
+    assert e.value.status_code == 400
+    assert "não chegou" in e.value.detail
+
+
+def test_conclusao_com_tamanho_diferente_e_recusada():
+    with pytest.raises(HTTPException) as e:
+        s._conferir_conclusao(Objeto(tamanho=9, mime="text/plain"), 10)
+    assert e.value.status_code == 400
+
+
+def test_conclusao_com_tamanho_certo_passa():
+    s._conferir_conclusao(Objeto(tamanho=10, mime="text/plain"), 10)
+
+
+def test_anexo_nao_e_lido_pela_porta_privada_generica():
+    """Anexo tem regra própria (participar da conversa). A porta
+    `/storage/privado/` só conhece dono por pasta — se aceitasse `anexos`,
+    seria uma segunda regra para o mesmo arquivo."""
+    assert s._pode_ler_privado("anexos", f"{DONO}/x/a.pdf", DONO) is False

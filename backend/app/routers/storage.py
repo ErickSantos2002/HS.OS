@@ -1,6 +1,8 @@
 """Arquivos — substitui o `supabase.storage`.
 
-Guarda em disco, sob `UPLOADS_DIR`, um diretório por bucket. Os buckets são os
+Guarda no Cloudflare R2 (ver `app/armazenamento.py`), com o bucket lógico como
+prefixo da chave. Ler é 302 para URL assinada; enviar é `PUT` assinado direto do
+navegador. Os buckets são os
 mesmos que o código herdado usa, com a mesma divisão entre público e privado:
 
 | bucket                | quem lê                                             |
@@ -10,6 +12,7 @@ mesmos que o código herdado usa, com a mesma divisão entre público e privado:
 | `wiki-uploads`        | qualquer um — imagem dentro de documento             |
 | `company-docs`        | autenticado                                          |
 | `generated-documents` | **só o dono** — um diretório por pessoa               |
+| `anexos`              | só quem participa da conversa — ver `app/routers/anexos.py` |
 
 **Por que os três primeiros são públicos:** a tela os usa em `src` de tag HTML,
 e o navegador não manda o cabeçalho `Authorization` nesse caso. Era assim no
@@ -25,14 +28,18 @@ import logging
 import mimetypes
 import re
 import time
+from datetime import datetime, timedelta, timezone
 from html import escape
-from pathlib import Path
 from uuid import uuid4
 
+import jwt
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
+from app import armazenamento as arm
+from app.armazenamento import (BUCKETS_PRIVADOS as _PRIVADOS, BUCKETS_PUBLICOS as _PUBLICOS,
+                               TAMANHO_MAXIMO as _TAMANHO_MAXIMO, Objeto)
 from app.config import settings
 from app.database import sessao
 from app.dependencies import Usuario, exige_papel, usuario_atual
@@ -41,39 +48,51 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/storage", tags=["storage"])
 
-_PUBLICOS = {"agent-files", "audio-messages", "wiki-uploads"}
-_PRIVADOS = {"company-docs", "generated-documents"}
-_BUCKETS = _PUBLICOS | _PRIVADOS
-
-# Segmento de caminho aceitável: letras, números, ponto, hífen, sublinhado. Barra
-# é permitida entre segmentos (o `path` do endpoint), mas cada pedaço passa por
-# aqui — é o que impede `..` de escapar do diretório do bucket.
-_SEGMENTO = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
-
-_TAMANHO_MAXIMO = 25 * 1024 * 1024
+_URL_PUBLICA_S = 3600
+_URL_PRIVADA_S = 300
+_PUT_S = 900
 
 
-def _resolver(bucket: str, caminho: str) -> Path:
-    """Traduz bucket + caminho para um arquivo dentro de `UPLOADS_DIR`.
+def _validar_tamanho(tamanho: int) -> None:
+    if tamanho <= 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Arquivo vazio — confira se ele foi exportado direito.")
+    if tamanho > _TAMANHO_MAXIMO:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"Arquivo acima do limite de {_TAMANHO_MAXIMO // (1024 * 1024)} MB.",
+        )
 
-    A validação é por segmento e não por prefixo: conferir só se o resultado
-    "começa com" o diretório do bucket é o erro clássico que `..%2f` e link
-    simbólico contornam.
-    """
-    if bucket not in _BUCKETS:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bucket desconhecido.")
 
-    partes = [p for p in caminho.split("/") if p]
-    if not partes or any(not _SEGMENTO.match(p) for p in partes):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Caminho de arquivo inválido.")
+def emitir_ticket(dados: dict, usuario_id: str, segundos: int = _PUT_S) -> str:
+    """O que o `iniciar` autorizou, assinado — o `concluir` não confia no cliente."""
+    corpo = {**dados, "sub": usuario_id, "uso": "upload",
+             "exp": datetime.now(timezone.utc) + timedelta(seconds=segundos)}
+    return jwt.encode(corpo, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
-    base = Path(settings.UPLOADS_DIR).resolve() / bucket
-    alvo = base.joinpath(*partes)
-    # Cinto e suspensório: mesmo com os segmentos validados, confere que o
-    # resultado está mesmo sob o bucket.
-    if base not in alvo.resolve().parents and alvo.resolve() != base:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Caminho de arquivo inválido.")
-    return alvo
+
+def ler_ticket(ticket: str, usuario_id: str) -> dict:
+    # O campo `uso` é o que impede o token de login de passar por ticket: o
+    # login é assinado com o mesmo segredo, mas não carrega `uso: "upload"`.
+    try:
+        corpo = jwt.decode(ticket, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Envio expirado ou inválido. Tente anexar de novo.")
+    if corpo.get("uso") != "upload" or corpo.get("sub") != usuario_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Envio expirado ou inválido. Tente anexar de novo.")
+    return corpo
+
+
+def _conferir_conclusao(obj: Objeto | None, tamanho: int) -> None:
+    if obj is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "O arquivo não chegou ao armazenamento. O envio pelo navegador falhou — tente de novo.",
+        )
+    if obj.tamanho != tamanho:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"O arquivo chegou com {obj.tamanho} bytes, e o esperado era {tamanho}. Tente de novo.",
+        )
 
 
 class ArquivoOut(BaseModel):
@@ -120,23 +139,24 @@ async def extrair_texto(
     trabalha: ela sobe o documento primeiro e depois pede o processamento,
     mandando só `storagePath`.
     """
-    alvo = _resolver(bucket, caminho)
-    if not alvo.is_file():
+    k = arm.chave(bucket, caminho)
+    dados = await arm.ler(k)
+    if dados is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Arquivo não encontrado.")
 
-    ext = alvo.suffix.lower().lstrip(".")
+    ext = caminho.rsplit(".", 1)[-1].lower() if "." in caminho else ""
     try:
         if ext in ("txt", "md"):
-            texto = alvo.read_text(encoding="utf-8", errors="replace")
+            texto = dados.decode("utf-8", errors="replace")
         elif ext == "pdf":
             from pypdf import PdfReader
 
-            leitor = PdfReader(str(alvo))
+            leitor = PdfReader(io.BytesIO(dados))
             texto = "\n".join((p.extract_text() or "") for p in leitor.pages)
         elif ext == "docx":
             import docx
 
-            texto = "\n".join(p.text for p in docx.Document(str(alvo)).paragraphs)
+            texto = "\n".join(p.text for p in docx.Document(io.BytesIO(dados)).paragraphs)
         else:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
@@ -145,7 +165,7 @@ async def extrair_texto(
     except HTTPException:
         raise
     except Exception as e:
-        logger.warning("Falha ao extrair texto de %s/%s: %s", bucket, caminho, e)
+        logger.warning("Falha ao extrair texto de %s: %s", k, e)
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             f"Não foi possível ler o arquivo: {e}",
@@ -326,7 +346,7 @@ async def gerar_documento(dados: DocumentoIn, usuario: Usuario = Depends(usuario
     usuário é o que sustenta o download privado, que confere o dono pelo
     primeiro segmento do caminho.
 
-    Se o registro no banco falhar, o arquivo é apagado. Arquivo órfão em disco
+    Se o registro no banco falhar, o arquivo é apagado. Arquivo órfão no R2
     não aparece em lugar nenhum e só ocupa espaço para sempre.
     """
     if dados.type not in ("pdf", "docx"):
@@ -347,9 +367,10 @@ async def gerar_documento(dados: DocumentoIn, usuario: Usuario = Depends(usuario
 
     doc_id = str(uuid4())
     caminho = f"{usuario.id}/{doc_id}.{dados.type}"
-    destino = _resolver("generated-documents", caminho)
-    destino.parent.mkdir(parents=True, exist_ok=True)
-    destino.write_bytes(bytes_)
+    k = arm.chave("generated-documents", caminho)
+    mime = "application/pdf" if dados.type == "pdf" else \
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    await arm.gravar(k, bytes_, mime)
 
     try:
         async with sessao(role="service_role") as conn:
@@ -365,12 +386,75 @@ async def gerar_documento(dados: DocumentoIn, usuario: Usuario = Depends(usuario
                 caminho, len(bytes_),
             )
     except Exception:
-        destino.unlink(missing_ok=True)
+        await arm.apagar(k)
         raise
 
     logger.info("Documento %s (%s, %d bytes) gerado por %s",
                 doc_id, dados.type, len(bytes_), usuario.id)
     return DocumentoGeradoOut(**dict(linha))
+
+
+class InicioIn(BaseModel):
+    bucket: str
+    caminho: str = ""
+    mime: str = "application/octet-stream"
+    tamanho: int
+
+
+class InicioOut(BaseModel):
+    url_put: str
+    ticket: str
+    expira_em: int
+
+
+class ConclusaoIn(BaseModel):
+    ticket: str
+
+
+@router.post("/upload/iniciar", response_model=InicioOut)
+async def iniciar_upload(dados: InicioIn, usuario: Usuario = Depends(usuario_atual)):
+    """Autoriza um envio e devolve o `PUT` assinado para o navegador subir direto.
+
+    O backend não vê os bytes — é o que mantém a VPS fora do caminho de um
+    arquivo de 100 MB. O que ele vê é o pedido, e é aqui que bucket, caminho e
+    tamanho são conferidos.
+
+    ⚠️ Declarado **antes** do upload genérico, pela mesma razão das outras
+    rotas de prefixo fixo.
+    """
+    if dados.bucket == "anexos":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Use o fluxo de anexos.")
+    _validar_tamanho(dados.tamanho)
+    k = arm.chave(dados.bucket, dados.caminho)
+    url = await arm.url_put(k, dados.mime, dados.tamanho, _PUT_S)
+    ticket = emitir_ticket(
+        {"bucket": dados.bucket, "caminho": k.split("/", 1)[1], "tamanho": dados.tamanho},
+        usuario.id,
+    )
+    return InicioOut(url_put=url, ticket=ticket, expira_em=_PUT_S)
+
+
+@router.post("/upload/concluir", response_model=ArquivoOut)
+async def concluir_upload(dados: ConclusaoIn, usuario: Usuario = Depends(usuario_atual)):
+    """Confere no R2 que o objeto chegou com o tamanho autorizado.
+
+    ⚠️ É o único ponto em que o servidor vê o que chegou de fato. Se o PUT
+    morreu no navegador (CORS errado é o caso clássico), é aqui que a pessoa
+    recebe uma mensagem que aponta para o envio — e não um anexo quebrado.
+    """
+    t = ler_ticket(dados.ticket, usuario.id)
+    if t["bucket"] == "anexos":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Use o fluxo de anexos.")
+    k = arm.chave(t["bucket"], t["caminho"])
+    obj = await arm.cabecalho(k)
+    try:
+        _conferir_conclusao(obj, int(t["tamanho"]))
+    except HTTPException:
+        if obj is not None:
+            await arm.apagar(k)
+        raise
+    return ArquivoOut(bucket=t["bucket"], path=t["caminho"],
+                      url=f"/storage/{t['bucket']}/{t['caminho']}", size=obj.tamanho)
 
 
 @router.post("/{bucket}/{caminho:path}", response_model=ArquivoOut,
@@ -387,37 +471,28 @@ async def enviar(
     (`upsert: true` no avatar) e porque o caminho já identifica o dono — o
     avatar de um agente é sempre `avatars/<id>.png`. Sem isso, trocar a foto
     criaria arquivo novo e deixaria lixo para sempre.
+
+    Continua existindo para avatar e arquivo pequeno; o que é grande sobe pelo
+    `PUT` assinado de `/upload/iniciar`.
     """
-    alvo = _resolver(bucket, caminho)
-    alvo.parent.mkdir(parents=True, exist_ok=True)
+    if bucket == "anexos":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Use o fluxo de anexos.")
+    k = arm.chave(bucket, caminho)
+    pedacos, tamanho = [], 0
+    while pedaco := await arquivo.read(1024 * 1024):
+        tamanho += len(pedaco)
+        if tamanho > _TAMANHO_MAXIMO:
+            # Interrompe durante a leitura: acumular 100 MB em memória para
+            # depois recusar é o mesmo erro que antes enchia o disco.
+            _validar_tamanho(tamanho)
+        pedacos.append(pedaco)
+    _validar_tamanho(tamanho)
+    mime = arquivo.content_type or mimetypes.guess_type(caminho)[0] or "application/octet-stream"
+    await arm.gravar(k, b"".join(pedacos), mime)
 
-    tamanho = 0
-    try:
-        with alvo.open("wb") as destino:
-            while pedaco := await arquivo.read(1024 * 1024):
-                tamanho += len(pedaco)
-                if tamanho > _TAMANHO_MAXIMO:
-                    # Interrompe durante a leitura, não depois: guardar o arquivo
-                    # inteiro para então recusá-lo é o que enche o disco.
-                    destino.close()
-                    alvo.unlink(missing_ok=True)
-                    raise HTTPException(
-                        status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                        f"Arquivo acima do limite de {_TAMANHO_MAXIMO // (1024 * 1024)} MB.",
-                    )
-                destino.write(pedaco)
-    except HTTPException:
-        raise
-    except OSError as e:
-        logger.error("Falha ao gravar %s/%s: %s", bucket, caminho, e)
-        raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "Não foi possível gravar o arquivo."
-        )
-
-    logger.info("Arquivo %s/%s gravado (%d bytes)", bucket, caminho, tamanho)
-    return ArquivoOut(
-        bucket=bucket, path=caminho, url=f"/storage/{bucket}/{caminho}", size=tamanho
-    )
+    logger.info("Arquivo %s gravado (%d bytes)", k, tamanho)
+    return ArquivoOut(bucket=bucket, path=k.split("/", 1)[1],
+                      url=f"/storage/{k}", size=tamanho)
 
 
 @router.get("/listar/{bucket}/{prefixo:path}")
@@ -440,12 +515,15 @@ async def listar(bucket: str, prefixo: str, usuario: Usuario = Depends(usuario_a
             status.HTTP_403_FORBIDDEN,
             f"Listagem disponível apenas para buckets públicos: {', '.join(sorted(_PUBLICOS))}.",
         )
-    # `_resolver` é quem impede travessia de caminho (`../`); reaproveitar aqui
-    # garante que a listagem obedeça exatamente à mesma regra do download.
-    alvo = _resolver(bucket, prefixo or ".")
-    if not alvo.is_dir():
-        return {"arquivos": []}
-    return {"arquivos": sorted(f.name for f in alvo.iterdir() if f.is_file())}
+    # `arm.chave` é quem impede travessia (`../`); para prefixo vazio ela
+    # levantaria 400, por isso o ramo. Atenção à precedência: o `+ "/"` precisa
+    # valer só para o ramo com prefixo.
+    if (prefixo or "").strip("/"):
+        prefixo_k = arm.chave(bucket, prefixo) + "/"
+    else:
+        prefixo_k = f"{bucket}/"
+    itens = await arm.listar(prefixo_k)
+    return {"arquivos": sorted(i["nome"] for i in itens)}
 
 
 # ⚠️ **A conferência de dono existia numa porta e faltava na outra.**
@@ -475,6 +553,11 @@ def _pode_ler_privado(bucket: str, caminho: str, usuario_id: str) -> bool:
     valendo para qualquer pessoa autenticada. `generated-documents` guarda um
     diretório por pessoa, e o dono é o primeiro segmento do caminho.
     """
+    if bucket == "anexos":
+        # Anexo tem regra própria — participar da conversa — e porta própria
+        # (`GET /anexos/{id}/url`). Duas regras para o mesmo arquivo é o que
+        # produz o próximo buraco.
+        return False
     if bucket not in _DIRETORIO_POR_PESSOA:
         return True
     dono = (caminho or "").lstrip("/").split("/")[0]
@@ -503,11 +586,12 @@ async def baixar_privado(
     # não deveria descobrir que o arquivo existe.
     if not _pode_ler_privado(bucket, caminho, str(usuario.id)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Arquivo não encontrado.")
-    alvo = _resolver(bucket, caminho)
-    if not alvo.is_file():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Arquivo não encontrado.")
-    tipo, _sub = mimetypes.guess_type(alvo.name)
-    return FileResponse(alvo, media_type=tipo or "application/octet-stream")
+    k = arm.chave(bucket, caminho)
+    nome = caminho.rsplit("/", 1)[-1]
+    # ⚠️ O `fetch` do front segue o 302 sozinho, mas o `Authorization` não vai
+    # para outra origem — e a URL assinada não precisa dele.
+    return RedirectResponse(await arm.url_get(k, _URL_PRIVADA_S, nome_download=nome),
+                            status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/{bucket}/{caminho:path}")
@@ -518,23 +602,21 @@ async def baixar(bucket: str, caminho: str):
     precisam responder a `<img src>`. Os privados conferem o token na mão, logo
     abaixo — o `Depends` obrigatório fecharia os dois casos junto.
     """
-    alvo = _resolver(bucket, caminho)
+    k = arm.chave(bucket, caminho)
     if bucket in _PRIVADOS:
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             "Este bucket é privado. Use o endpoint autenticado.",
         )
-    if not alvo.is_file():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Arquivo não encontrado.")
-
-    tipo, _ = mimetypes.guess_type(alvo.name)
-    return FileResponse(
-        alvo,
-        media_type=tipo or "application/octet-stream",
-        # Curto de propósito: avatar e imagem de wiki são sobrescritos no mesmo
-        # caminho, e cache longo mostraria a foto antiga por horas. A tela já
-        # acrescenta `?t=<timestamp>` ao trocar, mas isso não pode ser a única
-        # defesa.
+    # Não há `HEAD` antes do redirecionamento, de propósito: o carregador de
+    # avatares faz dezenas destas por página, e o R2 já responde 404 ao objeto
+    # que não existe.
+    return RedirectResponse(
+        await arm.url_get(k, _URL_PUBLICA_S),
+        status_code=status.HTTP_302_FOUND,
+        # Menor que a validade da assinatura (1 h): o navegador reaproveita o
+        # redirecionamento por 5 min e nunca segue uma URL já vencida. Curto
+        # também porque avatar é sobrescrito no mesmo caminho.
         headers={"Cache-Control": "public, max-age=300"},
     )
 
@@ -546,24 +628,9 @@ async def remover(bucket: str, caminho: str, _: Usuario = Depends(usuario_atual)
     O `remove()` do Supabase também não reclamava, e a tela usa isso para
     limpar variantes (`.png` e `.jpg`) sem saber qual existe.
     """
-    alvo = _resolver(bucket, caminho)
-    alvo.unlink(missing_ok=True)
-
-
-def preparar_diretorios() -> None:
-    """Cria os diretórios dos buckets no start.
-
-    Sem isto, o primeiro upload de cada bucket depende do `mkdir` do request, o
-    que esconde erro de permissão até alguém tentar subir um arquivo.
-    """
-    base = Path(settings.UPLOADS_DIR)
-    for bucket in sorted(_BUCKETS):
-        try:
-            (base / bucket).mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            logger.warning("Não foi possível preparar %s/%s: %s", base, bucket, e)
-            return
-    logger.info("Buckets prontos em %s: %s", base, ", ".join(sorted(_BUCKETS)))
+    if bucket == "anexos":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Anexo não se apaga por esta porta.")
+    await arm.apagar(arm.chave(bucket, caminho))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -592,17 +659,11 @@ async def faxina(_: Usuario = Depends(exige_papel("administrador"))):
     Só `agent-files`: avatar de agente vive nele também, mas em `avatars/`, e
     esses **não** têm carimbo no nome — a regra do carimbo os protege sozinha.
     """
-    base = Path(settings.UPLOADS_DIR) / "agent-files"
-    if not base.is_dir():
-        return FaxinaOut(removidos=0, examinados=0)
-
     limite_ms = (time.time() - _VALIDADE_SEGUNDOS) * 1000
     removidos = examinados = 0
-    for arquivo in base.rglob("*"):
-        if not arquivo.is_file():
-            continue
+    for item in await arm.listar("agent-files/", recursivo=True):
         examinados += 1
-        m = _CARIMBO.match(arquivo.name)
+        m = _CARIMBO.match(item["nome"])
         if not m:
             continue
         carimbo = int(m.group(1))
@@ -610,11 +671,8 @@ async def faxina(_: Usuario = Depends(exige_papel("administrador"))):
         if len(m.group(1)) == 10:
             carimbo *= 1000
         if carimbo < limite_ms:
-            try:
-                arquivo.unlink()
-                removidos += 1
-            except OSError as e:
-                logger.warning("Não foi possível remover %s: %s", arquivo, e)
+            await arm.apagar(item["chave"])
+            removidos += 1
 
     logger.info("Faxina: %d removidos de %d examinados", removidos, examinados)
     return FaxinaOut(removidos=removidos, examinados=examinados)

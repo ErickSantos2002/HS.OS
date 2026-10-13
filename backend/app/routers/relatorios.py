@@ -29,7 +29,7 @@ from app.integracoes import exige_segredo
 from app.relatorios import compradores
 from app.relatorios import vendedores as gerador
 from app.routers.integracoes import _url_do_banco
-from app.routers.storage import _resolver
+from app import armazenamento as arm
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["relatorios"])
@@ -103,9 +103,9 @@ async def _gerar_e_guardar(dono_id: str, dias: int, agente: str | None) -> Relat
 
     doc_id = str(uuid4())
     caminho = f"{dono_id}/{doc_id}.xlsx"
-    destino = _resolver("generated-documents", caminho)
-    destino.parent.mkdir(parents=True, exist_ok=True)
-    destino.write_bytes(dados)
+    k = arm.chave("generated-documents", caminho)
+    await arm.gravar(k, dados,
+                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     try:
         async with sessao(role="service_role") as conn:
@@ -120,9 +120,9 @@ async def _gerar_e_guardar(dono_id: str, dias: int, agente: str | None) -> Relat
                 caminho, len(dados),
             )
     except Exception:
-        # Arquivo órfão em disco não aparece em lugar nenhum e ocupa espaço para
+        # Arquivo órfão no R2 não aparece em lugar nenhum e ocupa espaço para
         # sempre — mesma decisão do `gerar_documento`.
-        destino.unlink(missing_ok=True)
+        await arm.apagar(k)
         raise
 
     logger.info("Relatório de vendedores (%dd) gerado para %s por %s — %d bytes",
@@ -289,9 +289,9 @@ async def _compradores_e_guardar(dono_id: str, args: dict, agente: str | None) -
 
     doc_id = str(uuid4())
     caminho = f"{dono_id}/{doc_id}.xlsx"
-    destino = _resolver("generated-documents", caminho)
-    destino.parent.mkdir(parents=True, exist_ok=True)
-    destino.write_bytes(dados)
+    k = arm.chave("generated-documents", caminho)
+    await arm.gravar(k, dados,
+                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     try:
         async with sessao(role="service_role") as conn:
             await conn.execute(
@@ -305,7 +305,7 @@ async def _compradores_e_guardar(dono_id: str, args: dict, agente: str | None) -
                 caminho, len(dados),
             )
     except Exception:
-        destino.unlink(missing_ok=True)
+        await arm.apagar(k)
         raise
 
     link = ""

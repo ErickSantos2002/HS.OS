@@ -43,7 +43,7 @@ from app.routers.warroom import router as warroom_router
 from app.routers.times import router as times_router
 from app.routers.wiki import router as wiki_router
 from app.routers.skills import router as skills_router
-from app.routers.storage import preparar_diretorios, router as storage_router
+from app.routers.storage import router as storage_router
 from app.routers.ws import router as ws_router, sinalizar_desligamento
 
 # Conforme os domínios forem portados das Edge Functions (backend/supabase/),
@@ -54,7 +54,6 @@ from app.routers.ws import router as ws_router, sinalizar_desligamento
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
-    preparar_diretorios()
 
     # A escuta do banco é o que substitui o `postgres_changes`. Roda numa
     # conexão dedicada, fora do pool, e reconecta sozinha — ver
