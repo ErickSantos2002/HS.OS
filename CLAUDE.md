@@ -1218,6 +1218,13 @@ começando por `= + - @` vira texto, não fórmula. A entrega na tela vem do tri
 ⚠️ **CORS errado no bucket não dá erro no backend** — o PUT morre no navegador. A tela
 diz "rede ou CORS do bucket"; a política está em `docs/DEPLOY.md`.
 
+⚠️ **`relatorio_ponto` mora no `hsos-anexos` e só o `bruce` a enxerga.** O
+`tools/list` desse servidor depende do agente da URL (`_FERRAMENTAS_RESTRITAS`),
+e `tools/call` de outro agente recebe "ferramenta desconhecida". A régua é a da
+coordenadora de RH, em `app/relatorios/ponto.py` — **mudou na conversa com ela,
+muda lá**, com teste. O xlsx dela vem com número de verdade; o do
+`enviar_arquivo` continua todo texto.
+
 ### Agendamento (`cron.*`) — contrato levantado em 19/08/2026
 
 ```

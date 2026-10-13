@@ -869,6 +869,13 @@ sem senha; conta convidada do tenant não entra.
      batida como saída.
    Os arquivos ficaram só no scratchpad da sessão — rebaixar do R2 pelos ids em
    `public.anexos` (enviados por `adm01@`).
+1c. ✅ **Ferramenta `relatorio_ponto` pronta (13/10)** — régua em
+   `backend/app/relatorios/ponto.py`, no `hsos-anexos`, só para o `bruce`
+   ([spec](superpowers/specs/2026-10-13-relatorio-ponto-design.md)). Conferida
+   contra setembro: status 5 críticos / 13 atenção / 3 acompanhamento, igual ao
+   dela. Depois do deploy: `bash scripts/publicar-skills.sh --enviar` (skill
+   `ponto-flash`) e o ponteiro no `AGENTS.md` do `bruce`. ⚠️ Saldo do banco de
+   horas sai do Flash — a planilha dela tinha um período editado à mão.
 2. Ela manda pelo chat com o `bruce` a **planilha bruta do Flash** e a **ajustada**
    do mesmo mês.
 3. Levantar a régua comparando as duas (o que ela corta, recalcula, agrupa) e
