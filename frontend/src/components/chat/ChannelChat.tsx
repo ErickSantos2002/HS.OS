@@ -13,6 +13,7 @@ import { useAgentAvatar } from "@/hooks/use-agent-avatar";
 import { normalizeAgentId } from "@/lib/active-agents";
 import { useChatMedia } from "@/hooks/use-chat-media";
 import { getAudioFileExtension, useAudioRecorder } from "@/hooks/use-audio-recorder";
+import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import { uploadFileToStorage, formatFileSize, isImageFile } from "@/lib/file-upload";
 import FileAttachmentCard from "./FileAttachmentCard";
 import AudioMessagePlayer from "./AudioMessagePlayer";
@@ -516,30 +517,29 @@ const MessageBubble = memo(function MessageBubble({
             {/* Render file attachments */}
             {msg.attachments && msg.attachments.length > 0 && (
               <div className="flex flex-col gap-1 mt-1">
-                {msg.attachments.map((att, i) => {
-                  if (att.mimeType?.startsWith("image/")) {
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => onImageClick(att.url, att.name)}
-                        className="mt-1 overflow-hidden rounded-md"
-                      >
-                        <img src={att.url} alt={att.name} className="max-h-48 max-w-[240px] rounded-md object-cover transition-transform hover:scale-[1.01]" />
-                      </button>
-                    );
-                  }
-                  return (
-                    <FileAttachmentCard
-                      key={i}
-                      name={att.name}
-                      url={att.url}
-                      size={att.size}
-                      mimeType={att.mimeType}
-                      onPreview={onAttachmentPreview}
-                    />
-                  );
-                })}
+                {msg.attachments.map((att, i) => (
+                  <AnexoResolvido key={i} id={att.id} url={att.url}>
+                    {(url, renovar) =>
+                      att.mimeType?.startsWith("image/") ? (
+                        <button
+                          type="button"
+                          onClick={() => onImageClick(url, att.name)}
+                          className="mt-1 overflow-hidden rounded-md"
+                        >
+                          <img src={url} onError={renovar} alt={att.name} className="max-h-48 max-w-[240px] rounded-md object-cover transition-transform hover:scale-[1.01]" />
+                        </button>
+                      ) : (
+                        <FileAttachmentCard
+                          name={att.name}
+                          url={url}
+                          size={att.size}
+                          mimeType={att.mimeType}
+                          onPreview={onAttachmentPreview}
+                        />
+                      )
+                    }
+                  </AnexoResolvido>
+                ))}
               </div>
             )}
 
@@ -1355,10 +1355,11 @@ export default function ChannelChat({
       if (channelMedia.staged.length > 0) {
         setUploadingFiles(true);
         try {
-          const finalized = await channelMedia.finalizeStaged(`channel-${channel.id}`);
+          const finalized = await channelMedia.finalizeStaged({ contexto: "canal", channelId: channel.id });
           attachments = finalized.map((f) => ({
+            id: f.id,
             name: f.name ?? "arquivo",
-            url: f.url || f.base64,
+            url: f.id ? "" : (f.url || f.base64),
             size: f.size ?? 0,
             mimeType: f.mimeType,
           }));

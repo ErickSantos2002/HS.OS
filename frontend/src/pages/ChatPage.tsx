@@ -113,6 +113,7 @@ import HeartbeatPanel from "@/components/chat/HeartbeatPanel";
 import DateDivider from "@/components/chat/DateDivider";
 import { shouldShowDateDivider } from "@/lib/chat-date-groups";
 import { resetComposerTextarea, resizeComposerTextarea } from "@/lib/chat-composer";
+import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import { copyToClipboard, hasActiveTextSelection } from "@/lib/clipboard";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 
@@ -243,7 +244,7 @@ function SidebarTypingDots() {
 
 /* ── Media Bubble ─────────────────────────────────────── */
 
-function MediaBubble({ attachment, onImageClick }: { attachment: MediaAttachment; onImageClick: (src: string) => void }) {
+function MediaBubble({ attachment, onImageClick, onErroImagem }: { attachment: MediaAttachment; onImageClick: (src: string) => void; onErroImagem?: () => void }) {
   // Auto-detect type from mimeType when type is missing or generic
   const effectiveType: MediaAttachment["type"] =
     attachment.type ??
@@ -277,7 +278,7 @@ function MediaBubble({ attachment, onImageClick }: { attachment: MediaAttachment
     
     return (
       <div className="relative group rounded-md overflow-hidden max-w-[240px] mt-1">
-        <img src={src} alt={attachment.name ?? "image"} className="rounded-md max-h-48 object-cover cursor-pointer" onClick={() => onImageClick(src)} />
+        <img src={src} onError={onErroImagem} alt={attachment.name ?? "image"} className="rounded-md max-h-48 object-cover cursor-pointer" onClick={() => onImageClick(src)} />
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center gap-2 pointer-events-none">
           <button onClick={() => onImageClick(src)} className="pointer-events-auto h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
             <ZoomIn className="h-4 w-4" />
@@ -519,7 +520,11 @@ const AgentMessageList = React.memo(function AgentMessageList({
                           <CollapsiblePlainText text={msg.content} className="text-sm text-foreground/90" />
                         )
                       )}
-                      {Array.isArray(msg.media) && msg.media.map((att, i) => <MediaBubble key={i} attachment={att} onImageClick={onSetLightboxSrc} />)}
+                      {Array.isArray(msg.media) && msg.media.map((att, i) => (
+                        <AnexoResolvido key={i} id={att.id} url={att.url || att.base64}>
+                          {(url, renovar) => <MediaBubble attachment={{ ...att, url, base64: att.base64 || url }} onImageClick={onSetLightboxSrc} onErroImagem={renovar} />}
+                        </AnexoResolvido>
+                      ))}
                     </div>
 
                     {/* Hover action bar — anchored to bubble edge */}
@@ -1970,7 +1975,7 @@ export default function ChatPage() {
     setTurnStartTick((t) => t + 1);
     setUploading(true);
     try {
-      const outgoingMedia = await media.finalizeStaged(sendingAgentId);
+      const outgoingMedia = await media.finalizeStaged({ contexto: "conversa_agente", agentId: sendingAgentId });
       const hasImages = outgoingMedia.some((m) => m.type === "image");
       const hasDocs = outgoingMedia.some((m) => m.type === "file");
       let displayContent = input.trim();

@@ -19,6 +19,7 @@ export interface MediaAttachment {
   name?: string;
   size?: number; // bytes
   url?: string; // public URL from storage
+  id?: string; // anexo privado (bucket anexos) — URL resolvida por id
   extractedText?: string; // extracted text content for documents
 }
 

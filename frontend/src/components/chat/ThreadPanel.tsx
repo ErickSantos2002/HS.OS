@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -276,34 +277,34 @@ function ThreadMessageCard({
 
               {message.attachments && message.attachments.length > 0 && (
                 <div className="flex flex-col gap-2">
-                  {message.attachments.map((attachment, index) => {
-                    if (attachment.mimeType?.startsWith("image/")) {
-                      return (
-                        <button
-                          key={`${attachment.url}-${index}`}
-                          type="button"
-                          onClick={() => onImageClick(attachment.url, attachment.name)}
-                          className="overflow-hidden rounded-xl"
-                        >
-                          <img
-                            src={attachment.url}
-                            alt={attachment.name}
-                            className="max-h-48 max-w-full rounded-xl object-cover transition-transform hover:scale-[1.01]"
+                  {message.attachments.map((attachment, index) => (
+                    <AnexoResolvido key={`${attachment.id ?? attachment.url}-${index}`} id={attachment.id} url={attachment.url}>
+                      {(url, renovar) =>
+                        attachment.mimeType?.startsWith("image/") ? (
+                          <button
+                            type="button"
+                            onClick={() => onImageClick(url, attachment.name)}
+                            className="overflow-hidden rounded-xl"
+                          >
+                            <img
+                              src={url}
+                              onError={renovar}
+                              alt={attachment.name}
+                              className="max-h-48 max-w-full rounded-xl object-cover transition-transform hover:scale-[1.01]"
+                            />
+                          </button>
+                        ) : (
+                          <FileAttachmentCard
+                            name={attachment.name}
+                            url={url}
+                            size={attachment.size}
+                            mimeType={attachment.mimeType}
+                            onPreview={onAttachmentPreview}
                           />
-                        </button>
-                      );
-                    }
-                    return (
-                      <FileAttachmentCard
-                        key={`${attachment.url}-${index}`}
-                        name={attachment.name}
-                        url={attachment.url}
-                        size={attachment.size}
-                        mimeType={attachment.mimeType}
-                        onPreview={onAttachmentPreview}
-                      />
-                    );
-                  })}
+                        )
+                      }
+                    </AnexoResolvido>
+                  ))}
                 </div>
               )}
             </>
@@ -464,10 +465,11 @@ export default function ThreadPanel({
     if (threadMedia.staged.length > 0) {
       setUploadingFiles(true);
       try {
-        const finalized = await threadMedia.finalizeStaged(`channel-${channelId}-thread-${rootMessage.id}`);
+        const finalized = await threadMedia.finalizeStaged({ contexto: "canal", channelId });
         attachments = finalized.map((f) => ({
+          id: f.id,
           name: f.name ?? "arquivo",
-          url: f.url || f.base64,
+          url: f.id ? "" : (f.url || f.base64),
           size: f.size ?? 0,
           mimeType: f.mimeType,
         }));

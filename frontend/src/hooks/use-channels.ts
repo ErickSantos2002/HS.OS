@@ -14,6 +14,7 @@ export interface Channel {
 }
 
 export interface ChannelAttachment {
+  id?: string; // anexo privado (bucket anexos) — URL resolvida por id
   name: string;
   url: string;
   size: number;

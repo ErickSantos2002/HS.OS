@@ -3,11 +3,11 @@ import type { MediaAttachment } from "@/lib/mock-data";
 import {
   isImageFile,
   isAcceptedFile,
-  uploadFileToStorage,
   formatFileSize,
   MAX_UPLOAD_SIZE,
 } from "@/lib/file-upload";
 import { toast } from "sonner";
+import { DestinoAnexo, enviarAnexo } from "@/lib/anexos";
 
 /* ── SpeechRecognition type shim ── */
 type SpeechRecognitionType = typeof window extends { SpeechRecognition: infer T } ? T : any;
@@ -188,25 +188,24 @@ export function useChatMedia() {
   }, []);
 
   /* ── Upload staged files to storage and return finalized attachments ── */
-  const finalizeStaged = useCallback(async (bucketPath: string): Promise<MediaAttachment[]> => {
+  const finalizeStaged = useCallback(async (destino: DestinoAnexo): Promise<MediaAttachment[]> => {
     const finalized: MediaAttachment[] = [];
     for (const att of staged) {
       if (att.type === "file") {
         const raw = (att as any)._rawFile as File | undefined;
         if (raw) {
           try {
-            const url = await uploadFileToStorage(bucketPath, raw);
-            const mimeType = att.mimeType || raw.type || "application/octet-stream";
-
+            const enviado = await enviarAnexo(destino, raw);
             finalized.push({
               type: "file",
-              mimeType,
-              base64: url,
+              id: enviado.id,
+              mimeType: enviado.mimeType,
+              base64: "",
               name: att.name,
-              size: att.size,
-              url,
-              _rawFile: raw,
-            } as any);
+              size: enviado.size,
+              url: "",
+              extractedText: att.extractedText,
+            });
           } catch (err: any) {
             toast.error(`Falha no upload de "${att.name}": ${err.message}`);
           }
@@ -219,8 +218,10 @@ export function useChatMedia() {
           const outputType = att.mimeType || blob.type || "image/jpeg";
           const fallbackExtension = outputType === "image/png" ? "png" : outputType === "image/webp" ? "webp" : "jpg";
           const file = new File([blob], att.name || `image.${fallbackExtension}`, { type: outputType });
-          const url = await uploadFileToStorage(bucketPath, file);
-          finalized.push({ ...att, url });
+          const enviado = await enviarAnexo(destino, file);
+          // `base64` fica: é dele que sai a descrição da imagem para o agente
+          // (`chat-image-vision.ts`), sem precisar baixar de volta.
+          finalized.push({ ...att, id: enviado.id, url: "" });
         } catch {
           finalized.push(att); // fallback to base64
         }
