@@ -168,3 +168,31 @@ def test_description_diz_o_que_o_codigo_garante():
     ler = next(f for f in m._FERRAMENTAS if f["name"] == "ler_anexo")
     assert "conversa com você" in ler["description"]
     assert "Use apenas ids que apareceram nesta conversa." in ler["description"]
+
+
+def test_enviar_arquivo_existe_e_exige_destino_formato_e_conteudo():
+    f = next(f for f in m._FERRAMENTAS if f["name"] == "enviar_arquivo")
+    assert set(f["inputSchema"]["required"]) == {"para", "nome", "formato", "conteudo"}
+    assert "já conversa" in f["description"]
+
+
+def test_pode_enviar_so_para_quem_ja_conversa_com_o_agente():
+    """Push é menos grave que pull, mas a planilha do RH mandada ao CEO por
+    engano é vazamento do mesmo jeito. Destino tem que ser alguém que já abriu
+    conversa com este agente."""
+    import asyncio
+
+    class Conn:
+        def __init__(self, existe):
+            self.existe = existe
+            self.args = None
+
+        async def fetchval(self, sql, *args):
+            self.args = args
+            return self.existe
+
+    conn = Conn(False)
+    assert asyncio.run(m._ja_conversa(conn, "bruce", "77071556-7a52-41d5-805a-cbbd3923da45")) is False
+    assert conn.args == ("bruce", "77071556-7a52-41d5-805a-cbbd3923da45")
+    assert asyncio.run(m._ja_conversa(Conn(True), "bruce", "77071556-7a52-41d5-805a-cbbd3923da45")) is True
+    assert asyncio.run(m._ja_conversa(Conn(True), "bruce", "nao-e-uuid")) is False

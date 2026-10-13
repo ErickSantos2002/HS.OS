@@ -12,7 +12,9 @@ vazada num log, não abre nada.
 """
 import hashlib
 import hmac
+import json
 import logging
+import uuid
 
 import anyio
 
@@ -21,10 +23,12 @@ from fastapi.responses import JSONResponse
 
 from app import anexos as ax
 from app import armazenamento as arm
+from app.anexos_escrita import montar_arquivo
 from app.anexos_leitura import conteudo_legivel
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
 from app.integracoes import exige_segredo, ler_segredo
+from app.realtime import hub, topico_usuario
 from app.routers.anexos import buscar_anexo, membro_do_canal
 
 logger = logging.getLogger(__name__)
@@ -65,6 +69,25 @@ _FERRAMENTAS = [{
             "pagina": {"type": "integer", "minimum": 1, "description": "Página, a partir de 1."},
         },
         "required": ["id"],
+    },
+}, {
+    "name": "enviar_arquivo",
+    "description": (
+        "Envia um arquivo para uma pessoa, que aparece como anexo na conversa dela com "
+        "você e na Documentos. Você escreve TEXTO: CSV (separado por ;) para csv/xlsx, "
+        "Markdown (# título, ## seção, **negrito**) para md/docx/pdf. O servidor monta "
+        "o arquivo. `para` é o id da pessoa, o mesmo que aparece na sua sessão "
+        "(hsos-<id>); só funciona para quem já conversa com você."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "para": {"type": "string", "description": "Id (uuid) da pessoa que recebe."},
+            "nome": {"type": "string", "description": "Nome do arquivo, sem precisar da extensão."},
+            "formato": {"type": "string", "enum": ["csv", "xlsx", "md", "docx", "pdf"]},
+            "conteudo": {"type": "string", "description": "CSV ou Markdown, conforme o formato."},
+        },
+        "required": ["para", "nome", "formato", "conteudo"],
     },
 }]
 
@@ -117,6 +140,99 @@ async def _ler_anexo(agent_id: str, args: dict) -> tuple[str, bool]:
     return f"{anexo.nome}\n{texto}", False
 
 
+async def _ja_conversa(conn, agent_id: str, pessoa: str) -> bool:
+    """Só se envia a quem já abriu conversa com este agente.
+
+    Push é menos grave que pull, mas a planilha do RH mandada ao CEO por engano
+    é vazamento do mesmo jeito.
+    """
+    try:
+        uuid.UUID(str(pessoa))
+    except (ValueError, AttributeError):
+        return False
+    return bool(await conn.fetchval(
+        "SELECT EXISTS (SELECT 1 FROM public.conversations "
+        "WHERE agent_id = $1 AND user_id = $2::uuid AND role = 'user')",
+        agent_id, pessoa,
+    ))
+
+
+async def _enviar_arquivo(agent_id: str, args: dict) -> tuple[str, bool]:
+    from app.routers.conversations import _COLUNAS, _para_saida
+
+    para = str(args.get("para") or "").strip()
+    if para.startswith("hsos-"):
+        para = para[len("hsos-"):]
+    try:
+        dados, mime, nome = montar_arquivo(str(args.get("formato") or ""),
+                                           str(args.get("nome") or ""), str(args.get("conteudo") or ""))
+    except ValueError as e:
+        return str(e), True
+
+    anexo_id, doc_id = str(uuid.uuid4()), str(uuid.uuid4())
+    caminho = ax.caminho_do_anexo(anexo_id, "conversa_agente", agent_id, nome)
+    ext = nome.rsplit(".", 1)[-1]
+    caminho_doc = f"{para}/{doc_id}.{ext}"
+    chave_anexo = arm.chave("anexos", caminho)
+    chave_doc = arm.chave("generated-documents", caminho_doc)
+    gravados: list[str] = []
+    try:
+        async with sessao(role="service_role") as conn:
+            if not await _ja_conversa(conn, agent_id, para):
+                return ("Só posso enviar arquivo para quem já conversa com você. "
+                        "Não tente outro destino; responda na conversa em curso."), True
+        mime = ax.mime_normalizado(mime)
+        gravados.append(chave_anexo)
+        await arm.gravar(chave_anexo, dados, mime)
+        gravados.append(chave_doc)
+        await arm.gravar(chave_doc, dados, mime)
+
+        media = [{"type": "file", "id": anexo_id, "name": nome, "size": len(dados),
+                  "mimeType": mime, "url": "", "base64": ""}]
+        async with sessao(role="service_role") as conn:
+            await conn.execute(
+                """
+                INSERT INTO public.anexos (id, caminho, nome, mime, tamanho, enviado_por_agent,
+                                           contexto, agent_id, dono_conversa)
+                VALUES ($1::uuid, $2, $3, $4, $5, $6, 'conversa_agente', $6, $7::uuid)
+                """,
+                anexo_id, caminho, nome, mime, len(dados), agent_id, para,
+            )
+            await conn.execute(
+                """
+                INSERT INTO public.generated_documents
+                    (id, user_id, agent_id, title, doc_type, storage_path, size_bytes)
+                VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7)
+                """,
+                doc_id, para, agent_id, nome, ext, caminho_doc, len(dados),
+            )
+            linha = await conn.fetchrow(
+                f"""
+                INSERT INTO public.conversations (agent_id, user_id, role, content, media)
+                VALUES ($1, $2::uuid, 'agent', $3, $4::text::jsonb)
+                RETURNING {_COLUNAS}
+                """,
+                agent_id, para, f"📎 {nome}", json.dumps(media),
+            )
+        saida = _para_saida(linha)
+    except Exception:  # noqa: BLE001
+        logger.exception("enviar_arquivo: falha interna (agente %s, destino %s)", agent_id, para)
+        # Sem linha no banco o objeto no R2 é órfão: recolhe o que já subiu.
+        for chave in gravados:
+            try:
+                await arm.apagar(chave)
+            except Exception:  # noqa: BLE001
+                logger.exception("enviar_arquivo: não consegui recolher %s", chave)
+        return "Falha interna ao enviar o arquivo; avise o administrador.", True
+
+    # Síncrono e com três argumentos (topico, tipo, dados) — CLAUDE.md, 26/08/2026.
+    hub.publicar(topico_usuario(para), "resposta-agente",
+                 {"agent_id": agent_id, "message": saida.model_dump()})
+    logger.info("enviar_arquivo: %s enviou %s (%d bytes) a %s", agent_id, nome, len(dados), para)
+    return (f"Enviado: {nome} ({ax.tamanho_legivel(len(dados))}). Aparece como anexo na conversa "
+            "e na Documentos — diga isso à pessoa."), False
+
+
 @router.post("/anexos/{agent_id}/{assinatura}")
 async def mcp_anexos(agent_id: str, assinatura: str, request: Request,
                      _: None = Depends(exige_segredo("GUARDRAILS_API_TOKEN"))):
@@ -144,6 +260,9 @@ async def mcp_anexos(agent_id: str, assinatura: str, request: Request,
         nome, args = params.get("name"), params.get("arguments") or {}
         if nome == "ler_anexo":
             texto, erro = await _ler_anexo(agent_id, args)
+            return _texto(ident, texto, erro)
+        if nome == "enviar_arquivo":
+            texto, erro = await _enviar_arquivo(agent_id, args)
             return _texto(ident, texto, erro)
         return _resposta(ident, erro={"code": -32601, "message": f"Ferramenta desconhecida: {nome}"})
     return _resposta(ident, erro={"code": -32601, "message": f"Método não suportado: {metodo}"})
