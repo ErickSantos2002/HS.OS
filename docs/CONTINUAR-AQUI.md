@@ -845,6 +845,30 @@ sem senha; conta convidada do tenant não entra.
 **O que falta, em ordem:**
 1. ✅ **Lidisay liberada** (13/10): `colaborador`, `pode_ver_agente` verdadeiro
    só para o `bruce`. Ela entra pelo botão "Entrar com Microsoft".
+1b. ✅ **Planilhas recebidas e régua levantada (13/10)** — anexos de setembro no R2:
+   dois CSV do Flash (`MarcacoesOriginaisJustificadas_*`, `BancoHoras_*`) e a
+   ajustada `09.HROS_SETEMBRO.xlsx` (8 abas). O que se sabe:
+   - A aba "Lista de Marcações" é o CSV de marcações **colado sem alteração**
+     (476 linhas, conferido célula a célula); "Saldos-Banco de Horas" é o outro CSV.
+   - Por dia: entrada = 1ª batida (antecipada `<7:29`, atraso `>=7:46`); intervalo =
+     3ª − 2ª (`<1h` / `>1h`); saída = **4ª** batida (antecipada `<16:59`, após
+     jornada `>17:01`). Por pessoa: 10+ ocorrências num indicador = recorrente;
+     3+ recorrentes CRÍTICO, 2 ATENÇÃO, 1 ACOMPANHAMENTO, 0 REGULAR. Recalculado
+     do bruto, **149/150** células do "Controle Principal" batem (a outra foi
+     digitada por cima da fórmula).
+   - Ajuste de ponto conta, **menos** os de trabalho (Externo, Viagem, Home Office,
+     atendimento a cliente): 88 de 97.
+   - A aba "Dados e-mail" (resumo para o Nicholson) segue outra régua, a escrita
+     no topo da planilha (`até 7h19`, `atraso 7h50`, `antecipada até 16h49`,
+     `extra 17h20`) — e mesmo com ela só 121/150 batem: há correção na mão.
+   - Defeitos da planilha dela: dia com 6 batidas usa a 4ª como saída; o total de
+     "Intervalo <1h" no Resumo soma uma faixa deslocada (F6:F39).
+   - **Perguntas mandadas à Lidisay por WhatsApp em 13/10, aguardando:** qual das
+     duas réguas de horário vale; o que ela tira na mão no "Dados e-mail"; se a
+     regra dos ajustes é "trabalho não conta"; a célula digitada; usar a última
+     batida como saída.
+   Os arquivos ficaram só no scratchpad da sessão — rebaixar do R2 pelos ids em
+   `public.anexos` (enviados por `adm01@`).
 2. Ela manda pelo chat com o `bruce` a **planilha bruta do Flash** e a **ajustada**
    do mesmo mês.
 3. Levantar a régua comparando as duas (o que ela corta, recalcula, agrupa) e
