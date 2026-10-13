@@ -53,3 +53,17 @@ def test_conteudo_vazio_e_recusado():
 def test_conteudo_gigante_e_recusado_antes_de_montar():
     with pytest.raises(ValueError):
         E.montar_arquivo("csv", "x", "a" * (E.LIMITE_CONTEUDO + 1))
+
+
+def test_xlsx_nao_vira_formula_com_texto_do_agente():
+    """`=HYPERLINK(...)` vindo do modelo (ou de dado que ele copiou) não pode
+    virar fórmula na planilha da pessoa."""
+    dados, _, _ = E.montar_arquivo("xlsx", "x", 'a;b\n=HYPERLINK("http://x","clique");+1\n')
+    ws = openpyxl.load_workbook(io.BytesIO(dados)).active
+    assert ws["A2"].data_type == "s" and ws["A2"].value.startswith("=HYPERLINK")
+    assert ws["B2"].data_type == "s"
+
+
+def test_nome_gigante_e_recusado():
+    with pytest.raises(ValueError):
+        E.montar_arquivo("csv", "n" * (E.LIMITE_NOME + 1), "a;b")

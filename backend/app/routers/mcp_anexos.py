@@ -28,7 +28,6 @@ from app.anexos_leitura import conteudo_legivel
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
 from app.integracoes import exige_segredo, ler_segredo
-from app.realtime import hub, topico_usuario
 from app.routers.anexos import buscar_anexo, membro_do_canal
 
 logger = logging.getLogger(__name__)
@@ -158,29 +157,38 @@ async def _ja_conversa(conn, agent_id: str, pessoa: str) -> bool:
 
 
 async def _enviar_arquivo(agent_id: str, args: dict) -> tuple[str, bool]:
-    from app.routers.conversations import _COLUNAS, _para_saida
-
     para = str(args.get("para") or "").strip()
     if para.startswith("hsos-"):
         para = para[len("hsos-"):]
     try:
-        dados, mime, nome = montar_arquivo(str(args.get("formato") or ""),
-                                           str(args.get("nome") or ""), str(args.get("conteudo") or ""))
-    except ValueError as e:
-        return str(e), True
+        # UUID aceita chaves, urn: e sem hífen; o valor cru iria para o caminho.
+        para = str(uuid.UUID(para))
+    except (ValueError, AttributeError):
+        return "`para` deve ser o id (uuid) da pessoa, como aparece em hsos-<id>.", True
 
     anexo_id, doc_id = str(uuid.uuid4()), str(uuid.uuid4())
-    caminho = ax.caminho_do_anexo(anexo_id, "conversa_agente", agent_id, nome)
-    ext = nome.rsplit(".", 1)[-1]
-    caminho_doc = f"{para}/{doc_id}.{ext}"
-    chave_anexo = arm.chave("anexos", caminho)
-    chave_doc = arm.chave("generated-documents", caminho_doc)
     gravados: list[str] = []
     try:
+        # Destino primeiro: montar PDF de 2M caracteres para quem nem pode receber
+        # seria trabalho (e thread) jogados fora.
         async with sessao(role="service_role") as conn:
             if not await _ja_conversa(conn, agent_id, para):
                 return ("Só posso enviar arquivo para quem já conversa com você. "
                         "Não tente outro destino; responda na conversa em curso."), True
+        try:
+            # Numa thread: reportlab/docx/openpyxl são síncronos e pesados; no
+            # loop travariam o worker (chat, /ws, /reply).
+            dados, mime, nome = await anyio.to_thread.run_sync(
+                lambda: montar_arquivo(str(args.get("formato") or ""),
+                                       str(args.get("nome") or ""), str(args.get("conteudo") or "")))
+        except ValueError as e:
+            return str(e), True
+
+        caminho = ax.caminho_do_anexo(anexo_id, "conversa_agente", agent_id, nome)
+        ext = nome.rsplit(".", 1)[-1]
+        caminho_doc = f"{para}/{doc_id}.{ext}"
+        chave_anexo = arm.chave("anexos", caminho)
+        chave_doc = arm.chave("generated-documents", caminho_doc)
         mime = ax.mime_normalizado(mime)
         gravados.append(chave_anexo)
         await arm.gravar(chave_anexo, dados, mime)
@@ -206,15 +214,13 @@ async def _enviar_arquivo(agent_id: str, args: dict) -> tuple[str, bool]:
                 """,
                 doc_id, para, agent_id, nome, ext, caminho_doc, len(dados),
             )
-            linha = await conn.fetchrow(
-                f"""
+            await conn.execute(
+                """
                 INSERT INTO public.conversations (agent_id, user_id, role, content, media)
                 VALUES ($1, $2::uuid, 'agent', $3, $4::text::jsonb)
-                RETURNING {_COLUNAS}
                 """,
                 agent_id, para, f"📎 {nome}", json.dumps(media),
             )
-        saida = _para_saida(linha)
     except Exception:  # noqa: BLE001
         logger.exception("enviar_arquivo: falha interna (agente %s, destino %s)", agent_id, para)
         # Sem linha no banco o objeto no R2 é órfão: recolhe o que já subiu.
@@ -225,9 +231,10 @@ async def _enviar_arquivo(agent_id: str, args: dict) -> tuple[str, bool]:
                 logger.exception("enviar_arquivo: não consegui recolher %s", chave)
         return "Falha interna ao enviar o arquivo; avise o administrador.", True
 
-    # Síncrono e com três argumentos (topico, tipo, dados) — CLAUDE.md, 26/08/2026.
-    hub.publicar(topico_usuario(para), "resposta-agente",
-                 {"agent_id": agent_id, "message": saida.model_dump()})
+    # ⚠️ Sem hub.publicar aqui: a entrega ao vivo vem do trigger de `conversations`
+    # (003_realtime.sql -> escuta_banco.py), que o ChatPage já assina em
+    # `usuario:<id>` filtrando tabela === "conversations". O tipo "resposta-agente"
+    # não tem consumidor no front.
     logger.info("enviar_arquivo: %s enviou %s (%d bytes) a %s", agent_id, nome, len(dados), para)
     return (f"Enviado: {nome} ({ax.tamanho_legivel(len(dados))}). Aparece como anexo na conversa "
             "e na Documentos — diga isso à pessoa."), False

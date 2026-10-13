@@ -196,3 +196,81 @@ def test_pode_enviar_so_para_quem_ja_conversa_com_o_agente():
     assert conn.args == ("bruce", "77071556-7a52-41d5-805a-cbbd3923da45")
     assert asyncio.run(m._ja_conversa(Conn(True), "bruce", "77071556-7a52-41d5-805a-cbbd3923da45")) is True
     assert asyncio.run(m._ja_conversa(Conn(True), "bruce", "nao-e-uuid")) is False
+
+
+# ── _enviar_arquivo com banco, R2 e hub falsos ──────────────────────────────
+
+PESSOA = "77071556-7a52-41d5-805a-cbbd3923da45"
+
+
+class _Conn:
+    def __init__(self, existe, falha_em=None, log=None):
+        self.existe, self.falha_em, self.log = existe, falha_em, log
+
+    async def fetchval(self, sql, *a):
+        return self.existe
+
+    async def execute(self, sql, *a):
+        self.log.append((sql, a))
+        if self.falha_em and self.falha_em in sql:
+            raise RuntimeError("banco caiu")
+
+
+def _ambiente(monkeypatch, existe=True, falha_em=None):
+    import contextlib
+
+    log, gravados, apagados, publicados = [], [], [], []
+
+    @contextlib.asynccontextmanager
+    async def sessao(role=None):
+        yield _Conn(existe, falha_em, log)
+
+    async def gravar(chave, dados, mime):
+        gravados.append(chave)
+
+    async def apagar(chave):
+        apagados.append(chave)
+
+    monkeypatch.setattr(m, "sessao", sessao)
+    monkeypatch.setattr(m.arm, "gravar", gravar)
+    monkeypatch.setattr(m.arm, "apagar", apagar)
+    return log, gravados, apagados
+
+
+def _args(para=PESSOA):
+    return {"para": para, "nome": "r", "formato": "csv", "conteudo": "a;b\n1;2"}
+
+
+def test_destino_que_nunca_conversou_nao_escreve_nada(monkeypatch):
+    """Recusa antes de montar e antes de tocar no R2 ou no banco."""
+    import asyncio
+    log, gravados, apagados = _ambiente(monkeypatch, existe=False)
+    texto, erro = asyncio.run(m._enviar_arquivo("bruce", _args()))
+    assert erro and "já conversa" in texto
+    assert gravados == [] and log == []
+
+
+def test_falha_no_insert_recolhe_os_objetos_do_r2(monkeypatch):
+    import asyncio
+    log, gravados, apagados = _ambiente(monkeypatch, falha_em="INSERT INTO public.generated_documents")
+    texto, erro = asyncio.run(m._enviar_arquivo("bruce", _args()))
+    assert erro and "Falha interna" in texto
+    assert len(gravados) == 2 and sorted(apagados) == sorted(gravados)
+
+
+def test_caminho_feliz_grava_anexo_da_conversa_do_agente(monkeypatch):
+    import asyncio
+    log, gravados, apagados = _ambiente(monkeypatch)
+    texto, erro = asyncio.run(m._enviar_arquivo("bruce", _args("{" + PESSOA.upper() + "}")))
+    assert not erro and apagados == [] and len(gravados) == 2
+    sql, a = next(x for x in log if "INSERT INTO public.anexos" in x[0])
+    assert "'conversa_agente'" in sql and "enviado_por_agent" in sql
+    assert a[5] == "bruce" and a[6] == PESSOA  # uuid normalizado
+    assert any("INSERT INTO public.conversations" in x[0] for x in log)
+
+
+def test_para_que_nao_e_uuid_e_recusado(monkeypatch):
+    import asyncio
+    log, gravados, _ = _ambiente(monkeypatch)
+    texto, erro = asyncio.run(m._enviar_arquivo("bruce", _args("../x")))
+    assert erro and gravados == [] and log == []

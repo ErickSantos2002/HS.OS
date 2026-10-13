@@ -14,6 +14,7 @@ from app.routers.storage import DefinicaoIn, SecaoIn, _montar_docx, _montar_pdf
 
 FORMATOS = {"csv", "xlsx", "md", "docx", "pdf"}
 LIMITE_CONTEUDO = 2_000_000
+LIMITE_NOME = 200  # mesmo teto do DocumentoIn.title
 
 _MIME = {
     "csv": "text/csv",
@@ -55,6 +56,8 @@ def montar_arquivo(formato: str, nome: str, conteudo: str) -> tuple[bytes, str, 
     if len(conteudo) > LIMITE_CONTEUDO:
         raise ValueError("Conteúdo grande demais para um arquivo enviado pelo chat (limite de 2 milhões de caracteres).")
 
+    if len(nome or "") > LIMITE_NOME:
+        raise ValueError(f"Nome grande demais (limite de {LIMITE_NOME} caracteres).")
     base = (nome or "arquivo").strip()
     if base.lower().endswith(f".{formato}"):
         base = base[: -len(formato) - 1]
@@ -71,6 +74,12 @@ def montar_arquivo(formato: str, nome: str, conteudo: str) -> tuple[bytes, str, 
         ws = wb.active
         for l in _linhas_csv(conteudo):
             ws.append(l)
+        # Injeção de fórmula: texto começando com = + - @ viraria fórmula no
+        # Excel (ex.: =HYPERLINK). Força tipo texto nessas células.
+        for linha in ws.iter_rows():
+            for c in linha:
+                if isinstance(c.value, str) and c.value[:1] in ("=", "+", "-", "@"):
+                    c.data_type = "s"
         b = io.BytesIO()
         wb.save(b)
         return b.getvalue(), _MIME["xlsx"], nome_final
