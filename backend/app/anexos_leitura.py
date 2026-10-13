@@ -22,6 +22,14 @@ TETO_LINHAS = 200_000
 # escapava do teto de linhas. Cortar coluna não é erro: vira nota no cabeçalho.
 TETO_COLUNAS = 200
 TETO_CAMPO_CSV = 1024 * 1024
+TETO_CSV_BYTES = 50 * 1024 * 1024
+TETO_LINHA_CSV = 1024 * 1024
+
+# Limite de campo definido UMA vez, na importação: salvar/mudar/restaurar a cada
+# leitura corria entre threads (`csv.Error` espúrio, limite trocado). Nenhum
+# outro código do backend usa `csv` (conferido por grep em 13/10/2026), então
+# subir o padrão de 128 KB para 1 MB não afeta ninguém.
+csv.field_size_limit(TETO_CAMPO_CSV)
 TETO_BYTES_DESCOMPACTADOS = 300 * 1024 * 1024
 
 
@@ -145,18 +153,20 @@ def _lido_csv(dados: bytes, aba, ini: int):
         # Subclasse: mutar `csv.excel` alteraria a classe global para todo o processo.
         class dialeto(csv.excel):
             delimiter = ";" if amostra.count(";") > amostra.count(",") else ","
+    if len(texto) > TETO_CSV_BYTES:
+        raise _GrandeDemais(f"o CSV passa de {TETO_CSV_BYTES // (1024 * 1024)} MB")
+    if texto and max(map(len, texto.splitlines())) > TETO_LINHA_CSV:
+        raise _GrandeDemais(f"há uma linha com mais de {TETO_LINHA_CSV // 1024} KB")
     if aba is not None and aba != "CSV":
         return ["CSV"], {"CSV": None}, aba, None, [], 0, False
     # Linha a linha: o reader é um iterador. `islice` corta a linha em
     # TETO_COLUNAS + 1 células; o limite de campo barra um campo único gigante
     # (estoura `csv.Error`, que o router trata como arquivo ilegível).
-    antigo = csv.field_size_limit(TETO_CAMPO_CSV)
-    try:
-        cab, fatia, total, cortou = _fatiar(
-            ([_celula(c) for c in itertools.islice(l, TETO_COLUNAS + 1)]
-             for l in csv.reader(io.StringIO(texto), dialeto)), ini)
-    finally:
-        csv.field_size_limit(antigo)
+    # ⚠️ Mas o `islice` age DEPOIS de o reader parsear a linha inteira (20M de
+    # vírgulas = lista de 20M itens, 313 MB). Por isso a recusa vem antes.
+    cab, fatia, total, cortou = _fatiar(
+        ([_celula(c) for c in itertools.islice(l, TETO_COLUNAS + 1)]
+         for l in csv.reader(io.StringIO(texto), dialeto)), ini)
     return ["CSV"], {"CSV": None}, "CSV", cab, fatia, total, cortou
 
 

@@ -164,3 +164,23 @@ def test_xlsx_com_300_colunas_mostra_200_e_avisa():
 def test_sem_excesso_de_colunas_nao_ha_nota():
     t = L.conteudo_legivel("p.xlsx", "", _xlsx([["A", "B"], [1, 2]]))
     assert "colunas)" not in t
+
+
+# --- CSV: recusar ANTES de o csv.reader parsear a linha inteira ------------
+
+def test_csv_com_linha_de_2_milhoes_de_virgulas_e_recusado_sem_parse(monkeypatch):
+    """`islice` depois do reader não protege: a lista de 20M itens já existe.
+    A linha física grande demais é recusada antes de o reader ser criado."""
+    def nao_deve_parsear(*a, **k):
+        raise AssertionError("csv.reader chamado")
+
+    monkeypatch.setattr(L.csv, "reader", nao_deve_parsear)
+    bruto = ("A,B\n" + "," * 2_000_000 + "\n").encode()
+    t = L.conteudo_legivel("p.csv", "text/csv", bruto)
+    assert t.startswith("planilha grande demais para ler por aqui")
+
+
+def test_csv_decodificado_acima_de_50_mb_e_recusado(monkeypatch):
+    monkeypatch.setattr(L, "TETO_CSV_BYTES", 10)
+    t = L.conteudo_legivel("p.csv", "text/csv", b"A,B\n1,2\n3,4\n")
+    assert t.startswith("planilha grande demais para ler por aqui")
