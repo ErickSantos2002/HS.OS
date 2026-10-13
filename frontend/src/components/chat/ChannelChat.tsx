@@ -17,6 +17,7 @@ import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import { uploadFileToStorage, formatFileSize, isImageFile } from "@/lib/file-upload";
 import FileAttachmentCard from "./FileAttachmentCard";
 import AudioDaMensagem from "./AudioDaMensagem";
+import { useResumoEmAudio } from "@/hooks/use-resumo-em-audio";
 import { enviarAudioDoCanal } from "@/lib/audio-de-mensagem";
 import CollapsibleTranscription from "./CollapsibleTranscription";
 import CopyMessageButton from "./CopyMessageButton";
@@ -217,6 +218,7 @@ export const MessageBubble = memo(function MessageBubble({
   isMarkedUnread,
   userNameById,
   authorStatus,
+  resumoLigado = true,
 }: {
   msg: ChannelMessage;
   currentUserId: string;
@@ -234,11 +236,17 @@ export const MessageBubble = memo(function MessageBubble({
   isMarkedUnread?: boolean;
   userNameById?: Map<string, string>;
   authorStatus?: { emoji: string; label: string; setAt?: string | null } | null;
+  /** Preferência "resumo em áudio" de quem está vendo (13/10/2026). */
+  resumoLigado?: boolean;
 }) {
   const isAgent = msg.author_type === "agent";
   const agentIdForAvatar = isAgent ? normalizeAgentId(msg.author_id || "") : "";
   const { avatar: agentAvatar } = useAgentAvatar(agentIdForAvatar);
   const hasAudio = !!msg.audio_url;
+  // Voz de pessoa: player em cima, texto é a transcrição. Agente: o texto é a
+  // resposta e vem inteiro; o áudio é o resumo falado e vai embaixo.
+  const audioDePessoa = hasAudio && msg.author_type !== "agent";
+  const audioDeAgente = hasAudio && msg.author_type === "agent" && resumoLigado;
   const hasMention = msg.content.includes("@");
   const mentionsEveryone = hasEveryoneMention(msg.content);
   const isOwn = msg.author_id === currentUserId;
@@ -525,7 +533,7 @@ export const MessageBubble = memo(function MessageBubble({
               </div>
             )}
 
-            {hasAudio && (
+            {audioDePessoa && (
               <div className="mt-1.5 mb-1">
                 <AudioDaMensagem audioUrl={msg.audio_url!} />
               </div>
@@ -536,13 +544,19 @@ export const MessageBubble = memo(function MessageBubble({
                 const displayContent = mentionsEveryone
                   ? msg.content.replace(/(^|\s)@todos\b[ \t]*/iu, "$1").replace(/^\s+/, "")
                   : msg.content;
-                if (hasAudio) return <CollapsibleTranscription text={displayContent} />;
+                if (audioDePessoa) return <CollapsibleTranscription text={displayContent} />;
                 if (isAgent) return <MarkdownMessageContent text={displayContent} className="" />;
                 return <MarkdownMessageContent text={displayContent} highlightMentions={hasMention} className="text-sm text-foreground/90" />;
               })()}
 
               {actionBarPlacement === "side" && renderActionBar("side")}
             </div>
+
+            {audioDeAgente && (
+              <div className="mt-1.5">
+                <AudioDaMensagem audioUrl={msg.audio_url!} />
+              </div>
+            )}
 
             {isOwn && (
               <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
@@ -732,6 +746,7 @@ export default function ChannelChat({
   const { bottomOffset, isKeyboardOpen } = useMobileChatViewport();
   const { messages, loading: msgsLoading, sendMessage, ensureMessageLoaded } = useChannelMessages(channel.id);
   const threadCounts = useThreadCounts(channel.id);
+  const { ligado: resumoLigado } = useResumoEmAudio();
   const [membersVersion, setMembersVersion] = useState(0);
   const members = useChannelMembers(channel.id, membersVersion);
   const { people } = usePeople();
@@ -1837,6 +1852,7 @@ export default function ChannelChat({
                     <MessageBubble
                       msg={msg}
                       currentUserId={user?.id ?? ""}
+                      resumoLigado={resumoLigado}
                       msgReactions={reactions[msg.id] ?? []}
                       onToggleReaction={(emoji) => user && toggleReaction(msg.id, emoji, user.id)}
                       onEdit={() => setEditingId(msg.id)}

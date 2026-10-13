@@ -114,6 +114,7 @@ import DateDivider from "@/components/chat/DateDivider";
 import { shouldShowDateDivider } from "@/lib/chat-date-groups";
 import { resetComposerTextarea, resizeComposerTextarea } from "@/lib/chat-composer";
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
+import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import { copyToClipboard, hasActiveTextSelection } from "@/lib/clipboard";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 
@@ -244,7 +245,7 @@ function SidebarTypingDots() {
 
 /* ── Media Bubble ─────────────────────────────────────── */
 
-function MediaBubble({ attachment, onImageClick, onErroImagem, urlAgora }: { attachment: MediaAttachment; onImageClick: (src: string) => void; onErroImagem?: () => void; urlAgora?: () => Promise<string> }) {
+export function MediaBubble({ attachment, onImageClick, onErroImagem, urlAgora }: { attachment: MediaAttachment; onImageClick: (src: string) => void; onErroImagem?: () => void; urlAgora?: () => Promise<string> }) {
   // Auto-detect type from mimeType when type is missing or generic
   const effectiveType: MediaAttachment["type"] =
     attachment.type ??
@@ -294,6 +295,15 @@ function MediaBubble({ attachment, onImageClick, onErroImagem, urlAgora }: { att
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
           </button>
         </div>
+      </div>
+    );
+  }
+  if (effectiveType === "audio") {
+    // Resumo em áudio do agente (13/10/2026): toca pela URL que o
+    // AnexoResolvido já resolveu; se ela vencer, `onErroImagem` pede outra.
+    return (
+      <div className="mt-2">
+        <AudioMessagePlayer src={attachment.url || ""} onErro={onErroImagem} />
       </div>
     );
   }
