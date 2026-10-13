@@ -1713,7 +1713,11 @@ async def _conceder_alerta(agent_id: str) -> None:
 
     parsed, base_hash = await patch_gw.config_do_gateway()
     servidores = ((parsed.get("mcp") or {}).get("servers")) or {}
-    servidor = next((s for s in servidores if "alerta" in s), None)
+    # Pelo nome exato: `"alerta" in s` casava também `hsos-anexos-<id com
+    # alerta>`, e o agente ganhava uma ferramenta que não existe no lugar do
+    # alerta (revisão de segurança, 13/10/2026).
+    from app.routers.integracoes import SERVIDOR_ALERTA
+    servidor = SERVIDOR_ALERTA if SERVIDOR_ALERTA in servidores else None
     if not servidor:
         raise ErroGateway(
             "O servidor MCP de alerta não está no gateway — nenhum agente "

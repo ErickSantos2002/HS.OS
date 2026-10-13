@@ -110,3 +110,18 @@ def test_sucesso_no_escopo_nao_desfaz_nada(monkeypatch):
     monkeypatch.setattr(ag, "_desfazer_criacao", desfazer)
     asyncio.run(ag._fechar_agente_novo("novo", especialista=True))
     assert "sessions_send" in _do_novo(gw)["deny"]
+
+
+def test_alerta_concedido_e_o_hsos_alerta_mesmo_com_anexos_de_id_alerta(monkeypatch):
+    """`_conceder_alerta` achava o servidor por `"alerta" in s` — a mesma
+    substring de `_deny_de_mcp`. Com um `hsos-anexos-alerta-x` antes na config,
+    o agente novo ganhava `mcp__hsos-anexos-alerta-x__avisar_administrador`,
+    ferramenta que não existe, e ficava sem o alerta de verdade."""
+    from app.gateway import patch as patch_gw
+    gw = GatewayFalso()
+    gw.conf["mcp"]["servers"] = {"hsos-anexos-alerta-x": ANEXOS, **gw.conf["mcp"]["servers"]}
+    gw.conf["agents"]["list"][1]["tools"] = {}
+    monkeypatch.setattr(patch_gw, "config_do_gateway", gw.config_do_gateway)
+    monkeypatch.setattr(patch_gw, "aplicar_patch", gw.aplicar_patch)
+    asyncio.run(ag._conceder_alerta("novo"))
+    assert _do_novo(gw)["alsoAllow"] == ["mcp__hsos-alerta__avisar_administrador"]
