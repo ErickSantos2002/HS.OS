@@ -161,7 +161,7 @@ def test_gatilho_so_com_anexo_vira_linha_de_anexo_e_nao_o_aviso_generico():
         "attachments": [{"id": "a1", "name": "ponto.xlsx", "size": 2_411_724,
                          "mimeType": "application/octet-stream", "url": ""}],
     }]
-    texto = _montar_pedido(historico, historico[0])
+    texto = _montar_pedido(historico, historico[0], {"a1": _ax("a1")})
     assert "[anexo: ponto.xlsx · 2,3 MB · planilha · id=a1]" in texto
     assert "provavelmente anexo" not in texto
 
@@ -174,3 +174,44 @@ def test_anexo_antigo_sem_id_nao_vira_linha():
         "attachments": [{"name": "velho.pdf", "url": "https://x/velho.pdf", "size": 1, "mimeType": "application/pdf"}],
     }]
     assert "id=" not in _montar_pedido(historico, historico[0])
+
+
+def _ax(id_, nome="ponto.xlsx", tamanho=2_411_724):
+    from app.anexos import Anexo
+    return Anexo(id=id_, caminho=f"canal/c1/{id_}/{nome}", nome=nome,
+                 mime="application/octet-stream", tamanho=tamanho,
+                 contexto="canal", channel_id="c1", agent_id=None,
+                 dono_conversa=None)
+
+
+def test_id_fora_do_dict_nao_vira_linha_anexo_de_outro_canal():
+    """O JSON `attachments` vem do cliente. Um membro do canal A pode gravar
+    o id de um anexo do canal B; se o agente também está em B, o `ler_anexo`
+    abriria. Só id confirmado na tabela, para ESTE canal, vira linha."""
+    historico = [{
+        "author_id": "p", "author_name": "Fulano", "content": "olha",
+        "attachments": [{"id": "de-outro-canal", "name": "segredo.xlsx"}],
+    }]
+    texto = _montar_pedido(historico, historico[0], {"a1": _ax("a1")})
+    assert "id=" not in texto
+    assert "segredo.xlsx" not in texto
+
+
+def test_linha_usa_nome_e_tamanho_da_tabela_nao_do_json():
+    """Nome, tamanho e mime do JSON são do cliente: não são confiáveis, e
+    `int()` sobre eles derrubava a resposta do agente em silêncio."""
+    historico = [{
+        "author_id": "p", "author_name": "Fulano", "content": "",
+        "attachments": [{"id": "a1", "name": "falso.exe", "size": "lixo"}],
+    }]
+    texto = _montar_pedido(historico, historico[0], {"a1": _ax("a1")})
+    assert "[anexo: ponto.xlsx · 2,3 MB · planilha · id=a1]" in texto
+    assert "falso.exe" not in texto
+
+
+def test_ids_de_anexos_do_historico_so_uuid_validos():
+    from app.routers.channels import _ids_de_anexos
+    u = "3f2b8c1e-5d4a-4b6e-9c7d-1a2b3c4d5e6f"
+    historico = [{"attachments": [{"id": "x"}, {"id": u}, "str", {}]},
+                 {"attachments": f'[{{"id": "{u}"}}]'}, {"attachments": None}]
+    assert _ids_de_anexos(historico) == [u]

@@ -729,33 +729,67 @@ _MARCA_GATILHO = "➡️ RESPONDA A ESTA MENSAGEM"
 _SEM_TEXTO = "[mensagem sem texto — provavelmente áudio ou anexo antigo]"
 
 
-def _linhas_de_anexo(attachments) -> list[str]:
-    """As linhas `[anexo: …]` a partir do JSON gravado na mensagem.
-
-    Só anexo com `id` — o que está em `public.anexos` e o `ler_anexo` encontra.
-    O resto é dos tempos do bucket público e não tem como ser lido pelo agente.
-    """
-    from app.anexos import Anexo, linha_de_anexo
-
+def _itens_de_anexos(attachments) -> list:
+    """O JSON `attachments` da mensagem como lista (o driver o devolve em string)."""
     itens = attachments
     if isinstance(itens, str):
         try:
             itens = json.loads(itens)
         except ValueError:
             return []
+    return itens if isinstance(itens, list) else []
+
+
+def _ids_de_anexos(historico) -> list[str]:
+    """Ids de anexo citados no histórico, só os que são UUID de verdade.
+
+    Quem decide se o id vale é a tabela (`SQL_ANEXOS_DO_CANAL`); aqui só se
+    evita que um id malformado estoure o `$1::uuid[]`.
+    """
+    ids: list[str] = []
+    for m in historico:
+        bruto = m.get("attachments") if hasattr(m, "get") else None
+        for a in _itens_de_anexos(bruto):
+            if not isinstance(a, dict) or not a.get("id"):
+                continue
+            try:
+                ids.append(str(UUID(str(a["id"]))))
+            except ValueError:
+                continue
+    return list(dict.fromkeys(ids))
+
+
+# ⚠️ O JSON `attachments` é do cliente. Sem conferir o id contra a tabela, um
+# membro do canal A gravaria o id de um anexo do canal B e, se o agente também
+# está em B, o `ler_anexo` despejaria B em A (confused deputy).
+SQL_ANEXOS_DO_CANAL = """
+    SELECT id::text AS id, caminho, nome, mime, tamanho, contexto,
+           channel_id::text AS channel_id, agent_id, dono_conversa::text AS dono_conversa
+      FROM public.anexos
+     WHERE id = ANY($1::uuid[]) AND contexto = 'canal' AND channel_id = $2::uuid
+"""
+
+
+def _linhas_de_anexo(attachments, anexos_do_canal=None) -> list[str]:
+    """As linhas `[anexo: …]` das mensagens, só para id confirmado na tabela.
+
+    Nome, tamanho e tipo vêm da TABELA, nunca do JSON do cliente. Anexo sem id
+    (bucket público antigo) ou com id fora do dict não vira linha.
+    """
+    from app.anexos import linha_de_anexo
+
+    anexos_do_canal = anexos_do_canal or {}
     linhas = []
-    for a in itens or []:
+    for a in _itens_de_anexos(attachments):
         if not isinstance(a, dict) or not a.get("id"):
             continue
-        linhas.append(linha_de_anexo(Anexo(
-            id=str(a["id"]), caminho="", nome=str(a.get("name") or "arquivo"),
-            mime=str(a.get("mimeType") or ""), tamanho=int(a.get("size") or 0),
-            contexto="canal", channel_id=None, agent_id=None, dono_conversa=None,
-        )))
+        confirmado = anexos_do_canal.get(str(a["id"]))
+        if confirmado is not None:
+            linhas.append(linha_de_anexo(confirmado))
     return linhas
 
 
-def _montar_pedido(historico: list, gatilho) -> str:
+def _montar_pedido(historico: list, gatilho, anexos_do_canal=None) -> str:
     """Monta o texto mandado ao agente, marcando qual mensagem é o gatilho.
 
     Função pura (só string a partir do que já foi buscado) de propósito: é a
@@ -781,7 +815,9 @@ def _montar_pedido(historico: list, gatilho) -> str:
     for m in historico:
         eh_gatilho = m is gatilho
         conteudo = (m["content"] or "").strip()
-        anexos = _linhas_de_anexo(m.get("attachments") if hasattr(m, "get") else None)
+        anexos = _linhas_de_anexo(
+            m.get("attachments") if hasattr(m, "get") else None, anexos_do_canal
+        )
         if anexos:
             conteudo = (conteudo + " " if conteudo else "") + " ".join(anexos)
         if not conteudo:
@@ -854,7 +890,14 @@ async def _responder_no_canal(channel_id: str, agent_id: str) -> None:
         # O contexto vai como texto porque o `chat.send` manda uma mensagem a um
         # agente configurado — não existe array de `messages` como havia no
         # /v1/chat/completions que a edge usava.
-        pedido = _montar_pedido(historico, gatilho)
+        anexos_do_canal: dict = {}
+        ids = _ids_de_anexos(historico)
+        if ids:
+            from app.anexos import Anexo
+            async with sessao(role="service_role") as conn:
+                linhas_ax = await conn.fetch(SQL_ANEXOS_DO_CANAL, ids, channel_id)
+            anexos_do_canal = {r["id"]: Anexo.de_linha(r) for r in linhas_ax}
+        pedido = _montar_pedido(historico, gatilho, anexos_do_canal)
 
         c = await cfg.carregar()
         if not c.configurado:

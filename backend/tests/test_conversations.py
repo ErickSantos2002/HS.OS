@@ -369,3 +369,9 @@ def test_mensagem_com_anexo_diz_ao_agente_como_ler():
     """Sem a instrução, um modelo que nunca viu `ler_anexo` responde sobre o
     nome do arquivo em vez de abrir. A frase é curta de propósito."""
     assert "ler_anexo" in c.mensagem_com_anexos("x", [_ax("a1")])
+
+
+def test_ids_validos_descarta_o_que_nao_e_uuid():
+    """Id malformado no `media` estouraria o `$1::uuid[]` em 500."""
+    u = "3f2b8c1e-5d4a-4b6e-9c7d-1a2b3c4d5e6f"
+    assert c._ids_validos([{"id": "x"}, {"id": u}, "str", {}]) == [u]
