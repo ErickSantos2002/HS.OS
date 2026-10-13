@@ -104,7 +104,10 @@ JWT_SECRET=<segredo longo e aleatório>
 JWT_ALGORITHM=HS256
 JWT_EXPIRE_HOURS=24
 FRONTEND_URL=https://hsos.healthsafetytech.com
-UPLOADS_DIR=/app/uploads
+R2_ACCOUNT_ID=<id da conta Cloudflare>
+R2_ACCESS_KEY_ID=<chave do token R2>
+R2_SECRET_ACCESS_KEY=<segredo do token R2>
+R2_BUCKET=hsos-arquivos
 OPENCLAW_GATEWAY_URL=http://172.18.0.1:18789
 OPENCLAW_ADMIN_TOKEN=<token do gateway>
 ```
@@ -140,8 +143,38 @@ Quatro armadilhas que já custaram tempo:
   valor gravado — ajuste pela tela Configurações → Gateway ou por
   `PUT /gateway/config`.
 
-**Volume:** montar `/app/uploads` como persistente, senão os anexos somem a cada
-deploy.
+### Arquivos — Cloudflare R2
+
+Todo arquivo (avatar, áudio, anexo, documento gerado) mora no bucket R2
+`hsos-arquivos`. O backend não guarda nada em disco desde 13/10/2026.
+
+1. Cloudflare → R2 → **Create bucket** `hsos-arquivos` (localização automática).
+2. R2 → **Manage API Tokens** → token com **Object Read & Write**, restrito a
+   `hsos-arquivos`. Anote Account ID, Access Key ID e Secret.
+3. No EasyPanel, variáveis do backend: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+   `R2_SECRET_ACCESS_KEY`, `R2_BUCKET=hsos-arquivos`.
+4. Bucket → Settings → **CORS Policy**:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://hsos.healthsafetytech.com", "http://localhost:8080"],
+    "AllowedMethods": ["GET", "PUT", "HEAD"],
+    "AllowedHeaders": ["Content-Type"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+⚠️ **CORS errado não dá erro no backend.** O PUT morre no navegador e a tela
+diz "Falha ao enviar o arquivo ao armazenamento (rede ou CORS do bucket)". Se
+aparecer isso, olhe a política acima antes de qualquer outra coisa.
+
+**Migração do disco antigo** (uma vez): `/app/scripts/migrar-uploads-r2.py`
+(fonte em `backend/scripts/`), dentro do container, primeiro em ensaio e depois
+com `--aplicar`. O volume `/app/uploads` só sai do EasyPanel quando a tabela do
+fim bater.
 
 **Healthcheck:** `GET /health` (já no Dockerfile).
 

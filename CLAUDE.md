@@ -26,7 +26,7 @@ escondeu telas quebradas em produção. O placar tem que separar as duas:
 | Subsistema | Substituto | Front religado | Destino |
 |---|---|---|---|
 | Auth | ✅ | ✅ **completo** | JWT próprio (PyJWT + bcrypt) |
-| Storage | ✅ | ✅ **completo** | `UPLOADS_DIR` em disco, `app/routers/storage.py` |
+| Storage | ✅ | ✅ **completo** | Cloudflare R2 (`app/armazenamento.py`); `UPLOADS_DIR` aposentado em 13/10/2026 |
 | Realtime (`postgres_changes`) | ✅ | ✅ **completo** | WebSocket + LISTEN/NOTIFY, `app/escuta_banco.py` |
 | Edge Functions | ✅ **73 de 73** | ✅ sem pendências | routers FastAPI |
 | Banco (via RLS, direto do browser) | ✅ ~145 rotas | ✅ **0 chamadas vivas** | endpoints FastAPI |
