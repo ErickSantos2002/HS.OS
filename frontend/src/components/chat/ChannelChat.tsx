@@ -200,7 +200,7 @@ function ReactionsBar({
 }
 
 // ─── Message Bubble ─────────────────────────────────────────
-const MessageBubble = memo(function MessageBubble({
+export const MessageBubble = memo(function MessageBubble({
   msg,
   currentUserId,
   msgReactions,
@@ -410,6 +410,46 @@ const MessageBubble = memo(function MessageBubble({
     );
   };
 
+
+  // ⚠️ Fora do ramo de "não apagada" de propósito. Em 13/10/2026 uma resposta
+  // em thread a uma mensagem apagada ficou invisível para o outro lado: o
+  // indicador só existia na mensagem viva, e apagar a raiz cortava o caminho
+  // até as respostas — que continuam no banco.
+  const indicadorDeRespostas = (
+    threadMeta && threadMeta.count > 0 && (
+      <div className="mt-1.5">
+        <button
+          type="button"
+          onClick={onReply}
+          className={`inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs transition-colors ${
+            threadHasUnread
+              ? "border-primary bg-primary/15 text-primary hover:bg-primary/20 ring-2 ring-primary/30"
+              : "border-border/50 bg-secondary/40 text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
+          }`}
+        >
+          {threadMeta.lastAuthorAvatar ? (
+            <img src={threadMeta.lastAuthorAvatar} alt="" className="h-4 w-4 rounded-full object-cover" />
+          ) : (
+            <div className="h-4 w-4 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-bold text-primary">
+              {(threadMeta.lastAuthorName || "?").charAt(0).toUpperCase()}
+            </div>
+          )}
+          <span className={`font-semibold ${threadHasUnread ? "text-primary" : "text-foreground"}`}>
+            {threadMeta.count} {threadMeta.count === 1 ? "resposta" : "respostas"}
+          </span>
+          {threadHasUnread && (
+            <>
+              <span className="inline-flex h-2 w-2 rounded-full bg-primary animate-pulse" aria-label="Não lidas" />
+              <span className="font-semibold">Nova</span>
+            </>
+          )}
+          <span className="text-[10px] opacity-80">
+            Última às {format(new Date(threadMeta.lastReplyAt), "HH:mm")}
+          </span>
+        </button>
+      </div>
+    )
+  );
   return (
     <div
       ref={wrapperRef}
@@ -472,7 +512,10 @@ const MessageBubble = memo(function MessageBubble({
         )}
 
         {isDeleted ? (
-          <p className="text-sm text-muted-foreground italic mt-1">Mensagem apagada</p>
+          <>
+            <p className="text-sm text-muted-foreground italic mt-1">Mensagem apagada</p>
+            {indicadorDeRespostas}
+          </>
         ) : (
           <div className={`relative max-w-full flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
             {mentionsEveryone && (
@@ -546,39 +589,7 @@ const MessageBubble = memo(function MessageBubble({
 
             <ReactionsBar reactions={msgReactions} currentUserId={currentUserId} onToggle={onToggleReaction} userNameById={userNameById} />
 
-            {threadMeta && threadMeta.count > 0 && (
-              <div className="mt-1.5">
-                <button
-                  type="button"
-                  onClick={onReply}
-                  className={`inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs transition-colors ${
-                    threadHasUnread
-                      ? "border-primary bg-primary/15 text-primary hover:bg-primary/20 ring-2 ring-primary/30"
-                      : "border-border/50 bg-secondary/40 text-muted-foreground hover:bg-secondary/70 hover:text-foreground"
-                  }`}
-                >
-                  {threadMeta.lastAuthorAvatar ? (
-                    <img src={threadMeta.lastAuthorAvatar} alt="" className="h-4 w-4 rounded-full object-cover" />
-                  ) : (
-                    <div className="h-4 w-4 rounded-full bg-primary/20 flex items-center justify-center text-[9px] font-bold text-primary">
-                      {(threadMeta.lastAuthorName || "?").charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <span className={`font-semibold ${threadHasUnread ? "text-primary" : "text-foreground"}`}>
-                    {threadMeta.count} {threadMeta.count === 1 ? "resposta" : "respostas"}
-                  </span>
-                  {threadHasUnread && (
-                    <>
-                      <span className="inline-flex h-2 w-2 rounded-full bg-primary animate-pulse" aria-label="Não lidas" />
-                      <span className="font-semibold">Nova</span>
-                    </>
-                  )}
-                  <span className="text-[10px] opacity-80">
-                    Última às {format(new Date(threadMeta.lastReplyAt), "HH:mm")}
-                  </span>
-                </button>
-              </div>
-            )}
+            {indicadorDeRespostas}
 
           </div>
         )}
