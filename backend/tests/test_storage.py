@@ -187,3 +187,31 @@ def test_remover_privado_exige_dono():
     assert e.value.status_code == 404
     s._conferir_remocao("generated-documents", CAMINHO, DONO)
     s._conferir_remocao("agent-files", "avatars/x.png", OUTRO)
+
+
+# ── O mime devolvido pelo `iniciar` é o que foi assinado ─────────────────────
+import asyncio
+
+from app.dependencies import Usuario
+
+
+def test_iniciar_generico_devolve_o_mime_usado_na_assinatura(monkeypatch):
+    """⚠️ O navegador manda no PUT o `Content-Type` que o `iniciar` devolve em
+    `mime`, e o R2 compara com o que entrou na assinatura: se os dois divergem,
+    é 403 SignatureDoesNotMatch — e o arquivo some com cara de erro de rede.
+    No fluxo genérico ninguém normaliza, então o devolvido tem que ser
+    EXATAMENTE o que foi passado ao `url_put`, inclusive com `;codecs=`."""
+    assinado = {}
+
+    async def url_put_falso(chave, mime, tamanho, segundos):
+        assinado.update(chave=chave, mime=mime, tamanho=tamanho)
+        return "https://r2.exemplo/put-assinado"
+
+    monkeypatch.setattr(s.arm, "url_put", url_put_falso)
+    dados = s.InicioIn(bucket="audio-messages", caminho=f"{DONO}/voz.webm",
+                       mime="audio/webm;codecs=opus", tamanho=10)
+    out = asyncio.run(s.iniciar_upload(dados, Usuario(id=DONO, email="x@x", papel="colaborador")))
+    assert assinado == {"chave": f"audio-messages/{DONO}/voz.webm",
+                        "mime": "audio/webm;codecs=opus", "tamanho": 10}
+    assert out.mime == assinado["mime"]
+    assert out.url_put == "https://r2.exemplo/put-assinado"
