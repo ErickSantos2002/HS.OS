@@ -819,6 +819,13 @@ parametrizada. Assim a decisão vira configuração, não código.
 
 ---
 
+## 👉 Lembrete do Erick para 14/10 — "visto" por mensagem, igual ao WhatsApp
+
+Pedido no fim de 13/10: o indicador de leitura no sistema tem que ser **por
+mensagem** (enviada / entregue / lida, os "vistos" do WhatsApp), não o que existe
+hoje. Começar levantando como a leitura é registrada agora (`dm_reads`,
+`notifications`, "marcar como não lida") antes de desenhar.
+
 ## 👉 Próxima sessão — o terceiro CSV do Flash (Eventos)
 
 Em 13/10 às 15:24 a coordenadora de RH mandou ao `bruce` um export que não
