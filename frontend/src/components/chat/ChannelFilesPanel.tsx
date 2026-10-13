@@ -6,6 +6,8 @@ import { formatFileSize, downloadAttachment } from "@/lib/file-upload";
 import { format, isThisWeek, isThisMonth, isToday, isYesterday, isValid, startOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import AnexoResolvido from "@/components/chat/AnexoResolvido";
+import { arquivosDoCanal, type ArquivoDoCanal } from "@/lib/arquivos-do-canal";
 
 interface Props {
   channelId: string;
@@ -13,15 +15,7 @@ interface Props {
   onClose: () => void;
 }
 
-interface FileItem {
-  name: string;
-  url: string;
-  size: number;
-  mimeType: string;
-  created_at: string;
-  author_name: string;
-  message_id: string;
-}
+type FileItem = ArquivoDoCanal;
 
 type Filter = "all" | "image" | "doc";
 
@@ -51,22 +45,8 @@ export default function ChannelFilesPanel({ channelId, open, onClose }: Props) {
         console.error("[ChannelFilesPanel] load error", error);
         setItems([]);
       } else {
-        const out: FileItem[] = [];
-        for (const row of (data ?? []) as any[]) {
-          const arr = Array.isArray(row.attachments) ? row.attachments : [];
-          for (const a of arr) {
-            if (!a?.url) continue;
-            out.push({
-              name: a.name || "arquivo",
-              url: a.url,
-              size: a.size ?? 0,
-              mimeType: a.mimeType || "",
-              created_at: row.created_at,
-              author_name: row.author_name || "",
-              message_id: row.id,
-            });
-          }
-        }
+        // Anexo novo vem com `url: ""` e `id`: filtrar por `url` o sumia daqui.
+        const out = arquivosDoCanal(data);
         setItems(out);
       }
       setLoading(false);
@@ -155,7 +135,11 @@ export default function ChannelFilesPanel({ channelId, open, onClose }: Props) {
                   </h4>
                   <div className="space-y-1">
                     {group.items.map((f) => (
-                      <FileRow key={`${f.message_id}-${f.url}`} file={f} />
+                      <AnexoResolvido key={`${f.message_id}-${f.id ?? f.url}`} id={f.id} url={f.url}>
+                        {(url, renovar, urlAgora) => (
+                          <FileRow file={f} url={url} renovar={renovar} urlAgora={urlAgora} />
+                        )}
+                      </AnexoResolvido>
                     ))}
                   </div>
                 </div>
@@ -168,7 +152,16 @@ export default function ChannelFilesPanel({ channelId, open, onClose }: Props) {
   );
 }
 
-function FileRow({ file }: { file: FileItem }) {
+interface FileRowProps {
+  file: FileItem;
+  /** URL resolvida no mount — boa para a miniatura, pode vencer em 5 min. */
+  url: string;
+  renovar: () => void;
+  /** URL válida na hora do clique (abrir, baixar). */
+  urlAgora: () => Promise<string>;
+}
+
+function FileRow({ file, url, renovar, urlAgora }: FileRowProps) {
   const isImage = file.mimeType.startsWith("image/");
   const Icon = isImage ? ImageIcon : FileText;
   const date = new Date(file.created_at);
@@ -177,12 +170,23 @@ function FileRow({ file }: { file: FileItem }) {
     <div className="flex items-center gap-2 px-2 py-2 rounded-xl group hover:bg-primary/5 transition-colors">
       <button
         type="button"
-        onClick={() => window.open(file.url, "_blank", "noopener,noreferrer")}
+        onClick={async () => {
+          // Mesmo caminho do `FileAttachmentCard`: a URL do mount pode ter
+          // vencido; `urlAgora` usa o cache enquanto vale.
+          let atual = url;
+          try {
+            atual = await urlAgora();
+          } catch {
+            toast.error("Não foi possível abrir este arquivo.");
+            return;
+          }
+          window.open(atual, "_blank", "noopener,noreferrer");
+        }}
         className="flex min-w-0 flex-1 items-center gap-2 text-left"
       >
         <div className="h-9 w-9 shrink-0 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden">
           {isImage ? (
-            <img src={file.url} alt={file.name} className="h-full w-full object-cover" loading="lazy" />
+            <img src={url} alt={file.name} className="h-full w-full object-cover" loading="lazy" onError={renovar} />
           ) : (
             <Icon className="h-4 w-4 text-primary" />
           )}
@@ -202,7 +206,7 @@ function FileRow({ file }: { file: FileItem }) {
           e.preventDefault();
           e.stopPropagation();
           try {
-            await downloadAttachment({ name: file.name, url: file.url });
+            await downloadAttachment({ name: file.name, url: await urlAgora() });
           } catch (err: any) {
             toast.error(err?.message || "Não foi possível baixar.");
           }
