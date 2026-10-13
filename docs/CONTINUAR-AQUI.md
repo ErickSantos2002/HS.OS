@@ -873,8 +873,8 @@ sem senha; conta convidada do tenant não entra.
    `backend/app/relatorios/ponto.py`, no `hsos-anexos`, só para o `bruce`
    ([spec](superpowers/specs/2026-10-13-relatorio-ponto-design.md)). Conferida
    contra setembro: status 5 críticos / 13 atenção / 3 acompanhamento, igual ao
-   dela. Depois do deploy: `bash scripts/publicar-skills.sh --enviar` (skill
-   `ponto-flash`) e o ponteiro no `AGENTS.md` do `bruce`. ⚠️ Saldo do banco de
+   dela. ✅ Em produção (`3e95aab`), skill `ponto-flash` publicada e ponteiro no
+   `AGENTS.md` do `bruce` (9.129 chars) — conferido perguntando a ele. ⚠️ Saldo do banco de
    horas sai do Flash — a planilha dela tinha um período editado à mão.
 2. Ela manda pelo chat com o `bruce` a **planilha bruta do Flash** e a **ajustada**
    do mesmo mês.
