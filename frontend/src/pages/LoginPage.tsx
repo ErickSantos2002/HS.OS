@@ -8,6 +8,24 @@ import { Switch } from "@/components/ui/switch";
 import { Loader2, AlertTriangle, Eye, EyeOff, Mail, Lock, RefreshCw, WifiOff, User } from "lucide-react";
 import { useBranding, useThemedLogo } from "@/hooks/use-branding";
 import { isTransientError } from "@/hooks/use-auth";
+import {
+  mensagemErroSso,
+  prepararLoginMicrosoft,
+  ssoAtivo,
+  URL_LOGIN_MICROSOFT,
+} from "@/lib/sso";
+
+/** Logo da Microsoft — quatro quadrados, cores oficiais. */
+function LogoMicrosoft() {
+  return (
+    <svg viewBox="0 0 21 21" className="h-4 w-4" aria-hidden="true">
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    </svg>
+  );
+}
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
@@ -45,6 +63,34 @@ export default function LoginPage() {
   const [fullName, setFullName] = useState("");
   const [checkingBootstrap, setCheckingBootstrap] = useState(true);
   const [installIncomplete, setInstallIncomplete] = useState(false);
+  const [ssoLigado, setSsoLigado] = useState(false);
+  const [indoParaMicrosoft, setIndoParaMicrosoft] = useState(false);
+
+  // Login com Microsoft: o botão só aparece se o backend tiver as variáveis do
+  // Entra; falha na checagem esconde o botão e o login por senha segue igual.
+  // O `?erro_sso=` vem do callback do backend — vira mensagem e sai da barra.
+  useEffect(() => {
+    let cancelled = false;
+    ssoAtivo().then((ativo) => {
+      if (!cancelled) setSsoLigado(ativo);
+    });
+    const params = new URLSearchParams(window.location.search);
+    const msg = mensagemErroSso(params.get("erro_sso"));
+    if (msg) {
+      setError(msg);
+      params.delete("erro_sso");
+      const resto = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${resto ? `?${resto}` : ""}`);
+    }
+    return () => { cancelled = true; };
+  }, []);
+
+  const entrarComMicrosoft = () => {
+    setIndoParaMicrosoft(true);
+    prepararLoginMicrosoft();
+    // Navegação, não fetch: é redirect entre domínios até a Microsoft.
+    window.location.assign(URL_LOGIN_MICROSOFT);
+  };
 
   // Instância zerada (remix novo): detecta ausência de admin e mostra a tela de
   // "criar conta de admin" no lugar do login. Auto-fechável no backend.
@@ -383,6 +429,26 @@ export default function LoginPage() {
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Entrar"}
             </Button>
+
+            {ssoLigado && (
+              <>
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-xs text-muted-foreground">ou</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={entrarComMicrosoft}
+                  disabled={indoParaMicrosoft}
+                  className="w-full h-12 rounded-full text-sm font-semibold gap-3"
+                >
+                  {indoParaMicrosoft ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogoMicrosoft />}
+                  Entrar com Microsoft
+                </Button>
+              </>
+            )}
 
             <p className="text-xs text-muted-foreground w-full text-center">
               Esqueceu a senha? Fale com o setor de TI.

@@ -111,7 +111,21 @@ R2_BUCKET=hsos-arquivos
 ANEXOS_MCP_SEGREDO=<hex de 64; ver "Anexos para os agentes" abaixo>
 OPENCLAW_GATEWAY_URL=http://172.18.0.1:18789
 OPENCLAW_ADMIN_TOKEN=<token do gateway>
+MS_TENANT_ID=<Entra → app "HS.OS" → Directory (tenant) ID>
+MS_CLIENT_ID=<Entra → app "HS.OS" → Application (client) ID>
+MS_CLIENT_SECRET=<o Value do client secret, não o Secret ID>
+MS_REDIRECT_URI=https://hsosapi.healthsafetytech.com/auth/microsoft/callback
 ```
+
+**Login com Microsoft.** As quatro `MS_*` ligam o botão "Entrar com Microsoft";
+com qualquer uma vazia ele some e o login por senha segue igual. O registro no
+Entra tem as duas redirect URIs (a acima e `http://localhost:8002/auth/microsoft/callback`)
+e só a permissão delegada `User.Read`. **Exige a migração `018`** — sem a
+tabela `sso_tickets` o callback estoura depois que a pessoa já passou pela
+Microsoft. ⚠️ O client secret vence (24 meses no máximo): quando vencer, o
+sintoma é `erro_sso=falha_microsoft` e `HTTP 401` na troca do code, no log.
+Quem entra é quem já tem conta aqui com o mesmo e-mail — não se cria usuário
+no primeiro acesso.
 
 Quatro armadilhas que já custaram tempo:
 

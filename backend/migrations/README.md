@@ -8,8 +8,9 @@ Schema do Postgres próprio, extraído do Supabase e validado em Postgres puro.
 |---|---|
 | `000_compat_supabase.sql` | Camada de compatibilidade. Escrito à mão. |
 | `001_initial_schema.sql` | Schema `public` completo. **Gerado** — não edite. |
-| `002` … `017` | Mudanças de schema, em ordem. |
+| `002` … `018` | Mudanças de schema, em ordem. |
 | `017_anexos.sql` | Tabela `anexos` (quem lê o anexo de conversa) + `doc_type` csv/md. ⚠️ Superusuário: `python3 ~/aplicar-hsos-017.py` |
+| `018_sso_tickets.sql` | Ticket de uso único do login com Microsoft. ⚠️ Superusuário: `python3 ~/aplicar-hsos-018.py` |
 | ⚠️ `008_pessoas_talenths.sql` | **Não é deste banco** — ver abaixo. |
 | `_origem/` | Dump de origem + script de regeração + export do SQL editor |
 

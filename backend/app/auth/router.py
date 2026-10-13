@@ -8,8 +8,10 @@ Elas são criadas juntas, na mesma transação.
 """
 
 import logging
+import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 
 from app.auth.schemas import (
     BootstrapIn,
@@ -20,7 +22,9 @@ from app.auth.schemas import (
 )
 from pydantic import BaseModel, Field
 
+from app.auth import microsoft, sso
 from app.auth.security import conferir_senha, emitir_token, gerar_hash
+from app.config import settings
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
 
@@ -186,3 +190,127 @@ async def trocar_senha(dados: TrocaSenhaIn, usuario: Usuario = Depends(usuario_a
             usuario.id,
         )
     logger.info("Senha trocada por %s", usuario.id)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Login com Microsoft (Entra ID)
+# ─────────────────────────────────────────────────────────────────────────────
+# Desenho do DataCoreHS (spec 2026-09-24 de lá), já testado em produção:
+#
+#   tela ─(navegação)─▶ GET /auth/microsoft          state no cookie, 302 Microsoft
+#   Microsoft ────────▶ GET /auth/microsoft/callback confere state, lê o e-mail,
+#                                                    grava ticket, 302 para o front
+#   front /auth/callback ─▶ POST /auth/sso/exchange  ticket → o mesmo token do /login
+#
+# ⚠️ **Não cria conta no primeiro acesso.** Quem entra é quem já tem usuário
+# aqui com o mesmo e-mail; o tenant inteiro da HS não ganha acesso aos agentes.
+# Desativar a pessoa no HS.OS continua sendo o que corta o acesso — desativar
+# no Entra só impede logins novos, e o token já emitido vale até vencer.
+#
+# Qualquer falha no callback vira `302 → <front>/login?erro_sso=<código>`.
+
+COOKIE_STATE = "sso_state"
+CAMINHO_COOKIE = "/auth/microsoft"  # cobre também /auth/microsoft/callback
+TICKET_INVALIDO = "Link de acesso inválido ou expirado."
+
+
+def _para_o_front(caminho: str) -> RedirectResponse:
+    return RedirectResponse(f"{settings.url_do_front}{caminho}", status_code=302)
+
+
+def _erro_sso(codigo: str) -> RedirectResponse:
+    return _para_o_front(f"/login?erro_sso={codigo}")
+
+
+class SsoStatusOut(BaseModel):
+    ativo: bool
+
+
+class TicketIn(BaseModel):
+    ticket: str = Field(min_length=1, max_length=200)
+
+
+@router.get("/sso/status", response_model=SsoStatusOut)
+async def sso_status():
+    """A tela mostra o botão "Entrar com Microsoft" só com `ativo: true`."""
+    return SsoStatusOut(ativo=settings.sso_ativo)
+
+
+@router.get("/microsoft")
+async def iniciar_login_microsoft():
+    if not settings.sso_ativo:
+        if not settings.url_do_front:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Login com Microsoft desligado.")
+        return _erro_sso("sso_desligado")
+    state = secrets.token_urlsafe(32)
+    resposta = RedirectResponse(microsoft.url_de_autorizacao(state), status_code=302)
+    # O `state` impede login CSRF: sem ele, alguém com conta poderia mandar um
+    # link que faz OUTRA pessoa entrar na conta dele. `Lax` basta — a volta da
+    # Microsoft é navegação de topo com GET, e nela o cookie vai junto.
+    resposta.set_cookie(
+        COOKIE_STATE, state,
+        max_age=600, path=CAMINHO_COOKIE, httponly=True, samesite="lax",
+        secure=settings.MS_REDIRECT_URI.startswith("https://"),
+    )
+    return resposta
+
+
+async def _resultado_do_callback(
+    code: str | None, state: str | None, error: str | None, cookie: str | None,
+) -> RedirectResponse:
+    if not settings.sso_ativo:
+        return _erro_sso("sso_desligado")
+    # `compare_digest` sobre `str` levanta TypeError com caractere não ASCII, e o
+    # `state` vem da query string — seria um 500 esperando acontecer. Em bytes, não.
+    if not state or not cookie or not secrets.compare_digest(state.encode(), cookie.encode()):
+        return _erro_sso("state_invalido")
+    if error == "access_denied":
+        return _erro_sso("cancelado")
+    if error or not code:
+        logger.warning("SSO: a Microsoft devolveu erro %r", error)
+        return _erro_sso("falha_microsoft")
+
+    try:
+        email_cru = await microsoft.email_do_usuario(await microsoft.trocar_code_por_token(code))
+    except microsoft.ErroMicrosoft as erro:
+        logger.warning("SSO: %s", erro)
+        return _erro_sso("falha_microsoft")
+
+    email = (email_cru or "").strip().lower()
+    conta = await sso.buscar_conta(email) if "@" in email else None
+    if conta is None:
+        logger.info("SSO: conta Microsoft sem usuário no HS.OS: %s", email or "(sem e-mail)")
+        return _erro_sso("usuario_nao_encontrado")
+    if not conta["is_active"]:
+        return _erro_sso("conta_desativada")
+
+    ticket = await sso.emitir_ticket(conta["id"])
+    return _para_o_front(f"/auth/callback?ticket={ticket}")
+
+
+@router.get("/microsoft/callback")
+async def callback_microsoft(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+):
+    resposta = await _resultado_do_callback(code, state, error, request.cookies.get(COOKIE_STATE))
+    resposta.delete_cookie(COOKIE_STATE, path=CAMINHO_COOKIE)
+    return resposta
+
+
+@router.post("/sso/exchange", response_model=TokenOut)
+async def trocar_ticket(dados: TicketIn):
+    """O front troca o ticket do callback pelo mesmo token do `/auth/login`."""
+    user_id = await sso.resgatar_ticket(dados.ticket)
+    conta = await sso.conta_por_id(user_id) if user_id else None
+    if conta is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, TICKET_INVALIDO)
+    # Relida aqui, não confiada ao callback: entre os dois cabe uma desativação.
+    if not conta["is_active"]:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Conta desativada.")
+    await sso.registrar_entrada(conta["id"])
+    token, expira = emitir_token(conta["id"], conta["papel"], conta["email"])
+    logger.info("SSO: %s entrou com a Microsoft", conta["email"])
+    return TokenOut(access_token=token, expires_in=expira)

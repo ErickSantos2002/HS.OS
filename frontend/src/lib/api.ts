@@ -11,6 +11,12 @@ const BASE = import.meta.env.VITE_API_URL || "/api";
 
 const CHAVE_TOKEN = "hsos.token";
 
+/** URL absoluta de uma rota da API — para o que é navegação, não `fetch`
+ *  (o login com Microsoft é redirect entre domínios). */
+export function urlDaApi(caminho: string): string {
+  return `${BASE}${caminho}`;
+}
+
 /** Emitido quando o token é rejeitado pelo servidor ou removido localmente. */
 export const EVENTO_SESSAO_ENCERRADA = "hsos:sessao-encerrada";
 

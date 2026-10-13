@@ -16,6 +16,16 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:8080"
 
+    # Login com Microsoft (Entra ID) — registro de aplicativo "HS.OS", single
+    # tenant. Com qualquer um vazio o SSO fica desligado: a API sobe normal, o
+    # `/auth/sso/status` diz `ativo: false` e a tela esconde o botão. O desenho é
+    # o do DataCoreHS (spec 2026-09-24 de lá); ver `app/auth/microsoft.py`.
+    # Para onde a pessoa volta depois do login: a PRIMEIRA origem do FRONTEND_URL.
+    MS_TENANT_ID: str = ""
+    MS_CLIENT_ID: str = ""
+    MS_CLIENT_SECRET: str = ""
+    MS_REDIRECT_URI: str = ""
+
     # ⚠️ NÃO É MAIS USADO — o storage foi para o R2 em 13/10/2026. Continua
     # declarado só porque o pydantic-settings recusa chave desconhecida no
     # `.env` e derrubaria o boot de quem ainda a tem. Remover depois que sair
@@ -63,6 +73,19 @@ class Settings(BaseSettings):
     # O erro do pydantic nomeia a chave, mas **imprime o valor junto** — se for
     # colado em algum lugar, é o segredo indo com ele.
     GUARDRAILS_API_TOKEN: str = ""
+
+    @property
+    def url_do_front(self) -> str:
+        """A primeira origem do FRONTEND_URL — que também é lista do CORS."""
+        origens = [o.strip().rstrip("/") for o in self.FRONTEND_URL.split(",") if o.strip()]
+        return origens[0] if origens else ""
+
+    @property
+    def sso_ativo(self) -> bool:
+        return all((
+            self.MS_TENANT_ID, self.MS_CLIENT_ID, self.MS_CLIENT_SECRET,
+            self.MS_REDIRECT_URI, self.url_do_front,
+        ))
 
 
 settings = Settings()

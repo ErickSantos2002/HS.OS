@@ -40,6 +40,7 @@ const ArenaPausada = () => (
   />
 );
 import LoginPage from "./pages/LoginPage";
+import AuthCallbackPage from "./pages/AuthCallbackPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ResultsPage from "./pages/ResultsPage";
 import KnowledgeBasePage from "./pages/KnowledgeBasePage";
@@ -84,6 +85,8 @@ const App = () => {
               <Routes>
                 {/* Public routes */}
                 <Route path="/login" element={<LoginPage />} />
+                {/* Volta do login com Microsoft — troca o ticket pelo token. */}
+                <Route path="/auth/callback" element={<AuthCallbackPage />} />
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/artifact/:id" element={<PublicArtifactPage />} />
                 <Route path="/p/:slug" element={<PublicLiveArtifactPage />} />
