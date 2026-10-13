@@ -10,7 +10,7 @@ resumo para o CEO com uma régua mais tolerante (128 de 150). Ver
 ⚠️ **Os dados aqui são inventados.** O repositório é público e a planilha real
 traz nome, matrícula e horário de cada funcionário.
 """
-from datetime import date
+from datetime import date, time
 
 import pytest
 
@@ -221,3 +221,61 @@ def test_quem_so_esta_no_banco_fica_de_fora():
     r = rel([marc("Ana Teste", "000001", "01/09/2026", "07:30")],
             (("Ana Teste", "000001", "01:00"), ("Diretor Ficticio", "-", "00:00")))
     assert [x.nome for x in r.pessoas] == ["Ana Teste"]
+
+
+# ── o xlsx ──────────────────────────────────────────────────────────────────
+import io as _io
+
+import openpyxl
+
+
+def _livro(r):
+    return openpyxl.load_workbook(_io.BytesIO(p.montar_xlsx(r)))
+
+
+def _r_completo():
+    return rel(_dias_com_atraso(10, volta="12:30") + [
+        marc("Bia Teste", "000002", "01/09/2026", "07:30", "12:00", "13:00", "17:00",
+             depto="COMERCIAL")],
+        (("Ana Teste", "000001", "(-07:42)"), ("Bia Teste", "000002", "01:00")))
+
+
+def test_abas_e_nome_do_arquivo():
+    r = _r_completo()
+    assert _livro(r).sheetnames == list(p.ABAS)
+    assert p.nome_do_arquivo(r) == "Controle de jornada - SETEMBRO-2026.xlsx"
+
+
+def test_contagens_sao_numeros_e_saldo_vai_em_texto_e_minutos():
+    """O xlsx do `enviar_arquivo` grava tudo como texto, e SOMA no Excel não
+    funciona sem converter. Este tem que somar."""
+    ws = _livro(_r_completo())["Controle Principal"]
+    cab = [c.value for c in ws[1]]
+    ana = next(l for l in ws.iter_rows(min_row=2, values_only=True) if l[0] == "Ana Teste")
+    linha = dict(zip(cab, ana))
+    assert linha["Atraso"] == 10 and isinstance(linha["Atraso"], int)
+    assert linha["Saldo banco"] == "-07:42" and linha["Saldo (min)"] == -462
+    assert linha["Status"] == "ATENÇÃO" and linha["Tratativa"] in (None, "")
+
+
+def test_ocorrencia_tem_horario_como_hora_do_dia():
+    ws = _livro(_r_completo())["Ocorrências"]
+    linha = next(ws.iter_rows(min_row=2))
+    celula_hora = linha[3]
+    # Gravado como fração de dia; com formato de hora, o openpyxl o devolve
+    # como `time` — texto ("07:55") voltaria como `str` e falharia aqui.
+    assert celula_hora.number_format == "hh:mm"
+    assert celula_hora.value == time(7, 55)
+
+
+def test_resumo_gerencial_lista_so_quem_nao_esta_regular():
+    ws = _livro(_r_completo())["Resumo Gerencial"]
+    nomes = [c.value for c in ws["A"] if c.value in ("Ana Teste", "Bia Teste")]
+    assert nomes == ["Ana Teste"]
+
+
+def test_resumo_ao_agente_tem_totais_e_quem_precisa_de_atencao():
+    texto = p.resumo(_r_completo())
+    assert "SETEMBRO/2026" in texto and "2 colaboradores" in texto
+    assert "Ana Teste" in texto and "ATENÇÃO" in texto and "-07:42" in texto
+    assert "Bia Teste" not in texto

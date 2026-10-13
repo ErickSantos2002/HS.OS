@@ -276,3 +276,136 @@ def gerar(arquivos: list[tuple[str, bytes]]) -> Relatorio:
         _classificar(pessoa)
     ordenadas = sorted(pessoas.values(), key=lambda x: _sem_acento(x.nome))
     return Relatorio(mes, ano, ordenadas, ocorrencias, ajustes)
+# ── saída: xlsx e resumo ────────────────────────────────────────────────────
+
+MESES = ("", "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULHO",
+         "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO")
+ABAS = ("Resumo Gerencial", "Controle Principal", "Dados e-mail", "Ocorrências", "Ajustes")
+_GRAVIDADE = {"CRÍTICO": 0, "ATENÇÃO": 1, "ACOMPANHAMENTO": 2, "REGULAR": 3}
+
+
+def nome_do_arquivo(r: Relatorio) -> str:
+    return f"Controle de jornada - {MESES[r.mes]}-{r.ano}.xlsx"
+
+
+def _hora(minutos: int) -> float:
+    return minutos / 1440
+
+
+def _fmt(minutos: int | None) -> str:
+    if minutos is None:
+        return ""
+    sinal = "-" if minutos < 0 else ""
+    return f"{sinal}{abs(minutos) // 60:02d}:{abs(minutos) % 60:02d}"
+
+
+def _cabecalho(ws, colunas: list[str]) -> None:
+    from openpyxl.styles import Font
+    ws.append(colunas)
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True)
+
+
+def montar_xlsx(r: Relatorio) -> bytes:
+    """Números como número: contagem `int`, horário fração de dia em `hh:mm`.
+
+    Saldo vai em duas colunas — texto para ler e minutos para somar — porque o
+    Excel mostra `#####` para hora negativa em `[h]:mm`.
+    """
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    resumo_ws = wb.active
+    resumo_ws.title = ABAS[0]
+
+    # Resumo Gerencial — o relatório que vai ao CEO.
+    ws = resumo_ws
+    ws.append([f"CONTROLE DE JORNADA — {MESES[r.mes]}/{r.ano}"])
+    ws.append([])
+    negativos = [x.saldo_min for x in r.pessoas if x.saldo_min is not None and x.saldo_min < 0]
+    por_status = Counter(x.status for x in r.pessoas)
+    _cabecalho(ws, ["Indicadores principais", "Dados"])
+    for rotulo, valor in (
+        ("Colaboradores monitorados", len(r.pessoas)),
+        ("Total de ajustes de ponto", sum(x.ajustes for x in r.pessoas)),
+        ("Colaboradores em acompanhamento", por_status["ACOMPANHAMENTO"]),
+        ("Colaboradores em atenção", por_status["ATENÇÃO"]),
+        ("Colaboradores críticos", por_status["CRÍTICO"]),
+        ("Colaboradores com saldo negativo", len(negativos)),
+        ("Saldo negativo acumulado", _fmt(sum(negativos)) if negativos else "00:00"),
+    ):
+        ws.append([rotulo, valor])
+    ws.append([])
+    _cabecalho(ws, ["Quadro de ocorrências", "Pessoas afetadas",
+                    "Total de ocorrências originais", "Total de ocorrências analisadas"])
+    total_aj = sum(x.ajustes for x in r.pessoas)
+    ws.append([ROTULOS["ajustes"], sum(1 for x in r.pessoas if x.ajustes), total_aj, total_aj])
+    for k in INDICADORES:
+        ws.append([ROTULOS[k], sum(1 for x in r.pessoas if x.originais[k]),
+                   sum(x.originais[k] for x in r.pessoas), sum(x.analisadas[k] for x in r.pessoas)])
+    ws.append([])
+    _cabecalho(ws, ["Colaborador que precisa de acompanhamento", "Saldo", "Status", "Tratativa", "Padrão"])
+    for x in sorted((x for x in r.pessoas if x.status != "REGULAR"),
+                    key=lambda x: (_GRAVIDADE[x.status], _sem_acento(x.nome))):
+        ws.append([x.nome, x.saldo_txt, x.status, "", x.padrao])
+
+    # Controle Principal — originais, por pessoa.
+    ws = wb.create_sheet(ABAS[1])
+    _cabecalho(ws, ["Colaborador", "Setor", "Ajustes", *[
+        {"entrada_antecipada": "Entrada antecipada", "atraso": "Atraso",
+         "intervalo_menor": "Intervalo < 1h", "intervalo_maior": "Intervalo > 1h",
+         "saida_antecipada": "Saída antecipada", "apos_jornada": "Após jornada"}[k]
+        for k in INDICADORES], "Saldo banco", "Saldo (min)", "Padrão", "Status", "Tratativa"])
+    for x in r.pessoas:
+        ws.append([x.nome, x.setor, x.ajustes, *[x.originais[k] for k in INDICADORES],
+                   x.saldo_txt, x.saldo_min, x.padrao, x.status, ""])
+
+    # Dados e-mail — analisadas, por pessoa.
+    ws = wb.create_sheet(ABAS[2])
+    _cabecalho(ws, ["Colaborador", "Setor", "Ajustes", "Entrada antecipada", "Atraso",
+                    "Intervalo < 1h", "Intervalo > 1h", "Saída antecipada", "Após jornada",
+                    "Saldo banco", "Saldo (min)", "Observações"])
+    for x in r.pessoas:
+        ws.append([x.nome, x.setor, x.ajustes, *[x.analisadas[k] for k in INDICADORES],
+                   x.saldo_txt, x.saldo_min, ""])
+
+    # Ocorrências — onde ela confirma ou descarta caso a caso.
+    ws = wb.create_sheet(ABAS[3])
+    _cabecalho(ws, ["Colaborador", "Data", "Indicador", "Horário / duração",
+                    "Conta nas originais", "Conta nas analisadas"])
+    for o in sorted(r.ocorrencias, key=lambda o: (_sem_acento(o.nome), o.data, o.indicador)):
+        ws.append([o.nome, o.data, ROTULOS[o.indicador], _hora(o.minutos),
+                   "SIM" if o.original else "NÃO", "SIM" if o.analisada else "NÃO"])
+        ws.cell(ws.max_row, 2).number_format = "dd/mm/yyyy"
+        ws.cell(ws.max_row, 4).number_format = "hh:mm"
+
+    # Ajustes — o histórico, com a coluna que decide se conta.
+    ws = wb.create_sheet(ABAS[4])
+    _cabecalho(ws, ["Colaborador", "Departamento", "Data", "Marcação", "Motivo",
+                    "Justificativa", "Horário", "Conta no indicador?"])
+    for a in r.ajustes:
+        ws.append([a.nome, a.departamento, a.data, a.marcacao, a.motivo, a.justificativa,
+                   _hora(a.minutos), "SIM" if a.conta else "NÃO"])
+        ws.cell(ws.max_row, 3).number_format = "dd/mm/yyyy"
+        ws.cell(ws.max_row, 7).number_format = "hh:mm"
+
+    saida = io.BytesIO()
+    wb.save(saida)
+    return saida.getvalue()
+
+
+def resumo(r: Relatorio) -> str:
+    """O que volta ao modelo: totais e quem precisa de atenção — nunca as linhas."""
+    por_status = Counter(x.status for x in r.pessoas)
+    partes = [f"Controle de jornada {MESES[r.mes]}/{r.ano}: {len(r.pessoas)} colaboradores, "
+              f"{sum(x.ajustes for x in r.pessoas)} ajustes de ponto que contam."]
+    partes.append("Ocorrências (originais / analisadas): " + "; ".join(
+        f"{ROTULOS[k]} {sum(x.originais[k] for x in r.pessoas)} / "
+        f"{sum(x.analisadas[k] for x in r.pessoas)}" for k in INDICADORES) + ".")
+    partes.append(f"Status: {por_status['CRÍTICO']} crítico(s), {por_status['ATENÇÃO']} em atenção, "
+                  f"{por_status['ACOMPANHAMENTO']} em acompanhamento, {por_status['REGULAR']} regular(es).")
+    destaque = sorted((x for x in r.pessoas if x.status in ("CRÍTICO", "ATENÇÃO")),
+                      key=lambda x: (_GRAVIDADE[x.status], _sem_acento(x.nome)))
+    for x in destaque:
+        partes.append(f"- {x.nome} — {x.status}, saldo {x.saldo_txt or 'sem saldo'}: {x.padrao}")
+    return "\n".join(partes)
