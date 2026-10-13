@@ -59,3 +59,112 @@ def test_falha_de_banco_vira_resposta_mcp_e_nao_500():
         m.sessao = original
     assert erro is True
     assert texto == "Falha interna ao ler o anexo; avise o administrador."
+
+
+# --- A fronteira de segurança do router ------------------------------------
+import asyncio
+import json
+
+import pytest
+
+from app import anexos as ax
+
+
+def _anexo(**kw):
+    base = dict(id="a1", caminho="x/y.xlsx", nome="ponto.xlsx", mime="", tamanho=1,
+                contexto="conversa_agente", channel_id=None, agent_id="bruce",
+                dono_conversa="u1")
+    base.update(kw)
+    return ax.Anexo(**base)
+
+
+class _Sessao:
+    async def __aenter__(self):
+        return object()
+
+    async def __aexit__(self, *a):
+        return False
+
+
+@pytest.fixture
+def isolado(monkeypatch):
+    """Banco e R2 falsos; `arm.ler` FALHA se for chamado."""
+    estado = {"anexo": None, "membro": False}
+
+    async def buscar(conn, anexo_id):
+        return estado["anexo"]
+
+    async def membro(conn, canal, membro_id, tipo):
+        return estado["membro"]
+
+    async def ler_proibido(chave):
+        raise AssertionError("arm.ler chamado para anexo que o agente não pode ler")
+
+    monkeypatch.setattr(m, "sessao", lambda **k: _Sessao())
+    monkeypatch.setattr(m, "buscar_anexo", buscar)
+    monkeypatch.setattr(m, "membro_do_canal", membro)
+    monkeypatch.setattr(m.arm, "ler", ler_proibido)
+    return estado
+
+
+def test_agente_nao_le_anexo_da_conversa_de_outro_agente(isolado):
+    """Anexo `conversa_agente` do bruce, pedido pela nina: recusado e o R2
+    nunca é tocado."""
+    isolado["anexo"] = _anexo()
+    texto, erro = asyncio.run(m._ler_anexo("nina", {"id": "a1"}))
+    assert erro is True and "não pertence" in texto
+
+
+def test_agente_fora_do_canal_nao_le_anexo_do_canal(isolado):
+    isolado["anexo"] = _anexo(contexto="canal", channel_id="c1", agent_id=None)
+    isolado["membro"] = False
+    texto, erro = asyncio.run(m._ler_anexo("nina", {"id": "a1"}))
+    assert erro is True and "não pertence" in texto
+
+
+def test_pagina_nao_numerica_diz_o_problema_real(isolado):
+    async def ler(chave):
+        return b"x"
+
+    isolado["anexo"] = _anexo()
+    m.arm.ler = ler  # o monkeypatch do fixture restaura no fim
+    texto, erro = asyncio.run(m._ler_anexo("bruce", {"id": "a1", "pagina": "abc"}))
+    assert erro is True
+    assert texto == "pagina deve ser um número inteiro a partir de 1."
+
+
+class _Req:
+    def __init__(self, corpo, falha=False):
+        self.corpo, self.falha, self.lido = corpo, falha, False
+
+    async def json(self):
+        self.lido = True
+        return self.corpo
+
+
+def test_assinatura_errada_da_404_sem_ler_o_corpo(monkeypatch):
+    async def segredo(nome):
+        return SEGREDO
+
+    monkeypatch.setattr(m, "ler_segredo", segredo)
+    from fastapi import HTTPException
+    req = _Req({})
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(m.mcp_anexos("bruce", "0" * 64, req, None))
+    assert e.value.status_code == 404 and req.lido is False
+
+
+def test_corpo_que_nao_e_objeto_da_erro_jsonrpc(monkeypatch):
+    async def segredo(nome):
+        return SEGREDO
+
+    monkeypatch.setattr(m, "ler_segredo", segredo)
+    r = asyncio.run(m.mcp_anexos("bruce", m.assinatura_do_agente(SEGREDO, "bruce"),
+                                 _Req([{"jsonrpc": "2.0"}]), None))
+    assert json.loads(r.body)["error"]["code"] == -32600
+
+
+def test_description_diz_o_que_o_codigo_garante():
+    ler = next(f for f in m._FERRAMENTAS if f["name"] == "ler_anexo")
+    assert "conversa com você" in ler["description"]
+    assert "Use apenas ids que apareceram nesta conversa." in ler["description"]

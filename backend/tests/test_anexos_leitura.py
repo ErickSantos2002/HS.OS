@@ -97,3 +97,47 @@ def test_texto_longo_e_paginado():
 def test_imagem_devolve_so_metadados():
     t = L.conteudo_legivel("foto.png", "image/png", b"\x89PNG")
     assert "não é legível por ferramenta" in t
+
+
+# --- Teto de recursos: xlsx é zip, 100 MB viram GB ao expandir -------------
+
+def test_xlsx_com_tamanho_descompactado_acima_do_teto_nem_abre(monkeypatch):
+    """Um zip pequeno pode declarar GB descompactados. A soma dos
+    `ZipInfo.file_size` é conferida ANTES de o openpyxl abrir o arquivo, e o
+    agente recebe uma mensagem nomeada em vez de derrubar o worker."""
+    monkeypatch.setattr(L, "TETO_BYTES_DESCOMPACTADOS", 10)
+
+    def nao_deve_abrir(*a, **k):
+        raise AssertionError("abriu a planilha grande demais")
+
+    monkeypatch.setattr(openpyxl, "load_workbook", nao_deve_abrir)
+    t = L.conteudo_legivel("p.xlsx", "", _xlsx([["A"], [1]]))
+    assert t.startswith("planilha grande demais para ler por aqui")
+
+
+def test_aba_com_linhas_acima_do_teto_e_recusada(monkeypatch):
+    monkeypatch.setattr(L, "TETO_LINHAS", 5)
+    linhas = [["N"]] + [[i] for i in range(10)]
+    t = L.conteudo_legivel("p.xlsx", "", _xlsx(linhas))
+    assert t.startswith("planilha grande demais para ler por aqui")
+    assert "5" in t
+
+
+def test_csv_acima_do_teto_de_linhas_e_recusado(monkeypatch):
+    monkeypatch.setattr(L, "TETO_LINHAS", 5)
+    bruto = ("N\n" + "\n".join(str(i) for i in range(10))).encode()
+    t = L.conteudo_legivel("p.csv", "text/csv", bruto)
+    assert t.startswith("planilha grande demais para ler por aqui")
+
+
+def test_so_a_aba_pedida_e_lida_e_a_outra_aparece_no_resumo():
+    wb = openpyxl.Workbook()
+    wb.active.title = "Ponto"
+    wb.active.append(["Nome"])
+    wb.active.append(["Ana"])
+    wb.create_sheet("Resumo").append(["Total"])
+    b = io.BytesIO()
+    wb.save(b)
+    t = L.conteudo_legivel("p.xlsx", "", b.getvalue(), aba="Resumo")
+    assert "Ponto" in t and "Aba: Resumo" in t and "Total" in t
+    assert "Ana" not in t

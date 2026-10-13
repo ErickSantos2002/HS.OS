@@ -14,6 +14,8 @@ import hashlib
 import hmac
 import logging
 
+import anyio
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
@@ -41,13 +43,19 @@ def assinatura_confere(segredo: str, agent_id: str, assinatura: str) -> bool:
     return hmac.compare_digest(assinatura_do_agente(segredo, agent_id), assinatura or "")
 
 
+# ⚠️ A description NÃO promete "só desta conversa": o gateway não repassa ao MCP
+# qual sessão nem qual pessoa chama (ver mcp_alerta.py, 14/08/2026). O que o
+# código garante é o escopo do AGENTE — anexo de conversa com ele, ou de canal
+# de que ele é membro. Prometer mais seria mentir ao próprio agente.
 _FERRAMENTAS = [{
     "name": "ler_anexo",
     "description": (
         "Lê um arquivo que a pessoa anexou nesta conversa. Use o id que aparece em "
         "[anexo: … id=…]. Planilha volta por páginas de 200 linhas com o cabeçalho "
         "repetido; leia todas as páginas antes de concluir qualquer total. Só abre "
-        "anexo desta conversa: id de outra conversa é recusado, e não adianta tentar de novo."
+        "anexo de uma conversa com você (ou de canal em que você está): id de outra "
+        "conversa é recusado, e não adianta tentar de novo. Use apenas ids que "
+        "apareceram nesta conversa."
     ),
     "inputSchema": {
         "type": "object",
@@ -74,6 +82,12 @@ def _texto(ident, texto: str, erro: bool = False):
 async def _ler_anexo(agent_id: str, args: dict) -> tuple[str, bool]:
     anexo_id = str(args.get("id") or "").strip()
     try:
+        pagina = int(args.get("pagina") or 1)
+        if pagina < 1:
+            raise ValueError
+    except (ValueError, TypeError):
+        return "pagina deve ser um número inteiro a partir de 1.", True
+    try:
         async with sessao(role="service_role") as conn:
             anexo = await buscar_anexo(conn, anexo_id)
             no_canal = bool(anexo and anexo.contexto == "canal"
@@ -91,8 +105,11 @@ async def _ler_anexo(agent_id: str, args: dict) -> tuple[str, bool]:
     if dados is None:
         return "O arquivo deste anexo não está mais no armazenamento.", True
     try:
-        texto = conteudo_legivel(anexo.nome, anexo.mime, dados,
-                                 aba=args.get("aba"), pagina=int(args.get("pagina") or 1))
+        # Numa thread: parsing de planilha é pesado e síncrono; no loop ele
+        # travaria o worker (chat, /ws, /reply).
+        texto = await anyio.to_thread.run_sync(
+            lambda: conteudo_legivel(anexo.nome, anexo.mime, dados,
+                                     aba=args.get("aba"), pagina=pagina))
     except Exception as e:  # noqa: BLE001
         logger.warning("ler_anexo: %s não pôde ser lido: %s", anexo.nome, e)
         return f"Não consegui ler {anexo.nome}: o arquivo parece corrompido ou protegido por senha.", True
@@ -112,6 +129,8 @@ async def mcp_anexos(agent_id: str, assinatura: str, request: Request,
         corpo = await request.json()
     except Exception:
         return _resposta(None, erro={"code": -32700, "message": "JSON inválido."})
+    if not isinstance(corpo, dict):
+        return _resposta(None, erro={"code": -32600, "message": "Requisição inválida: esperado um objeto."})
     metodo, ident, params = corpo.get("method"), corpo.get("id"), corpo.get("params") or {}
 
     if ident is None:
