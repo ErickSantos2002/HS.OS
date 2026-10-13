@@ -246,6 +246,9 @@ export const MessageBubble = memo(function MessageBubble({
   // Voz de pessoa: player em cima, texto é a transcrição. Agente: o texto é a
   // resposta e vem inteiro; o áudio é o resumo falado e vai embaixo.
   const audioDePessoa = hasAudio && msg.author_type !== "agent";
+  const temAnexos = !!msg.attachments && msg.attachments.length > 0;
+  // Sem texto (só imagem ou arquivo), não há bolha de texto: ela saía vazia.
+  const temTexto = !!msg.content?.trim() || audioDePessoa || !temAnexos;
   const audioDeAgente = hasAudio && msg.author_type === "agent" && resumoLigado;
   const hasMention = msg.content.includes("@");
   const mentionsEveryone = hasEveryoneMention(msg.content);
@@ -502,6 +505,7 @@ export const MessageBubble = memo(function MessageBubble({
                 <AudioDaMensagem audioUrl={msg.audio_url!} />
               </div>
             )}
+            {temTexto && (
             <div ref={bubbleRef} className={`relative mt-1 inline-block w-fit max-w-full pr-7 text-left ${bubbleClass}`}>
               {(() => {
                 // Strip @todos prefix from rendered text when the "Aviso para todos" badge is already shown
@@ -516,6 +520,44 @@ export const MessageBubble = memo(function MessageBubble({
               {renderReagir()}
               <MenuDaMensagem acoes={acoesDoMenu} className={showMobileMenu ? "opacity-100" : undefined} />
             </div>
+            )}
+
+            {/* Anexos ANTES do horário. Sem texto, a seta e o reagir vão para cá —
+                antes ficavam presos numa bolha de texto vazia (13/10/2026). */}
+            {temAnexos && (
+              <div data-bloco-anexos className="relative flex flex-col gap-1 mt-1">
+                {msg.attachments!.map((att, i) => (
+                  <AnexoResolvido key={i} id={att.id} url={att.url}>
+                    {(url, renovar, urlAgora) =>
+                      att.mimeType?.startsWith("image/") ? (
+                        <button
+                          type="button"
+                          onClick={async () => onImageClick(await urlAgora().catch(() => url), att.name)}
+                          className="mt-1 overflow-hidden rounded-lg"
+                        >
+                          <img src={url} onError={renovar} alt={att.name} className="max-h-80 w-auto max-w-full sm:max-w-[360px] rounded-lg object-contain transition-transform hover:scale-[1.01]" />
+                        </button>
+                      ) : (
+                        <FileAttachmentCard
+                          name={att.name}
+                          url={url}
+                          urlAgora={urlAgora}
+                          size={att.size}
+                          mimeType={att.mimeType}
+                          onPreview={onAttachmentPreview}
+                        />
+                      )
+                    }
+                  </AnexoResolvido>
+                ))}
+                {!temTexto && (
+                  <>
+                    {renderReagir()}
+                    <MenuDaMensagem acoes={acoesDoMenu} className={showMobileMenu ? "opacity-100" : undefined} />
+                  </>
+                )}
+              </div>
+            )}
 
             {audioDeAgente && (
               <div className="mt-1.5">
@@ -535,36 +577,6 @@ export const MessageBubble = memo(function MessageBubble({
                 )}
               </div>
             )}
-            {/* Render file attachments */}
-            {msg.attachments && msg.attachments.length > 0 && (
-              <div className="flex flex-col gap-1 mt-1">
-                {msg.attachments.map((att, i) => (
-                  <AnexoResolvido key={i} id={att.id} url={att.url}>
-                    {(url, renovar, urlAgora) =>
-                      att.mimeType?.startsWith("image/") ? (
-                        <button
-                          type="button"
-                          onClick={async () => onImageClick(await urlAgora().catch(() => url), att.name)}
-                          className="mt-1 overflow-hidden rounded-md"
-                        >
-                          <img src={url} onError={renovar} alt={att.name} className="max-h-48 max-w-[240px] rounded-md object-cover transition-transform hover:scale-[1.01]" />
-                        </button>
-                      ) : (
-                        <FileAttachmentCard
-                          name={att.name}
-                          url={url}
-                          urlAgora={urlAgora}
-                          size={att.size}
-                          mimeType={att.mimeType}
-                          onPreview={onAttachmentPreview}
-                        />
-                      )
-                    }
-                  </AnexoResolvido>
-                ))}
-              </div>
-            )}
-
             <ReactionsBar reactions={msgReactions} currentUserId={currentUserId} onToggle={onToggleReaction} userNameById={userNameById} />
 
             {indicadorDeRespostas}
