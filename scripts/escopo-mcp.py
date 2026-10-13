@@ -25,6 +25,13 @@ PROPRIO = {
     "bruce": ["banco-talenths__query", "banco-pessoas-hs__query"],
 }
 
+# Cada agente enxerga só a PRÓPRIA entrada de anexos: a URL dela carrega o HMAC
+# do id dele, e é isso que o servidor confere. Dar a de outro seria dar a
+# identidade de outro.
+def _anexos_de(aid: str) -> list[str]:
+    return [f"hsos-anexos-{aid}__ler_anexo", f"hsos-anexos-{aid}__enviar_arquivo"]
+
+
 async def main() -> int:
     aplicar = "--aplicar" in sys.argv
     cli = obter_cliente("ws://127.0.0.1:18789", os.environ.get("OPENCLAW_ADMIN_TOKEN", ""))
@@ -44,7 +51,7 @@ async def main() -> int:
         aid = ag.get("id")
         if aid not in PROPRIO:
             continue
-        meus = set(COMUM) | set(PROPRIO[aid])
+        meus = set(COMUM) | set(PROPRIO[aid]) | set(_anexos_de(aid))
         faltando = meus - todas
         assert not faltando, f"{aid}: ferramenta que não existe no gateway: {faltando}"
         t = dict(ag.get("tools") or {})
@@ -63,10 +70,12 @@ async def main() -> int:
     def conferir(parsed: dict) -> bool:
         lista = (parsed.get("agents") or {}).get("list") or []
         alvo = {a.get("id"): a for a in lista}
-        return all(
+        return (all(
             "mcp__banco-datacorehs__query" not in ((alvo.get(x, {}).get("tools") or {}).get("alsoAllow") or [])
             for x in ("atlas", "flow", "bruce")
         ) and "banco-hsgrowth__query" in ((alvo.get("iris", {}).get("tools") or {}).get("deny") or [])
+        and "mcp__hsos-anexos-bruce__ler_anexo" in ((alvo.get("bruce", {}).get("tools") or {}).get("alsoAllow") or [])
+        and "hsos-anexos-bruce__ler_anexo" in ((alvo.get("nina", {}).get("tools") or {}).get("deny") or []))
 
     await aplicar_patch({"agents": {"list": agentes}}, base_hash, conferir)
     print("\n  aplicado e conferido na config.")
