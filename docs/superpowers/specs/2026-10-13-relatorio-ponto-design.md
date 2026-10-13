@@ -161,9 +161,10 @@ linhas e não reescreve número.
 
 ## O xlsx
 
-Números são números (célula numérica); horário e saldo são **frações de dia com
-formato `[h]:mm`**, então somar funciona no Excel. Saldo negativo é número
-negativo, não o texto `(-07:42)` do Flash.
+Números são números (célula numérica). Horário e duração são **frações de dia
+com formato `hh:mm`**. O saldo vai em **duas colunas**: o texto `-07:42` para
+ler e os **minutos com sinal** (−462) para somar e filtrar — o Excel mostra
+`#####` para hora negativa em `[h]:mm`, então fração de dia não serve para saldo.
 
 | aba | conteúdo |
 |---|---|
