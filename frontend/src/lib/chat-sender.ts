@@ -357,6 +357,9 @@ interface PreparedFileAttachment {
 async function prepareFileAttachmentForAgent(att: MediaAttachment): Promise<PreparedFileAttachment | null> {
   const rawFile = (att as any)._rawFile as File | undefined;
   const filename = att.name || rawFile?.name || "arquivo";
+  // Anexo com `id` (bucket privado, desde 13/10/2026) vai por referência pelo
+  // backend; uma URL assinada vencida não serviria ao agente de qualquer forma.
+  if (att.id) return null;
   const fileUrl = att.url || att.base64 || "";
 
   // Send only a reference with signed URL — never inject file content
@@ -462,6 +465,10 @@ async function montarInstrucoesDaSessao(agentId?: string): Promise<string> {
  * fica no navegador e na tela, e o agente responde "não recebi nenhuma imagem" —
  * foi exatamente o que aconteceu no teste de 10/08/2026.
  *
+ * Anexo com `id` (bucket privado, desde 13/10/2026) vai como referência — o
+ * backend acrescenta a linha `[anexo: …]` e o agente lê pelo `ler_anexo`. Colar
+ * o texto extraído junto duplicaria e, numa planilha, estouraria o contexto.
+ *
  * A descrição vem de `/ia/descrever-imagem` (OpenAI). Falha ali não bloqueia a
  * mensagem: a pessoa ainda manda o anexo e conversa, o agente é que fica sem
  * saber o que a imagem mostra.
@@ -472,7 +479,7 @@ async function descreverImagensDoTurno(msg: ChatMessage | undefined): Promise<st
   const partes: string[] = [];
 
   const documentos = midia.filter(
-    (m) => m.type === "file" && m.extractedText && !isExtractionPlaceholder(m.extractedText),
+    (m) => m.type === "file" && !m.id && m.extractedText && !isExtractionPlaceholder(m.extractedText),
   );
   for (const d of documentos) {
     partes.push(`[Arquivo anexado: ${d.name}]\n\n${d.extractedText}`);
@@ -909,7 +916,8 @@ export function sendMessageInBackground(
         });
       }
 
-      const resposta = await enviarParaAgente(agentId, textoParaOAgente, controller.signal);
+      const anexoIds = (ultima?.media ?? []).flatMap((m) => (m.id ? [m.id] : []));
+      const resposta = await enviarParaAgente(agentId, textoParaOAgente, controller.signal, anexoIds);
 
       if (manuallyStoppedRequestIds.has(requestId)) {
         // O usuário mandou parar enquanto esperávamos. A resposta pode ter

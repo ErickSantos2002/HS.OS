@@ -337,3 +337,35 @@ def test_sessao_vazia_depois_do_limpar_descarta_o_piso():
     sessão nova, e nela não há turno anterior que possa colar na resposta.
     """
     assert asyncio.run(c._ultimo_seq(ClienteFalso([]), "chave", piso=44)) == 0
+
+
+# ── Anexo no chat direto (13/10/2026) ────────────────────────────────────────
+#
+# A tela já anexava e mandava em `media` desde a herança do dn.os; o `/send`
+# descartava. O agente respondia "não recebi arquivo nenhum". Agora vai uma
+# linha por anexo, e o conteúdo é lido sob demanda pelo `ler_anexo`.
+from app.anexos import Anexo
+
+
+def _ax(id_, nome="ponto.xlsx", tamanho=2_411_724):
+    return Anexo(id=id_, caminho=f"conversa/bruce/{id_}/{nome}", nome=nome,
+                 mime="application/octet-stream", tamanho=tamanho,
+                 contexto="conversa_agente", channel_id=None, agent_id="bruce",
+                 dono_conversa="u")
+
+
+def test_mensagem_sem_anexo_passa_intacta():
+    assert c.mensagem_com_anexos("oi", []) == "oi"
+
+
+def test_mensagem_com_anexo_ganha_uma_linha_por_arquivo_no_fim():
+    texto = c.mensagem_com_anexos("segue o ponto", [_ax("a1"), _ax("a2", "b.pdf", 1024)])
+    assert texto.startswith("segue o ponto\n\n")
+    assert texto.endswith("[anexo: ponto.xlsx · 2,3 MB · planilha · id=a1]\n"
+                          "[anexo: b.pdf · 1 KB · pdf · id=a2]")
+
+
+def test_mensagem_com_anexo_diz_ao_agente_como_ler():
+    """Sem a instrução, um modelo que nunca viu `ler_anexo` responde sobre o
+    nome do arquivo em vez de abrir. A frase é curta de propósito."""
+    assert "ler_anexo" in c.mensagem_com_anexos("x", [_ax("a1")])

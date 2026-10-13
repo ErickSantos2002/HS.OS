@@ -724,12 +724,35 @@ def _nome_de_exibicao(agent_id: str) -> str:
 
 _MARCA_GATILHO = "➡️ RESPONDA A ESTA MENSAGEM"
 
-# Preenchimento para quando o gatilho não tem texto. A tela manda `content`
-# vazio quando a mensagem é só anexo/áudio (`ChannelChat.tsx`), e a consulta
-# que alimenta `_responder_no_canal` hoje não busca `audio_url`/`attachments`
-# — então não dá para dizer qual dos dois é. Genérico e verdadeiro nos dois
-# casos bate mais do que arriscar "anexo" numa mensagem de áudio.
-_SEM_TEXTO = "[mensagem sem texto — provavelmente anexo, imagem ou áudio]"
+# Preenchimento para gatilho sem texto E sem anexo com id — sobra o áudio e o
+# anexo antigo (bucket público, sem id). Genérico e verdadeiro nos dois casos.
+_SEM_TEXTO = "[mensagem sem texto — provavelmente áudio ou anexo antigo]"
+
+
+def _linhas_de_anexo(attachments) -> list[str]:
+    """As linhas `[anexo: …]` a partir do JSON gravado na mensagem.
+
+    Só anexo com `id` — o que está em `public.anexos` e o `ler_anexo` encontra.
+    O resto é dos tempos do bucket público e não tem como ser lido pelo agente.
+    """
+    from app.anexos import Anexo, linha_de_anexo
+
+    itens = attachments
+    if isinstance(itens, str):
+        try:
+            itens = json.loads(itens)
+        except ValueError:
+            return []
+    linhas = []
+    for a in itens or []:
+        if not isinstance(a, dict) or not a.get("id"):
+            continue
+        linhas.append(linha_de_anexo(Anexo(
+            id=str(a["id"]), caminho="", nome=str(a.get("name") or "arquivo"),
+            mime=str(a.get("mimeType") or ""), tamanho=int(a.get("size") or 0),
+            contexto="canal", channel_id=None, agent_id=None, dono_conversa=None,
+        )))
+    return linhas
 
 
 def _montar_pedido(historico: list, gatilho) -> str:
@@ -758,6 +781,9 @@ def _montar_pedido(historico: list, gatilho) -> str:
     for m in historico:
         eh_gatilho = m is gatilho
         conteudo = (m["content"] or "").strip()
+        anexos = _linhas_de_anexo(m.get("attachments") if hasattr(m, "get") else None)
+        if anexos:
+            conteudo = (conteudo + " " if conteudo else "") + " ".join(anexos)
         if not conteudo:
             if not eh_gatilho:
                 continue
@@ -767,7 +793,9 @@ def _montar_pedido(historico: list, gatilho) -> str:
         linhas.append(f"{prefixo}{autor}: {conteudo}")
     return (
         "Você está no canal e foi mencionado. Responda à mensagem marcada com "
-        f'"{_MARCA_GATILHO}" — as demais são só contexto da conversa.\n\n'
+        f'"{_MARCA_GATILHO}" — as demais são só contexto da conversa.\n'
+        "Anexos aparecem entre colchetes com um identificador; para ler, use a "
+        "ferramenta ler_anexo com ele.\n\n"
         "--- conversa recente ---\n" + "\n".join(linhas)
     )
 
@@ -802,7 +830,7 @@ async def _responder_no_canal(channel_id: str, agent_id: str) -> None:
         async with sessao(role="service_role") as conn:
             historico = await conn.fetch(
                 """
-                SELECT author_name, author_type, author_id, content,
+                SELECT author_name, author_type, author_id, content, attachments,
                        to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS created_at
                   FROM public.channel_messages
                  WHERE channel_id = $1::uuid

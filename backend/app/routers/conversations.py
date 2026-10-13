@@ -16,14 +16,16 @@ import json
 import logging
 import re
 from datetime import datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from app.anexos import Anexo, linha_de_anexo
 from app.database import sessao
-from app.dependencies import Usuario, agente_visivel, exige_papel, usuario_atual
+from app.dependencies import (Usuario, agente_visivel, exige_papel,
+                              normalizar_agent_id, usuario_atual)
 from app.gateway import config as cfg
 from app.gateway.client import (ErroGateway, chave_de_sessao, obter_cliente,
                                 obter_cliente_de_espera)
@@ -448,6 +450,46 @@ def _chave_arena(agent_id: str, user_id: str) -> str:
     é o que garante sessão limpa; a forma continua sendo a do gateway.
     """
     return chave_de_sessao(agent_id, f"arena-{user_id}-{uuid4()}")
+
+
+# O agente recebe uma linha por anexo e lê o conteúdo pelo `ler_anexo` do
+# `hsos-anexos`. Colar o conteúdo aqui estouraria o contexto com uma planilha
+# de um mês — e cairia nos cortes silenciosos já catalogados no CLAUDE.md.
+_INSTRUCAO_ANEXO = "(Para ler um anexo, use a ferramenta ler_anexo com o id.)"
+
+SQL_ANEXOS_DA_CONVERSA = """
+    SELECT id::text AS id, caminho, nome, mime, tamanho, contexto,
+           channel_id::text AS channel_id, agent_id, dono_conversa::text AS dono_conversa
+      FROM public.anexos
+     WHERE id = ANY($1::uuid[]) AND contexto = 'conversa_agente'
+       AND agent_id = $2 AND dono_conversa = $3::uuid
+     ORDER BY created_at
+"""
+
+
+def mensagem_com_anexos(texto: str, anexos: list[Anexo]) -> str:
+    """O texto da pessoa + uma linha `[anexo: …]` por arquivo, no fim."""
+    if not anexos:
+        return texto
+    linhas = "\n".join(linha_de_anexo(a) for a in anexos)
+    return f"{texto}\n\n{_INSTRUCAO_ANEXO}\n{linhas}"
+
+
+def _ids_validos(media: list[dict] | None) -> list[str]:
+    """Ids de `media` que são UUID de verdade.
+
+    Um id malformado faria o `$1::uuid[]` estourar em 500; `UUID(...)` em
+    try/except, como `buscar_anexo` faz, descarta em vez de estourar.
+    """
+    ids: list[str] = []
+    for m in media or []:
+        if not isinstance(m, dict) or not m.get("id"):
+            continue
+        try:
+            ids.append(str(UUID(str(m["id"]))))
+        except ValueError:
+            continue
+    return ids
 
 
 class EnvioIn(BaseModel):
@@ -1013,6 +1055,19 @@ async def enviar(
     # Precisa ser único por envio: reaproveitar faria o gateway deduplicar e a
     # segunda mensagem sumiria em silêncio.
     run_id = f"hsos-{uuid4()}"
+
+    ids = _ids_validos(dados.media)
+    anexos: list[Anexo] = []
+    if ids:
+        # Só os anexos DESTA conversa: um id de outra conversa no `media` é
+        # descartado aqui em silêncio, em vez de virar linha que o agente não
+        # conseguiria abrir.
+        async with sessao(role="service_role") as conn:
+            linhas = await conn.fetch(SQL_ANEXOS_DA_CONVERSA, ids,
+                                      normalizar_agent_id(agent_id), usuario.id)
+        anexos = [Anexo.de_linha(l) for l in linhas]
+    mensagem = mensagem_com_anexos(dados.content, anexos)
+
     try:
         await cliente.chamar(
             "chat.send",
@@ -1021,7 +1076,7 @@ async def enviar(
                 # manda para o agente padrão, sem avisar.
                 "agentId": agent_id,
                 "sessionKey": chave,
-                "message": dados.content,
+                "message": mensagem,
                 "idempotencyKey": run_id,
             },
         )

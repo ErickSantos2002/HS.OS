@@ -57,12 +57,17 @@ export async function enviarParaAgente(
   agentId: string,
   content: string,
   sinal?: AbortSignal,
+  anexoIds: string[] = [],
 ): Promise<RespostaDoAgente> {
   let runId: string;
   try {
     const r = await api<{ run_id: string }>(
       `/conversations/${encodeURIComponent(agentId)}/send`,
-      { method: "POST", body: { content }, signal: sinal },
+      {
+        method: "POST",
+        body: anexoIds.length ? { content, media: anexoIds.map((id) => ({ id })) } : { content },
+        signal: sinal,
+      },
     );
     runId = r.run_id;
   } catch (e) {

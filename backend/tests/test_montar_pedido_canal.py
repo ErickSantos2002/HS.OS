@@ -150,3 +150,27 @@ def test_gatilho_vazio_com_anexo_ou_audio_nao_quebra_nem_perde_a_marca():
     assert sum(_MARCA_GATILHO in l for l in linhas) == 1
     marcada = next(l for l in linhas if _MARCA_GATILHO in l)
     assert marcada.split("Fulano:", 1)[1].strip() != ""
+
+
+def test_gatilho_so_com_anexo_vira_linha_de_anexo_e_nao_o_aviso_generico():
+    """Até 13/10/2026 a consulta não buscava `attachments` e o agente recebia
+    `[mensagem sem texto — provavelmente anexo, imagem ou áudio]`. Com o id, a
+    linha diz o que é e como abrir."""
+    historico = [{
+        "author_id": "pessoa-1", "author_name": "Fulano", "content": "",
+        "attachments": [{"id": "a1", "name": "ponto.xlsx", "size": 2_411_724,
+                         "mimeType": "application/octet-stream", "url": ""}],
+    }]
+    texto = _montar_pedido(historico, historico[0])
+    assert "[anexo: ponto.xlsx · 2,3 MB · planilha · id=a1]" in texto
+    assert "provavelmente anexo" not in texto
+
+
+def test_anexo_antigo_sem_id_nao_vira_linha():
+    """Anexo de antes de 13/10 está no bucket público e o `ler_anexo` não o
+    encontra — prometer um id que não existe faria o agente tentar à toa."""
+    historico = [{
+        "author_id": "pessoa-1", "author_name": "Fulano", "content": "olha",
+        "attachments": [{"name": "velho.pdf", "url": "https://x/velho.pdf", "size": 1, "mimeType": "application/pdf"}],
+    }]
+    assert "id=" not in _montar_pedido(historico, historico[0])
