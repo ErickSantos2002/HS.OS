@@ -819,6 +819,20 @@ parametrizada. Assim a decisão vira configuração, não código.
 
 ---
 
+## 👉 Próxima sessão — o terceiro CSV do Flash (Eventos)
+
+Em 13/10 às 15:24 a coordenadora de RH mandou ao `bruce` um export que não
+conhecíamos: `Eventos_Empresa_5747_*.csv` — atestados, declarações de horas,
+abonos do gestor, férias e day-off, com status (aprovado/cancelado). É
+provavelmente a peça que explica os ajustes à mão no "Dados e-mail": o caso do
+Lucas (contou 3 "após jornada" onde a régua conta 8) tem atestado em 03/09 e
+abono de 4h30 em 01/09; o Hyago estava de férias de 08 a 23/09.
+
+A fazer: confirmar com ela a regra ("dia/horário coberto por evento aprovado não
+conta"), incluir o CSV de eventos no `relatorio_ponto` como terceiro arquivo
+(opcional) e medir de novo contra setembro — hoje 130/150 no "Dados e-mail".
+O anexo está em `public.anexos` (dono `adm01@`), 7.575 bytes.
+
 ## Estado em 13/10/2026 (fim do dia) — esperando deploy
 
 Na `main`, sem deploy ainda (o Erick sobe front e back no fim do dia):
