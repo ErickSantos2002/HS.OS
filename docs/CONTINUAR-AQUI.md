@@ -819,6 +819,17 @@ parametrizada. Assim a decisão vira configuração, não código.
 
 ---
 
+## Estado em 13/10/2026 (fim do dia) — esperando deploy
+
+Na `main`, sem deploy ainda (o Erick sobe front e back no fim do dia):
+- **Resumo em áudio** dos agentes (spec `superpowers/specs/2026-10-13-resumo-em-audio-design.md`).
+  Migração `019` **já aplicada**. Conferir ao vivo depois do deploy: pergunta curta e
+  longa à `nina`, menção num canal.
+- **Áudio de canal privado**: `audio-messages` fechado. ⚠️ **Logo depois do deploy**,
+  rodar `cd backend && PYTHONPATH=. .venv/bin/python scripts/migrar-audio-anexos.py --aplicar`
+  — os 4 áudios antigos ficam mudos até isso. Depois, com ok do Erick, apagar os originais.
+- Voz → agente (transcrição), thread de mensagem apagada, áudio em 0:00.
+
 ## Próximo passo, em ordem de valor
 
 ### 0. Régua do ponto (Lidisay/RH) — PRÓXIMA SESSÃO COMEÇA AQUI

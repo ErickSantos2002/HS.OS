@@ -1225,6 +1225,33 @@ coordenadora de RH, em `app/relatorios/ponto.py` — **mudou na conversa com ela
 muda lá**, com teste. O xlsx dela vem com número de verdade; o do
 `enviar_arquivo` continua todo texto.
 
+### Resumo em áudio nas respostas — pedido do CEO, 13/10/2026
+
+Toda resposta de agente ganha, segundos depois, um áudio **embaixo do texto**:
+o agente falando um resumo. Resposta de até 300 caracteres é falada inteira;
+acima disso o **DeepSeek** (`DEEPSEEK_API_KEY`, chave própria do backend) resume
+em 2 a 4 frases. A voz é do **edge-tts** (`app/voz.py`), e o áudio vira anexo
+privado ligado à mensagem por `UPDATE` (`app/voz_entrega.py`) — o trigger de
+tempo real leva à tela. Disparo em segundo plano, **depois** do commit da
+resposta: o texto nunca espera o áudio.
+
+⚠️ **edge-tts é uso não oficial do serviço da Microsoft — risco aceito pelo
+Erick.** Se for bloqueado, as respostas saem sem áudio e o log diz `etapa voz`;
+nada mais quebra. A alternativa local avaliada foi o Piper (4 vozes pt-BR, todas
+masculinas, mais robóticas).
+
+⚠️ **A voz do agente é `agent_profiles.tts_voice_id`, mas só se começar com
+`pt-BR-`** — a coluna veio do ElevenLabs e pode ter id opaco; aí vale o Antonio.
+`nina` Francisca, `iris` Thalita, os outros Antonio (migração `019`).
+
+Preferência por pessoa: `profiles.resumo_em_audio`, ligada por padrão, em
+Configurações → Perfil. Conversa direta: desligada, nada é gerado. Canal: gera
+um por resposta e quem desligou só não vê o player.
+
+⚠️ **`ler_segredo` lê `os.environ`, não o `.env`.** Em produção a chave chega
+pelo EasyPanel como variável de ambiente; testando por script local, carregue o
+`.env` (`load_dotenv`) antes, senão o DeepSeek aparece como "chave ausente".
+
 ### Agendamento (`cron.*`) — contrato levantado em 19/08/2026
 
 ```
