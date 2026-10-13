@@ -394,3 +394,108 @@ def test_enviar_com_run_ja_respondido_nao_escreve_nada(monkeypatch):
     log, gravados, _ = _ambiente(monkeypatch, runs=[{"message_id": "m1", "idade_s": 5.0}])
     texto, erro = asyncio.run(m._enviar_arquivo("bruce", _args()))
     assert erro is True and gravados == [] and log == []
+
+
+# ── relatorio_ponto — só o bruce, e só com os anexos da pessoa em turno ─────
+#
+# A planilha de ponto do RH traz nome e horário de cada funcionário. A ferramenta
+# mora aqui porque este servidor verifica o agente pela URL e a posse do anexo;
+# nos servidores que confiam no argumento, outro agente a chamaria.
+
+import dataclasses
+
+PONTO_M = "﻿Nome;Matrícula;Departamento;Data da Marcação;Tipo Marcação 1;Hora da Marcação 1\nAna Teste;000001;LAB;01/09/2026;Original;07:55\n".encode()
+PONTO_B = "﻿Ano;Mês;Matrícula;Nome;Saldo banco total\n2026;9;000001;Ana Teste;(-01:00)\n".encode()
+
+
+def test_relatorio_ponto_so_aparece_para_o_bruce():
+    assert "relatorio_ponto" in [f["name"] for f in m.ferramentas_de("bruce")]
+    assert "relatorio_ponto" not in [f["name"] for f in m.ferramentas_de("nina")]
+    assert {"ler_anexo", "enviar_arquivo"} <= {f["name"] for f in m.ferramentas_de("nina")}
+
+
+def test_outro_agente_chamando_relatorio_ponto_recebe_ferramenta_desconhecida(monkeypatch):
+    """Esconder no `tools/list` não basta: o `tools/call` tem que recusar também."""
+    async def segredo(nome):
+        return SEGREDO
+
+    async def proibido(*a, **k):
+        raise AssertionError("relatorio_ponto executado para a nina")
+
+    monkeypatch.setattr(m, "ler_segredo", segredo)
+    monkeypatch.setattr(m, "_relatorio_ponto", proibido)
+    corpo = {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+             "params": {"name": "relatorio_ponto", "arguments": {"ids": ["a", "b"]}}}
+    r = asyncio.run(m.mcp_anexos("nina", m.assinatura_do_agente(SEGREDO, "nina"), _Req(corpo), None))
+    assert json.loads(r.body)["error"]["code"] == -32601
+
+
+@pytest.fixture
+def ponto(isolado, monkeypatch):
+    """Dois anexos da mesma pessoa, em turno; R2 devolve os CSV; a entrega é capturada."""
+    anexos = {"m": _anexo(id="m", caminho="m", nome="Marcacoes.csv", dono_conversa=PESSOA),
+              "b": _anexo(id="b", caminho="b", nome="BancoHoras.csv", dono_conversa=PESSOA)}
+    conteudo = {"m": PONTO_M, "b": PONTO_B}
+    entregas = []
+
+    async def buscar(conn, anexo_id):
+        return anexos.get(anexo_id)
+
+    async def ler(chave):
+        return conteudo[chave.split("/")[-1]]
+
+    async def entregar(agent_id, para, nome, dados, mime):
+        entregas.append((agent_id, para, nome, dados))
+        return "Enviado.", False
+
+    monkeypatch.setattr(m, "buscar_anexo", buscar)
+    monkeypatch.setattr(m.arm, "chave", lambda bucket, caminho: f"{bucket}/{caminho}")
+    monkeypatch.setattr(m.arm, "ler", ler)
+    monkeypatch.setattr(m, "_entregar", entregar)
+    isolado.update(anexos=anexos, entregas=entregas)
+    return isolado
+
+
+def test_relatorio_ponto_entrega_ao_dono_dos_anexos(ponto):
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["b", "m"]}))
+    assert not erro, texto
+    [(agente, para, nome, dados)] = ponto["entregas"]
+    assert (agente, para, nome) == ("bruce", PESSOA, "Controle de jornada - SETEMBRO-2026.xlsx")
+    assert dados[:2] == b"PK"  # xlsx é zip
+    assert "SETEMBRO/2026" in texto and "Enviado." in texto
+
+
+def test_relatorio_ponto_recusa_anexos_de_pessoas_diferentes_sem_ler_o_r2(ponto, monkeypatch):
+    ponto["anexos"]["b"] = dataclasses.replace(ponto["anexos"]["b"], dono_conversa="00000000-0000-4000-8000-0000000000b2")
+
+    async def ler_proibido(chave):
+        raise AssertionError("leu o R2 com anexos de duas pessoas")
+    monkeypatch.setattr(m.arm, "ler", ler_proibido)
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "b"]}))
+    assert erro and "mesma pessoa" in texto and ponto["entregas"] == []
+
+
+def test_relatorio_ponto_com_o_mesmo_id_duas_vezes(ponto):
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "m"]}))
+    assert erro and "dois" in texto and ponto["entregas"] == []
+
+
+def test_relatorio_ponto_sem_turno_e_recusado(ponto):
+    ponto["runs"] = []
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "b"]}))
+    assert erro and texto == m._FORA_DO_TURNO_LER and ponto["entregas"] == []
+
+
+def test_relatorio_ponto_com_id_de_fora_da_conversa_nao_toca_o_r2(ponto, monkeypatch):
+    async def ler_proibido(chave):
+        raise AssertionError("leu o R2 com um anexo que não é da conversa")
+    monkeypatch.setattr(m.arm, "ler", ler_proibido)
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "nao-existe"]}))
+    assert erro and "não pertence" in texto and ponto["entregas"] == []
+
+
+def test_relatorio_ponto_com_dois_csv_de_marcacoes_diz_o_que_falta(ponto):
+    # o R2 devolve marcações para os dois ids
+    ponto["anexos"]["b"] = dataclasses.replace(ponto["anexos"]["b"], caminho="m")
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "b"]}))
+    assert erro and "banco de horas" in texto and ponto["entregas"] == []

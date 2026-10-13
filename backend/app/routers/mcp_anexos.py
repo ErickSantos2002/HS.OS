@@ -28,6 +28,7 @@ from app.anexos_leitura import conteudo_legivel
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
 from app.integracoes import exige_segredo, ler_segredo
+from app.relatorios import ponto
 from app.routers.anexos import buscar_anexo, membro_do_canal
 
 logger = logging.getLogger(__name__)
@@ -92,7 +93,35 @@ _FERRAMENTAS = [{
         },
         "required": ["para", "nome", "formato", "conteudo"],
     },
+}, {
+    "name": "relatorio_ponto",
+    "description": (
+        "Monta o controle de jornada do mês a partir dos DOIS CSV do Flash que a pessoa "
+        "anexou: o de marcações (MarcacoesOriginaisJustificadas) e o de banco de horas "
+        "(BancoHoras). Passe os dois ids, em qualquer ordem. O servidor calcula com a "
+        "régua do RH e envia a planilha à pessoa na conversa e na Documentos; você recebe "
+        "só o resumo. NÃO recalcule nem reescreva os números: repasse o resumo e diga que "
+        "a planilha chegou. A Tratativa e a confirmação caso a caso são da pessoa."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "ids": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2,
+                    "description": "Os ids dos dois anexos, como vieram em [anexo: … id=…]."},
+        },
+        "required": ["ids"],
+    },
 }]
+
+# Ferramenta que só alguns agentes enxergam. A identidade vem da URL assinada,
+# então esconder no `tools/list` e recusar no `tools/call` é uma fronteira de
+# verdade — não depende do agente se declarar.
+_FERRAMENTAS_RESTRITAS = {"relatorio_ponto": frozenset({"bruce"})}
+
+
+def ferramentas_de(agent_id: str) -> list[dict]:
+    return [f for f in _FERRAMENTAS
+            if agent_id in _FERRAMENTAS_RESTRITAS.get(f["name"], {agent_id})]
 
 
 def _resposta(ident, resultado=None, erro=None):
@@ -208,6 +237,64 @@ async def _ler_anexo(agent_id: str, args: dict) -> tuple[str, bool]:
     return f"{anexo.nome}\n{texto}", False
 
 
+async def _relatorio_ponto(agent_id: str, args: dict) -> tuple[str, bool]:
+    ids = args.get("ids")
+    if not isinstance(ids, list) or len(ids) != 2 or not all(isinstance(i, str) and i.strip() for i in ids):
+        return "Passe `ids` com os ids dos DOIS anexos do Flash (marcações e banco de horas).", True
+    ids = [i.strip() for i in ids]
+    if ids[0] == ids[1]:
+        return ("Os dois ids são o mesmo anexo. Preciso de dois arquivos: o CSV de marcações "
+                "e o de banco de horas."), True
+    try:
+        async with sessao(role="service_role") as conn:
+            anexos = []
+            for anexo_id in ids:
+                anexo = await buscar_anexo(conn, anexo_id)
+                # Só anexo de conversa com este agente: planilha de RH em canal
+                # não é o caso de uso, e canal não tem dono a quem entregar.
+                if (anexo is None or anexo.contexto != "conversa_agente"
+                        or not ax.agente_pode_ler(anexo, agent_id, False)):
+                    logger.warning("relatorio_ponto recusado: agente %s, anexo %s", agent_id, anexo_id)
+                    return ("Este anexo não pertence a uma conversa sua. Não tente de novo; "
+                            "peça à pessoa para anexar os arquivos aqui."), True
+                anexos.append(anexo)
+            if anexos[0].dono_conversa != anexos[1].dono_conversa:
+                return "Os dois anexos têm que ser da mesma pessoa, na conversa com você.", True
+            dono = str(anexos[0].dono_conversa)
+            if not await turno_em_curso(conn, agent_id, dono):
+                return _FORA_DO_TURNO_LER, True
+        arquivos = []
+        for anexo in anexos:
+            dados = await arm.ler(arm.chave("anexos", anexo.caminho))
+            if dados is None:
+                return f"O arquivo {anexo.nome} não está mais no armazenamento.", True
+            arquivos.append((anexo.nome, dados))
+    except Exception:  # noqa: BLE001
+        logger.exception("relatorio_ponto: falha interna (agente %s)", agent_id)
+        return "Falha interna ao ler os anexos; avise o administrador.", True
+
+    def calcular():
+        r = ponto.gerar(arquivos)
+        return r, ponto.montar_xlsx(r)
+
+    try:
+        # Numa thread: CSV + openpyxl são síncronos; no loop travariam o worker.
+        relatorio, xlsx = await anyio.to_thread.run_sync(calcular)
+    except ponto.ErroPonto as e:
+        return str(e), True
+    except Exception:  # noqa: BLE001
+        logger.exception("relatorio_ponto: falha ao calcular (agente %s)", agent_id)
+        return "Não consegui montar a planilha com estes arquivos; avise o administrador.", True
+
+    texto, erro = await _entregar(
+        agent_id, dono, ponto.nome_do_arquivo(relatorio), xlsx,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    if erro:
+        return texto, True
+    logger.info("relatorio_ponto: %s montou %s para %s", agent_id, ponto.nome_do_arquivo(relatorio), dono)
+    return f"{ponto.resumo(relatorio)}\n\n{texto}", False
+
+
 async def _ja_conversa(conn, agent_id: str, pessoa: str) -> bool:
     """Só se envia a quem já abriu conversa com este agente.
 
@@ -234,9 +321,6 @@ async def _enviar_arquivo(agent_id: str, args: dict) -> tuple[str, bool]:
         para = str(uuid.UUID(para))
     except (ValueError, AttributeError):
         return "`para` deve ser o id (uuid) da pessoa, como aparece em hsos-<id>.", True
-
-    anexo_id, doc_id = str(uuid.uuid4()), str(uuid.uuid4())
-    gravados: list[str] = []
     try:
         # Destino primeiro: montar PDF de 2M caracteres para quem nem pode receber
         # seria trabalho (e thread) jogados fora.
@@ -247,15 +331,30 @@ async def _enviar_arquivo(agent_id: str, args: dict) -> tuple[str, bool]:
             if not await turno_em_curso(conn, agent_id, para):
                 logger.warning("enviar_arquivo fora do turno: agente %s, destino %s", agent_id, para)
                 return _FORA_DO_TURNO_ENVIAR, True
-        try:
-            # Numa thread: reportlab/docx/openpyxl são síncronos e pesados; no
-            # loop travariam o worker (chat, /ws, /reply).
-            dados, mime, nome = await anyio.to_thread.run_sync(
-                lambda: montar_arquivo(str(args.get("formato") or ""),
-                                       str(args.get("nome") or ""), str(args.get("conteudo") or "")))
-        except ValueError as e:
-            return str(e), True
+    except Exception:  # noqa: BLE001
+        logger.exception("enviar_arquivo: falha interna (agente %s, destino %s)", agent_id, para)
+        return "Falha interna ao enviar o arquivo; avise o administrador.", True
+    try:
+        # Numa thread: reportlab/docx/openpyxl são síncronos e pesados; no
+        # loop travariam o worker (chat, /ws, /reply).
+        dados, mime, nome = await anyio.to_thread.run_sync(
+            lambda: montar_arquivo(str(args.get("formato") or ""),
+                                   str(args.get("nome") or ""), str(args.get("conteudo") or "")))
+    except ValueError as e:
+        return str(e), True
+    return await _entregar(agent_id, para, nome, dados, mime)
 
+
+async def _entregar(agent_id: str, para: str, nome: str, dados: bytes, mime: str) -> tuple[str, bool]:
+    """Grava o arquivo como anexo da conversa com `para` e na Documentos dele.
+
+    Quem chama já conferiu o destino. Usada pelo `enviar_arquivo` e pelo
+    `relatorio_ponto`: as duas entregas têm que ser idênticas, senão uma delas
+    aparece na conversa e some da Documentos (ou o contrário).
+    """
+    anexo_id, doc_id = str(uuid.uuid4()), str(uuid.uuid4())
+    gravados: list[str] = []
+    try:
         caminho = ax.caminho_do_anexo(anexo_id, "conversa_agente", agent_id, nome)
         ext = nome.rsplit(".", 1)[-1]
         caminho_doc = f"{para}/{doc_id}.{ext}"
@@ -334,14 +433,19 @@ async def mcp_anexos(agent_id: str, assinatura: str, request: Request,
         return _resposta(ident, {"protocolVersion": _PROTOCOLO, "capabilities": {"tools": {}},
                                  "serverInfo": {"name": "hsos-anexos", "version": "1.0.0"}})
     if metodo == "tools/list":
-        return _resposta(ident, {"tools": _FERRAMENTAS})
+        return _resposta(ident, {"tools": ferramentas_de(agent_id)})
     if metodo == "tools/call":
         nome, args = params.get("name"), params.get("arguments") or {}
+        if nome not in {f["name"] for f in ferramentas_de(agent_id)}:
+            return _resposta(ident, erro={"code": -32601, "message": f"Ferramenta desconhecida: {nome}"})
         if nome == "ler_anexo":
             texto, erro = await _ler_anexo(agent_id, args)
             return _texto(ident, texto, erro)
         if nome == "enviar_arquivo":
             texto, erro = await _enviar_arquivo(agent_id, args)
+            return _texto(ident, texto, erro)
+        if nome == "relatorio_ponto":
+            texto, erro = await _relatorio_ponto(agent_id, args)
             return _texto(ident, texto, erro)
         return _resposta(ident, erro={"code": -32601, "message": f"Ferramenta desconhecida: {nome}"})
     return _resposta(ident, erro={"code": -32601, "message": f"Método não suportado: {metodo}"})
