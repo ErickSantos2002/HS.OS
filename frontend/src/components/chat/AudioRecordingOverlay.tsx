@@ -1,4 +1,4 @@
-import { Loader2, X, Check } from "lucide-react";
+import { Loader2, X, Check, Send } from "lucide-react";
 import { AiLoader } from "@/components/ui/ai-loader";
 
 interface AudioRecordingOverlayProps {
@@ -7,6 +7,8 @@ interface AudioRecordingOverlayProps {
   isProcessing: boolean;
   onCancel: () => void;
   onTranscribe: () => void;
+  /** Transcreve e envia direto. Só o chat com agente oferece; o canal não. */
+  onSend?: () => void;
 }
 
 function formatDuration(seconds: number) {
@@ -21,6 +23,7 @@ export default function AudioRecordingOverlay({
   isProcessing,
   onCancel,
   onTranscribe,
+  onSend,
 }: AudioRecordingOverlayProps) {
   const raw = Array.isArray(bars) ? bars : [];
   const half = raw.slice(0, Math.ceil(raw.length / 2));
@@ -84,6 +87,16 @@ export default function AudioRecordingOverlay({
           )}
         </button>
 
+        {onSend && (
+          <button
+            onClick={onSend}
+            disabled={isProcessing}
+            className="flex h-14 w-14 items-center justify-center rounded-full border border-primary/40 bg-primary/15 text-primary hover:bg-primary/25 transition-colors disabled:opacity-40"
+            title="Enviar ao agente"
+          >
+            <Send className="h-6 w-6" />
+          </button>
+        )}
       </div>
     </div>
   );

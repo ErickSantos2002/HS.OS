@@ -9,6 +9,7 @@
  * Now supports SSE streaming via /api/stream with fallback to /v1/responses.
  */
 
+import { avisoDeVoz } from "@/lib/mensagem-de-voz";
 import { assinar } from "@/lib/realtime";
 import { getAgentReadableImageContext } from "@/lib/chat-image-vision";
 import { getModelForAgent } from "@/lib/active-agents";
@@ -901,6 +902,11 @@ export function sendMessageInBackground(
 
       const descricoes = await descreverImagensDoTurno(ultima);
       if (descricoes) prefixos.push(descricoes);
+
+      // Voz chega como transcrição; o agente precisa saber que pode haver erro
+      // de reconhecimento. Ver `lib/mensagem-de-voz.ts`.
+      const aviso = avisoDeVoz(texto);
+      if (aviso) prefixos.push(aviso);
 
       const textoParaOAgente = prefixos.length
         ? `${prefixos.join("\n\n")}\n\n---\n\n${texto}`

@@ -1,7 +1,7 @@
+import { conteudoDeVoz } from "@/lib/mensagem-de-voz";
 import { assinar } from "@/lib/realtime";
 import React, { Fragment, useState, useRef, useEffect, useCallback, useMemo, useLayoutEffect } from "react";
 import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
-import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { api } from "@/lib/api";
 
 import { useAllAvatars, useResolvedAgentAvatar } from "@/hooks/use-agent-avatar";
@@ -1962,6 +1962,30 @@ export default function ChatPage() {
   /* ── Send (agent DM) ── */
   const [uploading, setUploading] = useState(false);
 
+  /** Mostra, grava e dispara o agente. Comum ao texto digitado e à voz. */
+  const despacharAoAgente = useCallback(async (sendingAgentId: string, userMsg: ChatMessage): Promise<boolean> => {
+    appendAgentMessage(sendingAgentId, userMsg);
+    try {
+      const persistedMessage = await appendToConversations(user!.id, sendingAgentId, userMsg);
+      replaceMessageInHistoryCache(user!.id, sendingAgentId, userMsg.id, persistedMessage);
+      upsertAgentMessage(sendingAgentId, persistedMessage, userMsg.id);
+      setLastMessages((prev) => ({
+        ...prev,
+        [sendingAgentId]: {
+          content: (persistedMessage.content ?? "").length > 120 ? `${persistedMessage.content.slice(0, 120)}…` : (persistedMessage.content ?? ""),
+          created_at: persistedMessage.timestamp,
+        },
+      }));
+    } catch {
+      removeMessageFromHistoryCache(user!.id, sendingAgentId, userMsg.id);
+      updateAgentHistory(sendingAgentId, (c) => c.filter((m) => m.id !== userMsg.id));
+      toast.error("Não consegui salvar essa mensagem no histórico. Tente novamente.");
+      return false;
+    }
+    sendMessageInBackground(sendingAgentId, [...(messagesByAgent[sendingAgentId] ?? []), userMsg]);
+    return true;
+  }, [messagesByAgent, appendAgentMessage, updateAgentHistory, upsertAgentMessage, user, setLastMessages]);
+
   const handleSend = useCallback(async () => {
     let input = inputLocalRef.current;
     if ((!input.trim() && media.staged.length === 0) || !effectiveAgentId || uploading) return;
@@ -2001,31 +2025,13 @@ export default function ChatPage() {
         content: displayContent, timestamp: new Date().toISOString(), channel: "web",
         media: outgoingMedia.length > 0 ? outgoingMedia : undefined,
       };
-      appendAgentMessage(sendingAgentId, userMsg);
-      try {
-        const persistedMessage = await appendToConversations(user!.id, sendingAgentId, userMsg);
-        replaceMessageInHistoryCache(user!.id, sendingAgentId, userMsg.id, persistedMessage);
-        upsertAgentMessage(sendingAgentId, persistedMessage, userMsg.id);
-        setLastMessages((prev) => ({
-          ...prev,
-          [sendingAgentId]: {
-            content: (persistedMessage.content ?? "").length > 120 ? `${persistedMessage.content.slice(0, 120)}…` : (persistedMessage.content ?? ""),
-            created_at: persistedMessage.timestamp,
-          },
-        }));
-      } catch {
-        removeMessageFromHistoryCache(user!.id, sendingAgentId, userMsg.id);
-        updateAgentHistory(sendingAgentId, (c) => c.filter((m) => m.id !== userMsg.id));
-        toast.error("Não consegui salvar essa mensagem no histórico. Tente novamente.");
-        return;
-      }
+      if (!(await despacharAoAgente(sendingAgentId, userMsg))) return;
       inputLocalRef.current = "";
       clearInputDraft();
       resetComposerTextarea(inputRef.current);
       media.clearStaged();
-      sendMessageInBackground(sendingAgentId, [...(messagesByAgent[sendingAgentId] ?? []), userMsg]);
     } finally { setUploading(false); }
-  }, [media, effectiveAgentId, isAgentWorking, uploading, messagesByAgent, appendAgentMessage, updateAgentHistory, clearInputDraft, upsertAgentMessage, user, setLastMessages, setRealtimePending]);
+  }, [media, effectiveAgentId, isAgentWorking, uploading, clearInputDraft, despacharAoAgente, setRealtimePending]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     if (e.clipboardData.files.length > 0) {
@@ -2180,8 +2186,12 @@ export default function ChatPage() {
     }
   }, [audioLevel, audioRecorder, syncToDraft]);
 
-  const handleAudioSendAsVoice = useCallback(async () => {
+  // Grava, transcreve e manda ao agente como se fosse digitado — com a marca
+  // 🎤 para o agente saber que é transcrição. O áudio não é guardado: no chat
+  // com agente não há player, e o agente não ouve. Ver `lib/mensagem-de-voz.ts`.
+  const handleAudioSend = useCallback(async () => {
     if (!user || !effectiveAgentId) return;
+    const sendingAgentId = effectiveAgentId;
     audioLevel.stop();
     audioRecorder.setIsProcessing(true);
     try {
@@ -2191,31 +2201,40 @@ export default function ChatPage() {
         return;
       }
       const ext = getAudioFileExtension(blob.type);
-      const fileName = `${Date.now()}.${ext}`;
-      const filePath = `${user.id}/${effectiveAgentId}/${fileName}`;
+      const formData = new FormData();
+      formData.append("arquivo", blob, `audio.${ext}`);
+      let transcricao: string | undefined;
       try {
-        await enviarArquivo("audio-messages", filePath, blob, `audio.${ext}`);
+        transcricao = (await api<{ text: string }>("/ia/transcrever", { method: "POST", body: formData })).text;
       } catch {
-        toast.error("Erro ao enviar áudio.");
+        // Sem transcrição não há o que mandar: o agente não ouve áudio.
+        toast.error("Não consegui transcrever o áudio, então ele não foi enviado. Tente de novo ou digite.");
         return;
       }
-      const audioUrl = urlPublica("audio-messages", filePath);
-      // O `user_id` sai do token no servidor.
-      await api(`/conversations/${encodeURIComponent(effectiveAgentId)}`, {
-        method: "POST",
-        body: {
-          role: "user",
-          content: "🎤 Mensagem de voz",
-          media: [{ type: "audio", url: audioUrl, name: fileName }],
-        },
+      const conteudo = conteudoDeVoz(transcricao);
+      if (!conteudo) {
+        toast.info("Nenhuma fala detectada no áudio — nada foi enviado.");
+        return;
+      }
+      if (isAgentWorking) {
+        setRealtimePending(sendingAgentId, false);
+        setStreamingText("");
+        stopAgentResponse(sendingAgentId);
+      }
+      agentShouldAutoScrollRef.current = true;
+      turnStartByAgentRef.current[sendingAgentId] = Date.now();
+      setTurnStartTick((t) => t + 1);
+      await despacharAoAgente(sendingAgentId, {
+        id: `m${Date.now()}`, agentId: sendingAgentId, role: "user",
+        content: conteudo, timestamp: new Date().toISOString(), channel: "web",
       });
     } catch (err) {
       console.error("Audio send error:", err);
-      toast.error("Erro ao enviar áudio.");
+      toast.error("Erro ao enviar o áudio.");
     } finally {
       audioRecorder.setIsProcessing(false);
     }
-  }, [audioLevel, audioRecorder, user, effectiveAgentId]);
+  }, [audioLevel, audioRecorder, user, effectiveAgentId, isAgentWorking, despacharAoAgente, setRealtimePending]);
 
   /* ── Channel create handler ── */
   const handleCreateChannel = async (name: string, desc: string, type: "public" | "private" | "dm", agentIds?: string[], memberIds?: string[]) => {
@@ -2732,7 +2751,7 @@ export default function ChatPage() {
           isProcessing={audioRecorder.isProcessing}
           onCancel={handleAudioCancel}
           onTranscribe={handleAudioTranscribe}
-          
+          onSend={handleAudioSend}
         />
       )}
     </div>
