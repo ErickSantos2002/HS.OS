@@ -897,6 +897,32 @@ def _ja_esta_la(texto: str, existentes: list[str]) -> bool:
     return False
 
 
+def _turno_terminou(msgs: list) -> bool:
+    """A janela termina com texto do agente — ou seja, o turno acabou?
+
+    ⚠️ **O `/recuperar` gravava a narração de um turno ainda em curso.** A tela
+    chama a rota ao abrir, e abrir enquanto o agente trabalha é o normal: em
+    13/10/2026 a Lidisay mandou três planilhas ao `bruce` e a primeira bolha foi
+    "I'll read the attached files.", sozinha, em inglês. A janela tinha a
+    narração e dois resultados de ferramenta; sem texto depois da última
+    ferramenta, o recuo do `_texto_da_resposta` devolvia a narração.
+
+    O recuo continua certo para o `/reply`, que só lê depois do `agent.wait`
+    dizer que o run acabou. Aqui não há essa garantia, então a regra é mais
+    estrita: só se recupera a janela cuja ÚLTIMA mensagem é texto do agente.
+    Run que terminou só com ferramenta também fica de fora — a narração não é
+    resposta, e quem precisa dizer "terminou sem texto" é o `/reply`.
+    """
+    ultima = max(msgs, key=lambda m: (m.get("__openclaw") or {}).get("seq") or 0, default=None)
+    if ultima is None or ultima.get("role") != "assistant":
+        return False
+    conteudo = ultima.get("content")
+    if isinstance(conteudo, str):
+        return bool(conteudo.strip())
+    return any(isinstance(b, dict) and b.get("type") == "text" and (b.get("text") or "").strip()
+               for b in (conteudo or []))
+
+
 def _texto_a_recuperar(texto: str, existentes: list[str]) -> str | None:
     """O que a janela do gateway vira em `conversations` — ou `None` se nada.
 
@@ -989,6 +1015,8 @@ async def recuperar(
         recuperadas = []
         for fim_ms, msgs in janelas:
             if fim_ms and fim_ms <= corte_ms:
+                continue
+            if not _turno_terminou(msgs):
                 continue
             texto = _texto_a_recuperar(_texto_da_resposta(msgs, 0), existentes)
             if texto is None:

@@ -375,3 +375,53 @@ def test_ids_validos_descarta_o_que_nao_e_uuid():
     """Id malformado no `media` estouraria o `$1::uuid[]` em 500."""
     u = "3f2b8c1e-5d4a-4b6e-9c7d-1a2b3c4d5e6f"
     assert c._ids_validos([{"id": "x"}, {"id": u}, "str", {}]) == [u]
+
+
+# ── Turno em andamento não é resposta órfã — 13/10/2026 ─────────────────────
+#
+# A Lidisay mandou três planilhas ao `bruce` e a primeira bolha que ela viu foi
+# **"I'll read the attached files."**, sozinha, em inglês. Não era resposta: era
+# a narração que o modelo escreve antes de chamar a ferramenta.
+#
+# Quem gravou foi o `/recuperar`, que roda quando a tela abre — e a tela abriu
+# com o agente ainda trabalhando. A janela tinha a narração e dois resultados de
+# ferramenta; o corte por fronteira deixava zero texto depois da última
+# ferramenta, e o recuo do `_texto_da_resposta` ("se o turno final não tem
+# texto, junta tudo") devolvia justamente a narração. Treze bolhas assim em
+# trinta dias, em quatro agentes — sempre o "I'll …" antes de uma ferramenta.
+
+def _msg(seq, role, texto=None):
+    m = {"role": role, "__openclaw": {"seq": seq, "recordTimestampMs": seq * 1000}}
+    if texto is not None:
+        m["content"] = [{"type": "text", "text": texto}]
+    return m
+
+
+EM_ANDAMENTO = [
+    _msg(1, "user", "olha os arquivos"),
+    _msg(2, "assistant", "I'll read the attached files."),
+    _msg(3, "toolResult", "marcacoes.csv: 476 linhas"),
+    _msg(4, "toolResult", "bancohoras.csv: 27 linhas"),
+]
+
+
+def test_turno_em_andamento_nao_e_recuperado():
+    """O histórico real da sessão da Lidisay, no instante em que a tela abriu."""
+    [(_, msgs)] = c._janelas_por_pergunta(EM_ANDAMENTO)
+    assert not c._turno_terminou(msgs)
+
+
+def test_turno_que_terminou_com_texto_e_recuperado():
+    [(_, msgs)] = c._janelas_por_pergunta(EM_ANDAMENTO + [
+        _msg(5, "assistant", "Li os três arquivos. Aqui está o que eles são."),
+    ])
+    assert c._turno_terminou(msgs)
+    assert c._texto_da_resposta(msgs, 0) == "Li os três arquivos. Aqui está o que eles são."
+
+
+def test_turno_que_terminou_so_com_ferramenta_nao_e_recuperado():
+    """Sem texto final não há o que mostrar — e a narração não substitui a resposta."""
+    [(_, msgs)] = c._janelas_por_pergunta(EM_ANDAMENTO + [
+        _msg(5, "assistant", ""),
+    ])
+    assert not c._turno_terminou(msgs)
