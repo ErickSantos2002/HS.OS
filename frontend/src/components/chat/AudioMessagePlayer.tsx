@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pause, Play, Volume2 } from "lucide-react";
+import { Pause, Play } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { gravarVelocidade, lerVelocidade, proximaVelocidade, rotuloVelocidade } from "@/lib/velocidade-audio";
 
 interface AudioMessagePlayerProps {
   src: string;
@@ -44,6 +45,24 @@ export default function AudioMessagePlayer({ src, className, onErro }: AudioMess
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [hasError, setHasError] = useState(false);
+  const [velocidade, setVelocidade] = useState(lerVelocidade);
+
+  // `defaultPlaybackRate` sobrevive à troca de `src` (URL assinada renovada);
+  // o `playbackRate` vale para o que já está tocando.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.defaultPlaybackRate = velocidade;
+    audio.playbackRate = velocidade;
+  }, [velocidade, src]);
+
+  const trocarVelocidade = useCallback(() => {
+    setVelocidade((atual) => {
+      const nova = proximaVelocidade(atual);
+      gravarVelocidade(nova);
+      return nova;
+    });
+  }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -227,9 +246,15 @@ export default function AudioMessagePlayer({ src, className, onErro }: AudioMess
         </div>
       </button>
 
-      <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary/70 text-muted-foreground">
-        <Volume2 className="h-4 w-4" />
-      </div>
+      <button
+        type="button"
+        onClick={trocarVelocidade}
+        className="relative z-10 flex h-8 min-w-[2.75rem] shrink-0 items-center justify-center rounded-full bg-secondary/70 px-2 text-[11px] font-semibold tabular-nums text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+        aria-label={`Velocidade: ${rotuloVelocidade(velocidade)}. Clique para mudar.`}
+        title="Velocidade do áudio"
+      >
+        {rotuloVelocidade(velocidade)}
+      </button>
 
       {hasError && <span className="absolute inset-x-3 -bottom-5 text-[10px] text-destructive">Não foi possível reproduzir este áudio.</span>}
     </div>
