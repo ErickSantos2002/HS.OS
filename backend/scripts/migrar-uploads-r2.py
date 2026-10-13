@@ -10,10 +10,11 @@ Idempotente: pula o que já está no R2 com o mesmo tamanho. Ao fim imprime
 contagem e bytes por bucket dos dois lados — o volume só sai do EasyPanel
 quando a coluna final bater.
 
-"Bateu", para um bucket, quer dizer: o R2 tem pelo menos a mesma quantidade de
-arquivos E pelo menos os mesmos bytes que o disco. "Pelo menos" e não "igual"
-porque, depois do deploy, uploads novos já caem direto no R2 e o disco antigo
-não os conhece — exigir igualdade reprovaria uma migração correta.
+"Bateu" é conferido POR CHAVE: toda chave do disco precisa estar no R2 com o
+mesmo tamanho. O R2 pode ter chaves a mais (uploads feitos depois do deploy),
+mas isso NÃO compensa um arquivo que falte — comparar só totais deixaria um
+upload novo mascarar um arquivo perdido, e o volume é apagado com esse veredito.
+Arquivo do disco fora de bucket conhecido também reprova: não seria migrado.
 """
 import mimetypes
 import sys
@@ -27,16 +28,23 @@ from app.config import settings  # noqa: E402
 ORIGEM = Path("/app/uploads")
 
 
-def bateu(n_disco: int, bytes_disco: int, n_r2: int, bytes_r2: int) -> bool:
-    """O R2 cobre o disco: ao menos a mesma contagem e ao menos os mesmos bytes."""
-    return n_r2 >= n_disco and bytes_r2 >= bytes_disco
+def faltando(disco: dict[str, int], r2: dict[str, int]) -> list[str]:
+    """Chaves do disco ausentes no R2 ou com tamanho diferente (vazio = bateu)."""
+    return sorted(k for k, t in disco.items() if r2.get(k) != t)
 
 
 def main() -> int:
     aplicar = "--aplicar" in sys.argv
+    ausentes = [n for n in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET")
+                if not getattr(settings, n, "")]
+    if ausentes:
+        print(f"Variáveis do R2 ausentes: {', '.join(ausentes)}")
+        return 2
     r2 = R2(settings.R2_ACCOUNT_ID, settings.R2_ACCESS_KEY_ID,
             settings.R2_SECRET_ACCESS_KEY, settings.R2_BUCKET)
     disco = defaultdict(lambda: [0, 0])
+    chaves_disco: dict[str, int] = {}
+    fora = []
     enviados = pulados = 0
     for arquivo in sorted(ORIGEM.rglob("*")):
         if not arquivo.is_file():
@@ -45,10 +53,12 @@ def main() -> int:
         bucket = rel.split("/", 1)[0]
         if bucket not in BUCKETS:
             print(f"  ⚠️  fora de bucket conhecido, ignorado: {rel}")
+            fora.append(rel)
             continue
         tamanho = arquivo.stat().st_size
         disco[bucket][0] += 1
         disco[bucket][1] += tamanho
+        chaves_disco[rel] = tamanho
         ja = r2.cabecalho(rel)
         if ja is not None and ja.tamanho == tamanho:
             pulados += 1
@@ -60,14 +70,24 @@ def main() -> int:
 
     print(f"\n{'enviados' if aplicar else 'a enviar'}: {enviados} · já no R2: {pulados}\n")
     print(f"  {'bucket':22} {'disco':>16} {'R2':>16}")
-    ok = True
+    chaves_r2: dict[str, int] = {}
     for bucket in sorted(BUCKETS):
         n_d, b_d = disco.get(bucket, [0, 0])
         itens = r2.listar(f"{bucket}/", recursivo=True)
+        for i in itens:
+            chaves_r2[i["chave"]] = i["tamanho"]
         n_r, b_r = len(itens), sum(i["tamanho"] for i in itens)
-        passou = bateu(n_d, b_d, n_r, b_r)
-        ok &= passou
-        print(f"  {bucket:22} {n_d:>6} · {b_d:>8} {n_r:>6} · {b_r:>8}  {'✅' if passou else '❌'}")
+        print(f"  {bucket:22} {n_d:>6} · {b_d:>8} {n_r:>6} · {b_r:>8}")
+    falta = faltando(chaves_disco, chaves_r2)
+    if falta:
+        print(f"\n  ❌ {len(falta)} chave(s) faltando ou com tamanho diferente no R2:")
+        for k in falta[:20]:
+            print(f"     {k} (disco {chaves_disco[k]} · R2 {chaves_r2.get(k, 'ausente')})")
+        if len(falta) > 20:
+            print(f"     ... e mais {len(falta) - 20}")
+    if fora:
+        print(f"\n  ❌ {len(fora)} arquivo(s) fora de bucket conhecido (não migrados)")
+    ok = not falta and not fora
     if not aplicar:
         print("\n  (ensaio — nada foi escrito; rode com --aplicar)")
         return 0
