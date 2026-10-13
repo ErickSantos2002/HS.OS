@@ -82,6 +82,10 @@ class Settings(BaseSettings):
 
     @property
     def sso_ativo(self) -> bool:
+        # Tenant genérico abriria o login a QUALQUER conta Microsoft do mundo,
+        # e o e-mail delas não é controlado por nós. Só o tenant da HS liga.
+        if self.MS_TENANT_ID.strip().lower() in ("common", "organizations", "consumers"):
+            return False
         return all((
             self.MS_TENANT_ID, self.MS_CLIENT_ID, self.MS_CLIENT_SECRET,
             self.MS_REDIRECT_URI, self.url_do_front,

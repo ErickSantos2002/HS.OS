@@ -227,3 +227,57 @@ def test_desativada_entre_o_callback_e_a_troca_nao_recebe_token(sso_ligado, banc
 
     assert c.post("/auth/sso/exchange", json={"ticket": q["ticket"]}).status_code == 403
     assert banco.entradas == []
+
+
+# ─── nOAuth: só membro do tenant da HS ───────────────────────────────────────
+
+@pytest.mark.parametrize("tenant", ["common", "organizations", "Consumers"])
+def test_tenant_generico_desliga_o_sso(sso_ligado, monkeypatch, tenant):
+    """Com `common`, qualquer conta Microsoft do mundo chegaria ao callback."""
+    monkeypatch.setattr(settings, "MS_TENANT_ID", tenant)
+    assert cliente().get("/auth/sso/status").json() == {"ativo": False}
+
+
+class _RespostaGraph:
+    def __init__(self, corpo):
+        self.corpo = corpo
+        self.is_success = True
+        self.status_code = 200
+
+    def json(self):
+        return self.corpo
+
+
+@pytest.fixture
+def graph(monkeypatch):
+    """Troca o httpx do `email_do_usuario` por um Graph que devolve `graph.corpo`."""
+
+    class Estado:
+        corpo: dict = {}
+
+    class ClienteFalso:
+        def __init__(self, *a, **k): ...
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): ...
+        async def get(self, *a, **k): return _RespostaGraph(Estado.corpo)
+
+    monkeypatch.setattr(microsoft.httpx, "AsyncClient", ClienteFalso)
+    return Estado
+
+
+def test_convidado_do_tenant_nao_vira_email(graph):
+    import asyncio
+    casos = [
+        {"mail": "rh@exemplo.com", "userPrincipalName": "rh_exemplo.com#EXT#@hs.onmicrosoft.com", "userType": "Guest"},
+        {"mail": "rh@exemplo.com", "userPrincipalName": "rh_exemplo.com#EXT#@hs.onmicrosoft.com", "userType": "Member"},
+        {"mail": "rh@exemplo.com", "userPrincipalName": "rh@exemplo.com"},
+    ]
+    for corpo in casos:
+        graph.corpo = corpo
+        assert asyncio.run(microsoft.email_do_usuario("t")) is None, corpo
+
+
+def test_membro_do_tenant_vira_email(graph):
+    import asyncio
+    graph.corpo = {"mail": None, "userPrincipalName": "RH@exemplo.com", "userType": "Member"}
+    assert asyncio.run(microsoft.email_do_usuario("t")) == "RH@exemplo.com"
