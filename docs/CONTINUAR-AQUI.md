@@ -821,14 +821,42 @@ parametrizada. Assim a decisão vira configuração, não código.
 
 ## Próximo passo, em ordem de valor
 
-### 0. Régua do ponto (Lindsay/RH) — depois dos anexos no R2
+### 0. Régua do ponto (Lindsay/RH) — PRÓXIMA SESSÃO COMEÇA AQUI
 
-A Lindsay manda pelo chat com o `bruce` a planilha bruta do Flash e a ajustada.
-Levantar a régua comparando as duas, conferir com ela, e transformar em ferramenta
-determinística + skill `ponto-flash` + ponteiro no `AGENTS.md` do bruce (**medir o
-teto de 20.000 caracteres antes** de escrever). Pré-requisito: o GATE dos anexos
-(13/10/2026) conferido em produção — `ler_anexo` com xlsx e csv, `enviar_arquivo`,
-404 para quem não é da conversa e a `nina` recusando id alheio.
+**Estado em 13/10/2026 (fim da sessão):** anexos e storage no R2 estão **em
+produção e testados de ponta a ponta** — bucket `hsos-arquivos`, migração `017`
+aplicada, disco antigo migrado e volume removido, `hsos-anexos-<agente>`
+publicado no gateway com o escopo fechado (cada agente vê só a sua entrada,
+conferido perguntando ao `bruce` e à `nina`). O `bruce` leu uma planilha de teste
+certo e devolveu xlsx como anexo, ao vivo. `ler_anexo`/`enviar_arquivo` só valem
+durante o turno em curso da pessoa (`agent_runs`, janela de 30 min).
+
+O `bruce` já sabe (está no `AGENTS.md` dele) que **ponto vive no Flash, sistema
+externo, e é dele com a RH** — e os cinco `SOUL.md` têm "Não afirmo o que não sei
+— nem número, nem fato". Antes disso ele deduziu que ponto era do Flow.
+
+**O que falta, em ordem:**
+1. **Liberar a Lindsay**: conta `colaborador`, acesso só ao `bruce`
+   (`allowedUserIds`). Ela entra pelo FortiPAM — senha quem define é o admin.
+   Conferir com o token dela que `GET /agents` só devolve o `bruce`.
+2. Ela manda pelo chat com o `bruce` a **planilha bruta do Flash** e a **ajustada**
+   do mesmo mês.
+3. Levantar a régua comparando as duas (o que ela corta, recalcula, agrupa) e
+   **conferir com ela** — a régua é dela, não nossa (memória
+   `regras-de-negocio-ficam-em-projetos`).
+4. Virar **ferramenta determinística** (padrão `app/relatorios/compradores.py`,
+   recebe o id do anexo) + skill `ponto-flash` + ponteiro curto no `AGENTS.md`
+   do `bruce` (hoje 8.937 de 20.000 caracteres — **medir antes**).
+5. Duas saídas: os dados para ela e o relatório para o Nicholson.
+
+⚠️ O xlsx que o `enviar_arquivo` monta grava **toda célula como texto** —
+`SOMA` no Excel não funciona sem converter. A ferramenta da régua deve gerar o
+xlsx dela com números de verdade, não passar pelo `enviar_arquivo`.
+
+⚠️ Pendências menores catalogadas e não bloqueantes: bolha extra "O agente
+terminou sem produzir texto" na `nina` logo depois de uma resposta normal;
+`agent_runs.agent_id` gravado sem normalizar no `/send`; extração de uma página
+de PDF enorme não tem teto dentro da página.
 
 ### 1. O banco — é o que sobrou
 
