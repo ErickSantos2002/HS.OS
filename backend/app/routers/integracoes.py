@@ -1807,6 +1807,73 @@ def _deny_de_mcp(also_allow: list[str], deny_atual: list[str],
     return sorted(todas - meus) + preservados
 
 
+# As ferramentas que cada entrada `hsos-anexos-<id>` expõe. Ficam aqui, ao lado
+# do cálculo de escopo, porque o script que publica as entradas e a criação de
+# agente precisam concordar sobre elas.
+FERRAMENTAS_ANEXOS = ("ler_anexo", "enviar_arquivo")
+_PREFIXO_ANEXOS = "hsos-anexos-"
+
+
+def escopo_mcp_do_agente(agent_id: str, tools: dict, servidores: dict) -> dict:
+    """O `tools` do agente com o escopo de MCP recalculado. Puro: devolve cópia.
+
+    ⚠️ **Cada `hsos-anexos-<id>` é a identidade de um agente**, porque a URL
+    leva o HMAC do id dele. Enxergar a entrada de outro é ler os anexos das
+    conversas do outro e mandar arquivo em nome dele. Por isso:
+
+    - a entrada PRÓPRIA entra no `alsoAllow` quando existe em `servidores`;
+    - a de qualquer outro sai do `alsoAllow`, se alguém a pôs ali à mão;
+    - o `deny` é recalculado por `_deny_de_mcp`, que nega tudo o que o agente
+      não tem no `alsoAllow` — e é isso que exclui de verdade, porque o
+      `alsoAllow` só acrescenta.
+
+    Agente sem entrada própria (criado pela tela antes de alguém rodar o
+    `publicar-anexos-mcp.py`) fica sem anexos, mas também sem os dos outros.
+    """
+    t = dict(tools or {})
+    proprias = [f"mcp__{_PREFIXO_ANEXOS}{agent_id}__{f}" for f in FERRAMENTAS_ANEXOS]
+    atuais = [
+        x for x in (t.get("alsoAllow") or [])
+        if not _sem_prefixo(x).startswith(_PREFIXO_ANEXOS) or x in proprias
+    ]
+    if f"{_PREFIXO_ANEXOS}{agent_id}" in servidores:
+        atuais += [x for x in proprias if x not in atuais]
+    t["alsoAllow"] = atuais
+    t["deny"] = _deny_de_mcp(atuais, list(t.get("deny") or []), servidores)
+    return t
+
+
+async def aplicar_escopo_mcp(agent_id: str) -> None:
+    """Grava no gateway o escopo de MCP de UM agente (o recém-criado).
+
+    Mesmo caminho do `publicar_banco`: lê a config com o hash, manda a lista de
+    agentes INTEIRA (array substitui no merge patch) e confere o efeito no
+    `deny` relido, não só que o patch voltou sem erro.
+    """
+    parsed, base_hash = await patch_gw.config_do_gateway()
+    servidores = ((parsed.get("mcp") or {}).get("servers")) or {}
+    lista = [dict(a) for a in (parsed.get("agents") or {}).get("list") or []]
+    alvo = next((a for a in lista if str(a.get("id")) == agent_id), None)
+    if alvo is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            f"Agente {agent_id} não está no gateway.")
+    novo = escopo_mcp_do_agente(agent_id, alvo.get("tools") or {}, servidores)
+    if novo == (alvo.get("tools") or {}):
+        return
+    alvo["tools"] = novo
+    esperado = set(novo["deny"])
+
+    def _conferir(c: dict) -> bool:
+        return any(
+            str(x.get("id")) == agent_id
+            and set((x.get("tools") or {}).get("deny") or []) == esperado
+            for x in ((c.get("agents") or {}).get("list") or [])
+        )
+
+    await patch_gw.aplicar_patch({"agents": {"list": lista}}, base_hash, conferir=_conferir)
+    logger.info("Escopo de MCP aplicado a %s: nega %d ferramentas", agent_id, len(esperado))
+
+
 @router.post("/conectores/{conector_id}/publicar-banco")
 async def publicar_banco(
     conector_id: str,

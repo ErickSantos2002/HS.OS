@@ -1997,6 +1997,19 @@ async def criar(
             logger.error("Travas de especialista não aplicadas a %s: %s", dados.openclaw_id, e)
             falhos.append({"conector": "Travas de especialista", "motivo": str(e)[:300]})
 
+    # ⚠️ **Agente novo nasce com o escopo de MCP fechado.** O `deny` de MCP só
+    # era recalculado ao publicar um banco — e agente criado sem conector nunca
+    # passava por lá. Nascia sem deny nenhum e, como `alsoAllow` só acrescenta,
+    # enxergava todo servidor declarado, inclusive as `hsos-anexos-<outro>`, que
+    # carregam a identidade do outro agente (13/10/2026). Vem depois das travas
+    # porque o recálculo preserva as delas (`_DENY_NAO_MCP`).
+    try:
+        from app.routers.integracoes import aplicar_escopo_mcp
+        await aplicar_escopo_mcp(dados.openclaw_id)
+    except Exception as e:  # noqa: BLE001
+        logger.error("Escopo de MCP não aplicado a %s: %s", dados.openclaw_id, e)
+        falhos.append({"conector": "Escopo de ferramentas", "motivo": str(e)[:300]})
+
     # Sem isto o agente nasce inalcançável pela orquestradora, e a recusa não
     # chega a quem perguntou.
     try:
