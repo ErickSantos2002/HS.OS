@@ -32,6 +32,8 @@ export interface ChatMessage {
   channel: string;
   media?: MediaAttachment[];
   isError?: boolean;
+  /** Visto da pergunta vindo do servidor (spec 2026-10-14). */
+  recibo?: "enviada" | "entregue" | "lida" | "falhou";
 }
 
 export interface TeamMember {
