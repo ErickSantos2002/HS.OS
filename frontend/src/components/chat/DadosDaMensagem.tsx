@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { Loader2 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import VistoDaMensagem from "./VistoDaMensagem";
 
@@ -48,6 +48,7 @@ export default function DadosDaMensagem({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle>Dados da mensagem</DialogTitle>
+          <DialogDescription className="sr-only">Quem recebeu e quem leu esta mensagem.</DialogDescription>
         </DialogHeader>
         {erro ? (
           <p className="text-sm text-muted-foreground">Não consegui carregar os dados da mensagem.</p>
