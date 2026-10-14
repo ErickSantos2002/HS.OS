@@ -18,6 +18,8 @@ vi.mock("@/lib/api", () => ({
     return [
       { id: "m1", agent_id: "bruce", role: "user", content: "planilha com os eventos", created_at: "2026-10-13T12:24:15.000Z" },
       { id: "m2", agent_id: "bruce", role: "agent", content: "22 eventos em setembro", created_at: "2026-10-13T12:25:24.000Z" },
+      { id: "m3", agent_id: "bruce", role: "agent", content: "📎 eventos.xlsx", created_at: "2026-10-13T12:25:30.000Z",
+        media: [{ type: "document", name: "eventos.xlsx", id: "a1" }] },
     ];
   }),
 }));
@@ -39,5 +41,14 @@ describe("ConversasAnteriores", () => {
   it("abre direto na conversa pedida pela busca", async () => {
     render(<ConversasAnteriores agentId="bruce" open onOpenChange={() => {}} onCitar={() => {}} abrirConversa="r1" />);
     expect(await screen.findByText("22 eventos em setembro")).toBeInTheDocument();
+  });
+
+  it("o arquivo que o agente entregou aparece na conversa antiga (revisão final)", async () => {
+    // ⚠️ O `relatorio_ponto` e o `enviar_arquivo` gravam a bolha como
+    // "📎 <nome>" com o arquivo em `media`. Sem desenhar a mídia, a conversa
+    // que motivou o pedido abria com o nome do arquivo e nada para baixar.
+    const renderMidia = vi.fn((media: { name?: string }[]) => <span>baixar {media[0].name}</span>);
+    render(<ConversasAnteriores agentId="bruce" open onOpenChange={() => {}} onCitar={() => {}} abrirConversa="r1" renderMidia={renderMidia} />);
+    expect(await screen.findByText("baixar eventos.xlsx")).toBeInTheDocument();
   });
 });

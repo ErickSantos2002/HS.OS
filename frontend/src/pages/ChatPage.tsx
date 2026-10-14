@@ -23,7 +23,7 @@ import { type ChatMessage, type MediaAttachment } from "@/lib/mock-data";
 import VistoDaMensagem from "@/components/chat/VistoDaMensagem";
 import { estadoNoAgente } from "@/lib/vistos";
 import ConversasAnteriores from "@/components/chat/ConversasAnteriores";
-import { acrescentarCitacao } from "@/lib/conversas-anteriores";
+import { acrescentarCitacao, semPedidoDaBusca } from "@/lib/conversas-anteriores";
 import { formatFileSize } from "@/lib/file-upload";
 import { Bot, FileText, File as FileIcon, Copy, Check, BellDot } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -665,7 +665,7 @@ export default function ChatPage() {
   const { notifications, unreadByChannel, unreadByAgentOnly, unreadCount, markAsRead, markAllAsReadForChannel, markAllAsReadForAgent, setActiveChannel, setActiveAgent } = useNotificationsContext();
   const isMobile = useIsMobile();
   const { bottomOffset, isKeyboardOpen } = useMobileChatViewport();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
   const [agentDmChannelMap, setAgentDmChannelMap] = useState<Record<string, string>>({});
@@ -775,6 +775,12 @@ export default function ChatPage() {
   useEffect(() => {
     if (anteriorParam) setAnterioresAberto(true);
   }, [anteriorParam]);
+  // Fechar consome o pedido da busca: tira `anterior`/`message` da URL, senão
+  // o próximo clique na mesma conversa não reabre e o botão abre direto nela.
+  const mudarAnteriores = useCallback((aberto: boolean) => {
+    setAnterioresAberto(aberto);
+    if (!aberto && anteriorParam) setSearchParams(semPedidoDaBusca(searchParams), { replace: true });
+  }, [anteriorParam, searchParams, setSearchParams]);
   const [createOpen, setCreateOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"channels" | "dms" | "unreads">("dms");
 
@@ -2933,12 +2939,17 @@ export default function ChatPage() {
           <ConversasAnteriores
             agentId={effectiveAgentId}
             open={anterioresAberto}
-            onOpenChange={setAnterioresAberto}
+            onOpenChange={mudarAnteriores}
             abrirConversa={anteriorParam}
             destacarMensagem={anteriorParam ? mensagemParam : null}
+            renderMidia={(media) => media.map((att, i) => (
+              <AnexoResolvido key={i} id={att.base64?.startsWith("data:") ? undefined : att.id} url={att.base64?.startsWith("data:") ? att.base64 : (att.url || att.base64)}>
+                {(url, renovar, urlAgora) => <MediaBubble attachment={{ ...att, url, base64: att.base64 || url }} onImageClick={setLightboxSrc} onErroImagem={renovar} urlAgora={urlAgora} />}
+              </AnexoResolvido>
+            ))}
             onCitar={(texto) => {
               // Entra na conversa de HOJE como citação; o rascunho não se perde.
-              setAnterioresAberto(false);
+              mudarAnteriores(false);
               syncToDraft(acrescentarCitacao(inputLocalRef.current, texto));
               window.setTimeout(() => {
                 const ta = inputRef.current;

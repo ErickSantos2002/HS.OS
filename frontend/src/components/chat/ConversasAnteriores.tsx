@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import { ArrowLeft, Copy, Loader2, Quote } from "lucide-react";
 import { toast } from "sonner";
@@ -7,12 +7,14 @@ import { MarkdownMessageContent } from "@/components/chat/MessageContent";
 import { api } from "@/lib/api";
 import { copyToClipboard } from "@/lib/clipboard";
 import type { ConversaAnterior } from "@/lib/conversas-anteriores";
+import type { MediaAttachment } from "@/lib/mock-data";
 
 interface MensagemAntiga {
   id: string;
   role: string;
   content: string;
   created_at: string;
+  media?: MediaAttachment[] | null;
 }
 
 /**
@@ -31,6 +33,7 @@ export default function ConversasAnteriores({
   onCitar,
   abrirConversa = null,
   destacarMensagem = null,
+  renderMidia,
 }: {
   agentId: string;
   open: boolean;
@@ -40,6 +43,12 @@ export default function ConversasAnteriores({
   abrirConversa?: string | null;
   /** Vem da busca global: rola até esta mensagem e a realça. */
   destacarMensagem?: string | null;
+  /**
+   * Desenha os anexos da mensagem — quem passa é o `ChatPage`, que já tem o
+   * `MediaBubble` e a URL assinada renovável. ⚠️ Sem isto, o arquivo que o
+   * agente entregou ("📎 eventos.xlsx") aparecia só como nome, sem baixar.
+   */
+  renderMidia?: (media: MediaAttachment[]) => ReactNode;
 }) {
   const [lista, setLista] = useState<ConversaAnterior[] | null>(null);
   const [aberta, setAberta] = useState<ConversaAnterior | null>(null);
@@ -150,6 +159,7 @@ export default function ConversasAnteriores({
                     <div key={m.id} data-msg-antiga={m.id} className={`flex flex-col ${minha ? "items-end" : "items-start"}`}>
                       <div className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm ${minha ? "bg-primary/15 text-foreground" : "bg-secondary/60 text-foreground"}`}>
                         <MarkdownMessageContent text={m.content} />
+                        {renderMidia && Array.isArray(m.media) && m.media.length > 0 && renderMidia(m.media)}
                       </div>
                       <div className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
                         <span>{format(new Date(m.created_at), "HH:mm")}</span>

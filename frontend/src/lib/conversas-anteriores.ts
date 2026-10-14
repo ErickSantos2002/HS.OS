@@ -41,3 +41,16 @@ export function destinoDaBusca(r: { origem: string; id: string; conversa_anterio
     ? `/chat?agent=${agente}&anterior=${encodeURIComponent(r.conversa_anterior)}&message=${msg}`
     : `/chat?agent=${agente}&message=${msg}`;
 }
+
+/**
+ * A URL sem o pedido da busca (`anterior` e `message`). Chamada ao fechar o
+ * painel: preso na URL, o pedido fazia um segundo clique na mesma conversa não
+ * reabrir nada, e o botão "Conversas anteriores" abrir direto nela em vez da
+ * lista (revisão final, 14/10/2026).
+ */
+export function semPedidoDaBusca(params: URLSearchParams): URLSearchParams {
+  const fim = new URLSearchParams(params);
+  fim.delete("anterior");
+  fim.delete("message");
+  return fim;
+}

@@ -3,7 +3,7 @@
  * citar, e para onde a busca leva.
  */
 import { describe, expect, it } from "vitest";
-import { acrescentarCitacao, citarTrecho, destinoDaBusca } from "./conversas-anteriores";
+import { acrescentarCitacao, citarTrecho, destinoDaBusca, semPedidoDaBusca } from "./conversas-anteriores";
 
 describe("citarTrecho", () => {
   it("cada linha vira citação, a linha vazia também, e sobra espaço para escrever", () => {
@@ -29,5 +29,14 @@ describe("destinoDaBusca", () => {
   it("mensagem de conversa encerrada abre o histórico nela", () => {
     expect(destinoDaBusca({ origem: "nina", id: "m1", conversa_anterior: "r1" }))
       .toBe("/chat?agent=nina&anterior=r1&message=m1");
+  });
+});
+
+describe("semPedidoDaBusca", () => {
+  it("tira o pedido da busca da URL e mantém o resto", () => {
+    // ⚠️ Revisão final: com `anterior` preso na URL, um segundo clique da busca
+    // na mesma conversa não reabria o painel, e o botão abria direto nela.
+    const fim = semPedidoDaBusca(new URLSearchParams("agent=nina&anterior=r1&message=m1"));
+    expect(fim.toString()).toBe("agent=nina");
   });
 });
