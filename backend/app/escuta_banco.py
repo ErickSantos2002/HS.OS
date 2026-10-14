@@ -47,6 +47,7 @@ import logging
 
 import asyncpg
 
+from app import recibos_entrega
 from app.config import settings
 from app.realtime import hub, topico_canal, topico_tabela, topico_usuario
 
@@ -83,6 +84,11 @@ def _ao_receber(_conexao, _pid, _canal, carga: str) -> None:
             hub.publicar(topico_canal(canal), "mudanca", {**publico, "channel_id": canal})
         if usuario := evento.get("user_id"):
             hub.publicar(topico_usuario(usuario), "mudanca", {**publico, "user_id": usuario})
+
+        # Mensagem nova num canal: quem dos destinatários está conectado NESTE
+        # worker já a recebeu — é o ✓✓ cinza. Ver `app/recibos_entrega.py`.
+        if tabela == "channel_messages" and op == "INSERT" and ident:
+            recibos_entrega.disparar(recibos_entrega.entregar_mensagem(ident))
     except Exception as e:  # noqa: BLE001
         logger.warning("Notificação malformada de %s: %s", CANAL, e)
 
