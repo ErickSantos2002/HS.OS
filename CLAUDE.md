@@ -557,6 +557,30 @@ igual a código.** Três das quatro linhas desta seção descreviam um sistema q
 não existia, e a decisão ficou "pendente" semanas esperando alguém escolher entre
 opções que tinham deixado de ser opções.
 
+### Visto por mensagem — 14/10/2026
+
+✓ / ✓✓ cinza / ✓✓ azul em cada mensagem, igual ao WhatsApp. Spec:
+`docs/superpowers/specs/2026-10-14-vistos-por-mensagem-design.md`.
+
+- **Canal (DM, grupo, thread):** `recibos_mensagem` (migração `020`), uma linha
+  por mensagem × membro **humano** destinatário — o autor e os agentes não
+  entram (agente não "abre" canal e travaria o azul). Quem cria é o trigger
+  `trg_criar_recibos`, que **engole qualquer erro** de propósito: ele roda
+  dentro do INSERT de toda mensagem, e recibo é acessório.
+- ⚠️ **"Entregue" é marcado pelo servidor, não pelo navegador**
+  (`app/recibos_entrega.py`): ao conectar no `/ws` e, a cada mensagem nova, para
+  quem tem `usuario:<id>` assinado **naquele worker**. São 2 workers e o hub é
+  por processo — cada um cuida dos seus, o `entregue_em IS NULL` torna repetir
+  inócuo. Não existe registro de presença compartilhado, e não precisa.
+- O aviso de recibo mudou sai do **banco** (trigger por statement no `UPDATE`,
+  um `pg_notify` por canal), não de `hub.publicar` — pelo mesmo motivo dos 2
+  workers.
+- ⚠️ **Agente: azul é "há resposta do agente depois da pergunta", NÃO "o run
+  tem `message_id`".** O `/recuperar` grava resposta sem preencher o run (74 de
+  140 numa semana de agosto) e a regra pelo run deixaria essas com ⚠ para
+  sempre. O run (`agent_runs.pergunta_id`) só decide o cinza e o ⚠ (30 min).
+- `dm_reads` está aposentado, sem leitor nem escritor.
+
 ### Estado e persistência
 
 - **`app_settings` (tabela) substituiu o `localStorage` para configuração** — ver `frontend/src/lib/app-settings.ts`,

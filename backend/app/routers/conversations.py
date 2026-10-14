@@ -32,6 +32,7 @@ from app.gateway.client import (ErroGateway, chave_de_sessao, obter_cliente,
                                 obter_cliente_de_espera)
 from app.integracoes import exige_segredo
 from app.realtime import hub, topico_usuario
+from app.recibos import eh_uuid, estado_no_agente
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,9 @@ class MensagemOut(BaseModel):
     content: str = ""
     media: list[dict] | None = None
     created_at: str
+    # O visto da pergunta (spec 2026-10-14): só em `role="user"`, e só no
+    # histórico — as outras rotas devolvem `None`.
+    recibo: str | None = None
 
 
 class PaginaOut(BaseModel):
@@ -286,10 +290,47 @@ async def historico(
             *args, limite,
         )
 
-    return PaginaOut(
-        messages=[_para_saida(l) for l in linhas],
-        has_more=len(linhas) == limite,
-    )
+    saida = [_para_saida(l) for l in linhas]
+    perguntas = [m.id for m in saida if m.role == "user"]
+    if perguntas:
+        async with sessao(role="authenticated", user_id=usuario.id) as conn:
+            runs = {
+                r["pergunta_id"]: r["criado_em"]
+                for r in await conn.fetch(
+                    "SELECT pergunta_id::text AS pergunta_id, criado_em FROM public.agent_runs "
+                    " WHERE pergunta_id = ANY($1::uuid[])", perguntas)
+            }
+            # Paginando para trás, a resposta da pergunta mais nova da página
+            # pode estar fora dela. Sem `antes_de` a página já é a mais nova.
+            resposta_apos = False
+            if corte is not None:
+                resposta_apos = bool(await conn.fetchval(
+                    "SELECT EXISTS(SELECT 1 FROM public.conversations "
+                    " WHERE agent_id = $1 AND user_id = $2::uuid AND role = 'agent' "
+                    "   AND created_at > $3)",
+                    agent_id, usuario.id,
+                    datetime.fromisoformat(saida[0].created_at.replace("Z", "+00:00"))))
+        recibos = _recibos_do_agente([m.model_dump() for m in saida], runs,
+                                     datetime.now(timezone.utc), resposta_apos)
+        for m in saida:
+            m.recibo = recibos.get(m.id)
+    return PaginaOut(messages=saida, has_more=len(linhas) == limite)
+
+
+def _recibos_do_agente(linhas, runs: dict, agora, resposta_apos_a_pagina: bool) -> dict[str, str]:
+    """Visto de cada pergunta da página. `linhas` vem DECRESCENTE.
+
+    ⚠️ Azul é "há resposta do agente depois", não "o run tem `message_id`" —
+    o `/recuperar` grava resposta sem preencher o run. Ver `app/recibos.py`.
+    """
+    saida: dict[str, str] = {}
+    resposta_depois = resposta_apos_a_pagina
+    for l in linhas:
+        if l["role"] == "agent":
+            resposta_depois = True
+            continue
+        saida[l["id"]] = estado_no_agente(resposta_depois, runs.get(l["id"]), agora)
+    return saida
 
 
 @router.post("/{agent_id}", response_model=MensagemOut, status_code=status.HTTP_201_CREATED)
@@ -496,6 +537,9 @@ def _ids_validos(media: list[dict] | None) -> list[str]:
 class EnvioIn(BaseModel):
     content: str = Field(min_length=1)
     media: list[dict] | None = None
+    # A mensagem da pessoa que este envio responde — liga o run à pergunta para
+    # o visto. Valor que não seja uuid (bolha otimista) é ignorado.
+    pergunta_id: str | None = None
 
 
 class EnvioOut(BaseModel):
@@ -1117,7 +1161,8 @@ async def enviar(
             status.HTTP_502_BAD_GATEWAY, f"O agente não pôde ser acionado: {e}"
         )
 
-    await _guardar_run(run_id, agent_id, chave, seq_antes, usuario.id)
+    await _guardar_run(run_id, agent_id, chave, seq_antes, usuario.id,
+                       pergunta_id=dados.pergunta_id if eh_uuid(dados.pergunta_id) else None)
     _podar(_TRAVA_DO_RUN)
     logger.info("Envio para %s por %s: run %s", agent_id, usuario.id, run_id)
     return EnvioOut(run_id=run_id)
@@ -1164,16 +1209,17 @@ def _podar(d) -> None:
 
 
 async def _guardar_run(run_id: str, agent_id: str, chave: str,
-                       seq_antes: int, user_id: str) -> None:
+                       seq_antes: int, user_id: str,
+                       pergunta_id: str | None = None) -> None:
     """Registra o envio. `ON CONFLICT DO NOTHING` porque o `runId` é o nosso
     `idempotencyKey`: reenvio do mesmo id é o mesmo envio, não um novo."""
     async with sessao(role="authenticated", user_id=user_id) as conn:
         await conn.execute(
             """INSERT INTO public.agent_runs
-                   (run_id, agent_id, session_key, seq_antes, user_id)
-               VALUES ($1, $2, $3, $4, $5::uuid)
+                   (run_id, agent_id, session_key, seq_antes, user_id, pergunta_id)
+               VALUES ($1, $2, $3, $4, $5::uuid, $6::uuid)
                ON CONFLICT (run_id) DO NOTHING""",
-            run_id, agent_id, chave, seq_antes, user_id)
+            run_id, agent_id, chave, seq_antes, user_id, pergunta_id)
 
 
 async def _seguir_run(run_id: str, user_id: str):

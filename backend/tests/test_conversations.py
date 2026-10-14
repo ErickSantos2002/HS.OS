@@ -425,3 +425,44 @@ def test_turno_que_terminou_so_com_ferramenta_nao_e_recuperado():
         _msg(5, "assistant", ""),
     ])
     assert not c._turno_terminou(msgs)
+
+
+# ─── Visto na conversa com agente (spec 2026-10-14) ─────────────────────────
+
+from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+
+_AGORA = _dt(2026, 10, 14, 12, 0, tzinfo=_tz.utc)
+
+
+def _l(id_, role):
+    return {"id": id_, "role": role}
+
+
+def test_visto_do_agente_olha_o_que_vem_depois_na_pagina_invertida():
+    """A página vem do mais novo para o mais antigo. Ler na ordem errada daria
+    azul à pergunta que ainda espera e cinza à que já foi respondida."""
+    pagina = [_l("a3", "agent"), _l("u2", "user"), _l("u1", "user")]
+    assert c._recibos_do_agente(pagina, {}, _AGORA, False) == {"u2": "lida", "u1": "lida"}
+
+
+def test_visto_do_agente_pergunta_em_espera_e_entregue():
+    pagina = [_l("u2", "user"), _l("a1", "agent")]
+    runs = {"u2": _AGORA - _td(minutes=1)}
+    assert c._recibos_do_agente(pagina, runs, _AGORA, False) == {"u2": "entregue"}
+
+
+def test_visto_do_agente_run_velho_sem_resposta_falhou():
+    pagina = [_l("u2", "user")]
+    runs = {"u2": _AGORA - _td(minutes=40)}
+    assert c._recibos_do_agente(pagina, runs, _AGORA, False) == {"u2": "falhou"}
+
+
+def test_visto_do_agente_resposta_fora_da_pagina_conta():
+    """Paginando para trás, a resposta da pergunta mais nova da página pode estar
+    na página seguinte (mais nova). Sem isso ela apareceria ⚠ ao rolar."""
+    assert c._recibos_do_agente([_l("u5", "user")], {}, _AGORA, True) == {"u5": "lida"}
+
+
+def test_envio_aceita_pergunta_id():
+    assert c.EnvioIn(content="oi", pergunta_id="x").pergunta_id == "x"
+    assert c.MensagemOut(id="1", agent_id="a", role="user", created_at="t").recibo is None

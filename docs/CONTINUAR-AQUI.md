@@ -819,12 +819,18 @@ parametrizada. Assim a decisão vira configuração, não código.
 
 ---
 
-## 👉 Lembrete do Erick para 14/10 — "visto" por mensagem, igual ao WhatsApp
+## ✅ Visto por mensagem, igual ao WhatsApp — feito em 14/10/2026
 
-Pedido no fim de 13/10: o indicador de leitura no sistema tem que ser **por
-mensagem** (enviada / entregue / lida, os "vistos" do WhatsApp), não o que existe
-hoje. Começar levantando como a leitura é registrada agora (`dm_reads`,
-`notifications`, "marcar como não lida") antes de desenhar.
+✓ enviada · ✓✓ cinza entregue · ✓✓ azul lida, em cada mensagem minha, em DM,
+grupo, thread e conversa com agente; "Dados da mensagem" no menu da seta (DM e
+grupo). Spec e plano em `docs/superpowers/{specs,plans}/2026-10-14-vistos-*`.
+
+- **Migração `020` já aplicada em produção** e conferida
+  (`~/aplicar-hsos-020.py`). Falta só o **deploy** do backend e do front.
+- **Até o deploy, o trigger já cria recibo** para cada mensagem nova — inofensivo,
+  ninguém lê ainda.
+- `dm_reads` ficou sem leitor nem escritor; as rotas `/dm-reads` saíram.
+- Fora do escopo (pedir se quiser): desligar o visto por privacidade.
 
 ## 👉 Próxima sessão — o terceiro CSV do Flash (Eventos)
 

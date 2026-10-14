@@ -14,6 +14,8 @@ interface ConversationRow {
   content: string;
   media: unknown[] | null;
   created_at: string;
+  /** Visto da pergunta (spec 2026-10-14) — só em `role="user"`. */
+  recibo?: ChatMessage["recibo"] | null;
 }
 
 interface PaginaApi {
@@ -69,6 +71,7 @@ export function conversationRowToMessage(row: any, agentId: string): ChatMessage
     timestamp: row.created_at,
     channel: "web",
     isError: isError || undefined,
+    recibo: row.recibo ?? undefined,
     media: row.media
       ? Array.isArray(row.media)
         ? (row.media as unknown as MediaAttachment[])

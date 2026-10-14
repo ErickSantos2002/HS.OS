@@ -1,6 +1,8 @@
 import { api } from "@/lib/api";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
+import VistoDaMensagem from "./VistoDaMensagem";
+import { estadoNoCanal, type EstadoDoVisto } from "@/lib/vistos";
 import { FileText, Loader2, MessageSquare, Mic, Paperclip, Pencil, Send, Smile, Trash2, Users, X, Check, Bot } from "lucide-react";
 import EmojiPickerReact, { Theme as EmojiTheme } from "emoji-picker-react";
 
@@ -185,6 +187,7 @@ function ThreadMessageCard({
   onDelete,
   onImageClick,
   onAttachmentPreview,
+  visto,
 }: {
   message: ChannelMessage;
   compact?: boolean;
@@ -195,6 +198,8 @@ function ThreadMessageCard({
   onDelete?: () => void;
   onImageClick: (src: string, alt: string) => void;
   onAttachmentPreview: (attachment: { name: string; url: string; size?: number; mimeType?: string }) => void;
+  /** Visto da resposta, só na minha (spec 2026-10-14). */
+  visto?: EstadoDoVisto;
 }) {
   const isAgent = message.author_type === "agent";
   const hasAudio = !!message.audio_url;
@@ -252,6 +257,7 @@ function ThreadMessageCard({
             {hasAudio && <Mic className={`h-3.5 w-3.5 ${isOwn ? "text-primary-foreground/80" : "text-muted-foreground"}`} />}
             <span className={`text-[10px] ${isOwn ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{format(new Date(message.created_at), "HH:mm")}</span>
             {isEdited && !isDeleted && <span className={`text-[10px] italic ${isOwn ? "text-primary-foreground/70" : "text-muted-foreground"}`}>(editado)</span>}
+            {visto && !isDeleted && <VistoDaMensagem estado={visto} className={visto === "lida" ? "" : "text-primary-foreground/70"} />}
           </div>
 
           {isDeleted ? (
@@ -398,6 +404,10 @@ interface ThreadPanelProps {
   currentUserId: string;
   reactions: Record<string, Reaction[]>;
   onToggleReaction: (messageId: string, emoji: string) => void;
+  /** `{message_id: estado}` das minhas mensagens no canal — `useRecibos`. */
+  recibos?: Record<string, string>;
+  /** "Eu li esta thread" — o `marcarLido(threadId)` do `useRecibos`. */
+  onLer?: (threadId: string) => void;
 }
 
 export default function ThreadPanel({
@@ -411,6 +421,8 @@ export default function ThreadPanel({
   currentUserId,
   reactions,
   onToggleReaction,
+  recibos = {},
+  onLer,
 }: ThreadPanelProps) {
   const isMobile = useIsMobile();
   const { bottomOffset } = useMobileChatViewport();
@@ -427,6 +439,14 @@ export default function ThreadPanel({
   const repliesRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const { messages, loading } = useThreadMessages(open ? channelId : null, open ? rootMessage?.id ?? null : null);
+
+  // A thread lê a si mesma: abrir o canal não lê as respostas (revisão final
+  // dos vistos, 14/10/2026). Ao abrir e a cada resposta, com a aba visível.
+  const rootId = rootMessage?.id ?? null;
+  useEffect(() => {
+    if (!open || !rootId || !onLer || document.visibilityState !== "visible") return;
+    onLer(rootId);
+  }, [open, rootId, messages.length, onLer]);
 
   useEffect(() => {
     if (!open) return;
@@ -580,6 +600,7 @@ export default function ThreadPanel({
             message={rootMessage}
             compact
             currentUserId={currentUserId}
+            visto={rootMessage.author_id === currentUserId ? estadoNoCanal(rootMessage.id, recibos) : undefined}
             reactions={reactions[rootMessage.id] ?? []}
             onImageClick={(src, alt) => setLightboxImage({ src, alt })}
             onAttachmentPreview={setPreviewAttachment}
@@ -610,6 +631,7 @@ export default function ThreadPanel({
                   <ThreadMessageCard
                     message={message}
                     currentUserId={currentUserId}
+                    visto={message.author_id === currentUserId ? estadoNoCanal(message.id, recibos) : undefined}
                     reactions={reactions[message.id] ?? []}
                     onToggleReaction={(emoji) => onToggleReaction(message.id, emoji)}
                     onEdit={() => setEditingId(message.id)}

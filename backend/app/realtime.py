@@ -72,6 +72,12 @@ class Hub:
             except Exception as e:  # noqa: BLE001
                 logger.warning("Falha ao publicar em %s: %s", topico, e)
 
+    def usuarios_conectados(self) -> set[str]:
+        """Quem tem `/ws` aberto NESTE processo. São 2 workers: cada um sabe
+        dos seus, e é assim que o "entregue" dispensa registro de presença."""
+        prefixo = topico_usuario("")
+        return {t[len(prefixo):] for t in self._filas if t.startswith(prefixo)}
+
     @property
     def topicos_ativos(self) -> int:
         return len(self._filas)

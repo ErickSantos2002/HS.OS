@@ -91,3 +91,19 @@ export function threadDepoisDeApagar(
 ): ChannelMessage | null {
   return aberta && aberta.id === apagadaId ? null : aberta;
 }
+
+/**
+ * A mensagem nova chegou só como `"mudanca"` do banco e a tela não a tem?
+ *
+ * ⚠️ São 2 workers e o `"mensagem"` (com a linha inteira) sai só pelo que
+ * atendeu o POST. Quem está ligado no outro recebia apenas o aviso do banco —
+ * ignorado — e via a mensagem na enquete de 60s, enquanto o visto (que vem do
+ * banco) já mostrava ✓✓ "entregue" para quem mandou. Levantado na revisão dos
+ * vistos, 14/10/2026. O aviso não traz conteúdo: quem busca é o `load()`.
+ */
+export function mudancaPedeRecarga(prev: ChannelMessage[], tipo: string, dados: unknown): boolean {
+  if (tipo !== "mudanca") return false;
+  const d = dados as { tabela?: string; op?: string; id?: string | null } | null;
+  if (d?.tabela !== "channel_messages" || d.op !== "INSERT" || !d.id) return false;
+  return !prev.some((m) => m.id === d.id);
+}

@@ -16,6 +16,7 @@ import logging
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
+from app import recibos_entrega
 from app.auth.security import ler_token
 from app.database import sessao
 from app.realtime import hub, serializar, topico_canal, topico_tabela, topico_usuario
@@ -97,6 +98,9 @@ async def eventos(
 
     await websocket.accept()
     fila = hub.assinar(topicos)
+    # Conectou: tudo o que estava pendente para esta pessoa chegou ao navegador
+    # dela — o ✓✓ cinza de quem mandou enquanto ela estava fora.
+    recibos_entrega.disparar(recibos_entrega.entregar_pendentes(user_id))
     logger.info("WS conectado: usuário %s, %d tópicos", user_id, len(topicos))
 
     async def bombear() -> None:

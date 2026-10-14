@@ -72,4 +72,22 @@ describe("mensagem de canal estilo WhatsApp", () => {
     const { container } = montar("eu");
     expect(container.querySelector(".max-w-\\[70\\%\\]")).not.toBeNull();
   });
+
+  it("dados da mensagem só na própria mensagem (spec 2026-10-14)", async () => {
+    const { unmount } = render(
+      <MessageBubble msg={msg} currentUserId="eu" msgReactions={[]} onToggleReaction={noop}
+        onEdit={noop} onDelete={noop} onReply={noop} onMarkUnread={() => true} onImageClick={noop}
+        onAttachmentPreview={noop} threadMeta={null} threadHasUnread={false}
+        visto="lida" onDadosDaMensagem={noop} />,
+    );
+    // Antes de abrir o menu: com ele aberto o Radix esconde o resto da árvore.
+    expect(screen.getByRole("img", { name: "Lida" })).toBeInTheDocument();
+    abrirMenu();
+    expect(within(await screen.findByRole("menu")).getByRole("menuitem", { name: "Dados da mensagem" })).toBeInTheDocument();
+    unmount();
+
+    montar("outra-pessoa");
+    abrirMenu();
+    expect(within(await screen.findByRole("menu")).queryByRole("menuitem", { name: "Dados da mensagem" })).toBeNull();
+  });
 });
