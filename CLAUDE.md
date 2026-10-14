@@ -557,7 +557,23 @@ igual a código.** Três das quatro linhas desta seção descreviam um sistema q
 não existia, e a decisão ficou "pendente" semanas esperando alguém escolher entre
 opções que tinham deixado de ser opções.
 
-### Visto por mensagem — 14/10/2026
+### Conversas anteriores com o agente — 14/10/2026
+
+Pedido da Lidisay (RH): voltar numa conversa antiga para **pegar informação**,
+como no ChatGPT — **não** para continuar a sessão. Spec:
+`docs/superpowers/specs/2026-10-14-conversas-anteriores-design.md`.
+
+- Uma conversa anterior é o trecho de `conversations` que um "Nova conversa"
+  (`conversation_resets`) encerrou — o recorte é `app/conversas_anteriores.py`,
+  puro e testado. Sem migração: o dado sempre esteve lá, só a tela escondia.
+- ⚠️ **O identificador é o uuid do reset, não o horário** — a API devolve
+  milissegundos e o banco guarda microssegundos.
+- Só leitura e só da própria pessoa (RLS de `conversations` e
+  `conversation_resets`). Reaproveitar é **Citar**: o trecho entra na conversa
+  de hoje como texto, e a sessão antiga no gateway não é tocada.
+- A busca global devolve `conversa_anterior` e abre o painel na conversa certa
+  (`/chat?agent=…&anterior=<reset>&message=<id>`).
+
 
 ✓ / ✓✓ cinza / ✓✓ azul em cada mensagem, igual ao WhatsApp. Spec:
 `docs/superpowers/specs/2026-10-14-vistos-por-mensagem-design.md`.
