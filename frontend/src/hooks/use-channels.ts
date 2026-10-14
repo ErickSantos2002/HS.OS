@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import { assinar } from "@/lib/realtime";
-import { aplicarEventoDeCanal, reconcileMessages } from "@/lib/eventos-de-canal";
+import { aplicarEventoDeCanal, mudancaPedeRecarga, reconcileMessages } from "@/lib/eventos-de-canal";
 import { useAuthContext } from "@/contexts/auth-context";
 
 export interface Channel {
@@ -219,6 +219,11 @@ export function useChannelMessages(channelId: string | null) {
       if (tipo === "mensagem" && !loadedRef.current) {
         const msg = dados as ChannelMessage;
         if (!msg.thread_id) pendingBuffer.push(msg);
+        return;
+      }
+      // Mensagem nova vista só pelo aviso do banco (outro worker): buscar.
+      if (mudancaPedeRecarga(channelMessageCache[channelId] ?? [], tipo, dados)) {
+        void load();
         return;
       }
       updateMessages((prev) => aplicarEventoDeCanal(prev, tipo, dados));

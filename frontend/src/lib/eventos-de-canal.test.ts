@@ -17,7 +17,7 @@
  * eventos que ninguém escutava.
  */
 import { describe, it, expect } from "vitest";
-import { aplicarEventoDeCanal, threadDepoisDeApagar } from "./eventos-de-canal";
+import { aplicarEventoDeCanal, mudancaPedeRecarga, threadDepoisDeApagar } from "./eventos-de-canal";
 import type { ChannelMessage } from "@/hooks/use-channels";
 
 const msg = (id: string, extra: Record<string, unknown> = {}) => ({
@@ -115,5 +115,23 @@ describe("mensagem-editada parcial", () => {
   it("ignora quando a mensagem ainda não está na tela", () => {
     const prev = [existente];
     expect(aplicarEventoDeCanal(prev, "mensagem-editada", { id: "m9", audio_url: "anexo:x" })).toBe(prev);
+  });
+});
+
+describe("mudancaPedeRecarga (vistos, 14/10/2026)", () => {
+  // ⚠️ Com 2 workers, o `"mensagem"` só sai pelo worker que atendeu o POST.
+  // No outro, a mensagem nova chegava só como `"mudanca"` (do banco) e era
+  // ignorada até a enquete de 60s — enquanto o visto, que vem do banco, já
+  // dizia ✓✓ "entregue" para quem mandou.
+  it("INSERT de mensagem que a tela não tem pede recarga", () => {
+    expect(mudancaPedeRecarga([msg("m1")], "mudanca", { tabela: "channel_messages", op: "INSERT", id: "m2" })).toBe(true);
+  });
+  it("mensagem que a tela já tem não pede", () => {
+    expect(mudancaPedeRecarga([msg("m1")], "mudanca", { tabela: "channel_messages", op: "INSERT", id: "m1" })).toBe(false);
+  });
+  it("outras tabelas, outras operações e outros tipos não pedem", () => {
+    expect(mudancaPedeRecarga([], "mudanca", { tabela: "recibos_mensagem", op: "UPDATE", id: null })).toBe(false);
+    expect(mudancaPedeRecarga([], "mudanca", { tabela: "channel_messages", op: "UPDATE", id: "m2" })).toBe(false);
+    expect(mudancaPedeRecarga([], "mensagem", msg("m2"))).toBe(false);
   });
 });
