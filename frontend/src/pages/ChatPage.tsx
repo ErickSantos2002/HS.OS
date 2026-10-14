@@ -20,6 +20,8 @@ import { useAuthContext } from "@/contexts/auth-context";
 import { useFS } from "@/contexts/FileSystemContext";
 import { getGatewayConfig } from "@/lib/gateway";
 import { type ChatMessage, type MediaAttachment } from "@/lib/mock-data";
+import VistoDaMensagem from "@/components/chat/VistoDaMensagem";
+import { estadoNoAgente } from "@/lib/vistos";
 import { formatFileSize } from "@/lib/file-upload";
 import { Bot, FileText, File as FileIcon, Copy, Check, BellDot } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -569,6 +571,7 @@ export const AgentMessageList = React.memo(function AgentMessageList({
                   {isOwn && (
                     <div className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
                       <span>{time}</span>
+                      <VistoDaMensagem estado={estadoNoAgente(messages, index, isAgentWorking)} />
                     </div>
                   )}
 
@@ -1685,11 +1688,13 @@ export default function ChatPage() {
         channel: "web",
       };
       appendAgentMessage(agentId, userMsg);
+      let enviada = userMsg;
       try {
         const persisted = await appendToConversations(user.id, agentId, userMsg);
         upsertAgentMessage(agentId, persisted, userMsg.id);
+        enviada = persisted;
       } catch { /* ignore persistence error */ }
-      sendMessageInBackground(agentId, [...(messagesByAgentRef.current[agentId] ?? []), userMsg]);
+      sendMessageInBackground(agentId, [...(messagesByAgentRef.current[agentId] ?? []), enviada]);
     };
     window.addEventListener("hsos:file-op-result", handler);
     return () => window.removeEventListener("hsos:file-op-result", handler);
@@ -1955,8 +1960,10 @@ export default function ChatPage() {
   /** Mostra, grava e dispara o agente. Comum ao texto digitado e à voz. */
   const despacharAoAgente = useCallback(async (sendingAgentId: string, userMsg: ChatMessage): Promise<boolean> => {
     appendAgentMessage(sendingAgentId, userMsg);
+    let gravada: ChatMessage;
     try {
       const persistedMessage = await appendToConversations(user!.id, sendingAgentId, userMsg);
+      gravada = persistedMessage;
       replaceMessageInHistoryCache(user!.id, sendingAgentId, userMsg.id, persistedMessage);
       upsertAgentMessage(sendingAgentId, persistedMessage, userMsg.id);
       setLastMessages((prev) => ({
@@ -1972,7 +1979,9 @@ export default function ChatPage() {
       toast.error("Não consegui salvar essa mensagem no histórico. Tente novamente.");
       return false;
     }
-    sendMessageInBackground(sendingAgentId, [...(messagesByAgent[sendingAgentId] ?? []), userMsg]);
+    // Vai a mensagem GRAVADA, não a otimista: é o id dela que liga o run à
+    // pergunta para o visto (spec 2026-10-14).
+    sendMessageInBackground(sendingAgentId, [...(messagesByAgent[sendingAgentId] ?? []), gravada]);
     return true;
   }, [messagesByAgent, appendAgentMessage, updateAgentHistory, upsertAgentMessage, user, setLastMessages]);
 

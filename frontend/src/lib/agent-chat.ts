@@ -58,6 +58,8 @@ export async function enviarParaAgente(
   content: string,
   sinal?: AbortSignal,
   anexoIds: string[] = [],
+  /** A mensagem da pessoa, já gravada — liga o run a ela para o visto. */
+  perguntaId?: string,
 ): Promise<RespostaDoAgente> {
   let runId: string;
   try {
@@ -65,7 +67,11 @@ export async function enviarParaAgente(
       `/conversations/${encodeURIComponent(agentId)}/send`,
       {
         method: "POST",
-        body: anexoIds.length ? { content, media: anexoIds.map((id) => ({ id })) } : { content },
+        body: {
+          content,
+          ...(anexoIds.length ? { media: anexoIds.map((id) => ({ id })) } : {}),
+          ...(perguntaId ? { pergunta_id: perguntaId } : {}),
+        },
         signal: sinal,
       },
     );

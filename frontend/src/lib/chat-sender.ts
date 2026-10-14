@@ -16,6 +16,7 @@ import { getModelForAgent } from "@/lib/active-agents";
 import { appendToConversations, conversationRowToMessage } from "@/lib/chat-persistence";
 import { getModelOverride } from "@/lib/agent-model-override";
 import { enviarParaAgente } from "@/lib/agent-chat";
+import { UUID_RE } from "@/lib/vistos";
 import { api, lerUsuarioDoToken } from "@/lib/api";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 import type { ChatMessage, MediaAttachment } from "@/lib/mock-data";
@@ -923,7 +924,10 @@ export function sendMessageInBackground(
       }
 
       const anexoIds = (ultima?.media ?? []).flatMap((m) => (m.id ? [m.id] : []));
-      const resposta = await enviarParaAgente(agentId, textoParaOAgente, controller.signal, anexoIds);
+      // Só id persistido liga o run à pergunta: a bolha otimista ainda não
+      // existe no banco (spec 2026-10-14).
+      const perguntaId = ultima?.id && UUID_RE.test(ultima.id) ? ultima.id : undefined;
+      const resposta = await enviarParaAgente(agentId, textoParaOAgente, controller.signal, anexoIds, perguntaId);
 
       if (manuallyStoppedRequestIds.has(requestId)) {
         // O usuário mandou parar enquanto esperávamos. A resposta pode ter
