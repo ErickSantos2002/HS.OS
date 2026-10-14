@@ -6,23 +6,34 @@ Substitui o `/dm-reads` (um horário por pessoa e canal). Ver spec
 Tudo como `service_role`, como nos anexos: a tabela não tem policy, e a regra
 de quem vê o quê está aqui — membro do canal; o detalhe, só o autor.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
-from app.recibos import estado_no_canal
+from app.recibos import eh_uuid, estado_no_canal
 
 router = APIRouter(prefix="/channels", tags=["chat"])
 
 SQL_MEMBRO = """SELECT 1 FROM public.channel_members
                  WHERE channel_id = $1::uuid AND user_id = $2 LIMIT 1"""
 
+# ⚠️ O canal lê só o nível de cima; cada thread lê a si mesma. Até a revisão
+# final (14/10/2026) abrir o canal marcava como lidas as respostas de thread
+# que a pessoa nunca abriu — azul falso para quem respondeu.
 SQL_MARCAR_LIDO = """
     UPDATE public.recibos_mensagem r
        SET lida_em = now(), entregue_em = COALESCE(r.entregue_em, now())
       FROM public.channel_messages m
-     WHERE r.message_id = m.id AND m.channel_id = $1::uuid
+     WHERE r.message_id = m.id AND m.channel_id = $1::uuid AND m.thread_id IS NULL
+       AND r.user_id = $2::uuid AND r.lida_em IS NULL
+"""
+
+SQL_MARCAR_LIDO_THREAD = """
+    UPDATE public.recibos_mensagem r
+       SET lida_em = now(), entregue_em = COALESCE(r.entregue_em, now())
+      FROM public.channel_messages m
+     WHERE r.message_id = m.id AND m.channel_id = $1::uuid AND m.thread_id = $3::uuid
        AND r.user_id = $2::uuid AND r.lida_em IS NULL
 """
 
@@ -70,16 +81,26 @@ async def _membro(conn, channel_id: str, user_id: str) -> bool:
 
 
 @router.post("/{channel_id}/lido", status_code=status.HTTP_204_NO_CONTENT)
-async def marcar_lido(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
-    """Marca como lido, agora, tudo o que chegou para mim neste canal.
+async def marcar_lido(
+    channel_id: str,
+    usuario: Usuario = Depends(usuario_atual),
+    thread_id: str | None = Query(default=None, description="Lê só as respostas desta thread."),
+):
+    """Marca como lido, agora, o que chegou para mim neste canal — o nível de
+    cima, ou só as respostas de uma thread quando `thread_id` vem.
 
     Vale para DM e grupo. O horário é do servidor — recibo com relógio de
     navegador errado mostraria "lida" na hora errada para quem mandou.
     """
+    if thread_id is not None and not eh_uuid(thread_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Thread não encontrada.")
     async with sessao(role="service_role") as conn:
         if not await _membro(conn, channel_id, usuario.id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Canal não encontrado.")
-        await conn.execute(SQL_MARCAR_LIDO, channel_id, usuario.id)
+        if thread_id:
+            await conn.execute(SQL_MARCAR_LIDO_THREAD, channel_id, usuario.id, thread_id)
+        else:
+            await conn.execute(SQL_MARCAR_LIDO, channel_id, usuario.id)
 
 
 @router.get("/{channel_id}/recibos", response_model=dict[str, str])

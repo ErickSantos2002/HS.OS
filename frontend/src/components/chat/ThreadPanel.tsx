@@ -406,6 +406,8 @@ interface ThreadPanelProps {
   onToggleReaction: (messageId: string, emoji: string) => void;
   /** `{message_id: estado}` das minhas mensagens no canal — `useRecibos`. */
   recibos?: Record<string, string>;
+  /** "Eu li esta thread" — o `marcarLido(threadId)` do `useRecibos`. */
+  onLer?: (threadId: string) => void;
 }
 
 export default function ThreadPanel({
@@ -420,6 +422,7 @@ export default function ThreadPanel({
   reactions,
   onToggleReaction,
   recibos = {},
+  onLer,
 }: ThreadPanelProps) {
   const isMobile = useIsMobile();
   const { bottomOffset } = useMobileChatViewport();
@@ -436,6 +439,14 @@ export default function ThreadPanel({
   const repliesRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const { messages, loading } = useThreadMessages(open ? channelId : null, open ? rootMessage?.id ?? null : null);
+
+  // A thread lê a si mesma: abrir o canal não lê as respostas (revisão final
+  // dos vistos, 14/10/2026). Ao abrir e a cada resposta, com a aba visível.
+  const rootId = rootMessage?.id ?? null;
+  useEffect(() => {
+    if (!open || !rootId || !onLer || document.visibilityState !== "visible") return;
+    onLer(rootId);
+  }, [open, rootId, messages.length, onLer]);
 
   useEffect(() => {
     if (!open) return;

@@ -40,9 +40,18 @@ def test_estados_so_das_minhas_mensagens_humanas():
 def test_marcar_lido_tambem_entrega_e_nao_reescreve_horario():
     """Lida sem entregue é estado impossível — mostraria azul e "Aguardando" juntos
     no "Dados da mensagem". E reler não pode mover o horário da primeira leitura."""
-    sql = " ".join(r.SQL_MARCAR_LIDO.split())
-    assert "entregue_em = COALESCE(r.entregue_em, now())" in sql
-    assert "r.lida_em IS NULL" in sql
+    for sql in (r.SQL_MARCAR_LIDO, r.SQL_MARCAR_LIDO_THREAD):
+        sql = " ".join(sql.split())
+        assert "entregue_em = COALESCE(r.entregue_em, now())" in sql
+        assert "r.lida_em IS NULL" in sql
+
+
+def test_abrir_o_canal_nao_le_as_threads():
+    """⚠️ Achado da revisão final (I2): abrir o canal marcava como lidas as
+    respostas de thread que a pessoa nunca abriu — azul falso para quem
+    respondeu. O canal lê só o nível de cima; a thread lê a si mesma."""
+    assert "m.thread_id IS NULL" in " ".join(r.SQL_MARCAR_LIDO.split())
+    assert "m.thread_id = $3::uuid" in " ".join(r.SQL_MARCAR_LIDO_THREAD.split())
 
 
 def test_detalhe_so_de_membros_atuais():

@@ -2306,6 +2306,7 @@ export default function ChannelChat({
         reactions={reactions}
         onToggleReaction={(messageId, emoji) => user && toggleReaction(messageId, emoji, user.id)}
         recibos={recibos}
+        onLer={marcarLido}
       />
       <DadosDaMensagem
         channelId={channel.id}
