@@ -27,6 +27,7 @@ from app.routers.branding import router as branding_router
 from app.routers.broadcast import router as broadcast_router
 from app.routers.channels import router as channels_router
 from app.routers.chat_extras import router as chat_extras_router
+from app.routers.recibos import router as recibos_router
 from app.routers.coletor import router as coletor_router
 from app.routers.conversations import router as conversations_router
 from app.routers.gateway import router as gateway_router
@@ -210,6 +211,7 @@ app.include_router(conversations_router)
 app.include_router(channels_router)
 app.include_router(broadcast_router)
 app.include_router(chat_extras_router)
+app.include_router(recibos_router)
 app.include_router(gateway_router)
 app.include_router(ia_router)
 app.include_router(integracoes_router)
