@@ -819,6 +819,17 @@ parametrizada. Assim a decisão vira configuração, não código.
 
 ---
 
+## ✅ Conversas anteriores com o agente — feito em 14/10/2026
+
+Pedido da Lidisay. Botão "Conversas anteriores" na conversa com agente: lista
+das conversas encerradas por "Nova conversa", leitura, Copiar e Citar na
+conversa atual; a busca global abre direto na conversa antiga. Sem migração —
+só deploy. Spec e plano em `docs/superpowers/{specs,plans}/2026-10-14-conversas-anteriores*`.
+
+⚠️ **A planilha de eventos do Flash ela já mandou ao `bruce` em 13/10 às 12:24**
+(atestados e declarações, 22 eventos de setembro). Conferir se é o "terceiro
+CSV" da seção abaixo antes de esperar por ela.
+
 ## ✅ Visto por mensagem, igual ao WhatsApp — feito em 14/10/2026
 
 ✓ enviada · ✓✓ cinza entregue · ✓✓ azul lida, em cada mensagem minha, em DM,

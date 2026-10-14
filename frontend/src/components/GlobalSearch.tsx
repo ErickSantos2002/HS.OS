@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { destinoDaBusca } from "@/lib/conversas-anteriores";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Search, Bot, Hash, MessageSquare, X } from "lucide-react";
@@ -83,6 +84,7 @@ export function GlobalSearch({ compact = false }: { compact?: boolean }) {
         autor: string | null;
         content: string;
         created_at: string;
+        conversa_anterior?: string | null;
       }>>(`/busca?q=${encodeURIComponent(search)}`).catch(() => []);
       const conversationResponse = { data: achados.filter((a) => a.tipo === "conversa") };
       const channelResponse = { data: achados.filter((a) => a.tipo === "canal") };
@@ -97,7 +99,7 @@ export function GlobalSearch({ compact = false }: { compact?: boolean }) {
           title: agentNameById.get(item.origem) ?? item.origem,
           subtitle: "Conversa privada",
           preview: normalizePreview(item.content ?? ""),
-          target: `/chat?agent=${encodeURIComponent(item.origem)}&message=${encodeURIComponent(item.id)}`,
+          target: destinoDaBusca(item),
           icon: "bot",
           createdAt: item.created_at,
         }));

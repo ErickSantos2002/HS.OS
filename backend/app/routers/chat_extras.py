@@ -22,6 +22,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from app.conversas_anteriores import SQL_RESETS, trecho_da_mensagem
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
 
@@ -172,6 +173,10 @@ class ResultadoBusca(BaseModel):
     autor: str | None = None
     content: str
     created_at: str
+    # Conversa com agente: o reset que encerrou a conversa desta mensagem, se
+    # ela é de antes do último "Nova conversa" — a tela abre o histórico em vez
+    # do chat, que a esconderia. `None` = conversa atual. (spec 2026-10-14)
+    conversa_anterior: str | None = None
 
 
 @router.get("/busca", response_model=list[ResultadoBusca])
@@ -196,7 +201,7 @@ async def busca(
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         conversas = await conn.fetch(
             """
-            SELECT id::text AS id, agent_id, content,
+            SELECT id::text AS id, agent_id, content, created_at AS criado_bruto,
                    to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS created_at
               FROM public.conversations
              WHERE user_id = $1::uuid AND content ILIKE $2
@@ -204,6 +209,10 @@ async def busca(
             """,
             usuario.id, padrao,
         )
+        resets_por_agente = {
+            a: [dict(r) for r in await conn.fetch(SQL_RESETS, usuario.id, a)]
+            for a in {c["agent_id"] for c in conversas}
+        }
         canais = await conn.fetch(
             """
             SELECT id::text AS id, channel_id::text AS channel_id, author_name, content,
@@ -216,7 +225,9 @@ async def busca(
         )
     return (
         [ResultadoBusca(tipo="conversa", id=c["id"], origem=c["agent_id"],
-                        content=c["content"] or "", created_at=c["created_at"])
+                        content=c["content"] or "", created_at=c["created_at"],
+                        conversa_anterior=trecho_da_mensagem(
+                            resets_por_agente[c["agent_id"]], c["criado_bruto"]))
          for c in conversas]
         + [ResultadoBusca(tipo="canal", id=c["id"], origem=c["channel_id"],
                           autor=c["author_name"], content=c["content"] or "",

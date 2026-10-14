@@ -32,6 +32,7 @@ from app.gateway.client import (ErroGateway, chave_de_sessao, obter_cliente,
                                 obter_cliente_de_espera)
 from app.integracoes import exige_segredo
 from app.realtime import hub, topico_usuario
+from app.conversas_anteriores import SQL_RESETS, limites_do_trecho, recortar_conversas
 from app.recibos import eh_uuid, estado_no_agente
 
 logger = logging.getLogger(__name__)
@@ -249,6 +250,71 @@ async def excluir_mensagem(mensagem_id: str, usuario: Usuario = Depends(usuario_
         )
     if marca.rsplit(" ", 1)[-1] == "0":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Mensagem não encontrada.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Conversas anteriores — só leitura (spec 2026-10-14)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _iso(dt) -> str:
+    """Mesmo formato do `_COLUNAS`: UTC, milissegundos, `Z`."""
+    dt = dt.astimezone(timezone.utc)
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{dt.microsecond // 1000:03d}Z"
+
+
+class ConversaAnteriorOut(BaseModel):
+    id: str          # uuid do reset que a encerrou — o identificador
+    ate: str
+    inicio: str
+    titulo: str
+    mensagens: int
+
+
+@router.get("/{agent_id}/anteriores", response_model=list[ConversaAnteriorOut])
+async def conversas_anteriores(agent_id: str, usuario: Usuario = Depends(agente_visivel)):
+    """As conversas que "Nova conversa" encerrou, da mais nova à mais antiga.
+
+    Só leitura e só da própria pessoa — o RLS de `conversations` e de
+    `conversation_resets` garante. O recorte é `app/conversas_anteriores.py`.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        resets = [dict(r) for r in await conn.fetch(SQL_RESETS, usuario.id, agent_id)]
+        if not resets:
+            return []
+        msgs = [dict(r) for r in await conn.fetch(
+            "SELECT role, content, created_at FROM public.conversations "
+            " WHERE agent_id = $1 AND user_id = $2::uuid AND created_at <= $3 "
+            " ORDER BY created_at",
+            agent_id, usuario.id, resets[-1]["created_at"])]
+    return [ConversaAnteriorOut(id=c["id"], ate=_iso(c["ate"]), inicio=_iso(c["inicio"]),
+                                titulo=c["titulo"], mensagens=c["mensagens"])
+            for c in recortar_conversas(resets, msgs)]
+
+
+@router.get("/{agent_id}/anteriores/{reset_id}", response_model=list[MensagemOut])
+async def conversa_anterior(agent_id: str, reset_id: str,
+                            usuario: Usuario = Depends(agente_visivel)):
+    """As mensagens de uma conversa encerrada, em ordem, até 500.
+
+    `reset_id` que não seja desta pessoa com este agente é 404 — a lista de
+    resets já vem filtrada pelos dois.
+    """
+    if not eh_uuid(reset_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversa não encontrada.")
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        resets = [dict(r) for r in await conn.fetch(SQL_RESETS, usuario.id, agent_id)]
+        limites = limites_do_trecho(resets, reset_id)
+        if limites is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversa não encontrada.")
+        depois_de, ate = limites
+        linhas = await conn.fetch(
+            f"SELECT {_COLUNAS} FROM public.conversations "
+            " WHERE agent_id = $1 AND user_id = $2::uuid "
+            "   AND created_at <= $3 AND ($4::timestamptz IS NULL OR created_at > $4) "
+            " ORDER BY created_at LIMIT 500",
+            agent_id, usuario.id, ate, depois_de)
+    return [_para_saida(l) for l in linhas]
 
 
 @router.get("/{agent_id}", response_model=PaginaOut)
