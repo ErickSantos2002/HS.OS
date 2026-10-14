@@ -22,6 +22,8 @@ import { getGatewayConfig } from "@/lib/gateway";
 import { type ChatMessage, type MediaAttachment } from "@/lib/mock-data";
 import VistoDaMensagem from "@/components/chat/VistoDaMensagem";
 import { estadoNoAgente } from "@/lib/vistos";
+import ConversasAnteriores from "@/components/chat/ConversasAnteriores";
+import { acrescentarCitacao } from "@/lib/conversas-anteriores";
 import { formatFileSize } from "@/lib/file-upload";
 import { Bot, FileText, File as FileIcon, Copy, Check, BellDot } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -66,7 +68,7 @@ import {
   Send, User, Loader2, WifiOff,
   Mic, Paperclip, Image as ImageIcon,
   X, ZoomIn, Info, Volume2, Square,
-  RefreshCw, Hash, Lock, MessageCircle, Plus, Star, Bell, RotateCcw,
+  RefreshCw, Hash, Lock, MessageCircle, Plus, Star, Bell, RotateCcw, History,
 } from "lucide-react";
 import { usePendingAgentTask } from "@/hooks/use-pending-agent-task";
 import { playNotificationSound } from "@/lib/notification-sound";
@@ -765,6 +767,14 @@ export default function ChatPage() {
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [ttsPlaying, setTtsPlaying] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
+  // Conversas anteriores (spec 2026-10-14). A busca global abre direto numa
+  // delas com `?anterior=<reset>&message=<id>`.
+  const [anterioresAberto, setAnterioresAberto] = useState(false);
+  const anteriorParam = searchParams.get("anterior");
+  const mensagemParam = searchParams.get("message");
+  useEffect(() => {
+    if (anteriorParam) setAnterioresAberto(true);
+  }, [anteriorParam]);
   const [createOpen, setCreateOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"channels" | "dms" | "unreads">("dms");
 
@@ -2563,6 +2573,10 @@ export default function ChatPage() {
                     velho ou numa execução que não volta é o motivo número um
                     para começar outra conversa. Com o botão cinza, clicar não
                     fazia nada e não explicava por quê. */}
+              <button onClick={() => setAnterioresAberto(true)} disabled={!effectiveAgentId} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors disabled:opacity-40" title="Ver conversas anteriores com este agente — só leitura">
+                <History className="h-3 w-3" />
+                <span>Conversas anteriores</span>
+              </button>
                <button onClick={() => setClearConfirmOpen(true)} disabled={!effectiveAgentId} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-40" title="Começar uma nova conversa — o agente esquece o contexto, as mensagens ficam guardadas">
                 {/* Lixeira vermelha era promessa errada: isto não apaga nada,
                     encerra a sessão e começa outra. Ver POST /conversations/{id}/limpar. */}
@@ -2601,6 +2615,9 @@ export default function ChatPage() {
               
               <button onClick={handleCopyConversation} disabled={agentMessages.length === 0} className="p-2 rounded-full text-muted-foreground hover:bg-secondary/50 transition-colors disabled:opacity-40 touch-target" title="Copiar conversa">
                 {conversationCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              </button>
+              <button onClick={() => setAnterioresAberto(true)} disabled={!effectiveAgentId} className="p-2 rounded-full text-muted-foreground hover:bg-secondary/50 transition-colors disabled:opacity-40 touch-target" title="Conversas anteriores" aria-label="Conversas anteriores">
+                <History className="h-4 w-4" />
               </button>
                <button onClick={() => setClearConfirmOpen(true)} disabled={!effectiveAgentId} className="p-2 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-40 touch-target" title="Começar uma nova conversa">
                 <RotateCcw className="h-4 w-4" />
@@ -2911,6 +2928,27 @@ export default function ChatPage() {
      Fica numa variável usada pelos dois returns — duplicar o JSX é como o
      original se perdeu. */
   const dialogoNovaConversa = (
+      <>
+        {effectiveAgentId && (
+          <ConversasAnteriores
+            agentId={effectiveAgentId}
+            open={anterioresAberto}
+            onOpenChange={setAnterioresAberto}
+            abrirConversa={anteriorParam}
+            destacarMensagem={anteriorParam ? mensagemParam : null}
+            onCitar={(texto) => {
+              // Entra na conversa de HOJE como citação; o rascunho não se perde.
+              setAnterioresAberto(false);
+              syncToDraft(acrescentarCitacao(inputLocalRef.current, texto));
+              window.setTimeout(() => {
+                const ta = inputRef.current;
+                if (!ta) return;
+                ta.focus();
+                ta.setSelectionRange(ta.value.length, ta.value.length);
+              }, 50);
+            }}
+          />
+        )}
         <AlertDialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
@@ -2930,6 +2968,7 @@ export default function ChatPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+      </>
   );
 
   // Mesma razão do `dialogoNovaConversa` acima: usado pelos dois returns
