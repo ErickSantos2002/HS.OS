@@ -74,3 +74,32 @@ def test_trecho_da_mensagem():
     assert trecho_da_mensagem(RESETS, t(10)) == "r1"
     assert trecho_da_mensagem(RESETS, t(15)) == "r2"
     assert trecho_da_mensagem(RESETS, t(30)) is None
+
+
+# ─── Rotas (Task 2) ─────────────────────────────────────────────────────────
+
+def test_iso_sai_em_milissegundos_utc():
+    from app.routers.conversations import _iso
+    dt = datetime(2026, 10, 14, 15, 1, 51, 224987, tzinfo=timezone.utc)
+    assert _iso(dt) == "2026-10-14T15:01:51.224Z"
+
+
+def test_resets_sao_do_par_pessoa_e_agente():
+    """Sem o `agent_id`, o "Nova conversa" com a `iris` recortaria a conversa
+    com a `nina` — a pessoa abriria uma conversa partida ao meio."""
+    from app.conversas_anteriores import SQL_RESETS
+    assert "user_id = $1::uuid" in SQL_RESETS and "agent_id = $2" in SQL_RESETS
+
+
+def test_saida_aceita_o_recorte():
+    from app.routers.conversations import ConversaAnteriorOut, _iso
+    c = recortar_conversas(RESETS, [m(1)])[0]
+    out = ConversaAnteriorOut(id=c["id"], ate=_iso(c["ate"]), inicio=_iso(c["inicio"]),
+                              titulo=c["titulo"], mensagens=c["mensagens"])
+    assert out.id == "r1" and out.mensagens == 1
+
+
+def test_busca_tem_campo_da_conversa_anterior():
+    from app.routers.chat_extras import ResultadoBusca
+    r = ResultadoBusca(tipo="conversa", id="x", origem="nina", content="c", created_at="t")
+    assert r.conversa_anterior is None
