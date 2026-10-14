@@ -61,3 +61,36 @@ class ConexaoFalsa:
 def test_membro():
     assert asyncio.run(r._membro(ConexaoFalsa(1), "c", "u")) is True
     assert asyncio.run(r._membro(ConexaoFalsa(None), "c", "u")) is False
+
+
+def test_dados_da_mensagem_exige_ainda_ser_membro(monkeypatch):
+    """O autor que saiu do grupo não pode seguir vendo quem lê lá dentro — o
+    detalhe é a mesma janela para o canal que a membresia fecha."""
+    from contextlib import asynccontextmanager
+
+    import pytest
+    from fastapi import HTTPException
+
+    from app.dependencies import Usuario
+
+    class Conexao:
+        async def fetchval(self, sql, *args):
+            if "channel_members" in sql:
+                return None          # já não é membro
+            return "u1"              # mas é o autor
+
+        async def fetch(self, *a):
+            raise AssertionError("não devia chegar ao detalhe")
+
+    @asynccontextmanager
+    async def falsa(**_):
+        yield Conexao()
+
+    monkeypatch.setattr(r, "sessao", falsa)
+    with pytest.raises(HTTPException) as erro:
+        asyncio.run(r.dados_da_mensagem("c", "m", Usuario(id="u1", email="x@y", papel="colaborador")))
+    assert erro.value.status_code == 404
+
+
+def test_detalhe_nao_expoe_email():
+    assert "email" not in r.SQL_DETALHE

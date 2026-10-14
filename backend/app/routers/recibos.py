@@ -48,7 +48,7 @@ SQL_ESTADOS = """
 
 SQL_DETALHE = """
     SELECT r.user_id::text AS user_id,
-           COALESCE(NULLIF(p.full_name, ''), p.email, 'Sem nome') AS nome,
+           COALESCE(NULLIF(p.full_name, ''), 'Sem nome') AS nome,
            to_char(r.entregue_em AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS entregue_em,
            to_char(r.lida_em     AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS lida_em
       FROM public.recibos_mensagem r
@@ -108,6 +108,9 @@ async def dados_da_mensagem(channel_id: str, message_id: str,
     de mensagem inexistente, para não confirmar que ela existe.
     """
     async with sessao(role="service_role") as conn:
+        # Membro AINDA: quem saiu do grupo não segue vendo quem lê lá dentro.
+        if not await _membro(conn, channel_id, usuario.id):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Mensagem não encontrada.")
         autor = await conn.fetchval(
             "SELECT author_id FROM public.channel_messages "
             " WHERE id = $1::uuid AND channel_id = $2::uuid AND author_type::text = 'human'",
