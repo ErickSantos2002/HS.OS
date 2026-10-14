@@ -1,9 +1,13 @@
-"""Acessórios do chat: recibos de leitura, reações e rascunhos.
+"""Acessórios do chat: reações e rascunhos.
 
-Três tabelas pequenas que o front consultava direto — `dm_reads`,
-`message_reactions` e `drafts`. Juntas num módulo porque nenhuma justifica um
-arquivo próprio e as três compartilham o mesmo padrão: chave composta, escrita
-idempotente, escopo do usuário do token.
+Tabelas pequenas que o front consultava direto — `message_reactions` e
+`drafts`. Juntas num módulo porque nenhuma justifica um arquivo próprio e
+compartilham o mesmo padrão: chave composta, escrita idempotente, escopo do
+usuário do token.
+
+O recibo de leitura de DM (`dm_reads`, um horário por pessoa e canal) saiu
+daqui em 14/10/2026: virou visto por mensagem, em `routers/recibos.py`. A
+tabela ficou, sem leitor nem escritor.
 
 ⚠️ **A parte de tempo real continua pendente.** Os três hooks correspondentes
 também assinam `postgres_changes` para receber mudança de outra aba ou de outra
@@ -24,53 +28,6 @@ from app.dependencies import Usuario, usuario_atual
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Recibos de leitura de DM
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class LeituraOut(BaseModel):
-    last_read_at: str | None = None
-
-
-@router.get("/dm-reads/{channel_id}", response_model=LeituraOut)
-async def leitura_do_par(
-    channel_id: str,
-    user_id: str = Query(description="De quem se quer o recibo — normalmente o outro participante."),
-    usuario: Usuario = Depends(usuario_atual),
-):
-    """Quando a outra pessoa leu o canal pela última vez."""
-    async with sessao(role="authenticated", user_id=usuario.id) as conn:
-        valor = await conn.fetchval(
-            "SELECT to_char(last_read_at AT TIME ZONE 'UTC', "
-            "'YYYY-MM-DD\"T\"HH24:MI:SS.MS') || 'Z' "
-            "FROM public.dm_reads WHERE channel_id = $1::uuid AND user_id = $2::uuid",
-            channel_id, user_id,
-        )
-    return LeituraOut(last_read_at=valor)
-
-
-@router.put("/dm-reads/{channel_id}", response_model=LeituraOut)
-async def marcar_lido(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
-    """Marca agora como o momento em que **eu** li este canal.
-
-    O horário é do servidor, não do cliente: recibo de leitura com relógio de
-    navegador atrasado ou adiantado mostra "lido" errado para o outro lado.
-    O front já limitava a chamada a uma a cada 2s, e isso continua lá.
-    """
-    async with sessao(role="authenticated", user_id=usuario.id) as conn:
-        valor = await conn.fetchval(
-            """
-            INSERT INTO public.dm_reads (channel_id, user_id, last_read_at)
-            VALUES ($1::uuid, $2::uuid, now())
-            ON CONFLICT (channel_id, user_id) DO UPDATE SET last_read_at = now()
-            RETURNING to_char(last_read_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z'
-            """,
-            channel_id, usuario.id,
-        )
-    return LeituraOut(last_read_at=valor)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -18,6 +18,9 @@ import { uploadFileToStorage, formatFileSize, isImageFile } from "@/lib/file-upl
 import FileAttachmentCard from "./FileAttachmentCard";
 import AudioDaMensagem from "./AudioDaMensagem";
 import MenuDaMensagem, { type AcaoDaMensagem } from "./MenuDaMensagem";
+import VistoDaMensagem from "./VistoDaMensagem";
+import DadosDaMensagem from "./DadosDaMensagem";
+import { estadoNoCanal, type EstadoDoVisto } from "@/lib/vistos";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useResumoEmAudio } from "@/hooks/use-resumo-em-audio";
 import { enviarAudioDoCanal } from "@/lib/audio-de-mensagem";
@@ -29,7 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, Copy } from "lucide-react";
+import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, Copy, Info } from "lucide-react";
 import { format } from "date-fns";
 import ChannelMembersPanel from "./ChannelMembersPanel";
 import ChannelFilesPanel from "./ChannelFilesPanel";
@@ -62,7 +65,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import ThreadPanel from "./ThreadPanel";
 import { useThreadCounts, getThreadLastViewed, markThreadViewed, type ThreadMeta } from "@/hooks/use-channel-threads";
-import { useDmReads } from "@/hooks/use-dm-reads";
+import { useRecibos } from "@/hooks/use-recibos";
 import { useMobileChatViewport } from "@/hooks/use-mobile-chat-viewport";
 import RichComposer, { type RichComposerHandle, type RichFormat } from "./RichComposer";
 
@@ -219,6 +222,8 @@ export const MessageBubble = memo(function MessageBubble({
   userNameById,
   authorStatus,
   resumoLigado = true,
+  visto,
+  onDadosDaMensagem,
 }: {
   msg: ChannelMessage;
   currentUserId: string;
@@ -238,6 +243,9 @@ export const MessageBubble = memo(function MessageBubble({
   authorStatus?: { emoji: string; label: string; setAt?: string | null } | null;
   /** Preferência "resumo em áudio" de quem está vendo (13/10/2026). */
   resumoLigado?: boolean;
+  /** Visto da mensagem — só faz sentido na minha (spec 2026-10-14). */
+  visto?: EstadoDoVisto;
+  onDadosDaMensagem?: () => void;
 }) {
   const isAgent = msg.author_type === "agent";
   const agentIdForAvatar = isAgent ? normalizeAgentId(msg.author_id || "") : "";
@@ -381,6 +389,7 @@ export const MessageBubble = memo(function MessageBubble({
         () => toast.error("Não foi possível marcar como não lida"));
     } },
     ...(isOwn ? [
+      ...(onDadosDaMensagem ? [{ rotulo: "Dados da mensagem", icone: Info, aoEscolher: () => { onDadosDaMensagem(); setShowMobileMenu(false); } }] : []),
       { rotulo: "Editar", icone: Pencil, aoEscolher: () => { onEdit(); setShowMobileMenu(false); } },
       { rotulo: "Apagar", icone: Trash2, perigo: true, aoEscolher: () => { onDelete(); setShowMobileMenu(false); } },
     ] : []),
@@ -569,6 +578,7 @@ export const MessageBubble = memo(function MessageBubble({
               <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
                 <span>{format(new Date(msg.created_at), "HH:mm")}</span>
                   {isEdited && !isDeleted && <span className="italic">(editado)</span>}
+                {visto && !isDeleted && <VistoDaMensagem estado={visto} />}
                 {isMarkedUnread && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-primary/20">
                     <BellDot className="h-3 w-3" />
@@ -1137,25 +1147,22 @@ export default function ChannelChat({
     return peer?.user_id ?? null;
   }, [isDm, members, user]);
 
-  const { peerLastReadAt, markRead } = useDmReads(
-    isDm && humanPeerId ? channel.id : null,
-    humanPeerId,
-    user?.id ?? null,
-  );
+  // Visto por mensagem em todo canal, DM ou grupo (spec 2026-10-14).
+  const { recibos, marcarLido } = useRecibos(channel.id, messages.length);
+  const [dadosDaMensagemId, setDadosDaMensagemId] = useState<string | null>(null);
   const { typingUsers, notifyTyping } = useTypingIndicator(channel.id, user?.id ?? null, currentUserName);
   const typingLabel = formatTypingLabel(typingUsers);
 
-  // Mark current user's last_read_at whenever the channel is open and messages change
+  // Ler o canal: ao abrir, a cada mensagem nova com a aba visível e ao voltar
+  // o foco — os mesmos gatilhos do antigo recibo de DM.
   useEffect(() => {
-    if (!isDm || !humanPeerId) return;
     if (document.visibilityState !== "visible") return;
-    markRead();
-  }, [isDm, humanPeerId, messages.length, markRead]);
+    marcarLido();
+  }, [messages.length, marcarLido]);
 
   useEffect(() => {
-    if (!isDm || !humanPeerId) return;
     const onVis = () => {
-      if (document.visibilityState === "visible") markRead();
+      if (document.visibilityState === "visible") marcarLido();
     };
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("focus", onVis);
@@ -1163,20 +1170,7 @@ export default function ChannelChat({
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("focus", onVis);
     };
-  }, [isDm, humanPeerId, markRead]);
-
-  // Index of the last own message that the peer has already read
-  const lastSeenOwnIndex = useMemo(() => {
-    if (!isDm || !humanPeerId || !peerLastReadAt || !user) return -1;
-    const peerReadMs = new Date(peerLastReadAt).getTime();
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.author_id === user.id && new Date(m.created_at).getTime() <= peerReadMs) {
-        return i;
-      }
-    }
-    return -1;
-  }, [isDm, humanPeerId, peerLastReadAt, messages, user]);
+  }, [marcarLido]);
 
   useEffect(() => subscribeToChannelAgentPending(channel.id, setPendingLocal), [channel.id]);
 
@@ -1850,16 +1844,11 @@ export default function ChannelChat({
                       }
                       userNameById={userNameById}
                       authorStatus={statusByUserId.get(msg.author_id) ?? null}
+                      visto={msg.author_id === user?.id ? estadoNoCanal(msg.id, recibos) : undefined}
+                      onDadosDaMensagem={() => setDadosDaMensagemId(msg.id)}
                     />
                   )}
                 </div>
-                {index === lastSeenOwnIndex && peerLastReadAt && Number.isFinite(new Date(peerLastReadAt).getTime()) && new Date(peerLastReadAt).getTime() > 0 && (
-                  <div className="-mt-2 flex justify-end pr-1">
-                    <span className="text-[10px] text-muted-foreground italic">
-                      Visto às {format(new Date(peerLastReadAt), "HH:mm")}
-                    </span>
-                  </div>
-                )}
               </Fragment>
 
             );
@@ -2316,6 +2305,12 @@ export default function ChannelChat({
         currentUserId={user?.id ?? ""}
         reactions={reactions}
         onToggleReaction={(messageId, emoji) => user && toggleReaction(messageId, emoji, user.id)}
+        recibos={recibos}
+      />
+      <DadosDaMensagem
+        channelId={channel.id}
+        messageId={dadosDaMensagemId}
+        onClose={() => setDadosDaMensagemId(null)}
       />
 
       <ImageLightbox
