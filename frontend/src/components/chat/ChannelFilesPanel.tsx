@@ -10,7 +10,10 @@ import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import { arquivosDoCanal, type ArquivoDoCanal } from "@/lib/arquivos-do-canal";
 
 interface Props {
-  channelId: string;
+  /** Rota que devolve as mensagens com anexo, no formato de
+   *  `GET /channels/{id}/arquivos`. A conversa com o agente usa
+   *  `GET /conversations/{agent_id}/arquivos`, que responde igual. */
+  endpoint: string;
   open: boolean;
   onClose: () => void;
 }
@@ -19,7 +22,7 @@ type FileItem = ArquivoDoCanal;
 
 type Filter = "all" | "image" | "doc";
 
-export default function ChannelFilesPanel({ channelId, open, onClose }: Props) {
+export default function ChannelFilesPanel({ endpoint, open, onClose }: Props) {
   const [items, setItems] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -36,7 +39,7 @@ export default function ChannelFilesPanel({ channelId, open, onClose }: Props) {
       let data: any[] | null = null;
       let error: unknown = null;
       try {
-        data = await api<any[]>(`/channels/${channelId}/arquivos`);
+        data = await api<any[]>(endpoint);
       } catch (e) {
         error = e;
       }
@@ -54,7 +57,7 @@ export default function ChannelFilesPanel({ channelId, open, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [open, channelId]);
+  }, [open, endpoint]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

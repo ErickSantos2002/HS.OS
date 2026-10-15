@@ -573,6 +573,11 @@ como no ChatGPT — **não** para continuar a sessão. Spec:
   de hoje como texto, e a sessão antiga no gateway não é tocada.
 - A busca global devolve `conversa_anterior` e abre o painel na conversa certa
   (`/chat?agent=…&anterior=<reset>&message=<id>`).
+- **Arquivos** (15/10/2026, também pedido da Lidisay): o painel do canal
+  (`ChannelFilesPanel`, agora por `endpoint`) serve a conversa com o agente via
+  `GET /conversations/{agent_id}/arquivos`. Atravessa o "Nova conversa" de
+  propósito e ⚠️ **tira o `type: "audio"`** — é o resumo em áudio, que vem em
+  quase toda resposta e afogaria a lista. Recorte em `app/arquivos_da_conversa.py`.
 
 
 ✓ / ✓✓ cinza / ✓✓ azul em cada mensagem, igual ao WhatsApp. Spec:

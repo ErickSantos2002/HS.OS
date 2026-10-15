@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from app import voz_entrega
 from app.anexos import Anexo, linha_de_anexo
+from app.arquivos_da_conversa import arquivos_da_conversa
 from app.database import sessao
 from app.dependencies import (Usuario, agente_visivel, exige_papel,
                               normalizar_agent_id, usuario_atual)
@@ -315,6 +316,35 @@ async def conversa_anterior(agent_id: str, reset_id: str,
             " ORDER BY created_at LIMIT 500",
             agent_id, usuario.id, ate, depois_de)
     return [_para_saida(l) for l in linhas]
+
+
+class MensagemComArquivoOut(BaseModel):
+    id: str
+    created_at: str
+    author_name: str
+    attachments: list[dict]
+
+
+@router.get("/{agent_id}/arquivos", response_model=list[MensagemComArquivoOut])
+async def arquivos(agent_id: str, usuario: Usuario = Depends(agente_visivel),
+                   limite: int = Query(default=500, ge=1, le=1000)):
+    """O painel "Arquivos" da conversa: o que a pessoa e o agente trocaram.
+
+    Atravessa o "Nova conversa" de propósito — `_ultimo_reset` não entra. O
+    pedido (Lidisay, 15/10/2026) é saber o que já foi mandado ao agente, e o
+    recomeço não apaga o que foi mandado. O recorte e a saída, no formato da
+    rota do canal, são `app/arquivos_da_conversa.py`.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(
+            f"SELECT {_COLUNAS} FROM public.conversations "
+            " WHERE agent_id = $1 AND user_id = $2::uuid "
+            "   AND media IS NOT NULL AND media NOT IN ('[]'::jsonb, 'null'::jsonb) "
+            " ORDER BY created_at DESC LIMIT $3",
+            agent_id, usuario.id, limite)
+        nome = await conn.fetchval(
+            "SELECT name FROM public.agent_profiles WHERE agent_id = $1", agent_id)
+    return arquivos_da_conversa([dict(l) for l in linhas], nome or agent_id)
 
 
 @router.get("/{agent_id}", response_model=PaginaOut)

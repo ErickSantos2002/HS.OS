@@ -23,6 +23,7 @@ import { type ChatMessage, type MediaAttachment } from "@/lib/mock-data";
 import VistoDaMensagem from "@/components/chat/VistoDaMensagem";
 import { estadoNoAgente } from "@/lib/vistos";
 import ConversasAnteriores from "@/components/chat/ConversasAnteriores";
+import ChannelFilesPanel from "@/components/chat/ChannelFilesPanel";
 import { acrescentarCitacao, semPedidoDaBusca } from "@/lib/conversas-anteriores";
 import { formatFileSize } from "@/lib/file-upload";
 import { Bot, FileText, File as FileIcon, Copy, Check, BellDot } from "lucide-react";
@@ -770,6 +771,8 @@ export default function ChatPage() {
   // Conversas anteriores (spec 2026-10-14). A busca global abre direto numa
   // delas com `?anterior=<reset>&message=<id>`.
   const [anterioresAberto, setAnterioresAberto] = useState(false);
+  // Painel "Arquivos" — o mesmo do canal (pedido da Lidisay, 15/10/2026).
+  const [arquivosAberto, setArquivosAberto] = useState(false);
   const anteriorParam = searchParams.get("anterior");
   const mensagemParam = searchParams.get("message");
   useEffect(() => {
@@ -2545,6 +2548,14 @@ export default function ChatPage() {
         </div>
       )}
 
+      {effectiveAgentId && (
+        <ChannelFilesPanel
+          endpoint={`/conversations/${effectiveAgentId}/arquivos`}
+          open={arquivosAberto}
+          onClose={() => setArquivosAberto(false)}
+        />
+      )}
+
       <div className="overflow-hidden flex flex-col flex-1 min-h-0 min-w-0">
         {/* Header - compact on desktop */}
         {!isMobile && (
@@ -2582,6 +2593,10 @@ export default function ChatPage() {
               <button onClick={() => setAnterioresAberto(true)} disabled={!effectiveAgentId} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors disabled:opacity-40" title="Ver conversas anteriores com este agente — só leitura">
                 <History className="h-3 w-3" />
                 <span>Conversas anteriores</span>
+              </button>
+              <button onClick={() => setArquivosAberto(true)} disabled={!effectiveAgentId} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors disabled:opacity-40" title="Arquivos trocados com este agente, inclusive em conversas anteriores">
+                <Paperclip className="h-3 w-3" />
+                <span>Arquivos</span>
               </button>
                <button onClick={() => setClearConfirmOpen(true)} disabled={!effectiveAgentId} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-40" title="Começar uma nova conversa — o agente esquece o contexto, as mensagens ficam guardadas">
                 {/* Lixeira vermelha era promessa errada: isto não apaga nada,
@@ -2624,6 +2639,9 @@ export default function ChatPage() {
               </button>
               <button onClick={() => setAnterioresAberto(true)} disabled={!effectiveAgentId} className="p-2 rounded-full text-muted-foreground hover:bg-secondary/50 transition-colors disabled:opacity-40 touch-target" title="Conversas anteriores" aria-label="Conversas anteriores">
                 <History className="h-4 w-4" />
+              </button>
+              <button onClick={() => setArquivosAberto(true)} disabled={!effectiveAgentId} className="p-2 rounded-full text-muted-foreground hover:bg-secondary/50 transition-colors disabled:opacity-40 touch-target" title="Arquivos" aria-label="Arquivos">
+                <Paperclip className="h-4 w-4" />
               </button>
                <button onClick={() => setClearConfirmOpen(true)} disabled={!effectiveAgentId} className="p-2 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-40 touch-target" title="Começar uma nova conversa">
                 <RotateCcw className="h-4 w-4" />
