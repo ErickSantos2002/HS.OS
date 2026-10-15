@@ -115,7 +115,12 @@ MS_TENANT_ID=<Entra → app "HS.OS" → Directory (tenant) ID>
 MS_CLIENT_ID=<Entra → app "HS.OS" → Application (client) ID>
 MS_CLIENT_SECRET=<o Value do client secret, não o Secret ID>
 MS_REDIRECT_URI=https://hsosapi.healthsafetytech.com/auth/microsoft/callback
+GIPHY_API_KEY=<chave do app no developers.giphy.com>
 ```
+
+**GIF.** Sem a `GIPHY_API_KEY` o botão GIF responde "falta configurar" (503);
+o resto do chat segue. Até 15/10/2026 a chave era `VITE_*` no front e nunca
+chegou ao build — o botão dava 401 desde sempre.
 
 **Login com Microsoft.** As quatro `MS_*` ligam o botão "Entrar com Microsoft";
 com qualquer uma vazia ele some e o login por senha segue igual. O registro no

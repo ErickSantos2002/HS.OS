@@ -38,6 +38,7 @@ from app.routers.mcp_wiki import router as mcp_wiki_router
 from app.routers.integracoes import router as integracoes_router
 from app.routers.ia import router as ia_router
 from app.routers.push import router as push_router
+from app.routers.gifs import router as gifs_router
 from app.routers.relatorios import router as relatorios_router
 from app.routers.profiles import router as profiles_router
 from app.routers.tarefas import router as tarefas_router
@@ -230,3 +231,4 @@ app.include_router(times_router)
 app.include_router(wiki_router)
 app.include_router(tarefas_router)
 app.include_router(ws_router)
+app.include_router(gifs_router)

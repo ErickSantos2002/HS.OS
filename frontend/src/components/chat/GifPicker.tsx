@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 
-const GIPHY_API_KEY =
-  (import.meta.env.VITE_GIPHY_API_KEY as string | undefined) || "LIVDSRZULELA"; // Giphy public SDK key (fallback for dev)
+// Mesmo valor de `_POR_PAGINA` em `backend/app/routers/gifs.py`: a tela usa
+// para saber se há mais página.
 const PAGE_LIMIT = 24;
 
 export interface GifResult {
@@ -15,38 +16,12 @@ export interface GifResult {
   height: number;
 }
 
-interface GiphyApiGif {
-  id: string;
-  title: string;
-  images: {
-    fixed_width: { url: string; webp?: string; width: string; height: string };
-    original: { url: string; width: string; height: string };
-    downsized_medium?: { url: string; width: string; height: string };
-  };
-}
-
-function mapGif(g: GiphyApiGif): GifResult {
-  const preview = g.images.fixed_width;
-  const full = g.images.downsized_medium || g.images.original;
-  return {
-    id: g.id,
-    title: g.title || "GIF",
-    previewUrl: preview.webp || preview.url,
-    url: full.url,
-    width: Number(full.width) || 0,
-    height: Number(full.height) || 0,
-  };
-}
-
+// ⚠️ A busca passa pelo backend, que guarda a `GIPHY_API_KEY`. Chamar o Giphy
+// daqui exigia a chave no bundle, e o build de produção nunca a recebeu: caía
+// na reserva `LIVDSRZULELA`, demo do Tenor, e o botão dava 401 (15/10/2026).
 async function fetchGifs(query: string, offset: number): Promise<GifResult[]> {
-  const base = query.trim()
-    ? `https://api.giphy.com/v1/gifs/search?q=${encodeURIComponent(query)}&`
-    : `https://api.giphy.com/v1/gifs/trending?`;
-  const url = `${base}api_key=${GIPHY_API_KEY}&limit=${PAGE_LIMIT}&offset=${offset}&rating=pg-13&lang=pt`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Giphy ${res.status}`);
-  const data = (await res.json()) as { data: GiphyApiGif[] };
-  return (data.data || []).map(mapGif);
+  const params = new URLSearchParams({ q: query, offset: String(offset) });
+  return api<GifResult[]>(`/gifs?${params}`);
 }
 
 export default function GifPicker({ onSelect }: { onSelect: (gif: GifResult) => void }) {

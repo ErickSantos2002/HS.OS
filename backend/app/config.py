@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     # mesmo motivo da OPENAI_API_KEY: chave desconhecida no `.env` derruba o boot.
     DEEPSEEK_API_KEY: str = ""
 
+    # Giphy — busca do seletor de GIF (`app/routers/gifs.py`). Declarada pelo
+    # mesmo motivo: chave desconhecida no `.env` derruba o boot.
+    GIPHY_API_KEY: str = ""
+
     # Web Push. O par é gerado localmente e não custa nada; sem ele o envio
     # responde 503 e a tela não oferece notificação.
     VAPID_PUBLIC_KEY: str = ""
