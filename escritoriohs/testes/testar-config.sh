@@ -37,6 +37,27 @@ for v in LIVEKIT_HOST LIVEKIT_API_KEY LIVEKIT_API_SECRET MAX_USERS_FOR_WEBRTC; d
   awk '/^  back:/{f=1;next} /^  [a-z-]+:$/{f=0} f' docker-compose.yml | grep -q -- "- $v\$" \
     && echo "ok   back recebe $v" || { echo "FALHA back recebe $v"; falhas=$((falhas+1)); }
 done
+# Admin API do HS.OS (sub-projeto B): só no play. No `back` ela o faria pedir o
+# mapa ao HS.OS em vez de calcular o wamUrl sozinho; no `uploader`, passaria a
+# exigir /api/limit/fileSize, que não implementamos.
+bloco() { awk -v s="  $1:" '$0==s{f=1;next} /^  [a-z-]+:$/{f=0} f' docker-compose.yml; }
+for v in ADMIN_API_URL ADMIN_API_TOKEN ADMIN_SOCKETS_TOKEN; do
+  bloco play | grep -q -- "- $v\$" \
+    && echo "ok   play recebe $v" || { echo "FALHA play recebe $v"; falhas=$((falhas+1)); }
+  for svc in back uploader map-storage; do
+    bloco "$svc" | grep -q -- "$v" \
+      && { echo "FALHA $v fora do play ($svc)"; falhas=$((falhas+1)); } || echo "ok   $v fora do $svc"
+  done
+done
+# São a volta atrás: apagar ADMIN_API_URL devolve o WA a elas.
+for v in MAP_EDITOR_ALLOWED_USERS START_ROOM_URL; do
+  bloco play | grep -q -- "- $v\$" \
+    && echo "ok   play mantém $v (volta atrás)" || { echo "FALHA play mantém $v (volta atrás)"; falhas=$((falhas+1)); }
+done
+# Vazia no exemplo: preenchida, o escritório passa a depender do HS.OS no boot.
+exige .env.example '^ADMIN_API_URL=$' "ADMIN_API_URL vazia no .env.example"
+proibe .env.example '^(ADMIN_API_TOKEN|ADMIN_SOCKETS_TOKEN)=.+' "tokens da Admin API fora do .env.example"
+
 # VPS dos bancos: nenhum serviço do WA sem teto de memória.
 for svc in borda play back uploader icon redis map-storage; do
   awk -v s="  $svc:" '$0==s{f=1;next} /^  [a-z-]+:$/{f=0} f' docker-compose.yml | grep -q 'memory:' \

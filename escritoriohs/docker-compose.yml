@@ -19,6 +19,13 @@ services:
       - ENABLE_MAP_EDITOR=true
       - MAP_EDITOR_ALLOWED_USERS
       - MAP_EDITOR_ALLOW_ALL_USERS
+      # Admin API do HS.OS (sub-projeto B) — SÓ no play. Vazia, o WA usa as
+      # implementações locais (o validador aceita "" e `!!""` desliga). Com
+      # ela, MAP_EDITOR_ALLOWED_USERS e START_ROOM_URL deixam de valer, mas
+      # ficam aqui: apagar a ADMIN_API_URL é a volta atrás.
+      - ADMIN_API_URL
+      - ADMIN_API_TOKEN
+      - ADMIN_SOCKETS_TOKEN
       - PUSHER_URL=https://${DOMAIN}/
       - ICON_URL=/icon
       - TURN_SERVER

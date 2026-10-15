@@ -27,6 +27,7 @@ e `livekit.healthsafetytech.com`. VPS: `62.72.11.28` (Hostinger, `srv815732`).
 | `SECRET_KEY`, `MAP_STORAGE_API_TOKEN`, `MAP_STORAGE_AUTHENTICATION_TOKEN`, `ROOM_API_SECRET_KEY` | idem (gerados uma vez) |
 | `LIVEKIT_API_KEY/SECRET`, `TURN_STATIC_AUTH_SECRET` | `/etc/escritoriohs/midia.env` na VPS **e** copiados no EasyPanel — trocar num lugar exige trocar no outro |
 | credenciais do R2 do backup | `/etc/escritoriohs/backup.env` na VPS |
+| `ADMIN_API_TOKEN`, `ADMIN_SOCKETS_TOKEN` (sub-projeto B) | EasyPanel → `escritoriohs/wa` (só o `play`) **e** no backend do HS.OS como `ESCRITORIO_ADMIN_API_TOKEN` / `ESCRITORIO_ADMIN_SOCKETS_TOKEN` — mesmo valor nos dois |
 
 ## Quando algo falhar
 
@@ -37,6 +38,7 @@ e `livekit.healthsafetytech.com`. VPS: `62.72.11.28` (Hostinger, `srv815732`).
 | UDP bloqueado | ninguém de fora tem vídeo | firewall do **hPanel** (não o da máquina) — ver Validações |
 | Microsoft recusa | não entra; erro `AADSTS…` | secret vencido (≈ 15/10/2028); app no Entra |
 | `play` fora | o escritório não abre; o HS.OS segue normal | logs do serviço `wa` no EasyPanel |
+| backend do HS.OS fora (com `ADMIN_API_URL`) | **ninguém entra**; o `play` nem sobe | `verificar.sh admin`; volta atrás em "Admin API" |
 
 Conferência geral, de qualquer máquina: `escritoriohs/testes/verificar.sh tudo`.
 Antes de commitar mudança de config: `escritoriohs/testes/testar-config.sh`.
@@ -172,6 +174,50 @@ do WA, não erro nosso.
 - Client secret com a validade máxima do portal (24 meses → **vence por volta de
   15/10/2028**). Quando vencer, ninguém entra e o erro é da Microsoft: gerar outro
   secret no portal e trocar `OPENID_CLIENT_SECRET` no EasyPanel.
+
+## Admin API (sub-projeto B)
+
+Spec: `docs/superpowers/specs/2026-10-15-escritoriohs-b-ligacao-hsos-design.md`.
+Com `ADMIN_API_URL` no `play`, o WA pergunta ao backend do HS.OS
+(`backend/app/routers/escritorio_wa.py`) quem entra, quem edita e para onde a
+raiz redireciona.
+
+**Variáveis** (nomes; valores só no EasyPanel):
+
+| onde | variável | valor |
+|---|---|---|
+| `wa` → só o `play` | `ADMIN_API_URL` | `https://hsosapi.healthsafetytech.com/escritorio-wa` |
+| `wa` → só o `play` | `ADMIN_API_TOKEN`, `ADMIN_SOCKETS_TOKEN` | `openssl rand -hex 32`, um para cada |
+| backend do HS.OS | `ESCRITORIO_ADMIN_API_TOKEN`, `ESCRITORIO_ADMIN_SOCKETS_TOKEN` | os mesmos dois valores |
+| backend do HS.OS | `ESCRITORIO_EDITORES` | e-mails por vírgula (o que hoje está em `MAP_EDITOR_ALLOWED_USERS`) |
+| backend do HS.OS | `ESCRITORIO_DOMINIOS`, `ESCRITORIO_SALA_INICIAL` | padrões: `healthsafetytech.com`, `/~/hs/hs.wam` |
+
+Só no `play`: no `back` ela o faria pedir o mapa ao HS.OS em vez de calcular
+sozinho, e no `uploader` passaria a exigir `/api/limit/fileSize`, que não
+implementamos. O `testar-config.sh` confere. Vazia, o WA usa as implementações
+locais (o validador dele aceita `""`).
+
+**Regra de entrada:** e-mail de domínio fora de `ESCRITORIO_DOMINIOS` (inclusive
+convidado B2B) é recusado; conta do HS.OS desativada é recusada; o resto entra,
+**mesmo sem conta no HS.OS**. Edita o mapa quem está em `ESCRITORIO_EDITORES`.
+HS.OS sem banco → tela de "tente de novo", não de acesso negado.
+
+⚠️ **Com `ADMIN_API_URL` preenchida, `MAP_EDITOR_ALLOWED_USERS` e
+`START_ROOM_URL` ficam sem efeito** — continuam no compose de propósito.
+
+⚠️ **O escritório passa a depender do HS.OS.** O `play` repete
+`/api/capabilities` a cada 500 ms e só sobe quando ela responde. Ela não toca
+banco, mas com o backend fora ninguém entra.
+
+**Volta atrás:** esvaziar `ADMIN_API_URL` no EasyPanel e reimplantar o `wa`.
+Tudo volta ao comportamento local, com `MAP_EDITOR_ALLOWED_USERS` e `START_ROOM_URL`.
+
+**Presença:** o backend do HS.OS assina `wss://escritoriohs.healthsafetytech.com/ws/admin/rooms`
+(JWT com `ADMIN_SOCKETS_TOKEN`) e expõe `GET /escritorio/presenca`. Sem o token,
+a presença fica desligada e o resto funciona.
+
+Conferência: `escritoriohs/testes/verificar.sh admin` (`capabilities` 200 `{}`
+sem token; `map` sem token 403).
 
 ## Mapa
 
