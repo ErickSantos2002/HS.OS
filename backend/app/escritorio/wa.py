@@ -120,8 +120,10 @@ def detalhes_do_mapa(play_uri: str, map_storage_url: str, sala_inicial: str) -> 
 
 
 # Os mapas do map-storage que o editor oferece como destino de saída
-# (`/api/room/sameWorld`). O LocalAdmin listava o map-storage; aqui são fixos.
-_MAPAS = (("EscritorioHS", "hs/hs.wam"), ("office", "office.wam"))
+# (`/api/room/sameWorld`) e na lista de salas. O LocalAdmin listava o
+# map-storage inteiro; aqui é fixo. O `office` fica de fora de propósito:
+# continua no map-storage como volta atrás, mas não aparece para as pessoas.
+_MAPAS = (("EscritorioHS", "hs/hs.wam"),)
 
 
 def mapas_do_mundo(map_storage_url: str) -> list[dict]:

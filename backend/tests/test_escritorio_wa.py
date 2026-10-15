@@ -230,6 +230,8 @@ def test_mapa_desliga_chat_matrix():
 
 
 def test_mapas_do_mundo():
+    """Só o mapa da HS. O `office` continua no map-storage (é a volta atrás),
+    mas o Erick pediu para ele sumir da lista de salas (15/10/2026)."""
     lista = wa.mapas_do_mundo(MS)
-    assert [m["roomUrl"] for m in lista] == ["/~/hs/hs.wam", "/~/office.wam"]
-    assert lista[1]["wamUrl"] == "https://e.com/map-storage/office.wam"
+    assert [m["roomUrl"] for m in lista] == ["/~/hs/hs.wam"]
+    assert lista[0]["wamUrl"] == "https://e.com/map-storage/hs/hs.wam"

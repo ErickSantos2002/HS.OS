@@ -222,14 +222,14 @@ def test_posts_respondem_204(cliente, caminho):
     assert r.status_code == 204
 
 
-def test_mesmo_mundo_lista_os_dois_mapas(cliente):
+def test_mesmo_mundo_lista_so_o_mapa_da_hs(cliente):
     """Com Admin API, o editor pergunta a nós quais mapas existem — é a lista do
     destino de uma saída (`ExitPropertyEditor.svelte`). Vazia, o Erick não
     consegue ligar o `hs` ao `office` pelo navegador."""
     r = cliente.get(f"/escritorio-wa/api/room/sameWorld?roomUrl={PLAY}", headers={"Authorization": TOKEN})
     assert r.status_code == 200
     salas = {m["roomUrl"]: m for m in r.json()}
-    assert set(salas) == {"/~/hs/hs.wam", "/~/office.wam"}
+    assert set(salas) == {"/~/hs/hs.wam"}
     assert salas["/~/hs/hs.wam"]["wamUrl"].endswith("/map-storage/hs/hs.wam")
     assert all(m["name"] for m in r.json())
 
