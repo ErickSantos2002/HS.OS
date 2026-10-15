@@ -34,6 +34,17 @@ if [ -d midia ]; then
                '169.254.0.0-169.254.255.255' '172.16.0.0-172.31.255.255' '192.168.0.0-192.168.255.255'; do
     exige midia/turnserver.conf "^denied-peer-ip=$faixa\$" "coturn nega relay para $faixa"
   done
+  # O IP público do próprio host também é "dentro": o relay chegaria em tudo que
+  # escuta em 0.0.0.0 na VPS. E as faixas de CGNAT, benchmark e IPv6 local.
+  for faixa in '62\.72\.11\.28' '100\.64\.0\.0-100\.127\.255\.255' '198\.18\.0\.0-198\.19\.255\.255' \
+               '::1' '::ffff:0\.0\.0\.0-::ffff:255\.255\.255\.255' 'fc00::-fdff:ffff:ffff:ffff:ffff:ffff:ffff:ffff' \
+               'fe80::-febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff'; do
+    exige midia/turnserver.conf "^denied-peer-ip=$faixa\$" "coturn nega relay para $faixa"
+  done
+  # WebRTC só precisa de relay UDP; relay TCP abre mais superfície para nada.
+  exige midia/turnserver.conf '^no-tcp-relay$' "coturn sem relay TCP"
+  # Segredo na linha de comando aparece no `ps` de qualquer usuário do host.
+  proibe midia/docker-compose.yml '--static-auth-secret' "segredo do coturn fora da linha de comando"
   exige midia/turnserver.conf '^use-auth-secret$' "coturn por static secret"
   proibe midia/turnserver.conf '^static-auth-secret=' "segredo do coturn fora do arquivo"
   exige midia/docker-compose.yml 'livekit/livekit-server:v1\.13\.8' "LiveKit fixo"

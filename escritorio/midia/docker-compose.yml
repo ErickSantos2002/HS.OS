@@ -17,7 +17,9 @@ services:
     image: coturn/coturn:4.17.2-r0
     network_mode: host
     env_file: /etc/escritorio/midia.env
-    entrypoint: ["/bin/sh", "-c", "exec turnserver -c /etc/coturn/turnserver.conf --static-auth-secret=\"$$TURN_STATIC_AUTH_SECRET\""]
+    # O segredo entra numa cópia 600 da config, não na linha de comando: argv
+    # aparece no `ps` de qualquer usuário do host.
+    entrypoint: ["/bin/sh", "-c", "umask 077 && cp /etc/coturn/turnserver.conf /tmp/turnserver.conf && printf 'static-auth-secret=%s\\n' \"$$TURN_STATIC_AUTH_SECRET\" >> /tmp/turnserver.conf && exec turnserver -c /tmp/turnserver.conf"]
     volumes:
       - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
     restart: unless-stopped
