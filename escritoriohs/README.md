@@ -9,7 +9,7 @@ Plano: `docs/superpowers/plans/2026-10-15-escritorio-virtual-a.md`.
 |---|---|---|
 | UDP 50000–50100, 3478, 49160–49200 chegam de fora? | **sim, depois de abrir no firewall da Hostinger** | `tcpdump -ni eth0` na VPS, pacotes da rede da HS e da VPS do OpenClaw |
 | TCP 7881 e 3478 chegam de fora? | sim (regras `Any` no firewall da Hostinger) | idem |
-| Domínio do EasyPanel → serviço Compose? | sim | `curl https://escritorio.healthsafetytech.com/` devolveu `borda-ok` |
+| Domínio do EasyPanel → serviço Compose? | sim | `curl https://escritoriohs.healthsafetytech.com/` devolveu `borda-ok` |
 | Container do Compose → host? | sim, por `172.18.0.1` **e** por `host-gateway` | `curl` em `/host/` e `/gw/` devolveram `host-ok` |
 
 ⚠️ **O firewall que importa é o do painel da Hostinger, não o da máquina.** Na
@@ -43,12 +43,12 @@ criado pela metade, com o domínio já reservado. O que funciona: criar, depois
 
 | o quê | onde |
 |---|---|
-| arquivos | `/opt/escritorio/midia/` (cópia de `escritorio/midia/`) |
-| segredos | `/etc/escritorio/midia.env` (root, `600`) — `LIVEKIT_KEYS`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `TURN_STATIC_AUTH_SECRET` |
-| serviço | `systemctl status escritorio-midia` |
+| arquivos | `/opt/escritoriohs/midia/` (cópia de `escritoriohs/midia/`) |
+| segredos | `/etc/escritoriohs/midia.env` (root, `600`) — `LIVEKIT_KEYS`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `TURN_STATIC_AUTH_SECRET` |
+| serviço | `systemctl status escritoriohs-midia` |
 | logs | `docker logs -f midia-livekit-1` · `docker logs -f midia-coturn-1` |
 
-Atualizar config: editar em `escritorio/midia/`, `scp` para `/opt/escritorio/midia/`
+Atualizar config: editar em `escritoriohs/midia/`, `scp` para `/opt/escritoriohs/midia/`
 e `docker compose up -d --force-recreate` lá. **Trocar os segredos:** apagar o
 `midia.env` e rodar `instalar.sh` — e repor `LIVEKIT_API_*` e
 `TURN_STATIC_AUTH_SECRET` no EasyPanel, senão o WA para de falar com os dois.

@@ -1,6 +1,6 @@
 # LiveKit — só entra em bolha/sala com mais de 4 (MAX_USERS_FOR_WEBRTC).
 # As chaves chegam por LIVEKIT_KEYS (formato "chave: segredo"), de
-# /etc/escritorio/midia.env — não ficam neste arquivo, que é público.
+# /etc/escritoriohs/midia.env — não ficam neste arquivo, que é público.
 port: 7880
 # Só a borda (pela bridge do Swarm) e o loopback falam com a API.
 bind_addresses: ["127.0.0.1", "172.18.0.1"]

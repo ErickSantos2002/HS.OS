@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** WorkAdventure no ar em `escritorio.healthsafetytech.com`, com login Microsoft, vídeo por LiveKit e Coturn na VPS do EasyPanel, e o mapa de escritório da HS.
+**Goal:** WorkAdventure no ar em `escritoriohs.healthsafetytech.com`, com login Microsoft, vídeo por LiveKit e Coturn na VPS do EasyPanel, e o mapa de escritório da HS.
 
 **Architecture:** O WorkAdventure (`play`, `back`, `map-storage`, `uploader`, `icon`, `redis`) roda como serviço **Compose no EasyPanel**, com um nginx próprio (`borda`) na frente fazendo o roteamento por caminho que o Traefik oficial fazia — assim o EasyPanel só precisa de **um** alvo por domínio, sem regra de caminho nem strip. LiveKit e Coturn rodam em `network_mode: host`, num Compose à parte gerenciado por `systemd`. O mesmo `borda` encaminha `livekit.healthsafetytech.com` para o LiveKit no host por `172.18.0.1:7880`.
 
@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - VPS: `62.72.11.28` (Hostinger, Ubuntu 24.04, `srv815732`), Swarm ativo, EasyPanel com Traefik nas portas 80/443. SSH `root@62.72.11.28` funciona sem senha a partir da máquina do Erick.
-- Domínios: `escritorio.healthsafetytech.com` e `livekit.healthsafetytech.com` — **já resolvem para `62.72.11.28`** (conferido em 15/10/2026).
+- Domínios: `escritoriohs.healthsafetytech.com` e `livekit.healthsafetytech.com` — **já resolvem para `62.72.11.28`** (conferido em 15/10/2026).
 - Bridge do host vista de dentro dos containers do EasyPanel: `172.18.0.1` (`docker_gwbridge`).
 - Portas no host: LiveKit `7880/tcp` (só via `borda`), `7881/tcp`, `50000–50100/udp`; Coturn `3478/udp+tcp`, relay `49160–49200/udp`.
 - Versões fixas, **nunca `latest`**: WA `v1.33.11`, LiveKit `v1.13.8`, Coturn `4.17.2-r0`, nginx `1.27-alpine`.
@@ -38,7 +38,7 @@
 ## Estrutura de arquivos
 
 ```
-escritorio/
+escritoriohs/
   README.md                    operação: o que roda onde, falhas, comandos, validações
   .env.example                 variáveis do serviço Compose no EasyPanel (sem valor secreto)
   docker-compose.yml           WA sem Traefik + borda (vai para o EasyPanel)
@@ -46,10 +46,10 @@ escritorio/
   midia/docker-compose.yml     LiveKit + Coturn, network_mode: host
   midia/livekit.yaml           config do LiveKit (chaves vêm por env)
   midia/turnserver.conf        config do Coturn (segredo vem por argumento)
-  midia/escritorio-midia.service  unit do systemd
+  midia/escritoriohs-midia.service  unit do systemd
   midia/instalar.sh            instala/atualiza a mídia no host (roda como root na VPS)
   backup/backup-mapas.sh       tar do volume do map-storage → R2
-  backup/escritorio-backup.service / .timer
+  backup/escritoriohs-backup.service / .timer
   testes/testar-config.sh      checagens estáticas dos arquivos acima (roda local)
   testes/verificar.sh          checagens contra produção (HTTP, WS, LiveKit, STUN)
 ```
@@ -61,7 +61,7 @@ escritorio/
 Responde aos três riscos da spec. **Se o UDP não chegar, PARAR e voltar ao Erick** — é o gatilho do plano B (LiveKit Cloud).
 
 **Files:**
-- Create: `escritorio/README.md` (só a seção "Validações de 15/10/2026" por enquanto)
+- Create: `escritoriohs/README.md` (só a seção "Validações de 15/10/2026" por enquanto)
 
 **Interfaces:**
 - Produces: decisão registrada no README — "UDP abre: sim/não", "EasyPanel Compose alcança 172.18.0.1: sim/não", "domínio → serviço Compose: sim/não".
@@ -90,7 +90,7 @@ Expected: as cinco linhas (`udp-50000`, `udp-50100`, `udp-3478`, `udp-49160`, `t
 
 - [ ] **Step 3: Serviço Compose de teste no EasyPanel**
 
-Confirmar com o Erick. Criar o projeto `escritorio` e, nele, um serviço Compose `teste-borda` (pelo painel ou pelo MCP do EasyPanel — `search_procedures` "create compose service"), com este conteúdo:
+Confirmar com o Erick. Criar o projeto `escritoriohs` e, nele, um serviço Compose `teste-borda` (pelo painel ou pelo MCP do EasyPanel — `search_procedures` "create compose service"), com este conteúdo:
 
 ```yaml
 services:
@@ -105,20 +105,20 @@ No host, um alvo temporário em `18080`:
 ssh root@62.72.11.28 'timeout 120 sh -c "while true; do printf \"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nhost-ok\n\" | socat - TCP-LISTEN:18080,reuseaddr; done" >/dev/null 2>&1 &'
 ```
 
-Domínio no EasyPanel: `escritorio.healthsafetytech.com` → serviço `borda`, porta `80`, HTTPS.
+Domínio no EasyPanel: `escritoriohs.healthsafetytech.com` → serviço `borda`, porta `80`, HTTPS.
 
 ```bash
-curl -s https://escritorio.healthsafetytech.com/        # Expected: borda-ok
-curl -s https://escritorio.healthsafetytech.com/host/   # Expected: host-ok
+curl -s https://escritoriohs.healthsafetytech.com/        # Expected: borda-ok
+curl -s https://escritoriohs.healthsafetytech.com/host/   # Expected: host-ok
 ```
 
 `borda-ok` prova domínio → Compose. `host-ok` prova Compose → host pela bridge (é o caminho que o LiveKit vai usar). Se `/host/` falhar com 502, testar `extra_hosts: ["host.docker.internal:host-gateway"]` e `proxy_pass http://host.docker.internal:18080/` antes de concluir que não dá; registrar qual funcionou.
 
-- [ ] **Step 4: Apagar o serviço de teste** (o projeto `escritorio` fica).
+- [ ] **Step 4: Apagar o serviço de teste** (o projeto `escritoriohs` fica).
 
 - [ ] **Step 5: Registrar no README e commitar**
 
-`escritorio/README.md`:
+`escritoriohs/README.md`:
 
 ```markdown
 # Escritório virtual (WorkAdventure)
@@ -138,7 +138,7 @@ Spec: `docs/superpowers/specs/2026-10-15-escritorio-virtual-design.md`.
 Preencher os `<…>` com o que foi medido (não deixar marcador no commit).
 
 ```bash
-git add escritorio/README.md && git commit -m "docs(escritorio): validações da VPS antes de montar"
+git add escritoriohs/README.md && git commit -m "docs(escritorio): validações da VPS antes de montar"
 ```
 
 ---
@@ -146,7 +146,7 @@ git add escritorio/README.md && git commit -m "docs(escritorio): validações da
 ### Task 2: O Compose do WorkAdventure e a `borda`
 
 **Files:**
-- Create: `escritorio/docker-compose.yml`, `escritorio/borda/nginx.conf`, `escritorio/.env.example`, `escritorio/testes/testar-config.sh`
+- Create: `escritoriohs/docker-compose.yml`, `escritoriohs/borda/nginx.conf`, `escritoriohs/.env.example`, `escritoriohs/testes/testar-config.sh`
 
 **Interfaces:**
 - Consumes: da Task 1, se o host é alcançado por `172.18.0.1` ou por `host.docker.internal` (ajustar o `upstream livekit` abaixo).
@@ -154,7 +154,7 @@ git add escritorio/README.md && git commit -m "docs(escritorio): validações da
 
 - [ ] **Step 1: Escrever o teste estático (falha: arquivos não existem)**
 
-`escritorio/testes/testar-config.sh`:
+`escritoriohs/testes/testar-config.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -204,12 +204,12 @@ echo; [ "$falhas" -eq 0 ] && echo "tudo certo" || { echo "$falhas falha(s)"; exi
 ```
 
 ```bash
-chmod +x escritorio/testes/testar-config.sh && escritorio/testes/testar-config.sh
+chmod +x escritoriohs/testes/testar-config.sh && escritoriohs/testes/testar-config.sh
 ```
 
 Expected: FALHA em quase tudo (arquivos ausentes), exit 1.
 
-- [ ] **Step 2: `escritorio/borda/nginx.conf`**
+- [ ] **Step 2: `escritoriohs/borda/nginx.conf`**
 
 ```nginx
 # Faz o roteamento por caminho que o Traefik do Compose oficial fazia por
@@ -226,7 +226,7 @@ upstream livekit { server 172.18.0.1:7880; }
 
 server {
     listen 80;
-    server_name escritorio.healthsafetytech.com;
+    server_name escritoriohs.healthsafetytech.com;
     client_max_body_size 50m;
 
     proxy_http_version 1.1;
@@ -263,14 +263,14 @@ server {
 }
 ```
 
-- [ ] **Step 3: `escritorio/docker-compose.yml`**
+- [ ] **Step 3: `escritoriohs/docker-compose.yml`**
 
 Adaptado de `contrib/docker/docker-compose.prod.yaml` do WA `v1.33.11`: sem `reverse-proxy`, sem labels, sem Matrix/gravação/Jitsi/BBB, com `borda`.
 
 ```yaml
-# WorkAdventure no EasyPanel (serviço Compose do projeto `escritorio`).
+# WorkAdventure no EasyPanel (serviço Compose do projeto `escritoriohs`).
 # Origem: contrib/docker/docker-compose.prod.yaml do WA, sem o Traefik deles —
-# o roteamento por caminho está em borda/nginx.conf. Ver escritorio/README.md.
+# o roteamento por caminho está em borda/nginx.conf. Ver escritoriohs/README.md.
 services:
   borda:
     image: nginx:1.27-alpine
@@ -379,7 +379,7 @@ volumes:
   map-storage-data:
 ```
 
-- [ ] **Step 4: `escritorio/.env.example`**
+- [ ] **Step 4: `escritoriohs/.env.example`**
 
 ```bash
 # Variáveis do serviço Compose `escritorio` no EasyPanel.
@@ -387,9 +387,9 @@ volumes:
 # do EasyPanel, gerados por `openssl rand -hex 32` (ver README, "Segredos").
 
 VERSION=v1.33.11
-DOMAIN=escritorio.healthsafetytech.com
+DOMAIN=escritoriohs.healthsafetytech.com
 
-# Login — app "HS Escritório" no Entra (ver README, "Entra")
+# Login — app "EscritorioHS" no Entra (ver README, "Entra")
 DISABLE_ANONYMOUS=true
 OPENID_CLIENT_ID=
 OPENID_CLIENT_SECRET=
@@ -397,7 +397,7 @@ OPENID_CLIENT_ISSUER=https://login.microsoftonline.com/<tenant>/v2.0
 OPENID_SCOPE=openid email profile
 OPENID_USERNAME_CLAIM=name
 OPENID_WOKA_NAME_POLICY=force_opid
-OPENID_LOGOUT_REDIRECT_URL=https://escritorio.healthsafetytech.com/
+OPENID_LOGOUT_REDIRECT_URL=https://escritoriohs.healthsafetytech.com/
 FALLBACK_LOCALE=pt-BR
 ENABLE_TUTORIAL=true
 
@@ -436,7 +436,7 @@ cd escritorio && cp .env.example .env.teste && docker compose --env-file .env.te
 docker run --rm -v "$PWD/borda/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
   --add-host play:127.0.0.1 --add-host back:127.0.0.1 --add-host uploader:127.0.0.1 \
   --add-host icon:127.0.0.1 --add-host map-storage:127.0.0.1 nginx:1.27-alpine nginx -t
-cd .. && escritorio/testes/testar-config.sh
+cd .. && escritoriohs/testes/testar-config.sh
 ```
 
 Expected: `compose-ok`, `syntax is ok`, e todas as checagens fora de `midia/` com `ok` (as de `midia/` ainda não rodam porque a pasta não existe). Exit 0.
@@ -444,7 +444,7 @@ Expected: `compose-ok`, `syntax is ok`, e todas as checagens fora de `midia/` co
 - [ ] **Step 6: Commit**
 
 ```bash
-git add escritorio/ && git commit -m "feat(escritorio): compose do WorkAdventure sem Traefik, com a borda"
+git add escritoriohs/ && git commit -m "feat(escritorio): compose do WorkAdventure sem Traefik, com a borda"
 ```
 
 ---
@@ -452,25 +452,25 @@ git add escritorio/ && git commit -m "feat(escritorio): compose do WorkAdventure
 ### Task 3: A mídia no host — LiveKit + Coturn
 
 **Files:**
-- Create: `escritorio/midia/docker-compose.yml`, `escritorio/midia/livekit.yaml`, `escritorio/midia/turnserver.conf`, `escritorio/midia/escritorio-midia.service`, `escritorio/midia/instalar.sh`
+- Create: `escritoriohs/midia/docker-compose.yml`, `escritoriohs/midia/livekit.yaml`, `escritoriohs/midia/turnserver.conf`, `escritoriohs/midia/escritoriohs-midia.service`, `escritoriohs/midia/instalar.sh`
 
 **Interfaces:**
-- Produces: no host, `/etc/escritorio/midia.env` (root, `600`) com `LIVEKIT_KEYS`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `TURN_STATIC_AUTH_SECRET`; unit `escritorio-midia.service`. A Task 5 lê dali os três segredos para o EasyPanel.
+- Produces: no host, `/etc/escritoriohs/midia.env` (root, `600`) com `LIVEKIT_KEYS`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `TURN_STATIC_AUTH_SECRET`; unit `escritoriohs-midia.service`. A Task 5 lê dali os três segredos para o EasyPanel.
 
 - [ ] **Step 1: Rodar o teste estático (falha nas checagens de `midia/`)**
 
 ```bash
-mkdir -p escritorio/midia && escritorio/testes/testar-config.sh
+mkdir -p escritoriohs/midia && escritoriohs/testes/testar-config.sh
 ```
 
 Expected: FALHA em `coturn nega relay…`, `LiveKit fixo`, etc. Exit 1.
 
-- [ ] **Step 2: `escritorio/midia/livekit.yaml`**
+- [ ] **Step 2: `escritoriohs/midia/livekit.yaml`**
 
 ```yaml
 # LiveKit — só entra em bolha/sala com mais de 4 (MAX_USERS_FOR_WEBRTC).
 # As chaves chegam por LIVEKIT_KEYS (formato "chave: segredo"), de
-# /etc/escritorio/midia.env — não ficam neste arquivo, que é público.
+# /etc/escritoriohs/midia.env — não ficam neste arquivo, que é público.
 port: 7880
 bind_addresses: ["0.0.0.0"]
 rtc:
@@ -482,14 +482,14 @@ logging:
   level: info
 ```
 
-- [ ] **Step 3: `escritorio/midia/turnserver.conf`**
+- [ ] **Step 3: `escritoriohs/midia/turnserver.conf`**
 
 ```conf
 # Coturn — relay para quem está em rede que bloqueia conexão direta (4G, hotel).
 # O segredo chega por --static-auth-secret na linha de comando (midia.env).
 listening-port=3478
 external-ip=62.72.11.28
-realm=escritorio.healthsafetytech.com
+realm=escritoriohs.healthsafetytech.com
 use-auth-secret
 fingerprint
 min-port=49160
@@ -510,17 +510,17 @@ denied-peer-ip=172.16.0.0-172.31.255.255
 denied-peer-ip=192.168.0.0-192.168.255.255
 ```
 
-- [ ] **Step 4: `escritorio/midia/docker-compose.yml`**
+- [ ] **Step 4: `escritoriohs/midia/docker-compose.yml`**
 
 ```yaml
 # Mídia do escritório, fora do Swarm: o LiveKit precisa de UDP direto no host.
-# Sobe por escritorio-midia.service. Segredos em /etc/escritorio/midia.env.
+# Sobe por escritoriohs-midia.service. Segredos em /etc/escritoriohs/midia.env.
 services:
   livekit:
     image: livekit/livekit-server:v1.13.8
     network_mode: host
     command: ["--config", "/etc/livekit.yaml"]
-    env_file: /etc/escritorio/midia.env
+    env_file: /etc/escritoriohs/midia.env
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml:ro
     restart: unless-stopped
@@ -531,7 +531,7 @@ services:
   coturn:
     image: coturn/coturn:4.17.2-r0
     network_mode: host
-    env_file: /etc/escritorio/midia.env
+    env_file: /etc/escritoriohs/midia.env
     entrypoint: ["/bin/sh", "-c", "exec turnserver -c /etc/coturn/turnserver.conf --static-auth-secret=\"$$TURN_STATIC_AUTH_SECRET\""]
     volumes:
       - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
@@ -541,7 +541,7 @@ services:
         limits: { cpus: "0.5", memory: 256m }
 ```
 
-- [ ] **Step 5: `escritorio/midia/escritorio-midia.service`**
+- [ ] **Step 5: `escritoriohs/midia/escritoriohs-midia.service`**
 
 ```ini
 [Unit]
@@ -552,7 +552,7 @@ After=docker.service network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-WorkingDirectory=/opt/escritorio/midia
+WorkingDirectory=/opt/escritoriohs/midia
 ExecStart=/usr/bin/docker compose up -d
 ExecStop=/usr/bin/docker compose down
 
@@ -560,16 +560,16 @@ ExecStop=/usr/bin/docker compose down
 WantedBy=multi-user.target
 ```
 
-- [ ] **Step 6: `escritorio/midia/instalar.sh`**
+- [ ] **Step 6: `escritoriohs/midia/instalar.sh`**
 
 ```bash
 #!/usr/bin/env bash
 # Instala ou atualiza a mídia do escritório. Roda como root NA VPS:
-#   scp -r escritorio/midia root@62.72.11.28:/opt/escritorio/ && ssh root@62.72.11.28 bash /opt/escritorio/midia/instalar.sh
+#   scp -r escritoriohs/midia root@62.72.11.28:/opt/escritoriohs/ && ssh root@62.72.11.28 bash /opt/escritoriohs/midia/instalar.sh
 # Gera os segredos só na primeira vez e NUNCA os imprime.
 set -euo pipefail
-install -d -m 700 /etc/escritorio
-if [ ! -f /etc/escritorio/midia.env ]; then
+install -d -m 700 /etc/escritoriohs
+if [ ! -f /etc/escritoriohs/midia.env ]; then
   umask 077
   chave="hs$(openssl rand -hex 6)"
   segredo="$(openssl rand -hex 32)"
@@ -578,13 +578,13 @@ if [ ! -f /etc/escritorio/midia.env ]; then
     echo "LIVEKIT_API_KEY=$chave"
     echo "LIVEKIT_API_SECRET=$segredo"
     echo "TURN_STATIC_AUTH_SECRET=$(openssl rand -hex 32)"
-  } > /etc/escritorio/midia.env
-  echo "segredos gerados em /etc/escritorio/midia.env"
+  } > /etc/escritoriohs/midia.env
+  echo "segredos gerados em /etc/escritoriohs/midia.env"
 fi
-install -m 644 /opt/escritorio/midia/escritorio-midia.service /etc/systemd/system/
+install -m 644 /opt/escritoriohs/midia/escritoriohs-midia.service /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now escritorio-midia.service
-cd /opt/escritorio/midia && docker compose pull -q && docker compose up -d
+systemctl enable --now escritoriohs-midia.service
+cd /opt/escritoriohs/midia && docker compose pull -q && docker compose up -d
 sleep 3
 docker compose ps --format '{{.Service}} {{.State}}'
 ```
@@ -592,8 +592,8 @@ docker compose ps --format '{{.Service}} {{.State}}'
 - [ ] **Step 7: Teste estático passa**
 
 ```bash
-chmod +x escritorio/midia/instalar.sh && escritorio/testes/testar-config.sh
-docker compose -f escritorio/midia/docker-compose.yml config -q 2>&1 | grep -v "env file" ; echo midia-compose-checado
+chmod +x escritoriohs/midia/instalar.sh && escritoriohs/testes/testar-config.sh
+docker compose -f escritoriohs/midia/docker-compose.yml config -q 2>&1 | grep -v "env file" ; echo midia-compose-checado
 ```
 
 Expected: `tudo certo`, exit 0. (O `config` reclama do `env_file` ausente na máquina local — é esperado.)
@@ -601,7 +601,7 @@ Expected: `tudo certo`, exit 0. (O `config` reclama do `env_file` ausente na má
 - [ ] **Step 8: Commit**
 
 ```bash
-git add escritorio/midia && git commit -m "feat(escritorio): LiveKit e Coturn na rede do host, com systemd"
+git add escritoriohs/midia && git commit -m "feat(escritorio): LiveKit e Coturn na rede do host, com systemd"
 ```
 
 ---
@@ -611,17 +611,17 @@ git add escritorio/midia && git commit -m "feat(escritorio): LiveKit e Coturn na
 Confirmar com o Erick antes do Step 1 (escreve em `/opt`, `/etc` e no systemd da VPS de produção).
 
 **Files:**
-- Create: `escritorio/testes/verificar.sh` (as checagens de mídia; a Task 5 acrescenta as do WA)
+- Create: `escritoriohs/testes/verificar.sh` (as checagens de mídia; a Task 5 acrescenta as do WA)
 
 **Interfaces:**
-- Consumes: `/etc/escritorio/midia.env` (Task 3).
+- Consumes: `/etc/escritoriohs/midia.env` (Task 3).
 - Produces: `verificar.sh midia` (exit 0 = mídia sã).
 
 - [ ] **Step 1: Instalar**
 
 ```bash
-ssh root@62.72.11.28 'mkdir -p /opt/escritorio' && scp -rq escritorio/midia root@62.72.11.28:/opt/escritorio/ \
-  && ssh root@62.72.11.28 bash /opt/escritorio/midia/instalar.sh
+ssh root@62.72.11.28 'mkdir -p /opt/escritorio' && scp -rq escritoriohs/midia root@62.72.11.28:/opt/escritoriohs/ \
+  && ssh root@62.72.11.28 bash /opt/escritoriohs/midia/instalar.sh
 ```
 
 Expected: `livekit running` e `coturn running`.
@@ -634,7 +634,7 @@ ssh root@62.72.11.28 'docker logs midia-coturn-1 2>&1 | grep -ciE "denied|peer" 
 
 Expected: contagem > 0 (o Coturn loga as faixas negadas ao subir) e as portas `3478` e a faixa do LiveKit escutando.
 
-- [ ] **Step 3: Escrever `escritorio/testes/verificar.sh` (parte da mídia)**
+- [ ] **Step 3: Escrever `escritoriohs/testes/verificar.sh` (parte da mídia)**
 
 ```bash
 #!/usr/bin/env bash
@@ -664,7 +664,7 @@ echo; [ "$falhas" -eq 0 ] && echo "tudo certo" || { echo "$falhas falha(s)"; exi
 ```
 
 ```bash
-chmod +x escritorio/testes/verificar.sh && escritorio/testes/verificar.sh midia
+chmod +x escritoriohs/testes/verificar.sh && escritoriohs/testes/verificar.sh midia
 ```
 
 Expected: `ok` nas duas, **se** a `borda` já estiver no ar. Como a `borda` só sobe na Task 5, a primeira linha falha agora — conferir o LiveKit direto no host em vez disso:
@@ -676,7 +676,7 @@ ssh root@62.72.11.28 'curl -s localhost:7880/'   # Expected: OK
 - [ ] **Step 4: Carga de 6 publicadores vindo de fora (critério 4 sem gente)**
 
 ```bash
-ssh root@62.72.11.28 'set -a; . /etc/escritorio/midia.env; set +a; \
+ssh root@62.72.11.28 'set -a; . /etc/escritoriohs/midia.env; set +a; \
   docker run --rm --network host livekit/livekit-cli:v2.18.8 load-test \
     --url ws://127.0.0.1:7880 --api-key "$LIVEKIT_API_KEY" --api-secret "$LIVEKIT_API_SECRET" \
     --room teste-carga --video-publishers 6 --subscribers 6 --duration 60s' 2>&1 | tail -15
@@ -686,10 +686,10 @@ Esse roda **no host** e prova o servidor. A prova de fora (UDP atravessando o fi
 
 - [ ] **Step 5: Registrar e commitar**
 
-Acrescentar ao README uma seção "Mídia" com: onde mora (`/opt/escritorio/midia`, `/etc/escritorio/midia.env`), `systemctl status escritorio-midia`, `docker compose -f /opt/escritorio/midia/docker-compose.yml logs -f livekit`, e o resultado do load-test (CPU de pico).
+Acrescentar ao README uma seção "Mídia" com: onde mora (`/opt/escritoriohs/midia`, `/etc/escritoriohs/midia.env`), `systemctl status escritoriohs-midia`, `docker compose -f /opt/escritoriohs/midia/docker-compose.yml logs -f livekit`, e o resultado do load-test (CPU de pico).
 
 ```bash
-git add escritorio/ && git commit -m "feat(escritorio): mídia instalada na VPS e verificar.sh"
+git add escritoriohs/ && git commit -m "feat(escritorio): mídia instalada na VPS e verificar.sh"
 ```
 
 ---
@@ -697,19 +697,19 @@ git add escritorio/ && git commit -m "feat(escritorio): mídia instalada na VPS 
 ### Task 5: Entra + WorkAdventure no EasyPanel
 
 **Files:**
-- Modify: `escritorio/testes/verificar.sh` (bloco `wa`), `escritorio/README.md` (seções "Entra", "Segredos")
+- Modify: `escritoriohs/testes/verificar.sh` (bloco `wa`), `escritoriohs/README.md` (seções "Entra", "Segredos")
 
 **Interfaces:**
-- Consumes: `borda/nginx.conf`, `docker-compose.yml`, `.env.example` (Task 2); `/etc/escritorio/midia.env` (Task 3).
-- Produces: `https://escritorio.healthsafetytech.com` respondendo; `verificar.sh wa` exit 0.
+- Consumes: `borda/nginx.conf`, `docker-compose.yml`, `.env.example` (Task 2); `/etc/escritoriohs/midia.env` (Task 3).
+- Produces: `https://escritoriohs.healthsafetytech.com` respondendo; `verificar.sh wa` exit 0.
 
-- [ ] **Step 1: App "HS Escritório" no Entra (o Erick faz, no portal)**
+- [ ] **Step 1: App "EscritorioHS" no Entra (o Erick faz, no portal)**
 
 Checklist para o Erick (portal.azure.com → Microsoft Entra ID):
-1. App registrations → New registration → nome **HS Escritório**, contas só deste diretório, redirect URI Web `https://escritorio.healthsafetytech.com/openid-callback`.
+1. App registrations → New registration → nome **EscritorioHS**, contas só deste diretório, redirect URI Web `https://escritoriohs.healthsafetytech.com/openid-callback`.
 2. Certificates & secrets → New client secret (24 meses). Copiar o **Value**.
 3. Enterprise applications → HS Escritório → Properties → **Assignment required = Yes**.
-4. Groups → novo grupo de segurança **HS – Escritório**, com o Erick e as 2–3 pessoas do piloto. Users and groups do app → adicionar o grupo.
+4. Groups → novo grupo de segurança **EscritorioHS**, com o Erick e as 2–3 pessoas do piloto. Users and groups do app → adicionar o grupo.
 5. Me mandar: Application (client) ID. O Directory (tenant) ID é o mesmo do `MS_TENANT_ID` do HS.OS. O secret o Erick cola direto no EasyPanel.
 
 Registrar no README a seção "Entra" com esses passos e a data de vencimento do secret.
@@ -719,8 +719,8 @@ Registrar no README a seção "Entra" com esses passos e a data de vencimento do
 Gera os segredos internos do WA, lê os de mídia no host, e põe o bloco inteiro no clipboard sem imprimir:
 
 ```bash
-ssh root@62.72.11.28 'grep -E "^(LIVEKIT_API_KEY|LIVEKIT_API_SECRET|TURN_STATIC_AUTH_SECRET)=" /etc/escritorio/midia.env' > /tmp/midia.$$ \
-&& { grep -vE '^(SECRET_KEY|MAP_STORAGE_API_TOKEN|MAP_STORAGE_AUTHENTICATION_TOKEN|ROOM_API_SECRET_KEY|LIVEKIT_API_KEY|LIVEKIT_API_SECRET|TURN_STATIC_AUTH_SECRET|OPENID_CLIENT_ID|MAP_EDITOR_ALLOWED_USERS|OPENID_CLIENT_ISSUER)=' escritorio/.env.example | grep -vE '^\s*(#|$)'
+ssh root@62.72.11.28 'grep -E "^(LIVEKIT_API_KEY|LIVEKIT_API_SECRET|TURN_STATIC_AUTH_SECRET)=" /etc/escritoriohs/midia.env' > /tmp/midia.$$ \
+&& { grep -vE '^(SECRET_KEY|MAP_STORAGE_API_TOKEN|MAP_STORAGE_AUTHENTICATION_TOKEN|ROOM_API_SECRET_KEY|LIVEKIT_API_KEY|LIVEKIT_API_SECRET|TURN_STATIC_AUTH_SECRET|OPENID_CLIENT_ID|MAP_EDITOR_ALLOWED_USERS|OPENID_CLIENT_ISSUER)=' escritoriohs/.env.example | grep -vE '^\s*(#|$)'
      echo "OPENID_CLIENT_ID=<client id do Step 1>"
      echo "OPENID_CLIENT_ISSUER=https://login.microsoftonline.com/<tenant>/v2.0"
      echo "MAP_EDITOR_ALLOWED_USERS=<e-mail do Erick>"
@@ -730,11 +730,11 @@ ssh root@62.72.11.28 'grep -E "^(LIVEKIT_API_KEY|LIVEKIT_API_SECRET|TURN_STATIC_
 
 Antes de rodar, trocar os três `<…>` pelos valores reais (client id, tenant do `MS_TENANT_ID`, e-mail). O `sed` final mostra só o começo de cada valor. `OPENID_CLIENT_SECRET` fica vazio no bloco: o Erick cola o Value do Entra direto no EasyPanel.
 
-- [ ] **Step 3: Criar o serviço Compose `wa` no projeto `escritorio`** (o Erick, no EasyPanel, ou pelo MCP com confirmação)
+- [ ] **Step 3: Criar o serviço Compose `wa` no projeto `escritoriohs`** (o Erick, no EasyPanel, ou pelo MCP com confirmação)
 
-- Fonte: GitHub `ErickSantos2002/HS.OS`, branch `main` (ou `escritorio-a` durante o piloto), caminho do compose `escritorio/docker-compose.yml`.
+- Fonte: GitHub `ErickSantos2002/HS.OS`, branch `main` (ou `escritorio-a` durante o piloto), caminho do compose `escritoriohs/docker-compose.yml`.
 - Environment: colar o bloco do clipboard + `OPENID_CLIENT_SECRET`.
-- Domínios: `escritorio.healthsafetytech.com` → serviço `borda`, porta `80`; `livekit.healthsafetytech.com` → serviço `borda`, porta `80`. HTTPS nos dois.
+- Domínios: `escritoriohs.healthsafetytech.com` → serviço `borda`, porta `80`; `livekit.healthsafetytech.com` → serviço `borda`, porta `80`. HTTPS nos dois.
 - Deploy.
 
 - [ ] **Step 4: Escrever o bloco `wa` do `verificar.sh` (falha antes do deploy)**
@@ -742,7 +742,7 @@ Antes de rodar, trocar os três `<…>` pelos valores reais (client id, tenant d
 Substituir o `:  # preenchido na Task 5` por:
 
 ```bash
-  base=https://escritorio.healthsafetytech.com
+  base=https://escritoriohs.healthsafetytech.com
   [ "$(curl -s -o /dev/null -w '%{http_code}' -m 15 $base/)" = 200 ] && ok "play abre" || falha "play abre"
   # Sem anônimo: entrar numa sala sem login tem que mandar para a Microsoft.
   curl -s -m 15 -o /dev/null -w '%{redirect_url}' "$base/login" | grep -q "login.microsoftonline.com" \
@@ -756,15 +756,15 @@ Substituir o `:  # preenchido na Task 5` por:
   [ "$(curl -s -o /dev/null -w '%{http_code}' -m 10 $base/api/)" != 502 ] && ok "back roteado" || falha "back roteado"
 ```
 
-Rodar antes do deploy terminar: `escritorio/testes/verificar.sh wa` → FALHA.
+Rodar antes do deploy terminar: `escritoriohs/testes/verificar.sh wa` → FALHA.
 
 - [ ] **Step 5: Depois do deploy, verificar tudo**
 
 ```bash
-escritorio/testes/verificar.sh tudo
+escritoriohs/testes/verificar.sh tudo
 ```
 
-Expected: `tudo certo`. Se o redirecionamento do login não bater (o caminho de entrada do WA pode ser outro na `v1.33.11`), abrir `https://escritorio.healthsafetytech.com` no navegador, seguir até a tela da Microsoft, e ajustar a URL do teste para a que de fato redireciona — sem afrouxar o critério (tem que terminar em `login.microsoftonline.com`).
+Expected: `tudo certo`. Se o redirecionamento do login não bater (o caminho de entrada do WA pode ser outro na `v1.33.11`), abrir `https://escritoriohs.healthsafetytech.com` no navegador, seguir até a tela da Microsoft, e ajustar a URL do teste para a que de fato redireciona — sem afrouxar o critério (tem que terminar em `login.microsoftonline.com`).
 
 Conferir que as variáveis chegaram:
 
@@ -779,7 +779,7 @@ Expected: `true`, `false`, `4` (o último vem do `back`; se não aparecer no `pl
 Da máquina do Erick (UDP atravessando a internet e o firewall do provedor):
 
 ```bash
-ssh root@62.72.11.28 'grep -E "^LIVEKIT_API_(KEY|SECRET)=" /etc/escritorio/midia.env' > /tmp/lk.$$ \
+ssh root@62.72.11.28 'grep -E "^LIVEKIT_API_(KEY|SECRET)=" /etc/escritoriohs/midia.env' > /tmp/lk.$$ \
 && set -a && . /tmp/lk.$$ && set +a && rm -f /tmp/lk.$$ \
 && docker run --rm livekit/livekit-cli:v2.18.8 load-test --url wss://livekit.healthsafetytech.com \
      --api-key "$LIVEKIT_API_KEY" --api-secret "$LIVEKIT_API_SECRET" \
@@ -796,7 +796,7 @@ Entrar com a conta do Erick em duas abas (uma anônima com outra conta do piloto
 - [ ] **Step 8: Commit**
 
 ```bash
-git add escritorio/ && git commit -m "feat(escritorio): WorkAdventure no EasyPanel com login do Entra"
+git add escritoriohs/ && git commit -m "feat(escritorio): WorkAdventure no EasyPanel com login do Entra"
 ```
 
 ---
@@ -804,7 +804,7 @@ git add escritorio/ && git commit -m "feat(escritorio): WorkAdventure no EasyPan
 ### Task 6: O mapa de escritório
 
 **Files:**
-- Modify: `escritorio/README.md` (seção "Mapa")
+- Modify: `escritoriohs/README.md` (seção "Mapa")
 
 **Interfaces:**
 - Consumes: `MAP_STORAGE_AUTHENTICATION_TOKEN` (no EasyPanel, Task 5).
@@ -817,15 +817,15 @@ d=/tmp/claude-1000/escritorio-mapa && rm -rf $d && mkdir -p $d && cd $d \
   && git clone -q --depth 1 https://github.com/workadventure/map-starter-kit.git . && npm ci --silent
 ```
 
-`npm run upload` abre a configuração de upload: URL `https://escritorio.healthsafetytech.com/map-storage/`, chave = `MAP_STORAGE_AUTHENTICATION_TOKEN` (o Erick cola, não passa pela sessão), diretório `/`. Subir só o `office.tmj`.
+`npm run upload` abre a configuração de upload: URL `https://escritoriohs.healthsafetytech.com/map-storage/`, chave = `MAP_STORAGE_AUTHENTICATION_TOKEN` (o Erick cola, não passa pela sessão), diretório `/`. Subir só o `office.tmj`.
 
 - [ ] **Step 2: Conferir e apontar a entrada**
 
 ```bash
-curl -s -m 10 https://escritorio.healthsafetytech.com/map-storage/ -o /dev/null -w '%{http_code}\n'
+curl -s -m 10 https://escritoriohs.healthsafetytech.com/map-storage/ -o /dev/null -w '%{http_code}\n'
 ```
 
-No EasyPanel, `START_ROOM_URL` = o caminho que o map-storage listou para o office (o padrão é `/~/office.wam`; usar o que aparecer). Redeploy. Abrir `https://escritorio.healthsafetytech.com` → depois do login da Microsoft, o avatar nasce no escritório.
+No EasyPanel, `START_ROOM_URL` = o caminho que o map-storage listou para o office (o padrão é `/~/office.wam`; usar o que aparecer). Redeploy. Abrir `https://escritoriohs.healthsafetytech.com` → depois do login da Microsoft, o avatar nasce no escritório.
 
 - [ ] **Step 3: Ajustes no editor (o Erick, no navegador)**
 
@@ -834,7 +834,7 @@ Com a conta do Erick (a única no `MAP_EDITOR_ALLOWED_USERS`): salas de reunião
 - [ ] **Step 4: Commit**
 
 ```bash
-git add escritorio/README.md && git commit -m "docs(escritorio): mapa de escritório no ar"
+git add escritoriohs/README.md && git commit -m "docs(escritorio): mapa de escritório no ar"
 ```
 
 ---
@@ -842,11 +842,11 @@ git add escritorio/README.md && git commit -m "docs(escritorio): mapa de escrit�
 ### Task 7: Backup diário do mapa para o R2
 
 **Files:**
-- Create: `escritorio/backup/backup-mapas.sh`, `escritorio/backup/escritorio-backup.service`, `escritorio/backup/escritorio-backup.timer`
+- Create: `escritoriohs/backup/backup-mapas.sh`, `escritoriohs/backup/escritoriohs-backup.service`, `escritoriohs/backup/escritoriohs-backup.timer`
 
 **Interfaces:**
-- Consumes: nome do volume do `map-storage` criado pelo EasyPanel (descobrir no Step 1); credenciais R2 — as mesmas `R2_*` do backend do HS.OS, que o Erick cola em `/etc/escritorio/backup.env` no host.
-- Produces: `s3://hsos-arquivos/escritorio/backups/mapas-AAAA-MM-DD.tar.gz` diário, 30 últimos mantidos.
+- Consumes: nome do volume do `map-storage` criado pelo EasyPanel (descobrir no Step 1); credenciais R2 — as mesmas `R2_*` do backend do HS.OS, que o Erick cola em `/etc/escritoriohs/backup.env` no host.
+- Produces: `s3://hsos-arquivos/escritoriohs/backups/mapas-AAAA-MM-DD.tar.gz` diário, 30 últimos mantidos.
 
 - [ ] **Step 1: Descobrir o volume**
 
@@ -856,15 +856,15 @@ ssh root@62.72.11.28 'docker volume ls --format "{{.Name}}" | grep -i map-storag
 
 Anotar o nome exato (ex.: `escritorio_wa_map-storage-data`).
 
-- [ ] **Step 2: `escritorio/backup/backup-mapas.sh`**
+- [ ] **Step 2: `escritoriohs/backup/backup-mapas.sh`**
 
 ```bash
 #!/usr/bin/env bash
 # Cópia diária dos mapas (volume do map-storage) para o R2. Roda como root na
-# VPS, pelo escritorio-backup.timer. Credenciais em /etc/escritorio/backup.env:
+# VPS, pelo escritoriohs-backup.timer. Credenciais em /etc/escritoriohs/backup.env:
 #   VOLUME=<nome do volume>  R2_ACCOUNT_ID=  R2_ACCESS_KEY_ID=  R2_SECRET_ACCESS_KEY=  R2_BUCKET=hsos-arquivos
 set -euo pipefail
-set -a; . /etc/escritorio/backup.env; set +a
+set -a; . /etc/escritoriohs/backup.env; set +a
 dia=$(date +%F)
 arq="/tmp/mapas-$dia.tar.gz"
 trap 'rm -f "$arq"' EXIT
@@ -873,16 +873,16 @@ aws() {
   docker run --rm -v /tmp:/tmp -e AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" -e AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
     -e AWS_DEFAULT_REGION=auto amazon/aws-cli:2.17.0 --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" "$@"
 }
-aws s3 cp "$arq" "s3://$R2_BUCKET/escritorio/backups/mapas-$dia.tar.gz" --only-show-errors
+aws s3 cp "$arq" "s3://$R2_BUCKET/escritoriohs/backups/mapas-$dia.tar.gz" --only-show-errors
 # Mantém os 30 mais recentes.
-aws s3 ls "s3://$R2_BUCKET/escritorio/backups/" | awk '{print $4}' | sort | head -n -30 \
-  | while read -r velho; do [ -n "$velho" ] && aws s3 rm "s3://$R2_BUCKET/escritorio/backups/$velho" --only-show-errors; done
+aws s3 ls "s3://$R2_BUCKET/escritoriohs/backups/" | awk '{print $4}' | sort | head -n -30 \
+  | while read -r velho; do [ -n "$velho" ] && aws s3 rm "s3://$R2_BUCKET/escritoriohs/backups/$velho" --only-show-errors; done
 echo "backup ok: mapas-$dia.tar.gz ($(stat -c %s "$arq") bytes)"
 ```
 
 - [ ] **Step 3: Timer e service**
 
-`escritorio/backup/escritorio-backup.service`:
+`escritoriohs/backup/escritoriohs-backup.service`:
 
 ```ini
 [Unit]
@@ -891,10 +891,10 @@ After=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/escritorio/backup/backup-mapas.sh
+ExecStart=/opt/escritoriohs/backup/backup-mapas.sh
 ```
 
-`escritorio/backup/escritorio-backup.timer`:
+`escritoriohs/backup/escritoriohs-backup.timer`:
 
 ```ini
 [Unit]
@@ -910,14 +910,14 @@ WantedBy=timers.target
 
 - [ ] **Step 4: Instalar e rodar uma vez (confirmar com o Erick)**
 
-O Erick cria `/etc/escritorio/backup.env` (modo `600`) com `VOLUME` do Step 1 e as `R2_*` do backend — colando no Konsole por `ssh root@62.72.11.28`, sem passar pela sessão. Depois:
+O Erick cria `/etc/escritoriohs/backup.env` (modo `600`) com `VOLUME` do Step 1 e as `R2_*` do backend — colando no Konsole por `ssh root@62.72.11.28`, sem passar pela sessão. Depois:
 
 ```bash
-ssh root@62.72.11.28 'mkdir -p /opt/escritorio' && scp -rq escritorio/backup root@62.72.11.28:/opt/escritorio/ \
-&& ssh root@62.72.11.28 'chmod +x /opt/escritorio/backup/backup-mapas.sh \
-  && install -m 644 /opt/escritorio/backup/escritorio-backup.{service,timer} /etc/systemd/system/ \
-  && systemctl daemon-reload && systemctl enable --now escritorio-backup.timer \
-  && systemctl start escritorio-backup.service && journalctl -u escritorio-backup.service -n 3 --no-pager'
+ssh root@62.72.11.28 'mkdir -p /opt/escritorio' && scp -rq escritoriohs/backup root@62.72.11.28:/opt/escritoriohs/ \
+&& ssh root@62.72.11.28 'chmod +x /opt/escritoriohs/backup/backup-mapas.sh \
+  && install -m 644 /opt/escritoriohs/backup/escritoriohs-backup.{service,timer} /etc/systemd/system/ \
+  && systemctl daemon-reload && systemctl enable --now escritoriohs-backup.timer \
+  && systemctl start escritoriohs-backup.service && journalctl -u escritoriohs-backup.service -n 3 --no-pager'
 ```
 
 Expected: `backup ok: mapas-<hoje>.tar.gz (<N> bytes)` com N > 0.
@@ -925,10 +925,10 @@ Expected: `backup ok: mapas-<hoje>.tar.gz (<N> bytes)` com N > 0.
 - [ ] **Step 5: Teste de restauração (o backup só vale se volta)**
 
 ```bash
-ssh root@62.72.11.28 'set -a; . /etc/escritorio/backup.env; set +a; d=$(mktemp -d); \
+ssh root@62.72.11.28 'set -a; . /etc/escritoriohs/backup.env; set +a; d=$(mktemp -d); \
   docker run --rm -v $d:/tmp -e AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" -e AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" -e AWS_DEFAULT_REGION=auto \
     amazon/aws-cli:2.17.0 --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
-    s3 cp "s3://$R2_BUCKET/escritorio/backups/mapas-$(date +%F).tar.gz" /tmp/r.tgz --only-show-errors \
+    s3 cp "s3://$R2_BUCKET/escritoriohs/backups/mapas-$(date +%F).tar.gz" /tmp/r.tgz --only-show-errors \
   && tar tzf $d/r.tgz | grep -c "\.wam$"; rm -rf $d'
 ```
 
@@ -937,7 +937,7 @@ Expected: ≥ 1 (o `office.wam` está dentro). Registrar no README, seção "Bac
 - [ ] **Step 6: Commit**
 
 ```bash
-git add escritorio/backup escritorio/README.md && git commit -m "feat(escritorio): backup diário dos mapas no R2"
+git add escritoriohs/backup escritoriohs/README.md && git commit -m "feat(escritorio): backup diário dos mapas no R2"
 ```
 
 ---
@@ -945,13 +945,13 @@ git add escritorio/backup escritorio/README.md && git commit -m "feat(escritorio
 ### Task 8: Aceite com gente, documentação e merge
 
 **Files:**
-- Modify: `escritorio/README.md` (seções "Quando algo falhar", "Aceite"), `CLAUDE.md` (seção curta "Escritório virtual"), `docs/CONTINUAR-AQUI.md`
+- Modify: `escritoriohs/README.md` (seções "Quando algo falhar", "Aceite"), `CLAUDE.md` (seção curta "Escritório virtual"), `docs/CONTINUAR-AQUI.md`
 
 - [ ] **Step 1: Os cinco critérios, com pessoas** (o Erick conduz; eu registro)
 
 | # | teste | como | passou? |
 |---|---|---|---|
-| 1 | Erick entra; conta fora do grupo é recusada | uma conta `@healthsafetytech.com` que não está em "HS – Escritório" | |
+| 1 | Erick entra; conta fora do grupo é recusada | uma conta `@healthsafetytech.com` que não está em "EscritorioHS" | |
 | 2 | duas pessoas no prédio conversam com vídeo | aproximar avatares | |
 | 3 | uma pessoa no **4G do celular** conversa com alguém de dentro | Wi-Fi do celular desligado | |
 | 4 | **seis pessoas** numa sala de reunião, com vídeo; HS.OS respondendo durante | monitor do EasyPanel aberto; abrir o HS.OS e mandar uma mensagem durante a chamada | |
@@ -961,19 +961,19 @@ Os critérios 3 e 4 **não podem ser trocados por variação do 2**: são os ún
 
 - [ ] **Step 2: README final**
 
-Seções que têm que existir em `escritorio/README.md`: "O que roda onde" (tabela da spec), "Validações", "Entra" (com vencimento do secret), "Segredos" (onde mora cada um — EasyPanel, `/etc/escritorio/midia.env`, `/etc/escritorio/backup.env` — sem valores), "Mídia", "Mapa", "Backup", "Quando algo falhar" (tabela da spec), "Atualizar versão" (ler `UPGRADE.md` do WA, trocar `VERSION`, redeploy; LiveKit/Coturn: trocar a tag em `midia/docker-compose.yml`, `scp` + `instalar.sh`), "Aceite" (a tabela do Step 1 preenchida).
+Seções que têm que existir em `escritoriohs/README.md`: "O que roda onde" (tabela da spec), "Validações", "Entra" (com vencimento do secret), "Segredos" (onde mora cada um — EasyPanel, `/etc/escritoriohs/midia.env`, `/etc/escritoriohs/backup.env` — sem valores), "Mídia", "Mapa", "Backup", "Quando algo falhar" (tabela da spec), "Atualizar versão" (ler `UPGRADE.md` do WA, trocar `VERSION`, redeploy; LiveKit/Coturn: trocar a tag em `midia/docker-compose.yml`, `scp` + `instalar.sh`), "Aceite" (a tabela do Step 1 preenchida).
 
 - [ ] **Step 3: `CLAUDE.md` e `CONTINUAR-AQUI.md`**
 
-Em `CLAUDE.md`, na lista de estrutura do monorepo, acrescentar `escritorio/` e uma seção curta:
+Em `CLAUDE.md`, na lista de estrutura do monorepo, acrescentar `escritoriohs/` e uma seção curta:
 
 ```markdown
 ### Escritório virtual — WorkAdventure (sub-projeto A, 10/2026)
 
-`escritorio/` não é código do HS.OS: é a config do WorkAdventure em
-`escritorio.healthsafetytech.com` (EasyPanel, projeto `escritorio`) e da mídia
-(LiveKit + Coturn em rede do host, `escritorio-midia.service`). Operação em
-`escritorio/README.md`; spec em `docs/superpowers/specs/2026-10-15-escritorio-virtual-design.md`.
+`escritoriohs/` não é código do HS.OS: é a config do WorkAdventure em
+`escritoriohs.healthsafetytech.com` (EasyPanel, projeto `escritoriohs`) e da mídia
+(LiveKit + Coturn em rede do host, `escritoriohs-midia.service`). Operação em
+`escritoriohs/README.md`; spec em `docs/superpowers/specs/2026-10-15-escritorio-virtual-design.md`.
 
 ⚠️ **`MAP_EDITOR_ALLOWED_USERS` é ignorada quando existe Admin API.** O
 sub-projeto B, ao ligar a Admin API, tem que levar a permissão do editor junto
@@ -989,7 +989,7 @@ Em `docs/CONTINUAR-AQUI.md`, uma linha no estado atual: sub-projeto A no ar; pr�
 - [ ] **Step 4: Testes finais e merge**
 
 ```bash
-escritorio/testes/testar-config.sh && escritorio/testes/verificar.sh tudo
+escritoriohs/testes/testar-config.sh && escritoriohs/testes/verificar.sh tudo
 git add -A && git commit -m "docs(escritorio): aceite do sub-projeto A, README de operação"
 git checkout main && git merge --no-ff escritorio-a -m "Merge: escritório virtual — sub-projeto A" && git push && git branch -d escritorio-a
 ```

@@ -1,6 +1,6 @@
-# WorkAdventure no EasyPanel (serviço Compose do projeto `escritorio`).
+# WorkAdventure no EasyPanel (serviço Compose do projeto `escritoriohs`).
 # Origem: contrib/docker/docker-compose.prod.yaml do WA, sem o Traefik deles —
-# o roteamento por caminho está em borda/nginx.conf. Ver escritorio/README.md.
+# o roteamento por caminho está em borda/nginx.conf. Ver escritoriohs/README.md.
 services:
   borda:
     image: nginx:1.27-alpine

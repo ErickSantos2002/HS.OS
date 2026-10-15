@@ -1,11 +1,11 @@
 # Mídia do escritório, fora do Swarm: o LiveKit precisa de UDP direto no host.
-# Sobe por escritorio-midia.service. Segredos em /etc/escritorio/midia.env.
+# Sobe por escritoriohs-midia.service. Segredos em /etc/escritoriohs/midia.env.
 services:
   livekit:
     image: livekit/livekit-server:v1.13.8
     network_mode: host
     command: ["--config", "/etc/livekit.yaml"]
-    env_file: /etc/escritorio/midia.env
+    env_file: /etc/escritoriohs/midia.env
     volumes:
       - ./livekit.yaml:/etc/livekit.yaml:ro
     restart: unless-stopped
@@ -16,7 +16,7 @@ services:
   coturn:
     image: coturn/coturn:4.17.2-r0
     network_mode: host
-    env_file: /etc/escritorio/midia.env
+    env_file: /etc/escritoriohs/midia.env
     # O segredo entra numa cópia 600 da config, não na linha de comando: argv
     # aparece no `ps` de qualquer usuário do host.
     entrypoint: ["/bin/sh", "-c", "umask 077 && cp /etc/coturn/turnserver.conf /tmp/turnserver.conf && printf 'static-auth-secret=%s\\n' \"$$TURN_STATIC_AUTH_SECRET\" >> /tmp/turnserver.conf && exec turnserver -c /tmp/turnserver.conf"]
