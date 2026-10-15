@@ -12,6 +12,9 @@ proibe() { if [ ! -f "$1" ] || grep -qE -- "$2" "$1"; then echo "FALHA $3"; falh
 exige borda/nginx.conf 'proxy_set_header Upgrade \$http_upgrade' "borda repassa Upgrade"
 exige borda/nginx.conf 'proxy_set_header Connection \$connection_upgrade' "borda repassa Connection"
 exige borda/nginx.conf 'location /ws/' "borda roteia /ws/ para o play:3001"
+# O /openid-callback do play responde com cabeçalho grande (tokens do Entra):
+# com o buffer padrão (4–8k) o nginx devolvia 502 em metade dos logins.
+exige borda/nginx.conf 'proxy_buffer_size +64k;' "borda aceita cabeçalho grande do login"
 exige borda/nginx.conf 'server_name livekit\.healthsafetytech\.com' "borda atende livekit.*"
 # Versão fixa: atualização sozinha num serviço de vídeo quebra reunião sem aviso.
 proibe docker-compose.yml ':latest' "nenhuma imagem latest no WA"
