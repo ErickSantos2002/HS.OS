@@ -188,7 +188,7 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
         return {"type": "tilelayer", "name": rotulo or nome, "width": W, "height": H,
                 "x": 0, "y": 0, "opacity": 1, "visible": True, "data": cam[nome]}
     def grupo(nome, filhos):
-        return {"type": "group", "name": nome, "opacity": 1, "visible": True, "layers": filhos}
+        return {"type": "group", "name": nome, "opacity": 1, "visible": True, "x": 0, "y": 0, "layers": filhos}
 
     tilesets = [{"firstgid": f, "name": n, "image": f"tilesets/{n}.png", "columns": col,
                  "tilecount": tot, "tilewidth": 32, "tileheight": 32, "margin": 0, "spacing": 0,
@@ -202,7 +202,7 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
     tilesets.append({"firstgid": primeiro_logo, "name": "logo_hs", "image": "logo-hs.png",
                      "columns": 6, "tilecount": 24, "tilewidth": 32, "tileheight": 32,
                      "margin": 0, "spacing": 0, "imagewidth": 192, "imageheight": 128})
-    tmj = {"type": "map", "orientation": "orthogonal", "renderorder": "right-down",
+    tmj = {"type": "map", "orientation": "orthogonal", "renderorder": "right-down", "compressionlevel": -1,
            "width": W, "height": H, "tilewidth": 32, "tileheight": 32, "infinite": False,
            "version": "1.10", "tiledversion": "1.10.2", "nextlayerid": 20, "nextobjectid": 1,
            "properties": [{"name": "mapName", "type": "string", "value": "EscritorioHS"},
@@ -214,10 +214,17 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
                       grupo("paredes", [camada("paredes1"), camada("paredes2")]),
                       grupo("moveis", [camada("moveis1"), camada("moveis2"), camada("placas")]),
                       {"type": "objectgroup", "name": "floorLayer", "objects": [], "opacity": 1,
-                       "visible": True, "draworder": "topdown"},
+                       "visible": True, "draworder": "topdown", "x": 0, "y": 0},
                       grupo("acima", [camada("acima")])]}
-    for i, l in enumerate(tmj["layers"]):
-        l["id"] = i + 1
+    # id em toda camada, inclusive as de dentro dos grupos — o map-storage exige.
+    proximo = [1]
+    def numerar(ls):
+        for l in ls:
+            l["id"] = proximo[0]; proximo[0] += 1
+            if l["type"] == "group":
+                numerar(l["layers"])
+    numerar(tmj["layers"])
+    tmj["nextlayerid"] = proximo[0]
     json.dump(tmj, open(os.path.join(pasta, "hs.tmj"), "w"), sort_keys=True, ensure_ascii=False)
     json.dump(_wam(P), open(os.path.join(pasta, "hs.wam"), "w"), sort_keys=True, ensure_ascii=False, indent=1)
 

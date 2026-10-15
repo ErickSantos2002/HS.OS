@@ -53,3 +53,24 @@ def test_tmj_tem_as_dimensoes_e_camadas():
     assert (m["width"], m["height"], m["tilewidth"]) == (P.largura, P.altura, 32)
     nomes = [l["name"] for l in m["layers"]]
     assert nomes == ["inicio", "colisao", "piso", "paredes", "moveis", "floorLayer", "acima"]
+
+def test_camadas_tem_os_campos_que_o_map_storage_exige():
+    """O map-storage recusou o primeiro envio (HTTP 400, "layers.2: Invalid
+    input"): grupo sem x/y e camada aninhada sem id. Os campos abaixo são os do
+    office.tmj oficial, que o servidor aceita."""
+    exigidos = {"group": {"id", "name", "opacity", "type", "visible", "x", "y"},
+                "tilelayer": {"height", "id", "name", "opacity", "type", "visible", "width", "x", "y", "data"},
+                "objectgroup": {"draworder", "id", "name", "opacity", "type", "visible", "x", "y", "objects"}}
+    with tempfile.TemporaryDirectory() as d:
+        gerar.gerar("planta.json", d)
+        m = json.load(open(os.path.join(d, "hs.tmj")))
+    ids = []
+    def andar(ls):
+        for l in ls:
+            assert exigidos[l["type"]] <= set(l), (l["name"], exigidos[l["type"]] - set(l))
+            ids.append(l["id"])
+            if l["type"] == "group":
+                andar(l["layers"])
+    andar(m["layers"])
+    assert len(ids) == len(set(ids))
+    assert m["nextlayerid"] > max(ids)
