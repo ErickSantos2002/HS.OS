@@ -6,8 +6,13 @@ o id em `publicados.json`. Nos envios seguintes:
   - objeto que está no ar fica como está (se o Erick moveu, continua movido);
   - objeto já publicado que sumiu do ar foi apagado pelo Erick — não volta;
   - objeto novo do gerador (sala nova, peça nova) é acrescentado.
-Do ar também se preservam o `lastCommandId` (clientes conectados sincronizam
-por ele) e o dono das áreas pessoais (sub-projeto B).
+Do ar também se preserva o `lastCommandId` (clientes conectados sincronizam
+por ele).
+
+Dono das áreas pessoais (sub-projeto B): quando a planta tem `dono`, vale a
+planta — o `ownerId` gerado não é nulo e vence o ar, com as `allowedTags`
+geradas. Sem `dono` na planta (`ownerId` gerado nulo), vale o ar: a atribuição
+feita pelo editor do navegador sobrevive ao envio.
 
 ⚠️ Sem conseguir ler o mapa do ar NÃO se envia nada, se já houve publicação:
 subir sem os objetos do ar apagaria tudo, e o registro impediria recriá-los.
@@ -51,7 +56,9 @@ def mesclar(novo, no_ar, publicados, renomear=None):
             continue
         for p in a.get("properties", []):
             chave = (a["id"], p.get("id"))
-            if p.get("type") == "personalAreaPropertyData" and chave in donos:
+            # planta com dono vence; sem dono, o que foi atribuído no ar fica
+            if p.get("type") == "personalAreaPropertyData" and chave in donos \
+                    and p.get("ownerId") is None:
                 p["ownerId"], tags = donos[chave]
                 if tags is not None:
                     p["allowedTags"] = tags

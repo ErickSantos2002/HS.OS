@@ -348,7 +348,8 @@ def _wam(P):
             props = [{"id": _id(c.nome, "lock"), "type": "lockableAreaPropertyData"}]
             if c.tipo == "sala":
                 props.append({"id": _id(c.nome, "pessoal"), "type": "personalAreaPropertyData",
-                              "accessClaimMode": "static", "allowedTags": [], "ownerId": None})
+                              "accessClaimMode": "static", "allowedTags": [],
+                              "ownerId": c.dono.strip().lower() if c.dono else None})
             areas.append(_area(c.nome, x1, y1, x2, y2, props))
     entidades = {oid: {"x": x, "y": y, "name": rotulo,
                        "prefabRef": {"collectionName": objetos.PECAS[peca][0], "id": objetos.prefab_id(peca)}}

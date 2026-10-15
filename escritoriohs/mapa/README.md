@@ -30,9 +30,17 @@ usavam (cômodo, índice); `saida/ids-antigos.json` os renomeia na mescla.
 se edita no navegador ("saving map hs/hs.wam" no log); o que for editado entre
 a leitura do mapa do ar e o envio se perde.
 
-A mescla preserva do ar o `lastCommandId` e o **dono das áreas pessoais**
-(`ownerId`/`allowedTags`) — o sub-projeto B pode atribuir dono pelo navegador
-sem que o próximo envio o apague.
+A mescla preserva do ar o `lastCommandId`.
+
+**Dono de sala** (sub-projeto B): `"dono": "<e-mail>"` num cômodo de
+`tipo: "sala"` em `planta.json` vira o `ownerId` da área pessoal, em
+minúsculas — é o `userUuid` que a Admin API do HS.OS devolve. Dono sem `@`, ou
+em cômodo que não é sala, para o gerador com erro. ⚠️ **Planta com `dono` vence
+o ar; planta sem `dono` preserva o dono do ar** (`ownerId`/`allowedTags`), ou
+seja, quem foi atribuído pelo editor do navegador continua lá. Para tirar o dono
+posto pela planta, apague o `dono` **e** desfaça pelo navegador. A `"placa"`
+continua manual: para pôr o nome da pessoa na porta, troque a placa. Quem é dono
+de qual sala é dado do Erick — o repositório não traz nenhum.
 
 A colisão dos objetos (mesas) **não vai para a camada `colisao` do mapa**: o
 WA a aplica onde a mesa está. Pintada no mapa, mesa movida deixava parede
@@ -47,6 +55,7 @@ invisível no lugar antigo.
 |---|---|
 | ambiente | `python3 -m venv .venv && .venv/bin/pip install pytest==8.3.3 pillow==12.3.0` |
 | trocar a placa de uma sala por um nome | editar `"placa"` em `planta.json` |
+| dar dono a uma sala | `"dono": "fulano@healthsafetytech.com"` no cômodo, em `planta.json` |
 | ver como ficou | `.venv/bin/python gerar.py && cp -r tilesets saida/ && .venv/bin/python previa.py saida/hs.tmj saida/previa.png 0.5` |
 | conferir | `.venv/bin/python -m pytest testes -q` |
 | pôr no ar | `./enviar.sh` (pasta `hs/`; o `office` fica intacto; precisa de `~/escritoriohs.env` com o `MAP_STORAGE_AUTHENTICATION_TOKEN`) |
