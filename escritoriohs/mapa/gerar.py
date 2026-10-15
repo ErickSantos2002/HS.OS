@@ -8,11 +8,46 @@ import hashlib, json, os, sys
 from PIL import Image, ImageDraw, ImageFont
 import blocos, modelo
 
-TIPO_PISO = {"sala": "madeira", "reuniao": "carpete", "diretoria": "carpete_escuro",
+TIPO_PISO = {"sala": "madeira", "reuniao": "carpete", "diretoria": "carpete",
              "recepcao": "piso_claro", "cafe": "madeira", "silenciosa": "carpete"}
-MOVEIS_POR_TIPO = {"sala": ["mesa_trabalho"], "diretoria": ["mesa_trabalho", "sofa"],
-                   "reuniao": ["mesa_reuniao"], "cafe": ["balcao_cafe", "sofa", "planta"],
-                   "silenciosa": ["sofa", "planta"], "recepcao": ["sofa", "planta"]}
+# Cada tipo de cômodo: (carimbo, onde) — `onde` recebe o interior caminhável
+# (x1, y1, x2, y2) e devolve o canto do carimbo. y1 é a primeira linha abaixo
+# das faces; carimbos com dy=-1 (tv, quadro, topo da estante) caem na face.
+MOVEIS_POR_TIPO = {
+    "sala": [("mesa_trabalho", lambda a: (a[0], a[1]))],
+    "diretoria": [("mesa_diretor", lambda a: (a[0] + 4, a[1])),
+                  ("estante", lambda a: (a[0] + 1, a[1])),
+                  ("sofa", lambda a: (a[2] - 3, a[3])),
+                  ("planta", lambda a: (a[2], a[1])),
+                  ("quadro", lambda a: (a[2] - 5, a[1]))],
+    "reuniao": [("mesa_reuniao", lambda a: ((a[0] + a[2]) // 2 - 2, (a[1] + a[3]) // 2 - 2)),
+                ("tv", lambda a: (a[0] + 2, a[1])),  # longe do meio, onde fica a porta norte
+                ("planta", lambda a: (a[0], a[1])),
+                ("planta", lambda a: (a[2], a[1]))],
+    "cafe": [("balcao_cafe", lambda a: (a[0], a[1])),
+             ("estante", lambda a: (a[0] + 4, a[1])),
+             ("mesa_redonda", lambda a: (a[0] + 2, a[1] + 3)),
+             ("mesa_redonda", lambda a: (a[0] + 7, a[1] + 3)),
+             ("mesa_redonda", lambda a: (a[0] + 12, a[1] + 3)),
+             ("mesa_redonda", lambda a: (a[0] + 4, a[1] + 6)),
+             ("mesa_redonda", lambda a: (a[0] + 9, a[1] + 6)),
+             ("sofa_azul", lambda a: (a[2] - 3, a[1])),
+             ("quadro", lambda a: (a[2] - 7, a[1])),
+             ("planta", lambda a: (a[0], a[3])),
+             ("planta", lambda a: (a[2], a[3]))],
+    "silenciosa": [("pufes", lambda a: (a[0] + 1, a[1] + 3)),
+                   ("estante", lambda a: (a[0], a[1])),
+                   ("estante", lambda a: (a[2] - 1, a[1])),
+                   ("planta", lambda a: (a[0], a[3])),
+                   ("planta", lambda a: (a[2], a[3]))],
+    "recepcao": [("balcao_recepcao", lambda a: ((a[0] + a[2]) // 2 - 1, a[1] + 1)),
+                 ("sofa_azul", lambda a: (a[0] + 2, a[1] + 4)),
+                 ("sofa_azul", lambda a: (a[2] - 4, a[1] + 4)),
+                 ("quadro", lambda a: (a[0] + 3, a[1])),
+                 ("quadro", lambda a: (a[2] - 4, a[1])),
+                 ("planta", lambda a: (a[0], a[1])),
+                 ("planta", lambda a: (a[2], a[1]))],
+}
 
 def _id(*partes):
     """Id estável: derivado do nome, nunca aleatório (bytes iguais a cada geração)."""
@@ -43,8 +78,8 @@ def grade(planta):
     bloqueado = set(parede)
     for c in planta.comodos:
         x1, y1, x2, y2 = _interior_caminhavel(c, parede)
-        for nome in MOVEIS_POR_TIPO[c.tipo]:
-            ox, oy = _origem(nome, c, (x1, y1, x2, y2))
+        for nome, onde in MOVEIS_POR_TIPO[c.tipo]:
+            ox, oy = onde((x1, y1, x2, y2))
             for dx, dy, _, _, colide in blocos.CARIMBOS[nome]:
                 if colide:
                     bloqueado.add((ox + dx, oy + dy))
@@ -53,12 +88,6 @@ def grade(planta):
         if (x, y + 1) not in parede and y + 1 < H:
             bloqueado |= {(x, y + 1), (x, y + 2)} - porta
     return {"parede": parede, "porta": porta, "bloqueado": bloqueado}
-
-def _origem(nome, c, area):
-    """Onde cada carimbo cai dentro do interior caminhável de cada tipo."""
-    x1, y1, x2, y2 = area
-    return {"mesa_trabalho": (x1, y1), "sofa": (x2 - 3, y2), "planta": (x1, y2),
-            "balcao_cafe": (x1, y1), "mesa_reuniao": ((x1 + x2) // 2 - 2, (y1 + y2) // 2 - 2)}[nome]
 
 def _mascara(parede, x, y):
     return ((x, y - 1) in parede) * 1 + ((x + 1, y) in parede) * 2 + \
@@ -78,6 +107,23 @@ def _placas(planta, pasta):
         d.text(((64 - w) / 2, 32 * i + 11), n, font=fonte, fill=(255, 255, 255, 255))
     img.save(os.path.join(pasta, "placas.png"), optimize=False)
     return nomes
+
+def _logo(pasta):
+    """Folha 192×128 a partir do logo oficial (tilesets/logo-hs-original.png):
+    linhas 0–1 = placa para a parede; linhas 2–3 = tapete da entrada."""
+    orig = Image.open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   "tilesets", "logo-hs-original.png")).convert("RGBA")
+    folha = Image.new("RGBA", (192, 128), (0, 0, 0, 0))
+    d = ImageDraw.Draw(folha)
+    d.rounded_rectangle((2, 6, 189, 60), 6, fill=(255, 255, 255, 255), outline=(14, 79, 120, 255), width=2)
+    d.rounded_rectangle((0, 66, 191, 125), 10, fill=(24, 133, 200, 255))
+    d.rounded_rectangle((5, 71, 186, 120), 7, fill=(236, 244, 250, 255))
+    for caixa in ((8, 10, 184, 56), (12, 75, 180, 116)):
+        logo = orig.copy()
+        logo.thumbnail((caixa[2] - caixa[0], caixa[3] - caixa[1]), Image.LANCZOS)
+        folha.alpha_composite(logo, (caixa[0] + (caixa[2] - caixa[0] - logo.width) // 2,
+                                     caixa[1] + (caixa[3] - caixa[1] - logo.height) // 2))
+    folha.save(os.path.join(pasta, "logo-hs.png"), optimize=False)
 
 def gerar(caminho_planta="planta.json", pasta="saida"):
     os.makedirs(pasta, exist_ok=True)
@@ -112,8 +158,8 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
 
     for c in P.comodos:
         area = _interior_caminhavel(c, g["parede"])
-        for nome in MOVEIS_POR_TIPO[c.tipo]:
-            ox, oy = _origem(nome, c, area)
+        for nome, onde in MOVEIS_POR_TIPO[c.tipo]:
+            ox, oy = onde(area)
             for dx, dy, camada, gid_, _ in blocos.CARIMBOS[nome]:
                 pôr(camada, ox + dx, oy + dy, gid_)
 
@@ -130,6 +176,14 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
     rx1, ry1, rx2, ry2 = rec.interior()
     pôr("inicio", (rx1 + rx2) // 2, ry2, blocos.START)
 
+    _logo(pasta)
+    primeiro_logo = primeiro_placa + 2 * len(nomes)
+    lx = (rx1 + rx2) // 2 - 3
+    for k in range(6):
+        for j in range(2):
+            pôr("placas", lx + k, ry1 + j, primeiro_logo + j * 6 + k)            # placa na face
+            pôr("moveis1", lx + k, ry2 - 3 + j, primeiro_logo + (j + 2) * 6 + k)  # tapete no chão
+
     def camada(nome, rotulo=None):
         return {"type": "tilelayer", "name": rotulo or nome, "width": W, "height": H,
                 "x": 0, "y": 0, "opacity": 1, "visible": True, "data": cam[nome]}
@@ -145,6 +199,9 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
     tilesets.append({"firstgid": primeiro_placa, "name": "placas_hs", "image": "placas.png",
                      "columns": 2, "tilecount": 2 * len(nomes), "tilewidth": 32, "tileheight": 32,
                      "margin": 0, "spacing": 0, "imagewidth": 64, "imageheight": 32 * len(nomes)})
+    tilesets.append({"firstgid": primeiro_logo, "name": "logo_hs", "image": "logo-hs.png",
+                     "columns": 6, "tilecount": 24, "tilewidth": 32, "tileheight": 32,
+                     "margin": 0, "spacing": 0, "imagewidth": 192, "imageheight": 128})
     tmj = {"type": "map", "orientation": "orthogonal", "renderorder": "right-down",
            "width": W, "height": H, "tilewidth": 32, "tileheight": 32, "infinite": False,
            "version": "1.10", "tiledversion": "1.10.2", "nextlayerid": 20, "nextobjectid": 1,

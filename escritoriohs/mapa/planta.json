@@ -25,8 +25,8 @@
     {"nome": "Lab 03",       "tipo": "sala",       "x": 14, "y": 61, "w": 8,  "h": 8,  "porta": "N", "placa": "Lab 03"},
     {"nome": "Qualidade 01", "tipo": "sala",       "x": 21, "y": 61, "w": 8,  "h": 8,  "porta": "N", "placa": "Qualidade 01"},
     {"nome": "Qualidade 02", "tipo": "sala",       "x": 28, "y": 61, "w": 8,  "h": 8,  "porta": "N", "placa": "Qualidade 02"},
-    {"nome": "Expedição 01", "tipo": "sala",       "x": 36, "y": 61, "w": 8,  "h": 8,  "porta": "N", "placa": "Expedição 01"},
-    {"nome": "Expedição 02", "tipo": "sala",       "x": 43, "y": 61, "w": 8,  "h": 8,  "porta": "N", "placa": "Expedição 02"},
+    {"nome": "Expedição 01", "tipo": "sala",       "x": 35, "y": 61, "w": 9,  "h": 8,  "porta": "N", "placa": "Expedição 01"},
+    {"nome": "Expedição 02", "tipo": "sala",       "x": 43, "y": 61, "w": 9,  "h": 8,  "porta": "N", "placa": "Expedição 02"},
 
     {"nome": "Comercial 01", "tipo": "sala",       "x": 51, "y": 18, "w": 8,  "h": 8,  "porta": "S", "placa": "Comercial 01"},
     {"nome": "Comercial 02", "tipo": "sala",       "x": 58, "y": 18, "w": 8,  "h": 8,  "porta": "S", "placa": "Comercial 02"},

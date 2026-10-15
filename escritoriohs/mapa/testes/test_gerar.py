@@ -43,7 +43,7 @@ def test_gerar_duas_vezes_da_os_mesmos_bytes():
         with tempfile.TemporaryDirectory() as d:
             gerar.gerar("planta.json", d)
             hashes.append([hashlib.sha256(open(os.path.join(d, f), "rb").read()).hexdigest()
-                           for f in ("hs.tmj", "hs.wam", "placas.png")])
+                           for f in ("hs.tmj", "hs.wam", "placas.png", "logo-hs.png")])
     assert hashes[0] == hashes[1]
 
 def test_tmj_tem_as_dimensoes_e_camadas():

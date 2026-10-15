@@ -45,7 +45,7 @@ PAREDE = {
 FACE_ALTA, FACE_BAIXA = RB(203), RB(228)        # face branca com rodapé
 FACE_ALTA_EXT, FACE_BAIXA_EXT = RB(310), RB(310)  # tijolo claro, parede externa norte
 PISO = {"madeira": RB(350), "carpete": RB(360), "carpete_escuro": RB(362),
-        "corredor": RB(355), "piso_claro": RB(358)}
+        "corredor": RB(383), "piso_claro": RB(358)}
 COLISAO = gid("WA_Special_Zones", 2)
 START = gid("WA_Special_Zones", 1)
 
@@ -56,12 +56,17 @@ T, S, M, O, D = (lambda i: gid("WA_Tables", i)), (lambda i: gid("WA_Seats", i)),
 # Carimbos: (dx, dy, camada, gid, colide). dx/dy relativos ao canto do
 # interior caminhável da sala (abaixo das faces).
 CARIMBOS = {
-    "mesa_trabalho": [  # mesa com computador, cadeira de frente e cadeira de visita
+    "mesa_trabalho": [  # mesa com dois monitores, cadeira de frente, cadeira de visita, vaso
         (1, 0, "moveis1", T(12), True), (2, 0, "moveis1", T(12), True),
         (1, 0, "moveis2", M(25), True), (2, 0, "moveis2", M(24), True),
         (1, 1, "moveis1", S(119), False),
         (4, 2, "moveis1", S(120), False),
-        (0, 0, "acima", O(20), True),
+        (5, 0, "moveis1", D(90), True),
+    ],
+    "mesa_diretor": [  # mesa grande de madeira 3×2, cadeira, monitores
+        *[(x, y, "moveis1", T(200 + 10 * y + x), True) for x in range(3) for y in range(2)],
+        (0, 0, "moveis2", M(25), True), (1, 0, "moveis2", M(24), True),
+        (1, 2, "moveis1", S(119), False),
     ],
     "mesa_reuniao": [  # mesa longa 4×2 com cadeiras em volta
         *[(x, 1, "moveis1", T(10 if x == 0 else 13 if x == 3 else 11), True) for x in range(4)],
@@ -70,7 +75,19 @@ CARIMBOS = {
         *[(x, 3, "moveis1", S(150), False) for x in range(4)],
     ],
     "sofa": [(x, 0, "moveis1", S(13 + x), True) for x in range(3)],
+    "sofa_azul": [(x, 0, "moveis1", S(16 + x), True) for x in range(3)],
+    "pufes": [(2 * x, 0, "moveis1", S(176 + x), False) for x in range(4)],
     "balcao_cafe": [(0, 0, "moveis1", T(70), True), (0, 0, "moveis2", M(46), True),
-                    (1, 0, "moveis1", T(70), True)],
-    "planta": [(0, 0, "moveis1", O(20), True), (0, -1, "acima", D(67), False)],
+                    (1, 0, "moveis1", T(70), True), (1, 0, "moveis2", M(67), True),
+                    (2, 0, "moveis1", T(70), True)],
+    "mesa_redonda": [(1, 0, "moveis1", T(141), True), (0, 0, "moveis1", S(164), False),
+                     (2, 0, "moveis1", S(164), False)],
+    "balcao_recepcao": [(0, 0, "moveis1", T(170), True), (1, 0, "moveis1", T(171), True),
+                        (0, 1, "moveis1", T(180), True), (1, 1, "moveis1", T(181), True),
+                        (0, 0, "moveis2", M(24), True)],
+    "estante": [(0, 0, "moveis1", O(34), True), (1, 0, "moveis1", O(35), True),
+                (0, -1, "acima", O(22), False), (1, -1, "acima", O(23), False)],
+    "planta": [(0, 0, "moveis1", D(90), True)],
+    "tv": [(x, -1, "placas", M(40 + x), False) for x in range(3)],       # na face da parede
+    "quadro": [(0, -1, "placas", D(0), False), (1, -1, "placas", D(1), False)],
 }
