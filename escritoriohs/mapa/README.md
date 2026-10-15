@@ -49,6 +49,25 @@ invisível no lugar antigo.
 ⚠️ **O editor do navegador não edita blocos** — só objetos e áreas. Edição de
 área feita no navegador some no próximo envio (áreas são do gerador).
 
+## Script do mapa: status do HS.OS no WA
+
+`script/escritorio.js` vai na propriedade `script` do `hs.tmj` (o gerador
+copia para `saida/` e o `enviar.sh` o põe no zip — ⚠️ o map-storage **apaga a
+pasta `hs/` antes de gravar o zip**, então arquivo fora do zip some do ar).
+Ao abrir e a cada 60 s ele lê `WA.player.userRoomToken` (o passe que a Admin
+API do HS.OS emite), chama `GET hsosapi…/escritorio/meu-status?t=<token>` e
+aplica `WA.player.setStatus(...)` **só quando o valor muda** — e no primeiro
+carregamento não aplica `ONLINE`, para não desfazer o status escolhido dentro
+do WA. 401 → desiste até a página ser recarregada.
+
+- O WA o roda num iframe sandbox de origem `null`, como `type="module"`: o
+  map-storage serve o `.js` com `Access-Control-Allow-Origin: *` (o `cors()`
+  dele), e a rota do HS.OS também precisa responder com `*`.
+- ⚠️ Sem Admin API (a volta atrás do B) o token é `undefined` e
+  `WA.player.userRoomToken` **lança**; o script trata e fica quieto.
+- Teste de comportamento: `testes/test_script.py` roda o script no `node` com
+  um `WA` falso (pula se não houver `node`).
+
 ## Comandos (de `escritoriohs/mapa/`)
 
 | quero… | faço |
