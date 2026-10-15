@@ -2123,6 +2123,14 @@
     "collectionName": "basic furniture",
     "id": "basic furniture:Armchair:black:Right"
    },
+   "properties": [
+    {
+     "description": "",
+     "id": "2c63d80e-f051-497a-852d-2cf8aa299bd7",
+     "searchable": false,
+     "type": "entityDescriptionProperties"
+    }
+   ],
    "x": 32,
    "y": 1536
   },
@@ -2891,15 +2899,6 @@
    "x": 480,
    "y": 2016
   },
-  "cd66be17-e12c-4000-8000-bbd05e0469ba": {
-   "name": "Recepção · monitor",
-   "prefabRef": {
-    "collectionName": "basic office decoration",
-    "id": "basic office decoration:Computer Screen:black:Down"
-   },
-   "x": 1088,
-   "y": 128
-  },
   "cd79724e-82f8-4000-8000-e924be5e5066": {
    "name": "Lab 02 · lixeira",
    "prefabRef": {
@@ -3442,7 +3441,7 @@
    "url": "https://escritoriohs.healthsafetytech.com/collections/OfficeCollection.json"
   }
  ],
- "lastCommandId": "8e7fe188-9949-4000-8000-3b237c999dab",
+ "lastCommandId": "4731e403-492e-4220-92d5-7d27c17bee18",
  "mapUrl": "./hs.tmj",
  "metadata": {
   "copyright": "Blocos: WorkAdventure (CC-BY-SA 3.0). Planta: Health & Safety.",
