@@ -1,8 +1,8 @@
-"""planta.json → saida/hs.tmj (blocos) + saida/hs.wam (áreas) + saida/placas.png.
+"""planta.json → saida/hs.tmj (blocos) + saida/hs.wam (áreas e objetos) + PNGs.
 
 Uso: python3 gerar.py [planta.json] [saida]
-⚠️ O gerador é a fonte da verdade do mapa: edição feita no editor do
-navegador some no próximo envio.
+O gerador manda em paredes, salas, áreas e placas. Os objetos (móveis) ele
+cria uma vez; depois de publicados são do Erick (ver mesclar.py).
 """
 import hashlib, json, os, sys
 from PIL import Image, ImageDraw, ImageFont
@@ -81,21 +81,46 @@ OBJETOS_POR_TIPO = {
                  ("relogio", lambda a: ((a[0] + a[2]) // 2 + 4, a[1] - 2))],
 }
 
+def _com_ids(itens, prefixo):
+    """Id por (cômodo, peça, ocorrência): inserir uma peça no meio da lista não
+    muda o id das outras — com id por posição, a peça nova virava cópia da última."""
+    vistos, out = {}, []
+    for peca, x, y, rotulo in itens:
+        k = vistos.get(peca, 0); vistos[peca] = k + 1
+        out.append((_id("obj", prefixo, peca, str(k)), peca, x, y, rotulo))
+    return out
+
 def objetos_do_mapa(planta):
-    """[(id, peça, x_px, y_px, rótulo)] de todos os objetos do gerador, em ordem
-    estável. O id deriva do cômodo e da posição na lista — nunca aleatório."""
+    """[(id, peça, x_px, y_px, rótulo)] de todos os objetos do gerador."""
     out = []
+    for c in planta.comodos:
+        x1, y1, x2, y2 = c.interior()
+        area = (x1, y1 + 2, x2, y2)
+        itens = []
+        for peca, onde in OBJETOS_POR_TIPO[c.tipo]:
+            tx, ty = onde(area)
+            itens.append((peca, tx * 32, ty * 32, f"{c.nome} · {peca}"))
+        out += _com_ids(itens, c.nome)
+    out += _com_ids([(d["objeto"], d["x"] * 32, d["y"] * 32, f"corredor · {d['objeto']}")
+                     for d in planta.decoracao if "objeto" in d], "corredor")
+    return out
+
+def ids_antigos(planta):
+    """{id antigo: id novo}. Até 15/10/2026 o id era (cômodo, índice na lista) —
+    os 303 objetos publicados nesse dia usam esse formato. Vale para as listas
+    como estavam naquele envio (commit ac82568); não reordenar antes de migrar."""
+    novos = {(r, p, x, y): i for i, p, x, y, r in objetos_do_mapa(planta)}
+    mapa = {}
     for c in planta.comodos:
         x1, y1, x2, y2 = c.interior()
         area = (x1, y1 + 2, x2, y2)
         for i, (peca, onde) in enumerate(OBJETOS_POR_TIPO[c.tipo]):
             tx, ty = onde(area)
-            out.append((_id("obj", c.nome, str(i)), peca, tx * 32, ty * 32, f"{c.nome} · {peca}"))
+            mapa[_id("obj", c.nome, str(i))] = novos[(f"{c.nome} · {peca}", peca, tx * 32, ty * 32)]
     for i, d in enumerate(planta.decoracao):
         if "objeto" in d:
-            out.append((_id("obj", "corredor", str(i)), d["objeto"], d["x"] * 32, d["y"] * 32,
-                        f"corredor · {d['objeto']}"))
-    return out
+            mapa[_id("obj", "corredor", str(i))] = novos[(f"corredor · {d['objeto']}", d["objeto"], d["x"] * 32, d["y"] * 32)]
+    return mapa
 
 def _id(*partes):
     """Id estável: derivado do nome, nunca aleatório (bytes iguais a cada geração)."""
@@ -136,13 +161,18 @@ def grade(planta):
             for dx, dy, _, _, colide in blocos.CARIMBOS[d["carimbo"]]:
                 if colide:
                     bloqueado.add((d["x"] + dx, d["y"] + dy))
+    fixo = set(bloqueado)   # o que vai para a camada `colisao`: só blocos
+    # Objetos: o WA aplica a collisionGrid onde a entidade ESTÁ. Pintá-la no tmj
+    # deixaria parede invisível quando o Erick move ou apaga a mesa. Entra só
+    # aqui, para os testes de alcance e de porta.
     for _, peca, x_px, y_px, _ in objetos_do_mapa(planta):
         bloqueado |= objetos.celulas_colisao(peca, x_px, y_px)
     # face de parede: 2 blocos abaixo de parede com piso logo ao sul — também colide
     for (x, y) in sorted(parede):
         if (x, y + 1) not in parede and y + 1 < H:
             bloqueado |= {(x, y + 1), (x, y + 2)} - porta
-    return {"parede": parede, "porta": porta, "bloqueado": bloqueado}
+            fixo |= {(x, y + 1), (x, y + 2)} - porta
+    return {"parede": parede, "porta": porta, "bloqueado": bloqueado, "fixo": fixo}
 
 def _mascara(parede, x, y):
     return ((x, y - 1) in parede) * 1 + ((x + 1, y) in parede) * 2 + \
@@ -208,7 +238,7 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
                             (2, blocos.FACE_BAIXA_EXT if externa else blocos.FACE_BAIXA)):
                 if (x, y + k) not in g["porta"] and (x, y + k) not in g["parede"]:
                     pôr("paredes2", x, y + k, gid_)
-    for (x, y) in g["bloqueado"]:
+    for (x, y) in g["fixo"]:
         pôr("colisao", x, y, blocos.COLISAO)
 
     for c in P.comodos:
@@ -293,6 +323,7 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
     tmj["nextlayerid"] = proximo[0]
     json.dump(tmj, open(os.path.join(pasta, "hs.tmj"), "w"), sort_keys=True, ensure_ascii=False)
     json.dump(_wam(P), open(os.path.join(pasta, "hs.wam"), "w"), sort_keys=True, ensure_ascii=False, indent=1)
+    json.dump(ids_antigos(P), open(os.path.join(pasta, "ids-antigos.json"), "w"), sort_keys=True, indent=1)
 
 def _area(nome, x1, y1, x2, y2, props):
     return {"id": _id("area", nome), "name": nome, "visible": True,

@@ -17,6 +17,27 @@ estão (movido fica onde ele pôs), **não recria** id já publicado que sumiu
 (apagado não volta) e só acrescenta objetos novos (sala nova). Para "resetar"
 uma sala: tirar os ids dela do `publicados.json` e reenviar.
 
+⚠️ **Sem ler o mapa do ar, o envio para.** Só 404 conta como "ainda não há
+mapa". Qualquer outra falha (5xx, timeout, resposta que não é JSON) interrompe
+o envio: subir sem os objetos do ar apagaria todos e o registro impediria
+recriá-los. Registro corrompido também interrompe.
+
+⚠️ **Id de objeto = cômodo + peça + ocorrência** (desde 15/10/2026). Inserir
+peça no meio da lista não muda o id das outras. Os 303 objetos publicados antes
+usavam (cômodo, índice); `saida/ids-antigos.json` os renomeia na mescla.
+
+⚠️ **Envie com ninguém mexendo no editor.** O map-storage grava sozinho o que
+se edita no navegador ("saving map hs/hs.wam" no log); o que for editado entre
+a leitura do mapa do ar e o envio se perde.
+
+A mescla preserva do ar o `lastCommandId` e o **dono das áreas pessoais**
+(`ownerId`/`allowedTags`) — o sub-projeto B pode atribuir dono pelo navegador
+sem que o próximo envio o apague.
+
+A colisão dos objetos (mesas) **não vai para a camada `colisao` do mapa**: o
+WA a aplica onde a mesa está. Pintada no mapa, mesa movida deixava parede
+invisível no lugar antigo.
+
 ⚠️ **O editor do navegador não edita blocos** — só objetos e áreas. Edição de
 área feita no navegador some no próximo envio (áreas são do gerador).
 
