@@ -68,4 +68,29 @@ imprimia no erro. Corrigido (aspas) e os segredos foram regerados.
 ⚠️ **Carga de 6×6 rodada DENTRO da VPS é inconclusiva.** O `lk load-test`
 gerando 6 câmeras e 6 espectadores no mesmo host disputa CPU com o LiveKit:
 deu 150–196% de CPU no LiveKit (teto de 2), 5,8% de perda e 26/36 trilhas. O
-número que vale é o da carga vinda de fora, pelo domínio.
+número que vale é o da carga vinda de fora, pelo domínio:
+
+| carga 6×6 por 60 s (15/10/2026) | dentro da VPS | **de fora, por `wss://livekit…`** |
+|---|---|---|
+| trilhas recebidas | 26/36 | **36/36** |
+| perda de pacotes | 5,8% | **0,29%** |
+| CPU do LiveKit | 150–196% | **pico de 123% ao conectar; 20–37% em regime** |
+
+## WorkAdventure no EasyPanel
+
+Projeto `escritoriohs`, serviço Compose `wa`, fonte Git (pasta `/escritoriohs`).
+As variáveis vão pela aba Environment com **"Create .env file"** — o Compose lê
+dali `VERSION`, `DOMAIN` e os segredos. Domínios: `escritoriohs.healthsafetytech.com`
+e `livekit.healthsafetytech.com`, os dois para o serviço `borda`, porta 80.
+
+Conferência: `escritoriohs/testes/verificar.sh tudo`.
+
+⚠️ **A tela é SPA: `/login` responde 200 e não redireciona.** Quem manda para o
+Entra é o `/login-screen?playUri=<sala>`. É o que o `verificar.sh` testa, junto
+com a `redirect_uri` exata registrada no app.
+
+⚠️ **O Traefik do EasyPanel responde `101 Switching Protocols` mesmo sem serviço
+atrás.** Teste de WebSocket que só olha o 101 passa com tudo desligado.
+
+O `play` loga `MatrixProvider … Invalid URL` sem Matrix configurado — é ruído
+do WA, não erro nosso.
