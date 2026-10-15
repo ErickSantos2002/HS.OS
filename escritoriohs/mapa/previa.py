@@ -28,6 +28,20 @@ def desenhar(caminho_tmj, caminho_png, escala=1.0):
         for k, g in enumerate(l["data"]):
             if g:
                 out.alpha_composite(bloco(g), ((k % W) * TT, (k // W) * TT))
+    # objetos do editor (hs.wam ao lado do .tmj), na ordem de profundidade do WA
+    caminho_wam = os.path.splitext(caminho_tmj)[0] + ".wam"
+    if os.path.exists(caminho_wam):
+        import objetos
+        por_id = {objetos.prefab_id(p): p for p in objetos.PECAS}
+        ents = []
+        for e in json.load(open(caminho_wam)).get("entities", {}).values():
+            peca = por_id.get(e["prefabRef"]["id"])
+            if peca:
+                img = Image.open(objetos.caminho_imagem(peca)).convert("RGBA")
+                prof = e["y"] + img.height + (objetos.item(peca).get("depthOffset") or 0)
+                ents.append((prof, e["x"], e["y"], img))
+        for _, x, y, img in sorted(ents, key=lambda t: t[0]):
+            out.alpha_composite(img, (int(x), int(y)))
     if escala != 1.0:
         out = out.resize((int(out.width * escala), int(out.height * escala)), Image.NEAREST)
     out.save(caminho_png)

@@ -48,9 +48,15 @@ def test_decoracao_fica_no_corredor():
     porta ou passagem sem ninguém perceber na planta."""
     import blocos
     assert P.decoracao, "a planta deveria ter decoração de corredor"
+    from PIL import Image
+    import objetos
+    def celulas(d):
+        if "carimbo" in d:
+            return [(d["x"] + dx, d["y"] + dy) for dx, dy, _, _, _ in blocos.CARIMBOS[d["carimbo"]]]
+        img = Image.open(objetos.caminho_imagem(d["objeto"]))   # objeto: a área da imagem inteira
+        return [(d["x"] + i, d["y"] + j) for i in range(img.width // 32) for j in range(img.height // 32)]
     for d in P.decoracao:
-        for dx, dy, _, _, _ in blocos.CARIMBOS[d["carimbo"]]:
-            x, y = d["x"] + dx, d["y"] + dy
+        for x, y in celulas(d):
             assert 0 < x < P.largura - 1 and 0 < y < P.altura - 1, d
             for c in P.comodos:
                 assert not c.contem(x, y), (d, "dentro de", c.nome)

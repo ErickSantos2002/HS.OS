@@ -14,10 +14,12 @@ $PY gerar.py
 rm -rf saida/tilesets && cp -r tilesets saida/
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+# Objetos: o que já foi publicado é do Erick (fica onde ele pôs; apagado não
+# volta). publicados.json registra os ids — só é atualizado se o envio der 200.
 if curl -sf "$BASE/hs/hs.wam" -o "$tmp/no-ar.wam"; then
-  $PY mesclar.py saida/hs.wam "$tmp/no-ar.wam"
+  $PY mesclar.py saida/hs.wam "$tmp/no-ar.wam" publicados.json
 else
-  $PY mesclar.py saida/hs.wam -
+  $PY mesclar.py saida/hs.wam - publicados.json
 fi
 
 (cd saida && zip -qr "$tmp/hs.zip" hs.tmj hs.wam placas.png logo-hs.png tilesets)
@@ -31,4 +33,5 @@ codigo=$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" | curl --config
 unset TOKEN
 echo "envio: HTTP $codigo"
 [ "$codigo" = 200 ] || { head -c 600 "$tmp/resposta"; echo; exit 1; }
+mv publicados.json.novo publicados.json
 curl -s -o /dev/null -w 'hs.wam no ar: HTTP %{http_code}\n' "$BASE/hs/hs.wam"

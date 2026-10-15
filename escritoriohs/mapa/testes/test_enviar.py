@@ -23,3 +23,9 @@ def test_token_nao_vai_na_linha_de_comando_do_curl():
     s = open("enviar.sh").read()
     assert '-H "Authorization: Bearer $TOKEN"' not in s
     assert "--config -" in s
+
+def test_registro_de_publicados_so_avanca_depois_do_200():
+    """Se o envio falhar e o registro avançar, os objetos 'publicados' que nunca
+    chegaram ao ar não seriam criados nunca mais."""
+    s = open("enviar.sh").read()
+    assert s.index('[ "$codigo" = 200 ]') < s.index("mv publicados.json.novo publicados.json")

@@ -6,48 +6,96 @@ navegador some no próximo envio.
 """
 import hashlib, json, os, sys
 from PIL import Image, ImageDraw, ImageFont
-import blocos, modelo
+import blocos, modelo, objetos
 
 TIPO_PISO = {"sala": "madeira", "reuniao": "carpete", "diretoria": "carpete",
              "recepcao": "piso_claro", "cafe": "madeira", "silenciosa": "carpete"}
 # Cada tipo de cômodo: (carimbo, onde) — `onde` recebe o interior caminhável
 # (x1, y1, x2, y2) e devolve o canto do carimbo. y1 é a primeira linha abaixo
 # das faces; carimbos com dy=-1 (tv, quadro, topo da estante) caem na face.
-MOVEIS_POR_TIPO = {
-    "sala": [("mesa_trabalho", lambda a: (a[0], a[1]))],
-    "diretoria": [("mesa_diretor", lambda a: (a[0] + 4, a[1])),
-                  ("estante", lambda a: (a[0] + 1, a[1])),
-                  ("sofa", lambda a: (a[2] - 3, a[3])),
-                  ("planta", lambda a: (a[2], a[1])),
-                  ("quadro", lambda a: (a[2] - 5, a[1]))],
+MOVEIS_POR_TIPO = {   # BLOCOS fixos: só o que não existe na coleção do editor
+    "sala": [],
+    "diretoria": [("quadro", lambda a: (a[2] - 5, a[1]))],
     "reuniao": [("mesa_reuniao", lambda a: ((a[0] + a[2]) // 2 - 2, (a[1] + a[3]) // 2 - 2)),
-                ("tv", lambda a: (a[0] + 2, a[1])),  # longe do meio, onde fica a porta norte
-                ("planta", lambda a: (a[0], a[1])),
-                ("planta", lambda a: (a[2], a[1]))],
+                ("tv", lambda a: (a[0] + 2, a[1]))],
     "cafe": [("balcao_cafe", lambda a: (a[0], a[1])),
-             ("estante", lambda a: (a[0] + 4, a[1])),
              ("mesa_redonda", lambda a: (a[0] + 2, a[1] + 3)),
              ("mesa_redonda", lambda a: (a[0] + 7, a[1] + 3)),
              ("mesa_redonda", lambda a: (a[0] + 12, a[1] + 3)),
              ("mesa_redonda", lambda a: (a[0] + 4, a[1] + 6)),
              ("mesa_redonda", lambda a: (a[0] + 9, a[1] + 6)),
-             ("sofa_azul", lambda a: (a[2] - 3, a[1])),
-             ("quadro", lambda a: (a[2] - 7, a[1])),
-             ("planta", lambda a: (a[0], a[3])),
-             ("planta", lambda a: (a[2], a[3]))],
-    "silenciosa": [("pufes", lambda a: (a[0] + 1, a[1] + 3)),
-                   ("estante", lambda a: (a[0], a[1])),
-                   ("estante", lambda a: (a[2] - 1, a[1])),
-                   ("planta", lambda a: (a[0], a[3])),
-                   ("planta", lambda a: (a[2], a[3]))],
+             ("quadro", lambda a: (a[2] - 7, a[1]))],
+    "silenciosa": [],
     "recepcao": [("balcao_recepcao", lambda a: ((a[0] + a[2]) // 2 - 1, a[1] + 1)),
-                 ("sofa_azul", lambda a: (a[0] + 2, a[1] + 4)),
-                 ("sofa_azul", lambda a: (a[2] - 4, a[1] + 4)),
                  ("quadro", lambda a: (a[0] + 3, a[1])),
-                 ("quadro", lambda a: (a[2] - 4, a[1])),
-                 ("planta", lambda a: (a[0], a[1])),
-                 ("planta", lambda a: (a[2], a[1]))],
+                 ("quadro", lambda a: (a[2] - 4, a[1]))],
 }
+
+# OBJETOS do editor: (peça, onde) — o Erick move e apaga pelo navegador.
+# `onde` devolve o bloco do canto de cima da IMAGEM (que pode subir na face).
+OBJETOS_POR_TIPO = {
+    "sala": [("estante_parede", lambda a: (a[0], a[1] - 1)),   # logo abaixo da placa
+             ("mesa", lambda a: (a[0] + 4, a[1] - 1)),
+             ("monitor", lambda a: (a[0] + 4, a[1])),
+             ("canecas", lambda a: (a[0] + 5, a[1])),
+             ("cadeira_cima", lambda a: (a[0] + 4, a[1] + 2)),
+             ("planta", lambda a: (a[0] + 5, a[1] + 2)),
+             ("poltrona_dir", lambda a: (a[0], a[1] + 2)),
+             ("lixeira", lambda a: (a[0] + 1, a[1] + 3)),
+             ("relogio", lambda a: (a[0] + 5, a[1] - 2))],
+    "diretoria": [("estante_grande", lambda a: (a[0] + 1, a[1] - 2)),
+                  ("mesa", lambda a: (a[0] + 6, a[1] - 1)),
+                  ("monitor", lambda a: (a[0] + 6, a[1])),
+                  ("livros", lambda a: (a[0] + 7, a[1])),
+                  ("cadeira_cima", lambda a: (a[0] + 6, a[1] + 2)),
+                  ("sofa", lambda a: (a[2] - 2, a[3] - 1)),
+                  ("poltrona_esq", lambda a: (a[2] - 3, a[3] - 1)),
+                  ("planta_grande", lambda a: (a[2] - 2, a[1] - 1)),
+                  ("relogio", lambda a: (a[0] + 4, a[1] - 2))],
+    "reuniao": [("planta_grande", lambda a: (a[0], a[1] - 1)),
+                ("planta_grande", lambda a: (a[2] - 2, a[1] - 1)),
+                ("relogio", lambda a: (a[2] - 3, a[1] - 2))],
+    "cafe": [("estante", lambda a: (a[0] + 4, a[1] - 2)),
+             ("sofa", lambda a: (a[2] - 2, a[1])),
+             ("sofa", lambda a: (a[2] - 5, a[1])),
+             ("planta_grande", lambda a: (a[0], a[3] - 2)),
+             ("planta_grande", lambda a: (a[2] - 2, a[3] - 2)),
+             ("cafeteira", lambda a: (a[0] + 3, a[1])),
+             ("relogio", lambda a: (a[0] + 8, a[1] - 2))],
+    "silenciosa": [("estante_grande", lambda a: (a[0], a[1] - 2)),
+                   ("estante_grande", lambda a: (a[2] - 1, a[1] - 2)),
+                   ("pufe", lambda a: (a[0] + 2, a[1] + 2)),
+                   ("pufe", lambda a: (a[0] + 4, a[1] + 2)),
+                   ("pufe", lambda a: (a[0] + 6, a[1] + 2)),
+                   ("poltrona", lambda a: (a[0] + 3, a[1] + 5)),
+                   ("poltrona", lambda a: (a[0] + 5, a[1] + 5)),
+                   ("planta_grande", lambda a: (a[0], a[3] - 2)),
+                   ("planta_grande", lambda a: (a[2] - 2, a[3] - 2))],
+    "recepcao": [("sofa", lambda a: (a[0] + 2, a[1] + 4)),
+                 ("sofa", lambda a: (a[0] + 4, a[1] + 4)),
+                 ("sofa", lambda a: (a[2] - 5, a[1] + 4)),
+                 ("sofa", lambda a: (a[2] - 3, a[1] + 4)),
+                 ("planta_grande", lambda a: (a[0], a[1] - 1)),
+                 ("planta_grande", lambda a: (a[2] - 2, a[1] - 1)),
+                 ("monitor", lambda a: ((a[0] + a[2]) // 2 - 1, a[1] + 1)),
+                 ("relogio", lambda a: ((a[0] + a[2]) // 2 + 4, a[1] - 2))],
+}
+
+def objetos_do_mapa(planta):
+    """[(id, peça, x_px, y_px, rótulo)] de todos os objetos do gerador, em ordem
+    estável. O id deriva do cômodo e da posição na lista — nunca aleatório."""
+    out = []
+    for c in planta.comodos:
+        x1, y1, x2, y2 = c.interior()
+        area = (x1, y1 + 2, x2, y2)
+        for i, (peca, onde) in enumerate(OBJETOS_POR_TIPO[c.tipo]):
+            tx, ty = onde(area)
+            out.append((_id("obj", c.nome, str(i)), peca, tx * 32, ty * 32, f"{c.nome} · {peca}"))
+    for i, d in enumerate(planta.decoracao):
+        if "objeto" in d:
+            out.append((_id("obj", "corredor", str(i)), d["objeto"], d["x"] * 32, d["y"] * 32,
+                        f"corredor · {d['objeto']}"))
+    return out
 
 def _id(*partes):
     """Id estável: derivado do nome, nunca aleatório (bytes iguais a cada geração)."""
@@ -84,9 +132,12 @@ def grade(planta):
                 if colide:
                     bloqueado.add((ox + dx, oy + dy))
     for d in planta.decoracao:
-        for dx, dy, _, _, colide in blocos.CARIMBOS[d["carimbo"]]:
-            if colide:
-                bloqueado.add((d["x"] + dx, d["y"] + dy))
+        if "carimbo" in d:
+            for dx, dy, _, _, colide in blocos.CARIMBOS[d["carimbo"]]:
+                if colide:
+                    bloqueado.add((d["x"] + dx, d["y"] + dy))
+    for _, peca, x_px, y_px, _ in objetos_do_mapa(planta):
+        bloqueado |= objetos.celulas_colisao(peca, x_px, y_px)
     # face de parede: 2 blocos abaixo de parede com piso logo ao sul — também colide
     for (x, y) in sorted(parede):
         if (x, y + 1) not in parede and y + 1 < H:
@@ -168,8 +219,9 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
                 pôr(camada, ox + dx, oy + dy, gid_)
 
     for d in P.decoracao:
-        for dx, dy, camada, gid_, _ in blocos.CARIMBOS[d["carimbo"]]:
-            pôr(camada, d["x"] + dx, d["y"] + dy, gid_)
+        if "carimbo" in d:
+            for dx, dy, camada, gid_, _ in blocos.CARIMBOS[d["carimbo"]]:
+                pôr(camada, d["x"] + dx, d["y"] + dy, gid_)
 
     nomes = _placas(P, pasta)
     primeiro_placa = blocos.TILESETS[-1][1] + blocos.TILESETS[-1][3]
@@ -177,8 +229,9 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
         if c.placa:
             i = nomes.index(c.placa)
             x1, y1, _, _ = c.interior()
-            pôr("placas", x1 + 1, y1, primeiro_placa + 2 * i)
-            pôr("placas", x1 + 2, y1, primeiro_placa + 2 * i + 1)
+            # canto esquerdo da parede: as colunas do meio são da porta norte
+            pôr("placas", x1, y1, primeiro_placa + 2 * i)
+            pôr("placas", x1 + 1, y1, primeiro_placa + 2 * i + 1)
 
     rec = next(c for c in P.comodos if c.tipo == "recepcao")
     rx1, ry1, rx2, ry2 = rec.interior()
@@ -266,7 +319,10 @@ def _wam(P):
                 props.append({"id": _id(c.nome, "pessoal"), "type": "personalAreaPropertyData",
                               "accessClaimMode": "static", "allowedTags": [], "ownerId": None})
             areas.append(_area(c.nome, x1, y1, x2, y2, props))
-    return {"version": "2.1.0", "mapUrl": "./hs.tmj", "entities": {}, "areas": areas,
+    entidades = {oid: {"x": x, "y": y, "name": rotulo,
+                       "prefabRef": {"collectionName": objetos.PECAS[peca][0], "id": objetos.prefab_id(peca)}}
+                 for oid, peca, x, y, rotulo in objetos_do_mapa(P)}
+    return {"version": "2.1.0", "mapUrl": "./hs.tmj", "entities": entidades, "areas": areas,
             # Os móveis que o editor do navegador oferece — sem isto ele abre vazio.
             "entityCollections": [{"type": "file", "url": f"https://escritoriohs.healthsafetytech.com/collections/{n}.json"}
                                   for n in ("FurnitureCollection", "OfficeCollection")],
