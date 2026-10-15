@@ -14,7 +14,9 @@ Levantado no código-fonte da tag `v1.33.11` do WA:
   (`back/src/Model/GameRoom.ts`, `getMapDetails`).
 - `detalhes_do_mapa` é cópia de `LocalAdmin.fetchMapDetails`
   (`play/src/pusher/services/LocalAdmin.ts`), com `authenticationMandatory`
-  fixo em `true` e o nome do Entra imposto (`force_opid`).
+  fixo em `true` e o nome do Entra imposto (`force_opid`). Duas recusas a
+  mais, por segurança: mapa de host externo (`/_/<host>/…`) e caminho que
+  escapa do map-storage (`..`, `%2e`, segmento vazio, barra invertida).
 - `resolver_texturas` é a regra de `LocalWokaService.fetchWokaDetails`: um id
   desconhecido invalida o conjunto (a pessoa volta à escolha do woka). O
   `wokas.json` é cópia de `play/src/pusher/data/woka.json`.
@@ -89,40 +91,35 @@ def detalhes_do_mapa(play_uri: str, map_storage_url: str, sala_inicial: str) -> 
     if caminho == "/":
         return {"redirectUrl": urlunsplit(url._replace(path=sala_inicial))}
 
-    map_url = None
-    wam_url = None
+    # ⚠️ Diferente do `LocalAdmin`: o formato `/_/<host>/<caminho>` NÃO é aceito.
+    # Lá ele monta `mapUrl` no host que vier na URL — qualquer link levaria a
+    # pessoa a um mapa de terceiro, com os scripts dele rodando no escritório.
     casou = re.search(r"/~/(.+)", caminho)
-    if casou:
-        if PurePosixPath(caminho).suffix == ".tmj":
-            # Igual ao WA: troca a primeira ocorrência na URL inteira.
-            return {"redirectUrl": play_uri.replace(".tmj", ".wam", 1)}
-        wam_url = f"{map_storage_url.rstrip('/')}/{casou.group(1)}"
-    else:
-        casou = re.search(r"/_/[^/]+/(.+)", caminho)
-        if not casou:
-            return {
-                **_erro(
-                    "error",
-                    "UNSUPPORTED_URL_FORMAT",
-                    "Unsupported URL format",
-                    "",
-                    "Unsupported path: " + caminho,
-                ),
-            }
-        map_url = f"{url.scheme}://{casou.group(1)}"
+    if not casou or not _relativo_seguro(casou.group(1)):
+        return _erro(
+            "error", "UNSUPPORTED_URL_FORMAT", "Unsupported URL format", "",
+            "Unsupported path: " + caminho,
+        )
+    if PurePosixPath(caminho).suffix == ".tmj":
+        # Igual ao WA: troca a primeira ocorrência na URL inteira.
+        return {"redirectUrl": play_uri.replace(".tmj", ".wam", 1)}
 
-    detalhes: dict = {
+    return {
+        "wamUrl": f"{map_storage_url.rstrip('/')}/{casou.group(1)}",
         "group": None,
         "authenticationMandatory": True,
         "opidWokaNamePolicy": "force_opid",
         "contactPage": None,
         "opidLogoutRedirectUrl": None,
     }
-    if wam_url:
-        detalhes["wamUrl"] = wam_url
-    if map_url:
-        detalhes["mapUrl"] = map_url
-    return detalhes
+
+
+def _relativo_seguro(relativo: str) -> bool:
+    """Caminho dentro do map-storage: sem `..`, `.`, segmento vazio, barra invertida
+    nem ponto codificado (`%2e`) — que o servidor do outro lado decodificaria."""
+    if "\\" in relativo or "%2e" in relativo.lower():
+        return False
+    return all(seg not in ("", ".", "..") for seg in relativo.split("/"))
 
 
 @lru_cache(maxsize=1)

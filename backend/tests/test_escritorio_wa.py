@@ -14,6 +14,8 @@ chave tem que ser omitida, e é o teste mais importante deste arquivo.
 import json
 from pathlib import Path
 
+import pytest
+
 from app.escritorio import wa
 
 MS = "https://e.com/map-storage"
@@ -96,10 +98,35 @@ def test_wam_monta_a_url_do_map_storage():
     assert "mapUrl" not in r or r["mapUrl"] is None
 
 
-def test_mapa_externo_monta_map_url():
+def test_mapa_de_host_externo_e_recusado():
+    """O `LocalAdmin` aceita `/_/<host>/<caminho>` e monta `mapUrl` no host que vier
+    na URL: qualquer link poria a pessoa num mapa de terceiro, com scripts dele
+    rodando dentro do escritório. Aqui só há mapa do nosso map-storage."""
     r = wa.detalhes_do_mapa("https://e.com/_/global/exemplo.com/mapa.tmj", MS, SALA)
-    assert r["mapUrl"] == "https://exemplo.com/mapa.tmj"
-    assert "group" in r
+    assert r["status"] == "error"
+    assert r["code"] == "UNSUPPORTED_URL_FORMAT"
+    assert "mapUrl" not in r
+
+
+@pytest.mark.parametrize(
+    "caminho",
+    [
+        "/~/../segredo.wam",
+        "/~/hs/../../x.wam",
+        "/~/hs//hs.wam",
+        "/~/%2e%2e/x.wam",
+        "/~/%2E%2E/x.wam",
+        "/~/hs/%2e/x.wam",
+        "/~/hs\\..\\x.wam",
+        "/~/",
+    ],
+)
+def test_caminho_que_escapa_do_map_storage_e_recusado(caminho):
+    """Sem isto, `..` ou o equivalente codificado montaria um `wamUrl` fora da pasta
+    dos mapas — e é o `back` do WA que o busca, de dentro da rede."""
+    r = wa.detalhes_do_mapa("https://e.com" + caminho, MS, SALA)
+    assert r.get("code") == "UNSUPPORTED_URL_FORMAT"
+    assert "wamUrl" not in r
 
 
 def test_caminho_desconhecido_e_erro_de_formato():
