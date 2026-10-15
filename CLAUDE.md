@@ -934,7 +934,9 @@ o agente **enxerga**, pergunte a ele.
 Compose `wa`) e da mídia — LiveKit + Coturn em rede do host,
 `escritoriohs-midia.service`. Operação, segredos e aceite em
 `escritoriohs/README.md`; spec e plano em `docs/superpowers/` (2026-10-15).
-Sub-projeto A no ar; B (ligação com o HS.OS) e C (agentes no escritório) a seguir.
+Sub-projeto A no ar. **B (ligação com o HS.OS) com código na `main` e backend no ar;
+falta ligar `ADMIN_API_URL` no `wa`** — estado e próximos passos em
+[`docs/ESCRITORIOHS-CONTINUAR.md`](docs/ESCRITORIOHS-CONTINUAR.md). C (agentes no escritório) a seguir.
 O mapa (`hs`) é **gerado** por `escritoriohs/mapa/gerar.py` a partir de
 `planta.json`; móveis são objetos do editor e, depois de publicados, são do
 Erick (`publicados.json` impede o gerador de recriar o que ele apagou).

@@ -1,83 +1,130 @@
 # EscritorioHS — ponto de retomada
 
-Atualizado em **15/10/2026**, antes de compactar a conversa que construiu os
-sub-projetos A e o mapa. Leia isto antes de mexer no escritório virtual.
+Atualizado em **15/10/2026, fim do dia**. Leia isto antes de mexer no
+escritório virtual.
 
 ## Onde estamos
 
 | peça | estado | onde ler |
 |---|---|---|
 | **A — escritório no ar** | ✅ em produção em `https://escritoriohs.healthsafetytech.com` | `escritoriohs/README.md`, spec/plano `docs/superpowers/*/2026-10-15-escritorio-virtual*` |
-| **Mapa próprio da HS** | ✅ é a entrada (`START_ROOM_URL=/~/hs/hs.wam`) | `escritoriohs/mapa/README.md`, spec/plano `docs/superpowers/*/2026-10-15-escritoriohs-mapa*` |
-| **B — ligação com o HS.OS** | ⏳ próximo: spec + plano + execução por agentes | abaixo |
-| **C — agentes no escritório** | ⏳ depois do B; começa por sondagem | spec do A, tabela dos sub-projetos |
+| **Mapa próprio da HS** | ✅ é a entrada (`/~/hs/hs.wam`) | `escritoriohs/mapa/README.md` |
+| **B — ligação com o HS.OS** | 🟡 **código pronto na `main`; backend no ar; falta ligar no `wa` e enviar o mapa** | abaixo; spec `docs/superpowers/specs/2026-10-15-escritoriohs-b-ligacao-hsos-design.md`, plano `docs/superpowers/plans/2026-10-15-escritoriohs-b.md` |
+| **C — agentes no escritório** | ⏳ depois do B; começa por sondagem | spec do A |
 
-**Link para as pessoas:** `https://escritoriohs.healthsafetytech.com` (login
-Microsoft, empresa inteira — sem grupo, "Assignment required = No").
-
-Conferência rápida de tudo, de qualquer máquina com SSH na VPS:
+Conferência rápida (de qualquer máquina com SSH na VPS):
 
 ```bash
 escritoriohs/testes/testar-config.sh            # config estática
-escritoriohs/testes/verificar.sh tudo           # produção: 14 checagens
-(cd escritoriohs/mapa && .venv/bin/python -m pytest testes -q)   # gerador: 46 testes
+escritoriohs/testes/verificar.sh tudo           # produção: 16 checagens (inclui `admin`)
+(cd escritoriohs/mapa && .venv/bin/python -m pytest testes -q)   # gerador: 69 testes
+(cd backend && ./.venv/bin/python -m pytest tests -q)            # 625 testes
 ```
 
-## Sub-projeto B — o que o Erick quer (15/10/2026)
+## Sub-projeto B — o que já foi feito (15/10/2026)
 
-**Os cinco**, todos:
+Três agentes, um por frente, mesclados na `main` (`3034ae2`) depois de revisão
+final; correções da revisão em `362b575`.
 
-1. **Entrar no escritório a partir do HS.OS** — botão/atalho no HS.OS.
-2. **Ver no HS.OS quem está no escritório agora.**
-3. **Integrar o status** que já existe no perfil do HS.OS (`use-user-status`).
-4. **Admin API** — o WA pergunta ao HS.OS quem entra e quem edita o mapa.
-5. **Dono de cada sala** — nome da pessoa na placa; a área pessoal ganha dono.
+- **Backend** (`backend/app/escritorio/`, `routers/escritorio_wa.py`,
+  `routers/escritorio.py`): Admin API do WA em `/escritorio-wa/api/*`, vigia de
+  presença no `/ws/admin/rooms` do play, `GET /escritorio/presenca`,
+  `GET /escritorio/meu-status?t=` (para o script do mapa), access log sem a
+  query dessas rotas (o play manda o token Microsoft nela).
+- **Front**: item "Escritório" no menu (abre em nova aba), bloco "No escritório
+  agora" na lista do chat, 🏢 ao lado de quem está lá.
+- **Mapa**: `"dono": "<e-mail>"` por sala na `planta.json` vira `ownerId`
+  (planta vence o ar; sem dono na planta, vale o do ar); `script/escritorio.js`
+  leva o status do HS.OS para o WA (Em reunião→Ocupado, Foco→Não perturbe,
+  Almoço/Ausente→Já volto).
+- Lista de salas do WA só com o EscritorioHS (`0ec47fa`): o `office` continua no
+  map-storage como volta atrás, mas some da lista **quando a Admin API ligar**.
 
-**Como o Erick quer o trabalho:** sem perguntas de escolha — seguir o
-recomendado, escrever spec e plano, e **mandar um agente executar cada frente
-em branch/worktree separada**, para ficar pronto o mais rápido possível.
-Agentes em paralelo só onde os arquivos não se cruzam (ver armadilhas).
+**Em produção já:**
+- ✅ Backend do HS.OS com `ESCRITORIO_ADMIN_API_TOKEN`,
+  `ESCRITORIO_ADMIN_SOCKETS_TOKEN`, `ESCRITORIO_EDITORES` (colados pelo Erick) e
+  deploy feito. Conferido por `curl`: capabilities 200 `{}`, map sem token 403,
+  raiz redireciona para o hs, `ti@` entra com editor e sem `username`, gmail
+  recusado, lista de salas só com o hs, `meu-status` 401 com CORS `*`.
+- ✅ `wa` reimplantado com o compose novo (variáveis da Admin API ainda
+  **vazias** = escritório funciona como antes, sem perguntar ao HS.OS).
+- ✅ Correção do login ("Service is not reachable" depois da Microsoft): buffer
+  do nginx da `borda`, `c036efc`. **Lição:** deploy do `wa` não recarrega o
+  nginx — foi preciso `docker restart escritoriohs_wa-borda-1` (está no README).
+- O **front do HS.OS**: confirmar se o Erick fez deploy dele junto com o
+  backend (o bloco "No escritório agora" só aparece com a presença ligada).
 
-### Armadilhas já conhecidas para o B
+## ▶ Próximos passos, em ordem (amanhã)
 
-- ⚠️ **`MAP_EDITOR_ALLOWED_USERS` é ignorada quando existe Admin API.** O item
-  4 tem que levar a permissão do editor junto (só o Erick edita), na mesma
-  entrega — senão o editor abre para todos, sem erro.
-- ⚠️ **Dono da sala:** o envio do mapa (`escritoriohs/mapa/enviar.sh` →
-  `mesclar.py`) **preserva** `ownerId`/`allowedTags` das áreas pessoais do ar.
-  Atribuir dono pelo navegador ou pela API sobrevive aos envios. A placa com o
-  nome é bloco: trocar `"placa"` em `escritoriohs/mapa/planta.json` e reenviar.
-- ⚠️ **Envio do mapa com ninguém no editor do navegador** — o map-storage
-  autosalva; edição durante o envio se perde.
-- ⚠️ O e-mail é a ponte WA ↔ HS.OS (`OPENID_SCOPE=openid email profile`,
-  nome do avatar `force_opid` vindo do Entra).
-- ⚠️ Itens 1–3 mexem no front do HS.OS (`ChatPage`/`AppSidebar`/`use-user-status`);
-  4 e 5 no backend (rotas novas) e no EasyPanel (`ADMIN_API_URL`/`ADMIN_API_TOKEN`
-  do serviço `wa`). Dois agentes no mesmo arquivo se atropelam: separar por
-  arquivo, não por item.
-- O Claude **não grava variável de ambiente no EasyPanel** (regra de segurança
-  bloqueia `updateComposeEnv`): monta o bloco e o Erick cola.
+Os valores dos tokens estão em `~/escritoriohs-b.env` (`600`). **Não imprimir**:
+montar o bloco no clipboard por script, como foi feito:
+
+```bash
+f=~/escritoriohs-b.env; { echo "ADMIN_API_URL=https://hsosapi.healthsafetytech.com/escritorio-wa"; \
+  echo "ADMIN_API_TOKEN=$(grep -oP '^ESCRITORIO_ADMIN_API_TOKEN=\K.+' $f)"; \
+  echo "ADMIN_SOCKETS_TOKEN=$(grep -oP '^ESCRITORIO_ADMIN_SOCKETS_TOKEN=\K.+' $f)"; } | wl-copy
+```
+
+1. **Erick cola as 3 linhas** no Environment do serviço `wa` (acrescentar no
+   fim, sem apagar nada) e salva.
+2. **Deploy do `wa`** (o Claude pode: a permissão de `execute_destructive` do
+   EasyPanel foi liberada pelo Erick; confirmar antes mesmo assim). Conferir:
+   containers de pé (`play` healthy — se o HS.OS não responder `capabilities`
+   o play não sobe), `verificar.sh tudo`, e no log do backend a presença
+   conectando.
+3. **Testes com gente:** Erick entra e vê o botão "Mapa" (editor); outra conta
+   entra **sem** editor; lista de salas sem o Office; no HS.OS (chat) aparece
+   "No escritório agora" com quem está lá; o 🏢 na lista de DMs.
+4. **Enviar o mapa** (`escritoriohs/mapa/enviar.sh`), com ninguém no editor do
+   navegador. Leva o `escritorio.js`. Depois, no navegador (F12 → Console),
+   conferir "Loading map related script at …/escritorio.js" sem erro de
+   CORS/MIME, e mudar o status no HS.OS para "Em reunião" → o avatar vira
+   Ocupado em até 60 s.
+5. **Donos das salas:** o Erick manda a lista "sala → e-mail"; pôr `"dono"` (e,
+   se quiser, `"placa"` com o nome) em `escritoriohs/mapa/planta.json` e
+   reenviar.
+6. Atualizar este arquivo, o `CLAUDE.md` (seção EscritorioHS) e o README.
+
+**Volta atrás** em qualquer ponto: apagar `ADMIN_API_URL` do `wa` e
+reimplantar — `MAP_EDITOR_ALLOWED_USERS` e `START_ROOM_URL` continuam lá.
+
+## Armadilhas que valem para o B
+
+- ⚠️ **Com `ADMIN_API_URL` preenchida o escritório depende do HS.OS**: o play
+  repete `capabilities` até responder e só então sobe. Backend do HS.OS fora =
+  ninguém entra.
+- ⚠️ `MAP_EDITOR_ALLOWED_USERS` e `START_ROOM_URL` ficam sem efeito com a Admin
+  API — quem edita é `ESCRITORIO_EDITORES` (backend do HS.OS).
+- ⚠️ A presença lê `ESCRITORIO_ADMIN_SOCKETS_TOKEN` só no boot do backend: token
+  trocado exige reiniciar o backend.
+- ⚠️ `ADMIN_API_URL` só no `play` (no `back`/`uploader` quebraria coisa);
+  `testar-config.sh` confere.
+- ⚠️ Envio do mapa com ninguém no editor do navegador (autosave).
+- Não aceitos de propósito (registrados na revisão): o pet do avatar some;
+  tirar `dono` da planta não limpa o dono do ar (limpa-se pelo editor).
+- O card "EscritorioHS" na lista de salas mostra a miniatura do mapa antigo —
+  cosmético, para depois.
 
 ## Pendências do Erick
 
-- **Aceite com gente** (`escritoriohs/README.md`, seção Aceite): recusa de
-  conta de fora · 4G (Coturn) · 6 pessoas numa reunião · tranca da sala com 2
-  pessoas · 3 na Reunião 01 na mesma chamada · silenciosa · chat da bolha ·
-  outra conta não vê o botão "Mapa".
-- **Colega que não conseguiu entrar** pelo link de teste — causa não achada
-  nos logs; pedir print se repetir.
-- Decidir sobre **convidados B2B** do diretório (entram hoje).
+- Colega **Nicholson** tentou entrar depois da correção do login? Confirmar.
+- **Aceite com gente** (`escritoriohs/README.md`, seção Aceite): 4G (Coturn),
+  6 pessoas numa reunião, tranca da sala com 2, 3 na Reunião 01, silenciosa,
+  chat da bolha.
 - **Token do R2 só para o backup** (hoje usa o do backend).
 - Apagar `~/escritoriohs-env.sh` e `~/escritoriohs-backup-env.sh`.
-  ⚠️ **Não apagar `~/escritoriohs.env`**: o `enviar.sh` do mapa lê dele o
-  `MAP_STORAGE_AUTHENTICATION_TOKEN`. Se quiser enxugar, deixar só essa linha.
-- Apagar a branch `escritorio-a` do GitHub (já mesclada).
+  ⚠️ **Não apagar `~/escritoriohs.env`** (o `enviar.sh` lê o
+  `MAP_STORAGE_AUTHENTICATION_TOKEN` dele) **nem `~/escritoriohs-b.env`** (tokens
+  da Admin API).
+- Apagar a branch remota `escritorio-a` (já mesclada).
 
-## Lições desta rodada que não estão em outro lugar
+## Lições que não estão em outro lugar
 
 - O firewall que vale na VPS é o do **hPanel**, não o `ufw`.
-- O Traefik do EasyPanel responde **101** em WebSocket mesmo sem serviço atrás.
-- `createComposeService` do MCP do EasyPanel com `source`+`domains` juntos falha.
-- **Nunca `git add -f`** em `escritoriohs/mapa/`: nada lá é ignorado por engano,
-  e o `-f` levou a `.venv` (1.399 arquivos) para o histórico — tirada antes do
-  push com `filter-branch`.
+- O Traefik do EasyPanel responde **101** em WebSocket mesmo sem serviço atrás,
+  e troca 502 do serviço pela tela "Service is not reachable".
+- O classificador de permissões bloqueia `updateComposeEnv` (env é o Erick que
+  cola). Deploy pelo MCP (`deployComposeService`) foi liberado em 15/10/2026.
+- **Nunca `git add -f`** em `escritoriohs/mapa/` (já levou a `.venv` ao histórico).
+- Agente em worktree nasce do commit **anterior** ao HEAD atual às vezes —
+  os três reposicionaram a branch no commit do plano; conferir a base.

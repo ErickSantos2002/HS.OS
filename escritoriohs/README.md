@@ -160,6 +160,18 @@ atrás.** Teste de WebSocket que só olha o 101 passa com tudo desligado.
 O `play` loga `MatrixProvider … Invalid URL` sem Matrix configurado — é ruído
 do WA, não erro nosso.
 
+⚠️ **Deploy do `wa` NÃO recarrega o `borda/nginx.conf`.** O Compose só recria
+o container cujo serviço mudou; a `borda` fica de pé com o arquivo montado
+antigo (o git troca o arquivo, e o bind mount continua no inode velho). Depois
+de mexer no nginx: `docker restart escritoriohs_wa-borda-1` na VPS e conferir
+com `docker exec escritoriohs_wa-borda-1 grep <linha nova> /etc/nginx/conf.d/default.conf`.
+
+⚠️ **"Service is not reachable" logo depois do login Microsoft** (URL
+`/openid-callback?code=…`) era o nginx recusando o cabeçalho grande da resposta
+do play (`upstream sent too big header` no log da `borda`) → 502, que o Traefik
+troca por essa tela. Metade dos logins falhava. Corrigido em 15/10/2026 com
+`proxy_buffer_size 64k` (o `testar-config.sh` exige).
+
 ## Entra — app EscritorioHS
 
 - App registration **EscritorioHS**, contas só deste diretório, redirect URI
