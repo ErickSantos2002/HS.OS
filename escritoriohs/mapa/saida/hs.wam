@@ -1,0 +1,725 @@
+{
+ "areas": [
+  {
+   "height": 384,
+   "id": "140e3bca-add4-4000-8000-e2efa76070f4",
+   "name": "Recepção",
+   "properties": [
+    {
+     "id": "4fee14e5-201c-4000-8000-ca15c72df6b7",
+     "isDefault": true,
+     "type": "start"
+    }
+   ],
+   "visible": true,
+   "width": 960,
+   "x": 672,
+   "y": 32
+  },
+  {
+   "height": 384,
+   "id": "9333ac19-985d-4000-8000-8c6a2f86b845",
+   "name": "Reunião 02",
+   "properties": [
+    {
+     "id": "372b6825-92c4-4000-8000-30bd449528fe",
+     "livekitRoomConfig": {
+      "startWithAudioMuted": false,
+      "startWithVideoMuted": true
+     },
+     "roomName": "Reunião 02",
+     "type": "livekitRoomProperty"
+    }
+   ],
+   "visible": true,
+   "width": 320,
+   "x": 1664,
+   "y": 32
+  },
+  {
+   "height": 384,
+   "id": "a3e913bf-98fa-4000-8000-bc50ba97d7c4",
+   "name": "Silenciosa",
+   "properties": [
+    {
+     "id": "a02d9655-52a0-4000-8000-839370ad6c4d",
+     "type": "silent"
+    }
+   ],
+   "visible": true,
+   "width": 288,
+   "x": 2016,
+   "y": 32
+  },
+  {
+   "height": 352,
+   "id": "4d8f9908-4af1-4000-8000-fbef3a14d0a8",
+   "name": "Reunião 01",
+   "properties": [
+    {
+     "id": "a96469ea-34b9-4000-8000-3ce68302efe0",
+     "livekitRoomConfig": {
+      "startWithAudioMuted": false,
+      "startWithVideoMuted": true
+     },
+     "roomName": "Reunião 01",
+     "type": "livekitRoomProperty"
+    }
+   ],
+   "visible": true,
+   "width": 640,
+   "x": 32,
+   "y": 608
+  },
+  {
+   "height": 192,
+   "id": "9ce95cb5-29ec-4000-8000-03f70d598317",
+   "name": "Financeiro 02",
+   "properties": [
+    {
+     "id": "ea5bd42b-f0f9-4000-8000-c913b2f665f2",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "e5d80197-a1d7-4000-8000-5cec50cc5373",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 704,
+   "y": 608
+  },
+  {
+   "height": 192,
+   "id": "95e485ce-e780-4000-8000-796873cea710",
+   "name": "RH",
+   "properties": [
+    {
+     "id": "60611ff7-6f3f-4000-8000-9a11a3e6d914",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "efbbfe7f-6fab-4000-8000-5a77658a93cb",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 928,
+   "y": 608
+  },
+  {
+   "height": 192,
+   "id": "647cb6de-6551-4000-8000-c87f0ea5dd29",
+   "name": "Financeiro 01",
+   "properties": [
+    {
+     "id": "03adc11e-9797-4000-8000-a9c928f626ee",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "3e8f9f22-89c4-4000-8000-fe3e048f1112",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 928,
+   "y": 832
+  },
+  {
+   "height": 192,
+   "id": "43c97f71-fef1-4000-8000-89cc2e742081",
+   "name": "Suporte 01",
+   "properties": [
+    {
+     "id": "cd5b834e-e701-4000-8000-3691d2e54cc5",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "6cd71b11-069b-4000-8000-16653ec32e92",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 32,
+   "y": 992
+  },
+  {
+   "height": 192,
+   "id": "3d62feb6-c746-4000-8000-dbeead636609",
+   "name": "Suporte 02",
+   "properties": [
+    {
+     "id": "872cd4c3-068f-4000-8000-dfaef9127d11",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "d3f371c4-3192-4000-8000-01298167226d",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 256,
+   "y": 992
+  },
+  {
+   "height": 192,
+   "id": "f98d7219-8435-4000-8000-54573a060ab1",
+   "name": "Suporte 03",
+   "properties": [
+    {
+     "id": "cbb72400-256a-4000-8000-43036e0cca18",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "effed0a3-f4be-4000-8000-aef1b9da29f0",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 480,
+   "y": 992
+  },
+  {
+   "height": 192,
+   "id": "4fbb351f-a75c-4000-8000-47b03e8210b0",
+   "name": "TI 01",
+   "properties": [
+    {
+     "id": "c51b30b7-41d3-4000-8000-3de408008b73",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "3bf90b19-65af-4000-8000-f39b22068379",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 32,
+   "y": 1408
+  },
+  {
+   "height": 192,
+   "id": "5665799d-cd40-4000-8000-9e9eb5e7f49b",
+   "name": "TI 02",
+   "properties": [
+    {
+     "id": "4ab43f60-9d4a-4000-8000-710885573691",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "e20e1449-7b03-4000-8000-43ce29079a0c",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 256,
+   "y": 1408
+  },
+  {
+   "height": 192,
+   "id": "4552e60e-bd51-4000-8000-75a8fddec708",
+   "name": "TI 03",
+   "properties": [
+    {
+     "id": "761f5da7-7cb4-4000-8000-60f377fed3b3",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "b1b6bdd7-b4d1-4000-8000-00da6f2d8043",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 480,
+   "y": 1408
+  },
+  {
+   "height": 192,
+   "id": "34ad8df6-98d4-4000-8000-abbc05dfdbb4",
+   "name": "Lab 01",
+   "properties": [
+    {
+     "id": "6468b85c-107d-4000-8000-5fbac07e7399",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "b8eaa5d5-a6e5-4000-8000-914d12242be7",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 32,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "d7e273c1-2726-4000-8000-b67429cdd3cd",
+   "name": "Lab 02",
+   "properties": [
+    {
+     "id": "d00c1cd9-0420-4000-8000-aad693eedfe1",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "93be0909-46e9-4000-8000-62ee68d3c69b",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 256,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "991966d4-bc9a-4000-8000-c54dd8070f8f",
+   "name": "Lab 03",
+   "properties": [
+    {
+     "id": "0451b10d-c108-4000-8000-1bf329a8ce68",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "b9b83c26-c1df-4000-8000-3d734c090d61",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 480,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "a7b3c622-6034-4000-8000-5921c92309b5",
+   "name": "Qualidade 01",
+   "properties": [
+    {
+     "id": "886fde39-6dca-4000-8000-3adb7d635a28",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "dd4d27d2-c8e7-4000-8000-9ef4b1e4e5e1",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 704,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "535fa616-47ac-4000-8000-af864699f0c3",
+   "name": "Qualidade 02",
+   "properties": [
+    {
+     "id": "6cc328aa-cff2-4000-8000-f61113cef16b",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "ce34f820-9b51-4000-8000-98d370a05dd3",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 928,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "5bbaa1b3-ee7d-4000-8000-4c1a32b424c0",
+   "name": "Expedição 01",
+   "properties": [
+    {
+     "id": "20f7fe42-62ea-4000-8000-21bc4aab31b5",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "0ed5d341-9f25-4000-8000-5bbe7eab42db",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 224,
+   "x": 1152,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "c6b81ee8-88a0-4000-8000-4baf37fb66fe",
+   "name": "Expedição 02",
+   "properties": [
+    {
+     "id": "7c83c422-b4af-4000-8000-7a66922873e6",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "86d1b547-b181-4000-8000-1d20037a6614",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 224,
+   "x": 1408,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "013a0cb0-b9fb-4000-8000-130da6d9e6b8",
+   "name": "Comercial 01",
+   "properties": [
+    {
+     "id": "ecdb1392-37dc-4000-8000-89afc2a17c93",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "01bfb809-3c46-4000-8000-04957e199481",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1664,
+   "y": 608
+  },
+  {
+   "height": 192,
+   "id": "9cf5f562-272e-4000-8000-a244996b506e",
+   "name": "Comercial 02",
+   "properties": [
+    {
+     "id": "ccf189ff-e916-4000-8000-91be9fcb2096",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "bb82e106-eba7-4000-8000-92f1db9bd3a8",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1888,
+   "y": 608
+  },
+  {
+   "height": 192,
+   "id": "ab1a304e-a5b5-4000-8000-a8bbc3a7c679",
+   "name": "Comercial 03",
+   "properties": [
+    {
+     "id": "048b42e3-50d3-4000-8000-40dd1d3fe320",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "464b7a86-4d7d-4000-8000-d4f3d7902b5e",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 2112,
+   "y": 608
+  },
+  {
+   "height": 192,
+   "id": "3718fe6f-3663-4000-8000-b3534aef157b",
+   "name": "Comercial 04",
+   "properties": [
+    {
+     "id": "2e49bbab-daf6-4000-8000-9e0b317b3d8e",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "7d27d723-85a0-4000-8000-80ab55ca7913",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1664,
+   "y": 992
+  },
+  {
+   "height": 192,
+   "id": "90c11ecb-27da-4000-8000-3f8a12ad11dc",
+   "name": "Comercial 05",
+   "properties": [
+    {
+     "id": "659d9e84-250b-4000-8000-f61f17d52979",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "c5cda420-21e2-4000-8000-fac0edb3c8dd",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1888,
+   "y": 992
+  },
+  {
+   "height": 192,
+   "id": "09c5cad7-1953-4000-8000-80e26e95f6d6",
+   "name": "Comercial 06",
+   "properties": [
+    {
+     "id": "0b08f485-cbea-4000-8000-06574aed6007",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "63d06013-e34e-4000-8000-34f498d08f4b",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 2112,
+   "y": 992
+  },
+  {
+   "height": 320,
+   "id": "656ccecc-e7e1-4000-8000-0784cb6eca2a",
+   "name": "Diretoria",
+   "properties": [
+    {
+     "id": "01127e7c-576d-4000-8000-803fa454e5dc",
+     "type": "lockableAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 640,
+   "x": 1664,
+   "y": 1216
+  },
+  {
+   "height": 192,
+   "id": "f5bb008f-3acb-4000-8000-8efbfae94f4d",
+   "name": "Comercial 07",
+   "properties": [
+    {
+     "id": "c1c874e3-c614-4000-8000-49cf3758da20",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "7b14d500-9be5-4000-8000-daebdb5c7cdf",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1664,
+   "y": 1568
+  },
+  {
+   "height": 192,
+   "id": "ae926ace-e152-4000-8000-36847a074619",
+   "name": "Comercial 08",
+   "properties": [
+    {
+     "id": "20a7a437-6df8-4000-8000-5a65b9ce01cc",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "75d63175-8440-4000-8000-4c29280f9fc9",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1888,
+   "y": 1568
+  },
+  {
+   "height": 192,
+   "id": "cd5cbd89-26b2-4000-8000-447bc3a57ed3",
+   "name": "Comercial 09",
+   "properties": [
+    {
+     "id": "1d1e53d4-0c7a-4000-8000-034a06fa87ac",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "d2f93de7-0add-4000-8000-4f15c81a1fc5",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 2112,
+   "y": 1568
+  },
+  {
+   "height": 192,
+   "id": "c814e4f3-c456-4000-8000-a1f5b2a053d6",
+   "name": "Comercial 10",
+   "properties": [
+    {
+     "id": "12f2afcf-d60d-4000-8000-f1e07dd76435",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "ae1e66c9-6e05-4000-8000-4161bedd2e5b",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1664,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "1e667624-16c3-4000-8000-491c89b2fb03",
+   "name": "Comercial 11",
+   "properties": [
+    {
+     "id": "9a81080e-df04-4000-8000-b1ced5880a6a",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "6d35173a-900e-4000-8000-b8afb184a4c7",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1888,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "05319497-04a6-4000-8000-ce9fcf0570b6",
+   "name": "Comercial 12",
+   "properties": [
+    {
+     "id": "06d7f37c-5982-4000-8000-00b50a7ab2d0",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "001a35f6-de2f-4000-8000-0ea93cda89b9",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 2112,
+   "y": 1984
+  }
+ ],
+ "entities": {},
+ "entityCollections": [
+  {
+   "type": "file",
+   "url": "https://escritoriohs.healthsafetytech.com/collections/FurnitureCollection.json"
+  },
+  {
+   "type": "file",
+   "url": "https://escritoriohs.healthsafetytech.com/collections/OfficeCollection.json"
+  }
+ ],
+ "lastCommandId": "8e7fe188-9949-4000-8000-3b237c999dab",
+ "mapUrl": "./hs.tmj",
+ "metadata": {
+  "copyright": "Blocos: WorkAdventure (CC-BY-SA 3.0). Planta: Health & Safety.",
+  "description": "Escritório virtual da Health & Safety",
+  "name": "EscritorioHS"
+ },
+ "version": "2.1.0"
+}
