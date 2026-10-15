@@ -12,6 +12,33 @@ if [ "$alvo" = midia ] || [ "$alvo" = tudo ]; then
   # LiveKit responde "OK" na raiz, passando pelo Traefik do EasyPanel e pela borda.
   [ "$(curl -s -m 10 https://livekit.healthsafetytech.com/)" = "OK" ] \
     && ok "LiveKit atrás do domínio" || falha "LiveKit atrás do domínio"
+  # TURN de verdade, rodado NA VPS com o segredo do midia.env (nada é impresso):
+  # alocação autenticada em UDP e em TCP, relay para fora funcionando e relay
+  # para dentro (bridge, o próprio host, loopback) recusado. STUN sozinho dava
+  # verde com segredo errado e com alocação quebrada.
+  turn=$(ssh -o BatchMode=yes root@62.72.11.28 'set -a; . /etc/escritoriohs/midia.env; set +a
+    teste() { timeout 25 docker run --rm --network host -e S="$TURN_STATIC_AUTH_SECRET" coturn/coturn:4.17.2-r0 \
+      sh -c "turnutils_uclient $1 -W \"\$S\" -u verificar -n 1 -m 1 -l 100 -e $2 -r 53 62.72.11.28" 2>&1; }
+    teste "" 1.1.1.1   | grep -q "wrong length" && echo udp-ok
+    teste -t 1.1.1.1   | grep -q "wrong length" && echo tcp-ok
+    # 508 = faixa de relay esgotada: cada teste prende uma porta por 10 min.
+    for alvo in 172.18.0.1 62.72.11.28 127.0.0.1; do r=$(teste "" $alvo)
+      echo "$r" | grep -q "error 403" && echo "nega-$alvo"; echo "$r" | grep -q "error 508" && echo esgotado; done
+    # Os segredos da mídia têm que ser os mesmos que o WA recebeu do EasyPanel.
+    h() { printf %s "$1" | sha256sum | cut -c1-16; }
+    [ "$(h "$LIVEKIT_API_SECRET")" = "$(h "$(docker exec escritoriohs_wa-back-1 printenv LIVEKIT_API_SECRET)")" ] && echo lk-igual
+    [ "$(h "$LIVEKIT_API_KEY")" = "$(h "$(docker exec escritoriohs_wa-back-1 printenv LIVEKIT_API_KEY)")" ] && echo lkkey-igual
+    [ "$(h "$TURN_STATIC_AUTH_SECRET")" = "$(h "$(docker exec escritoriohs_wa-play-1 printenv TURN_STATIC_AUTH_SECRET)")" ] && echo turn-igual' 2>/dev/null)
+  for marca in udp-ok tcp-ok; do
+    echo "$turn" | grep -qx "$marca" && ok "TURN aloca e faz relay (${marca%-ok})" || falha "TURN aloca e faz relay (${marca%-ok})"
+  done
+  for alvo in 172.18.0.1 62.72.11.28 127.0.0.1; do
+    echo "$turn" | grep -qx "nega-$alvo" && ok "TURN recusa relay para $alvo" || falha "TURN recusa relay para $alvo"
+  done
+  echo "$turn" | grep -qx esgotado && falha "faixa de relay do Coturn ESGOTADA (508) — ver README, Mídia"
+  echo "$turn" | grep -qx lk-igual && echo "$turn" | grep -qx lkkey-igual \
+    && ok "chaves do LiveKit iguais na mídia e no WA" || falha "chaves do LiveKit iguais na mídia e no WA"
+  echo "$turn" | grep -qx turn-igual && ok "segredo do TURN igual na mídia e no WA" || falha "segredo do TURN igual na mídia e no WA"
   # STUN: o Coturn responde a um binding request vindo de fora.
   docker run --rm --network host coturn/coturn:4.17.2-r0 turnutils_stunclient -p 3478 62.72.11.28 2>&1 \
     | grep -q "UDP reflexive addr" && ok "Coturn responde STUN" || falha "Coturn responde STUN"

@@ -1,6 +1,7 @@
 # WorkAdventure no EasyPanel (serviço Compose do projeto `escritoriohs`).
 # Origem: contrib/docker/docker-compose.prod.yaml do WA, sem o Traefik deles —
 # o roteamento por caminho está em borda/nginx.conf. Ver escritoriohs/README.md.
+# ⚠️ Esta VPS hospeda os bancos da empresa: todo serviço tem teto de memória.
 services:
   borda:
     image: nginx:1.27-alpine
@@ -8,6 +9,9 @@ services:
       - ./borda/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on: [play, back, map-storage, uploader, icon]
     restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 128m }
 
   play:
     image: thecodingmachine/workadventure-play:${VERSION}
@@ -49,6 +53,9 @@ services:
       - LIVEKIT_API_SECRET
       - SECURITY_EMAIL
     restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 1536m }
 
   back:
     image: thecodingmachine/workadventure-back:${VERSION}
@@ -69,6 +76,9 @@ services:
       - LIVEKIT_API_KEY
       - LIVEKIT_API_SECRET
     restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 1g }
 
   uploader:
     image: thecodingmachine/workadventure-uploader:${VERSION}
@@ -78,16 +88,29 @@ services:
       - REDIS_PORT=6379
       - ENABLE_CHAT_UPLOAD=false
     restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 256m }
 
   icon:
     image: matthiasluedtke/iconserver:v3.21.0
     restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 128m }
 
   redis:
     image: redis:6
+    # Teto antes do teto do container: sem ele o redis cresce até o kernel
+    # matá-lo. noeviction = escrita recusada quando cheio, em vez de jogar fora
+    # estado do WA em silêncio.
+    command: ["redis-server", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
     volumes:
       - redisdata:/data
     restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 640m }
 
   map-storage:
     image: thecodingmachine/workadventure-map-storage:${VERSION}
@@ -103,6 +126,9 @@ services:
     volumes:
       - map-storage-data:/maps
     restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 512m }
 
 volumes:
   redisdata:

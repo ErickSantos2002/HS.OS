@@ -937,8 +937,8 @@ Compose `wa`) e da mídia — LiveKit + Coturn em rede do host,
 Sub-projeto A no ar; B (ligação com o HS.OS) e C (agentes no escritório) a seguir.
 
 ⚠️ **O firewall que vale é o do hPanel da Hostinger, não o da máquina.** O
-`ufw` está inativo; quem bloqueava todo UDP era o painel. E testar porta do IP
-do escritório engana: ele está liberado para todo o TCP.
+`ufw` está inativo; quem bloqueava todo UDP era o painel. E testar porta de
+dentro da empresa engana: alguns IPs dela têm regra própria no painel.
 
 ⚠️ **`MAP_EDITOR_ALLOWED_USERS` é ignorada quando existe Admin API.** O
 sub-projeto B, ao ligar a Admin API, tem que levar a permissão do editor junto

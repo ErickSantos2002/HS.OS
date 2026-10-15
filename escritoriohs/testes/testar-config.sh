@@ -28,7 +28,31 @@ proibe .env.example '^MATRIX_' "sem Matrix"
 # Repo público: o exemplo não pode carregar segredo.
 proibe .env.example '^(SECRET_KEY|OPENID_CLIENT_SECRET|LIVEKIT_API_SECRET|TURN_STATIC_AUTH_SECRET|MAP_STORAGE_AUTHENTICATION_TOKEN|ROOM_API_SECRET_KEY)=.+' "nenhum segredo preenchido no .env.example"
 
+# TURN sem ?transport= faz o navegador alocar só por UDP: o recuo TCP 3478 nunca
+# era usado, e quem está em rede sem UDP ficava sem vídeo em bolha de até 4.
+exige .env.example '^TURN_SERVER=.*transport=udp.*transport=tcp' "TURN oferece UDP e TCP"
+# A ligação WA → LiveKit: sem estas no `back`, sala com mais de 4 fica sem vídeo
+# e o load-test do LiveKit continua verde (ele não passa pelo WA).
+for v in LIVEKIT_HOST LIVEKIT_API_KEY LIVEKIT_API_SECRET MAX_USERS_FOR_WEBRTC; do
+  awk '/^  back:/{f=1;next} /^  [a-z-]+:$/{f=0} f' docker-compose.yml | grep -q -- "- $v\$" \
+    && echo "ok   back recebe $v" || { echo "FALHA back recebe $v"; falhas=$((falhas+1)); }
+done
+# VPS dos bancos: nenhum serviço do WA sem teto de memória.
+for svc in borda play back uploader icon redis map-storage; do
+  awk -v s="  $svc:" '$0==s{f=1;next} /^  [a-z-]+:$/{f=0} f' docker-compose.yml | grep -q 'memory:' \
+    && echo "ok   $svc com teto de memória" || { echo "FALHA $svc com teto de memória"; falhas=$((falhas+1)); }
+done
+exige docker-compose.yml 'maxmemory' "redis com maxmemory"
+# Upload de áudio do uploader não exige autenticação no WA v1.33.11.
+exige borda/nginx.conf 'location /uploader/upload-audio-message \{ return 403; \}' "upload anônimo de áudio fechado"
+# Nome literal no proxy_pass é resolvido uma vez no boot: play recriado com IP
+# novo deixaria a borda dando 502.
+exige borda/nginx.conf '^\s*resolver 127\.0\.0\.11' "borda resolve nomes a cada request (DNS do Docker)"
+proibe borda/nginx.conf 'proxy_pass http://(play|back|uploader|icon|map-storage):' "borda sem upstream com nome fixo"
+
 if [ -d midia ]; then
+  # allowed-peer-ip tem precedência sobre denied-peer-ip: reabriria uma faixa.
+  proibe midia/turnserver.conf '^allowed-peer-ip' "coturn sem allowed-peer-ip"
   # Coturn sem denied-peer-ip vira túnel para os bancos da VPS.
   for faixa in '0.0.0.0-0.255.255.255' '10.0.0.0-10.255.255.255' '127.0.0.0-127.255.255.255' \
                '169.254.0.0-169.254.255.255' '172.16.0.0-172.31.255.255' '192.168.0.0-192.168.255.255'; do
@@ -55,6 +79,11 @@ if [ -d midia ]; then
   # "chave: segredo" tem espaço: sem aspas, quem faz `. midia.env` executa o
   # segredo como comando e o imprime no erro (aconteceu em 15/10/2026).
   exige midia/instalar.sh 'echo "LIVEKIT_KEYS=\\"\$chave: \$segredo\\""' "LIVEKIT_KEYS entre aspas no midia.env"
+  # O navegador reserva relay para CADA conexão da bolha (e em UDP e TCP), mesmo
+  # sem precisar dele: 41 portas esgotaram com 3 testes (508, 15/10/2026).
+  minp=$(grep -oP '^min-port=\K[0-9]+' midia/turnserver.conf); maxp=$(grep -oP '^max-port=\K[0-9]+' midia/turnserver.conf)
+  [ -n "$minp" ] && [ -n "$maxp" ] && [ $((maxp - minp + 1)) -ge 500 ] \
+    && echo "ok   faixa de relay do coturn com 500+ portas" || { echo "FALHA faixa de relay do coturn com 500+ portas"; falhas=$((falhas+1)); }
   exige midia/turnserver.conf '^use-auth-secret$' "coturn por static secret"
   proibe midia/turnserver.conf '^static-auth-secret=' "segredo do coturn fora do arquivo"
   exige midia/docker-compose.yml 'livekit/livekit-server:v1\.13\.8' "LiveKit fixo"

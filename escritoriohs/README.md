@@ -54,7 +54,7 @@ Antes de commitar mudança de config: `escritoriohs/testes/testar-config.sh`.
 
 | # | teste | estado |
 |---|---|---|
-| 1 | Erick entra; conta de fora do `healthsafetytech.com` é recusada | ✅ entrada (15/10) · ⏳ recusa a testar |
+| 1 | Erick entra; conta de fora do diretório da HS é recusada (e decidir sobre convidados B2B) | ✅ entrada (15/10) · ⏳ recusa a testar |
 | 2 | duas pessoas no prédio conversam com vídeo | ✅ 15/10 — Erick, Welton e Rickelme numa bolha |
 | 3 | alguém no **4G** conversa com alguém de dentro (exercita o Coturn) | ⏳ |
 | 4 | **seis pessoas** numa sala com vídeo; HS.OS respondendo durante | ✅ servidor (carga 6×6 de fora: 36/36 trilhas, 0,29% perda) · ⏳ com pessoas |
@@ -76,10 +76,9 @@ firewall do hPanel (VPS → Segurança → Firewall), que termina em `Drop Any`.
 O `tcpdump` não via o pacote chegar na `eth0` — é assim que se distingue.
 
 ⚠️ **Testar porta a partir do escritório engana.** O firewall da Hostinger
-libera **todo o TCP** para quatro IPs, e o do escritório (`187.21.12.34`) é um
-deles: o TCP 7881 "passou" no primeiro teste só por isso. Para quem está em
-casa ou no 4G ele estava fechado. Conferir porta sempre de um IP fora dessa
-lista, ou pela regra no painel.
+tem regras próprias para alguns IPs da empresa, e um teste que sai de um deles
+passa onde quem está em casa ou no 4G seria bloqueado. Conferir porta sempre de
+um IP de fora, ou pela regra no painel.
 
 Regras de entrada abertas para o escritório (fonte `Any`), acima do `Drop`:
 
@@ -88,7 +87,7 @@ Regras de entrada abertas para o escritório (fonte `Any`), acima do `Drop`:
 | UDP | 50000:50100 | mídia do LiveKit |
 | UDP | 3478 | Coturn |
 | TCP | 3478 | Coturn, recuo |
-| UDP | 49160:49200 | relay do Coturn |
+| UDP | 49160:49999 | relay do Coturn (840 portas — ver abaixo) |
 | TCP | 7881 | LiveKit, recuo |
 
 ⚠️ **`createComposeService` do MCP do EasyPanel com `source` e `domains` na
@@ -134,6 +133,12 @@ número que vale é o da carga vinda de fora, pelo domínio:
 | perda de pacotes | 5,8% | **0,29%** |
 | CPU do LiveKit | 150–196% | **pico de 123% ao conectar; 20–37% em regime** |
 
+⚠️ **Faixa de relay do Coturn: 840 portas, não 41.** Com TURN configurado, o
+navegador reserva relay para **cada conexão da bolha**, em UDP e em TCP, mesmo
+quando não vai precisar — e cada reserva prende uma porta por até 10 min. A
+faixa inicial (49160–49200) esgotou com três testes (`error 508`, 15/10/2026).
+O `verificar.sh` acusa "ESGOTADA" se voltar a acontecer.
+
 ## WorkAdventure no EasyPanel
 
 Projeto `escritoriohs`, serviço Compose `wa`, fonte Git (pasta `/escritoriohs`).
@@ -158,8 +163,11 @@ do WA, não erro nosso.
 - App registration **EscritorioHS**, contas só deste diretório, redirect URI
   `https://escritoriohs.healthsafetytech.com/openid-callback`.
 - **Sem grupo, por decisão (15/10/2026): a empresa inteira acessa.** Quem barra
-  é o app ser single-tenant — conta de fora do `healthsafetytech.com` é recusada
-  pela Microsoft. Por isso **"Assignment required" fica em No**: em Yes, sem
+  é o app ser single-tenant: só entra quem existe no diretório da HS. ⚠️ Isso
+  inclui **convidados (B2B)** — gente de fora convidada para um Teams ou
+  SharePoint da HS — e contas de serviço/caixas compartilhadas habilitadas. Se
+  o diretório tiver convidados e eles não devem entrar, o caminho é
+  "Assignment required = Yes" com um grupo dinâmico só de membros. Por isso **"Assignment required" fica em No**: em Yes, sem
   ninguém atribuído, a Microsoft recusaria todo mundo.
 - Client secret com a validade máxima do portal (24 meses → **vence por volta de
   15/10/2028**). Quando vencer, ninguém entra e o erro é da Microsoft: gerar outro

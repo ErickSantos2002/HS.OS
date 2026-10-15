@@ -88,7 +88,8 @@ neste app; dá para revogar o escritório sem tocar no login do HS.OS.
 - `DISABLE_ANONYMOUS=true` — sem login, não entra
 - ~~Atribuição obrigatória por grupo~~ — **revisto em 15/10/2026: a empresa
   inteira acessa**, sem grupo; "Assignment required" = No. Quem barra é o app
-  ser single-tenant (só contas `@healthsafetytech.com`).
+  ser single-tenant (só quem existe no diretório da HS — ⚠️ inclusive convidados
+  B2B; ver `escritoriohs/README.md`).
 
 **Nome do avatar: `OPENID_WOKA_NAME_POLICY=force_opid`.** O nome vem da conta
 Microsoft e a pessoa não muda. Num escritório de trabalho, saber quem é quem
@@ -134,7 +135,7 @@ inútil, desligá-lo.
 - `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET` gerados na instalação; só `back` e
   `play` os conhecem.
 
-**Coturn** (rede do host): `3478` (UDP e TCP), relay em `49160–49200/udp`,
+**Coturn** (rede do host): `3478` (UDP e TCP), relay em `49160–49999/udp`,
 autenticação por **static secret** (`TURN_STATIC_AUTH_SECRET`, credencial com
 validade), não usuário e senha fixos. Sem TLS na 5349 no começo — a mídia já
 vai cifrada pelo WebRTC; TLS no TURN só ajuda quem está atrás de firewall que
