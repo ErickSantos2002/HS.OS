@@ -3,6 +3,64 @@
 Spec: `docs/superpowers/specs/2026-10-15-escritorio-virtual-design.md`.
 Plano: `docs/superpowers/plans/2026-10-15-escritorio-virtual-a.md`.
 
+**EscritorioHS** é o escritório virtual da HS: WorkAdventure em
+`https://escritoriohs.healthsafetytech.com`, login com a conta Microsoft da
+empresa. Esta pasta não é código do HS.OS — é a config do que roda na VPS.
+
+## O que roda onde
+
+| peça | onde | como sobe |
+|---|---|---|
+| `borda` (nginx), `play`, `back`, `map-storage`, `uploader`, `icon`, `redis` | EasyPanel, projeto `escritoriohs`, serviço Compose `wa` (fonte: este repo, pasta `/escritoriohs`) | deploy no EasyPanel |
+| LiveKit (vídeo acima de 4 pessoas) | VPS, rede do host, `/opt/escritoriohs/midia` | `escritoriohs-midia.service` |
+| Coturn (relay para rede restrita) | idem | idem |
+| backup dos mapas | VPS, `/opt/escritoriohs/backup` → R2 | `escritoriohs-backup.timer` |
+
+Domínios (os dois para a `borda`, porta 80): `escritoriohs.healthsafetytech.com`
+e `livekit.healthsafetytech.com`. VPS: `62.72.11.28` (Hostinger, `srv815732`).
+
+## Segredos — onde mora cada um (nenhum no git)
+
+| segredo | onde |
+|---|---|
+| `OPENID_CLIENT_SECRET` (+ client id) | EasyPanel → `escritoriohs/wa` → Environment |
+| `SECRET_KEY`, `MAP_STORAGE_API_TOKEN`, `MAP_STORAGE_AUTHENTICATION_TOKEN`, `ROOM_API_SECRET_KEY` | idem (gerados uma vez) |
+| `LIVEKIT_API_KEY/SECRET`, `TURN_STATIC_AUTH_SECRET` | `/etc/escritoriohs/midia.env` na VPS **e** copiados no EasyPanel — trocar num lugar exige trocar no outro |
+| credenciais do R2 do backup | `/etc/escritoriohs/backup.env` na VPS |
+
+## Quando algo falhar
+
+| falha | o que a pessoa vê | onde olhar |
+|---|---|---|
+| LiveKit fora | sala com mais de 4 sem vídeo; bolhas de até 4 seguem | `systemctl status escritoriohs-midia`, `docker logs midia-livekit-1` |
+| Coturn fora | só quem está em rede restrita (4G, hotel) perde vídeo | `docker logs midia-coturn-1` |
+| UDP bloqueado | ninguém de fora tem vídeo | firewall do **hPanel** (não o da máquina) — ver Validações |
+| Microsoft recusa | não entra; erro `AADSTS…` | secret vencido (≈ 15/10/2028); app no Entra |
+| `play` fora | o escritório não abre; o HS.OS segue normal | logs do serviço `wa` no EasyPanel |
+
+Conferência geral, de qualquer máquina: `escritoriohs/testes/verificar.sh tudo`.
+Antes de commitar mudança de config: `escritoriohs/testes/testar-config.sh`.
+
+## Atualizar versão
+
+- **WorkAdventure:** ler o `UPGRADE.md` deles entre a versão atual e a nova,
+  trocar `VERSION` no Environment do EasyPanel (e no `.env.example`), deploy,
+  `verificar.sh tudo`. Nunca `latest`.
+- **LiveKit/Coturn:** trocar a tag em `midia/docker-compose.yml` (e no
+  `testar-config.sh`, que exige a versão), `scp` para `/opt/escritoriohs/midia/`,
+  `docker compose pull && docker compose up -d` lá.
+
+## Aceite (sub-projeto A)
+
+| # | teste | estado |
+|---|---|---|
+| 1 | Erick entra; conta de fora do `healthsafetytech.com` é recusada | ✅ entrada (15/10) · ⏳ recusa a testar |
+| 2 | duas pessoas no prédio conversam com vídeo | ✅ 15/10 — Erick, Welton e Rickelme numa bolha |
+| 3 | alguém no **4G** conversa com alguém de dentro (exercita o Coturn) | ⏳ |
+| 4 | **seis pessoas** numa sala com vídeo; HS.OS respondendo durante | ✅ servidor (carga 6×6 de fora: 36/36 trilhas, 0,29% perda) · ⏳ com pessoas |
+| 5 | só o Erick vê o editor de mapa | ⏳ perguntar a outra conta se vê o botão "Mapa" |
+| — | chat da bolha sem Matrix | ⏳ |
+
 ## Validações de 15/10/2026
 
 | pergunta | resposta | como foi medido |

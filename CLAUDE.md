@@ -71,6 +71,7 @@ backend/
   migrations/      000 compat · 001 schema · 002 auth própria
   supabase/        as 73 Edge Functions: fonte da portagem, não código que roda
 docs/              roadmap, deploy, auditoria herdada
+escritoriohs/      EscritorioHS (WorkAdventure): config do EasyPanel e da mídia na VPS
 scripts/           túnel SSH para o OpenClaw
 docker-compose.yml backend:8002 + frontend:80
 ```
@@ -925,6 +926,27 @@ agente contradizer os próprios arquivos, que os citam nominalmente.
 e `skill_workshop` negados — foi o que me fez concluir que o escopo nunca tinha
 sido aplicado. Para ler o que está declarado, use `config.get`; para saber o que
 o agente **enxerga**, pergunte a ele.
+
+### EscritorioHS — escritório virtual (WorkAdventure), 15/10/2026
+
+`escritoriohs/` **não é código do HS.OS**: é a config do WorkAdventure em
+`escritoriohs.healthsafetytech.com` (EasyPanel, projeto `escritoriohs`, serviço
+Compose `wa`) e da mídia — LiveKit + Coturn em rede do host,
+`escritoriohs-midia.service`. Operação, segredos e aceite em
+`escritoriohs/README.md`; spec e plano em `docs/superpowers/` (2026-10-15).
+Sub-projeto A no ar; B (ligação com o HS.OS) e C (agentes no escritório) a seguir.
+
+⚠️ **O firewall que vale é o do hPanel da Hostinger, não o da máquina.** O
+`ufw` está inativo; quem bloqueava todo UDP era o painel. E testar porta do IP
+do escritório engana: ele está liberado para todo o TCP.
+
+⚠️ **`MAP_EDITOR_ALLOWED_USERS` é ignorada quando existe Admin API.** O
+sub-projeto B, ao ligar a Admin API, tem que levar a permissão do editor junto
+— senão o editor abre para todos, sem erro.
+
+⚠️ **O Coturn mora na VPS dos bancos.** `denied-peer-ip` (inclusive o IP
+público do próprio host), `listening-ip`/`relay-ip` e `no-tcp-relay` são o que
+impede o relay de virar túnel para dentro; `testes/testar-config.sh` exige cada um.
 
 ## A regra dos sete arquivos
 
