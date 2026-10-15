@@ -2280,7 +2280,7 @@ export default function ChannelChat({
 
       {/* Files Panel */}
       <ChannelFilesPanel
-        channelId={channel.id}
+        endpoint={`/channels/${channel.id}/arquivos`}
         open={filesOpen}
         onClose={() => setFilesOpen(false)}
       />
