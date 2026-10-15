@@ -5,8 +5,9 @@
 set -u
 alvo="${1:-tudo}"
 falhas=0
-ok() { echo "ok   $1"; }
-falha() { echo "FALHA $1"; falhas=$((falhas+1)); }
+checagens=0
+ok() { echo "ok   $1"; checagens=$((checagens+1)); }
+falha() { echo "FALHA $1"; falhas=$((falhas+1)); checagens=$((checagens+1)); }
 
 if [ "$alvo" = midia ] || [ "$alvo" = tudo ]; then
   # LiveKit responde "OK" na raiz, passando pelo Traefik do EasyPanel e pela borda.
@@ -32,8 +33,10 @@ if [ "$alvo" = midia ] || [ "$alvo" = tudo ]; then
   for marca in udp-ok tcp-ok; do
     echo "$turn" | grep -qx "$marca" && ok "TURN aloca e faz relay (${marca%-ok})" || falha "TURN aloca e faz relay (${marca%-ok})"
   done
-  for alvo in 172.18.0.1 62.72.11.28 127.0.0.1; do
-    echo "$turn" | grep -qx "nega-$alvo" && ok "TURN recusa relay para $alvo" || falha "TURN recusa relay para $alvo"
+  # ⚠️ Não use `alvo` aqui: é o modo do script, e sobrescrevê-lo fazia o bloco
+  # `wa` ser pulado em silêncio no "tudo" (15/10/2026).
+  for destino in 172.18.0.1 62.72.11.28 127.0.0.1; do
+    echo "$turn" | grep -qx "nega-$destino" && ok "TURN recusa relay para $destino" || falha "TURN recusa relay para $destino"
   done
   echo "$turn" | grep -qx esgotado && falha "faixa de relay do Coturn ESGOTADA (508) — ver README, Mídia"
   echo "$turn" | grep -qx lk-igual && echo "$turn" | grep -qx lkkey-igual \
@@ -68,4 +71,7 @@ if [ "$alvo" = wa ] || [ "$alvo" = tudo ]; then
   roteado /api/ && ok "back roteado" || falha "back roteado"
 fi
 
-echo; [ "$falhas" -eq 0 ] && echo "tudo certo" || { echo "$falhas falha(s)"; exit 1; }
+# Conta o que rodou: um bloco pulado em silêncio também é falso verde.
+esperado=$(case "$alvo" in midia) echo 9;; wa) echo 5;; *) echo 14;; esac)
+[ "$checagens" -eq "$esperado" ] || falha "rodaram $checagens checagens, esperadas $esperado"
+echo; [ "$falhas" -eq 0 ] && echo "tudo certo ($checagens checagens)" || { echo "$falhas falha(s)"; exit 1; }
