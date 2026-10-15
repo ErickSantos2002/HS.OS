@@ -63,4 +63,12 @@ if [ -d midia ]; then
   exige midia/livekit.yaml 'port_range_end: 50100' "faixa UDP termina em 50100"
 fi
 
+if [ -d backup ]; then
+  # O backup lê o volume dos mapas; montado sem :ro, um defeito no tar mexeria nele.
+  exige backup/backup-mapas.sh '"\$VOLUME":/maps:ro' "backup lê o volume só para leitura"
+  proibe backup/backup-mapas.sh ':latest' "backup sem imagem latest"
+  exige backup/backup-mapas.sh 'head -n -30' "backup mantém os 30 mais recentes"
+  exige backup/escritoriohs-backup.timer '^Persistent=true$' "backup perdido (VPS desligada) roda ao voltar"
+fi
+
 echo; [ "$falhas" -eq 0 ] && echo "tudo certo" || { echo "$falhas falha(s)"; exit 1; }
