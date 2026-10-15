@@ -247,7 +247,10 @@ def _wam(P):
                               "accessClaimMode": "static", "allowedTags": [], "ownerId": None})
             areas.append(_area(c.nome, x1, y1, x2, y2, props))
     return {"version": "2.1.0", "mapUrl": "./hs.tmj", "entities": {}, "areas": areas,
-            "entityCollections": [], "lastCommandId": _id("cmd", "inicial"),
+            # Os móveis que o editor do navegador oferece — sem isto ele abre vazio.
+            "entityCollections": [{"type": "file", "url": f"https://escritoriohs.healthsafetytech.com/collections/{n}.json"}
+                                  for n in ("FurnitureCollection", "OfficeCollection")],
+            "lastCommandId": _id("cmd", "inicial"),
             "metadata": {"name": "EscritorioHS", "description": "Escritório virtual da Health & Safety",
                          "copyright": "Blocos: WorkAdventure (CC-BY-SA 3.0). Planta: Health & Safety."}}
 

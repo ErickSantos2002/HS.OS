@@ -49,3 +49,20 @@ def test_placa_cabe_na_largura():
     for c in P.comodos:
         if c.placa:
             assert d.textlength(c.placa, font=fonte) <= 60, c.placa
+
+def test_editor_tem_a_colecao_de_moveis():
+    """Sem entityCollections o editor do navegador abre sem nada para arrastar."""
+    urls = {c["url"] for c in WAM["entityCollections"]}
+    assert any(u.endswith("/collections/FurnitureCollection.json") for u in urls)
+    assert any(u.endswith("/collections/OfficeCollection.json") for u in urls)
+
+def test_envio_preserva_objetos_postos_no_navegador():
+    """O Erick decora pelo editor (objetos = `entities` do .wam). O gerador manda
+    em paredes, salas e áreas; os objetos soltos são dele e sobrevivem ao envio."""
+    import mesclar
+    novo = {"areas": [{"id": "a"}], "entities": {}, "lastCommandId": "x"}
+    no_ar = {"areas": [{"id": "velha"}], "entities": {"e1": {"x": 64, "y": 96}}, "lastCommandId": "y"}
+    r = mesclar.mesclar(novo, no_ar)
+    assert r["entities"] == {"e1": {"x": 64, "y": 96}}
+    assert r["areas"] == [{"id": "a"}]            # áreas: sempre as do gerador
+    assert mesclar.mesclar(novo, None)["entities"] == {}   # primeiro envio: nada no ar
