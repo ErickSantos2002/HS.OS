@@ -38,3 +38,34 @@ mesma chamada falha** (`ENOENT … docker-compose.override.yml`) e deixa o servi
 criado pela metade, com o domínio já reservado. O que funciona: criar, depois
 `updateComposeSourceInline` (ou `updateComposeSourceGit`) e
 `deployComposeService` — os dois exigem `execute_destructive`.
+
+## Mídia — LiveKit e Coturn (rede do host)
+
+| o quê | onde |
+|---|---|
+| arquivos | `/opt/escritorio/midia/` (cópia de `escritorio/midia/`) |
+| segredos | `/etc/escritorio/midia.env` (root, `600`) — `LIVEKIT_KEYS`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`, `TURN_STATIC_AUTH_SECRET` |
+| serviço | `systemctl status escritorio-midia` |
+| logs | `docker logs -f midia-livekit-1` · `docker logs -f midia-coturn-1` |
+
+Atualizar config: editar em `escritorio/midia/`, `scp` para `/opt/escritorio/midia/`
+e `docker compose up -d --force-recreate` lá. **Trocar os segredos:** apagar o
+`midia.env` e rodar `instalar.sh` — e repor `LIVEKIT_API_*` e
+`TURN_STATIC_AUTH_SECRET` no EasyPanel, senão o WA para de falar com os dois.
+
+Onde cada porta escuta (conferido com `ss` em 15/10/2026):
+
+| porta | escuta em | por quê |
+|---|---|---|
+| 7880/tcp (API LiveKit) | `127.0.0.1`, `172.18.0.1` | só a `borda` (pela bridge) e o loopback |
+| 7881/tcp, 50000–50100/udp | todas | mídia de quem está fora |
+| 3478 (Coturn) | `62.72.11.28` | `listening-ip`/`relay-ip`: sem eles o relay saía pelas bridges do Docker |
+
+⚠️ **O `instalar.sh` gravou `LIVEKIT_KEYS` sem aspas na primeira versão.** O
+Docker lê certo, mas `. midia.env` executava o segredo como comando e o
+imprimia no erro. Corrigido (aspas) e os segredos foram regerados.
+
+⚠️ **Carga de 6×6 rodada DENTRO da VPS é inconclusiva.** O `lk load-test`
+gerando 6 câmeras e 6 espectadores no mesmo host disputa CPU com o LiveKit:
+deu 150–196% de CPU no LiveKit (teto de 2), 5,8% de perda e 26/36 trilhas. O
+número que vale é o da carga vinda de fora, pelo domínio.

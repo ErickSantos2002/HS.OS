@@ -9,7 +9,7 @@ if [ ! -f /etc/escritorio/midia.env ]; then
   chave="hs$(openssl rand -hex 6)"
   segredo="$(openssl rand -hex 32)"
   {
-    echo "LIVEKIT_KEYS=$chave: $segredo"
+    echo "LIVEKIT_KEYS=\"$chave: $segredo\""
     echo "LIVEKIT_API_KEY=$chave"
     echo "LIVEKIT_API_SECRET=$segredo"
     echo "TURN_STATIC_AUTH_SECRET=$(openssl rand -hex 32)"

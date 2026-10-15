@@ -45,6 +45,16 @@ if [ -d midia ]; then
   exige midia/turnserver.conf '^no-tcp-relay$' "coturn sem relay TCP"
   # Segredo na linha de comando aparece no `ps` de qualquer usuário do host.
   proibe midia/docker-compose.yml '--static-auth-secret' "segredo do coturn fora da linha de comando"
+  # Sem estas, o coturn escuta e escolhe relay em toda interface, inclusive as
+  # bridges do Docker ("NO EXPLICIT RELAY ADDRESS" no log de 15/10/2026).
+  exige midia/turnserver.conf '^listening-ip=62\.72\.11\.28$' "coturn escuta só no IP público"
+  exige midia/turnserver.conf '^relay-ip=62\.72\.11\.28$' "coturn faz relay só pelo IP público"
+  # A API do LiveKit só precisa atender a borda (pela bridge) e o loopback.
+  proibe midia/livekit.yaml '0\.0\.0\.0' "LiveKit não escuta em todas as interfaces"
+  exige midia/livekit.yaml '172\.18\.0\.1' "LiveKit escuta na bridge, para a borda"
+  # "chave: segredo" tem espaço: sem aspas, quem faz `. midia.env` executa o
+  # segredo como comando e o imprime no erro (aconteceu em 15/10/2026).
+  exige midia/instalar.sh 'echo "LIVEKIT_KEYS=\\"\$chave: \$segredo\\""' "LIVEKIT_KEYS entre aspas no midia.env"
   exige midia/turnserver.conf '^use-auth-secret$' "coturn por static secret"
   proibe midia/turnserver.conf '^static-auth-secret=' "segredo do coturn fora do arquivo"
   exige midia/docker-compose.yml 'livekit/livekit-server:v1\.13\.8' "LiveKit fixo"

@@ -2,7 +2,8 @@
 # As chaves chegam por LIVEKIT_KEYS (formato "chave: segredo"), de
 # /etc/escritorio/midia.env — não ficam neste arquivo, que é público.
 port: 7880
-bind_addresses: ["0.0.0.0"]
+# Só a borda (pela bridge do Swarm) e o loopback falam com a API.
+bind_addresses: ["127.0.0.1", "172.18.0.1"]
 rtc:
   tcp_port: 7881
   port_range_start: 50000
