@@ -1,0 +1,55 @@
+"""O que o gerador escreve é o que a pessoa vai andar. O teste de alcance é o
+que garante que ninguém nasce e não consegue entrar na própria sala."""
+import collections, hashlib, json, os, tempfile
+import gerar, modelo
+
+P = modelo.carregar("planta.json")
+G = gerar.grade(P)
+
+def _alcancaveis():
+    rec = next(c for c in P.comodos if c.tipo == "recepcao")
+    x1, y1, x2, y2 = rec.interior()
+    ini = ((x1 + x2) // 2, y2)
+    vistos, fila = {ini}, collections.deque([ini])
+    while fila:
+        x, y = fila.popleft()
+        for nx, ny in ((x+1, y), (x-1, y), (x, y+1), (x, y-1)):
+            if 0 <= nx < P.largura and 0 <= ny < P.altura and (nx, ny) not in vistos \
+                    and (nx, ny) not in G["bloqueado"]:
+                vistos.add((nx, ny)); fila.append((nx, ny))
+    return vistos
+
+def test_toda_sala_alcancavel_a_partir_da_recepcao():
+    alc = _alcancaveis()
+    for c in P.comodos:
+        x1, y1, x2, y2 = c.interior()
+        livres = {(x, y) for x in range(x1, x2+1) for y in range(y1, y2+1)} - G["bloqueado"]
+        assert livres & alc, f"{c.nome}: nenhuma célula do interior é alcançável da recepção"
+
+def test_porta_nao_e_parede():
+    for c in P.comodos:
+        for cel in c.celulas_porta():
+            assert cel not in G["parede"] and cel not in G["bloqueado"], (c.nome, cel)
+
+def test_borda_do_mapa_e_parede():
+    for x in range(P.largura):
+        assert (x, 0) in G["parede"] and (x, P.altura - 1) in G["parede"]
+    for y in range(P.altura):
+        assert (0, y) in G["parede"] and (P.largura - 1, y) in G["parede"]
+
+def test_gerar_duas_vezes_da_os_mesmos_bytes():
+    hashes = []
+    for _ in range(2):
+        with tempfile.TemporaryDirectory() as d:
+            gerar.gerar("planta.json", d)
+            hashes.append([hashlib.sha256(open(os.path.join(d, f), "rb").read()).hexdigest()
+                           for f in ("hs.tmj", "hs.wam", "placas.png")])
+    assert hashes[0] == hashes[1]
+
+def test_tmj_tem_as_dimensoes_e_camadas():
+    with tempfile.TemporaryDirectory() as d:
+        gerar.gerar("planta.json", d)
+        m = json.load(open(os.path.join(d, "hs.tmj")))
+    assert (m["width"], m["height"], m["tilewidth"]) == (P.largura, P.altura, 32)
+    nomes = [l["name"] for l in m["layers"]]
+    assert nomes == ["inicio", "colisao", "piso", "paredes", "moveis", "floorLayer", "acima"]
