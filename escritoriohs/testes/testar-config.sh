@@ -69,6 +69,11 @@ if [ -d backup ]; then
   proibe backup/backup-mapas.sh ':latest' "backup sem imagem latest"
   exige backup/backup-mapas.sh 'head -n -30' "backup mantém os 30 mais recentes"
   exige backup/escritoriohs-backup.timer '^Persistent=true$' "backup perdido (VPS desligada) roda ao voltar"
+  # Credencial no argv do `docker run` aparece no `ps` de qualquer usuário.
+  proibe backup/backup-mapas.sh '-e AWS_(SECRET_ACCESS_KEY|ACCESS_KEY_ID)=' "segredo do R2 fora da linha de comando"
+  # /tmp é compartilhado: o tar vai para um diretório privado (mktemp -d).
+  exige backup/backup-mapas.sh 'mktemp -d' "backup usa diretório temporário privado"
+  proibe backup/backup-mapas.sh '-v /tmp:' "backup não monta o /tmp inteiro"
 fi
 
 echo; [ "$falhas" -eq 0 ] && echo "tudo certo" || { echo "$falhas falha(s)"; exit 1; }

@@ -121,3 +121,28 @@ do WA, não erro nosso.
   `npm rebuild sharp`, `npm run buildmap`, e `npx upload-wa-map` com
   `MAP_STORAGE_URL`, `MAP_STORAGE_API_KEY` (= `MAP_STORAGE_AUTHENTICATION_TOKEN`),
   `UPLOAD_DIRECTORY` e `UPLOAD_MODE=MAP_STORAGE` no ambiente.
+
+## Backup dos mapas
+
+`escritoriohs-backup.timer` roda `/opt/escritoriohs/backup/backup-mapas.sh` todo dia
+às 03:30 UTC (00:30 de Brasília): tar do volume `escritoriohs_wa_map-storage-data`
+para `s3://hsos-arquivos/escritoriohs/backups/mapas-AAAA-MM-DD.tar.gz` no R2,
+mantendo os 30 mais recentes. Credenciais em `/etc/escritoriohs/backup.env` (600),
+gravadas por um script que lê as `R2_*` do backend do HS.OS sem imprimir.
+
+```bash
+systemctl list-timers escritoriohs-backup.timer      # próxima execução
+journalctl -u escritoriohs-backup.service -n 5       # "backup ok: … (N bytes)"
+```
+
+**Restaurar** (conferido em 15/10/2026: o `office.wam` baixado do R2 é idêntico
+ao do volume): baixar o `.tar.gz` com o `aws-cli` (mesmo `docker run` do
+script), parar o serviço `wa` no EasyPanel, extrair no volume
+(`docker run --rm -v escritoriohs_wa_map-storage-data:/maps -v <dir>:/r alpine tar xzf /r/<arquivo> -C /maps`)
+e subir o serviço de novo.
+
+⚠️ **O backup usa o mesmo token do R2 do backend do HS.OS**, que alcança o
+bucket `hsos-arquivos` inteiro. A exposição não aumenta — o backend roda nesta
+mesma VPS com o mesmo token —, mas o certo é um token próprio, limitado ao
+prefixo `escritoriohs/backups/` ou a um bucket separado. Pendente: criar no
+painel da Cloudflare e trocar em `/etc/escritoriohs/backup.env`.
