@@ -159,8 +159,9 @@ async def listas_vazias():
 
 
 async def _registrar(request: Request) -> Response:
-    corpo = (await request.body())[:2000]
-    logger.info("escritorio-wa: %s %s — %r", request.method, request.url.path, corpo)
+    # Só o tamanho: o corpo traz e-mails e o texto da denúncia, que não vão para o log.
+    tamanho = len(await request.body())
+    logger.info("escritorio-wa: %s %s — %d bytes", request.method, request.url.path, tamanho)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
