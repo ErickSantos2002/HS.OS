@@ -859,7 +859,7 @@ python3 -m pytest testes -q
 python3 gerar.py
 rm -rf saida/tilesets && cp -r tilesets saida/
 z=$(mktemp -d)/hs.zip
-(cd saida && zip -qr "$z" hs.tmj hs.wam placas.png tilesets)
+(cd saida && zip -qr "$z" hs.tmj hs.wam placas.png logo-hs.png tilesets)
 TOKEN=$(grep -oP '^MAP_STORAGE_AUTHENTICATION_TOKEN=\K.+' ~/escritoriohs.env)
 codigo=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
   -H "Authorization: Bearer $TOKEN" -H "X-Map-Storage-Host: escritoriohs.healthsafetytech.com" \
