@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checagens contra PRODUÇÃO, de fora da VPS. Uso: verificar.sh [midia|wa|tudo]
+# Checagens contra PRODUÇÃO, de fora da VPS. Uso: verificar.sh [midia|wa|admin|tudo]
 # Os testes que importam são os que NÃO passam por acaso: duas pessoas na
 # mesma rede conversam mesmo com LiveKit e Coturn quebrados.
 set -u
@@ -71,7 +71,19 @@ if [ "$alvo" = wa ] || [ "$alvo" = tudo ]; then
   roteado /api/ && ok "back roteado" || falha "back roteado"
 fi
 
+if [ "$alvo" = admin ] || [ "$alvo" = tudo ]; then
+  # Admin API do HS.OS (sub-projeto B), só leitura. `capabilities` tem que
+  # responder sem token e sem banco: o play não sobe enquanto ela falhar.
+  api=https://hsosapi.healthsafetytech.com/escritorio-wa
+  r=$(curl -s -m 10 -w ' %{http_code}' "$api/api/capabilities")
+  [ "$r" = "{} 200" ] && ok "Admin API: capabilities 200 {}" || falha "Admin API: capabilities 200 {} (veio: $r)"
+  # Sem token, `map` recusa. 200 aqui = Admin API aberta a qualquer um.
+  sala=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "https://escritoriohs.healthsafetytech.com/~/hs/hs.wam")
+  [ "$(curl -s -o /dev/null -w '%{http_code}' -m 10 "$api/api/map?playUri=$sala")" = 403 ] \
+    && ok "Admin API: map sem token é 403" || falha "Admin API: map sem token é 403"
+fi
+
 # Conta o que rodou: um bloco pulado em silêncio também é falso verde.
-esperado=$(case "$alvo" in midia) echo 9;; wa) echo 5;; *) echo 14;; esac)
+esperado=$(case "$alvo" in midia) echo 9;; wa) echo 5;; admin) echo 2;; *) echo 16;; esac)
 [ "$checagens" -eq "$esperado" ] || falha "rodaram $checagens checagens, esperadas $esperado"
 echo; [ "$falhas" -eq 0 ] && echo "tudo certo ($checagens checagens)" || { echo "$falhas falha(s)"; exit 1; }

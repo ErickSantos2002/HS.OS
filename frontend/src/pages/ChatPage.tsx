@@ -122,6 +122,8 @@ import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import MenuDaMensagem from "@/components/chat/MenuDaMensagem";
 import { copyToClipboard, hasActiveTextSelection } from "@/lib/clipboard";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
+import { NoEscritorioAgora } from "@/components/escritorio/NoEscritorioAgora";
+import { useEscritorioPresenca } from "@/hooks/use-escritorio-presenca";
 
 /** Strip markdown formatting for sidebar preview */
 function stripMarkdown(text: string): string {
@@ -661,6 +663,8 @@ export default function ChatPage() {
   const { agents, loading, error } = useAgents();
   const { channels, loading: channelsLoading, createChannel, joinChannel, refetch: refetchChannels } = useChannels();
   const { people, loading: peopleLoading } = usePeople();
+  // Uma busca só para as duas listas (desktop e celular). Spec 2026-10-15-escritoriohs-b.
+  const { presenca: presencaEscritorio, estaNoEscritorio } = useEscritorioPresenca();
   const { user, profile, role } = useAuthContext();
   const { peers: dmPeers, peerIdToChannelId } = useDmPeers(channels, user?.id);
   const { notifications, unreadByChannel, unreadByAgentOnly, unreadCount, markAsRead, markAllAsReadForChannel, markAllAsReadForAgent, setActiveChannel, setActiveAgent } = useNotificationsContext();
@@ -3106,6 +3110,8 @@ export default function ChatPage() {
                     )}
                   </>
                 ) : (
+                  <>
+                  <NoEscritorioAgora presenca={presencaEscritorio} />
                   <div className="mb-2 divide-y divide-border/40">
                   {loading && agents.length === 0 && (
                     <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-primary" /></div>
@@ -3170,7 +3176,12 @@ export default function ChatPage() {
                             </div>
                             <div className="min-w-0 flex-1 overflow-hidden">
                               <div className="flex items-center justify-between gap-2">
-                                <span className={`text-[15px] truncate ${hasUnread ? "font-bold text-foreground" : "font-semibold text-foreground"}`}>{person.full_name || person.email}</span>
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <span className={`text-[15px] truncate ${hasUnread ? "font-bold text-foreground" : "font-semibold text-foreground"}`}>{person.full_name || person.email}</span>
+                                  {estaNoEscritorio(person.email) && (
+                                    <span title="No escritório" aria-label="No escritório" className="text-sm leading-none shrink-0">🏢</span>
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-1.5 shrink-0">
                                   {isHumanTyping ? (
                                     <SidebarTypingDots />
@@ -3192,6 +3203,7 @@ export default function ChatPage() {
                     }
                   })}
                 </div>
+                  </>
                 )}
 
               </div>
@@ -3312,7 +3324,7 @@ export default function ChatPage() {
               </>
             ) : (
               <div className="mb-2">
-
+                <NoEscritorioAgora presenca={presencaEscritorio} />
 
                 {loading && agents.length === 0 && (
                   <div className="flex items-center justify-center py-4"><Loader2 className="h-3 w-3 animate-spin text-primary" /></div>
@@ -3399,6 +3411,9 @@ export default function ChatPage() {
                                     >
                                       {person.custom_status_emoji}
                                     </span>
+                                  )}
+                                  {estaNoEscritorio(person.email) && (
+                                    <span title="No escritório" aria-label="No escritório" className="text-sm leading-none shrink-0">🏢</span>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">

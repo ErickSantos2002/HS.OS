@@ -12,6 +12,8 @@ from app.auth.router import router as auth_router
 from app.config import settings
 from app.erros import instalar_tratamento_de_erros
 from app.escuta_banco import escutar
+from app.escritorio.log_sem_query import instalar as instalar_log_sem_query
+from app.escritorio.presenca import vigiar as vigiar_escritorio
 from app.coletor_metricas import rodar as rodar_metricas
 from app.coletor_uso import rodar as rodar_coletor
 from app.vigia_sessoes import rodar as rodar_vigia
@@ -29,6 +31,8 @@ from app.routers.channels import router as channels_router
 from app.routers.chat_extras import router as chat_extras_router
 from app.routers.recibos import router as recibos_router
 from app.routers.coletor import router as coletor_router
+from app.routers.escritorio import router as escritorio_router
+from app.routers.escritorio_wa import router as escritorio_wa_router
 from app.routers.conversations import router as conversations_router
 from app.routers.gateway import router as gateway_router
 from app.routers.llm import router as llm_router
@@ -87,16 +91,24 @@ async def lifespan(app: FastAPI):
     parar_metricas = asyncio.Event()
     metricas = asyncio.create_task(rodar_metricas(parar_metricas))
 
+    # Quem está no EscritorioHS agora: assina o WebSocket de administração do
+    # WorkAdventure, uma conexão por worker. Sem ESCRITORIO_ADMIN_SOCKETS_TOKEN
+    # não sobe, e `/escritorio/presenca` diz `conectado: false`.
+    parar_escritorio = asyncio.Event()
+    escritorio = asyncio.create_task(vigiar_escritorio(parar_escritorio))
+
     yield
 
     parar_escuta.set()
     parar_coletor.set()
     parar_vigia.set()
     parar_metricas.set()
+    parar_escritorio.set()
     escuta.cancel()
     coletor.cancel()
     vigia.cancel()
     metricas.cancel()
+    escritorio.cancel()
     # A conexão com o gateway é persistente; fechar no shutdown evita deixar
     # socket pendurado no OpenClaw a cada reinício.
     # Antes de tudo: solta os WebSockets abertos, senão o shutdown
@@ -107,6 +119,8 @@ async def lifespan(app: FastAPI):
 
 
 logger = logging.getLogger(__name__)
+# Token Microsoft e token da sala chegam na query das rotas do escritório.
+instalar_log_sem_query()
 
 # ⚠️ **Lido uma vez, no import.** `APP_VERSION` vem do build arg `GIT_SHA` que o
 # EasyPanel já mandava e o Dockerfile ignorava. Fora de container não existe, e
@@ -208,6 +222,8 @@ app.include_router(agent_export_router)
 app.include_router(auth_router)
 app.include_router(branding_router)
 app.include_router(coletor_router)
+app.include_router(escritorio_router)
+app.include_router(escritorio_wa_router)
 app.include_router(conversations_router)
 app.include_router(channels_router)
 app.include_router(broadcast_router)

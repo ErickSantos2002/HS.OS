@@ -30,9 +30,17 @@ usavam (cômodo, índice); `saida/ids-antigos.json` os renomeia na mescla.
 se edita no navegador ("saving map hs/hs.wam" no log); o que for editado entre
 a leitura do mapa do ar e o envio se perde.
 
-A mescla preserva do ar o `lastCommandId` e o **dono das áreas pessoais**
-(`ownerId`/`allowedTags`) — o sub-projeto B pode atribuir dono pelo navegador
-sem que o próximo envio o apague.
+A mescla preserva do ar o `lastCommandId`.
+
+**Dono de sala** (sub-projeto B): `"dono": "<e-mail>"` num cômodo de
+`tipo: "sala"` em `planta.json` vira o `ownerId` da área pessoal, em
+minúsculas — é o `userUuid` que a Admin API do HS.OS devolve. Dono sem `@`, ou
+em cômodo que não é sala, para o gerador com erro. ⚠️ **Planta com `dono` vence
+o ar; planta sem `dono` preserva o dono do ar** (`ownerId`/`allowedTags`), ou
+seja, quem foi atribuído pelo editor do navegador continua lá. Para tirar o dono
+posto pela planta, apague o `dono` **e** desfaça pelo navegador. A `"placa"`
+continua manual: para pôr o nome da pessoa na porta, troque a placa. Quem é dono
+de qual sala é dado do Erick — o repositório não traz nenhum.
 
 A colisão dos objetos (mesas) **não vai para a camada `colisao` do mapa**: o
 WA a aplica onde a mesa está. Pintada no mapa, mesa movida deixava parede
@@ -41,12 +49,32 @@ invisível no lugar antigo.
 ⚠️ **O editor do navegador não edita blocos** — só objetos e áreas. Edição de
 área feita no navegador some no próximo envio (áreas são do gerador).
 
+## Script do mapa: status do HS.OS no WA
+
+`script/escritorio.js` vai na propriedade `script` do `hs.tmj` (o gerador
+copia para `saida/` e o `enviar.sh` o põe no zip — ⚠️ o map-storage **apaga a
+pasta `hs/` antes de gravar o zip**, então arquivo fora do zip some do ar).
+Ao abrir e a cada 60 s ele lê `WA.player.userRoomToken` (o passe que a Admin
+API do HS.OS emite), chama `GET hsosapi…/escritorio/meu-status?t=<token>` e
+aplica `WA.player.setStatus(...)` **só quando o valor muda** — e no primeiro
+carregamento não aplica `ONLINE`, para não desfazer o status escolhido dentro
+do WA. 401 → desiste até a página ser recarregada.
+
+- O WA o roda num iframe sandbox de origem `null`, como `type="module"`: o
+  map-storage serve o `.js` com `Access-Control-Allow-Origin: *` (o `cors()`
+  dele), e a rota do HS.OS também precisa responder com `*`.
+- ⚠️ Sem Admin API (a volta atrás do B) o token é `undefined` e
+  `WA.player.userRoomToken` **lança**; o script trata e fica quieto.
+- Teste de comportamento: `testes/test_script.py` roda o script no `node` com
+  um `WA` falso (pula se não houver `node`).
+
 ## Comandos (de `escritoriohs/mapa/`)
 
 | quero… | faço |
 |---|---|
 | ambiente | `python3 -m venv .venv && .venv/bin/pip install pytest==8.3.3 pillow==12.3.0` |
 | trocar a placa de uma sala por um nome | editar `"placa"` em `planta.json` |
+| dar dono a uma sala | `"dono": "fulano@healthsafetytech.com"` no cômodo, em `planta.json` |
 | ver como ficou | `.venv/bin/python gerar.py && cp -r tilesets saida/ && .venv/bin/python previa.py saida/hs.tmj saida/previa.png 0.5` |
 | conferir | `.venv/bin/python -m pytest testes -q` |
 | pôr no ar | `./enviar.sh` (pasta `hs/`; o `office` fica intacto; precisa de `~/escritoriohs.env` com o `MAP_STORAGE_AUTHENTICATION_TOKEN`) |

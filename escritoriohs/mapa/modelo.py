@@ -12,6 +12,19 @@ class Comodo:
     h: int
     porta: str | None = None
     placa: str | None = None
+    # E-mail do dono da sala (só `tipo: "sala"`). Vira o `ownerId` da área
+    # pessoal, em minúsculas: é o `userUuid` que a Admin API do HS.OS devolve.
+    dono: str | None = None
+
+    def __post_init__(self):
+        if self.dono is None:
+            return
+        if self.tipo != "sala":
+            raise ValueError(f"{self.nome}: `dono` só vale em cômodo do tipo sala "
+                             f"(este é {self.tipo}) — só a sala tem área pessoal")
+        if "@" not in self.dono.strip():
+            raise ValueError(f"{self.nome}: `dono` tem que ser o e-mail da pessoa "
+                             f"(veio {self.dono!r})")
 
     def interior(self):
         return (self.x + 1, self.y + 1, self.x + self.w - 2, self.y + self.h - 2)

@@ -47,17 +47,21 @@ import {
   Check,
   X as XIcon,
   ListChecks,
+  Building2,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useNotificationsContext } from "@/components/NotificationsProvider";
 import { useUserStatus } from "@/hooks/use-user-status";
 import { UserStatusBadge } from "@/components/UserStatusBadge";
 import { USER_STATUS_PRESETS } from "@/lib/user-status";
+import { ESCRITORIO_URL } from "@/lib/escritorio";
 
 interface NavItem {
   title: string;
   url: string;
   icon: React.ElementType;
+  /** Outro site: abre em aba nova por `<a>`, não navega pelo router. */
+  external?: boolean;
 }
 
 interface NavGroup {
@@ -69,6 +73,9 @@ const memberGroups: NavGroup[] = [
   {
     items: [
       { title: "Chat", url: "/chat", icon: MessageSquare },
+      // O escritório virtual (WorkAdventure) é da empresa inteira — por isso
+      // está nos dois menus. Spec 2026-10-15-escritoriohs-b.
+      { title: "Escritório", url: ESCRITORIO_URL, icon: Building2, external: true },
       { title: "Arenas", url: "/arenas", icon: Swords },
       // Para o colaborador esta página é o mapa da frota, em leitura: clicar
       // num agente abre o `AgentResumoPanel`, não o `AgentDetailPanel`.
@@ -86,6 +93,9 @@ const adminGroups: NavGroup[] = [
     label: "Principal",
     items: [
       { title: "Chat", url: "/chat", icon: MessageSquare },
+      // O escritório virtual (WorkAdventure) é da empresa inteira — por isso
+      // está nos dois menus. Spec 2026-10-15-escritoriohs-b.
+      { title: "Escritório", url: ESCRITORIO_URL, icon: Building2, external: true },
       { title: "Arenas", url: "/arenas", icon: Swords },
     ],
   },
@@ -147,6 +157,20 @@ export function AppSidebar() {
     const showBadge = isChatItem && unreadCount > 0;
     // For querystring routes, NavLink "to" needs path only; matching uses pathname.
     const [path] = item.url.split("?");
+    const classes = `flex items-center gap-3 ${collapsed ? "justify-center px-0" : "px-3"} py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150 ${collapsed ? "" : "border-l-2 border-transparent"}`;
+
+    if (item.external) {
+      return (
+        <SidebarMenuItem key={item.url}>
+          <SidebarMenuButton asChild className={collapsed ? "!w-full !max-w-none mx-auto justify-center" : ""}>
+            <a href={item.url} target="_blank" rel="noopener noreferrer" className={classes} title={collapsed ? item.title : undefined}>
+              <item.icon className="h-4 w-4 shrink-0" />
+              {!collapsed && <span className="text-sm flex-1">{item.title}</span>}
+            </a>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      );
+    }
 
     return (
       <SidebarMenuItem key={item.url}>
@@ -154,7 +178,7 @@ export function AppSidebar() {
           <NavLink
             to={item.url}
             end={path === "/"}
-            className={`flex items-center gap-3 ${collapsed ? "justify-center px-0" : "px-3"} py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150 ${collapsed ? "" : "border-l-2 border-transparent"}`}
+            className={classes}
             activeClassName={collapsed ? "bg-primary/10 text-primary font-semibold" : "bg-primary/10 text-primary !border-primary font-semibold"}
           >
             <span className="relative">
