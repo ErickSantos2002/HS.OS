@@ -1,0 +1,7 @@
+[Unit]
+Description=Backup dos mapas do escritório para o R2
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/escritoriohs/backup/backup-mapas.sh

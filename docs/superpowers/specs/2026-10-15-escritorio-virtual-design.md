@@ -1,6 +1,6 @@
 # Escritório virtual (WorkAdventure) — sub-projeto A: no ar — design
 
-**Data:** 2026-10-15 · **Escopo:** pasta nova `escritorio/` (Compose, config do
+**Data:** 2026-10-15 · **Escopo:** pasta nova `escritoriohs/` (Compose, config do
 LiveKit e do Coturn, `.env.example`, README de operação), projeto novo
 `escritorio` no EasyPanel, LiveKit e Coturn na rede do host da VPS do
 EasyPanel (`62.72.11.28`), app novo no Entra. **Nenhuma mudança em
@@ -46,7 +46,7 @@ quem usa — este sub-projeto não modifica nada, só configura.
 
 ## Arquitetura
 
-**Um domínio, roteado por caminho:** `escritorio.healthsafetytech.com`. É o
+**Um domínio, roteado por caminho:** `escritoriohs.healthsafetytech.com`. É o
 desenho do `contrib/docker/docker-compose.prod.yaml` oficial.
 
 | caminho | serviço | função |
@@ -57,7 +57,7 @@ desenho do `contrib/docker/docker-compose.prod.yaml` oficial.
 | `/uploader` | `uploader` | arquivo solto no mapa |
 | (interno) | `redis`, `icon` | estado efêmero e ícone de iframe |
 
-**No EasyPanel**, projeto `escritorio`, um serviço **Compose**: `play`, `back`,
+**No EasyPanel**, projeto `escritoriohs`, um serviço **Compose**: `play`, `back`,
 `map-storage`, `uploader`, `redis` e `icon`. Domínio e certificado ficam com o
 Traefik do EasyPanel — o Traefik do Compose oficial **sai**, senão disputa 80/443
 com o do EasyPanel.
@@ -66,7 +66,7 @@ com o do EasyPanel.
 `systemd` (sobe sozinho quando a máquina reinicia): **LiveKit** e **Coturn**.
 O LiveKit pede UDP direto no host, e o roteamento do Swarm não entrega isso.
 
-**O que é nosso mora no HS.OS, em `escritorio/`**, ao lado de `frontend/` e
+**O que é nosso mora no HS.OS, em `escritoriohs/`**, ao lado de `frontend/` e
 `backend/`: o Compose adaptado, `livekit.yaml`, `turnserver.conf`, as units do
 `systemd`, o `.env.example` e o `README.md` de operação. Fica no mesmo repo
 porque B e C mexem no backend do HS.OS e no escritório ao mesmo tempo. **Os
@@ -77,17 +77,19 @@ API (é o B), mapa com a planta real do prédio.
 
 ## Login e permissões
 
-**App novo no Entra: "HS Escritório"** — não o registro do HS.OS. Cada secret
+**App novo no Entra: "EscritorioHS"** — não o registro do HS.OS. Cada secret
 vence numa data e um não derruba o outro; a "atribuição obrigatória" fica só
 neste app; dá para revogar o escritório sem tocar no login do HS.OS.
 
-- Redirect URI: `https://escritorio.healthsafetytech.com/openid-callback`
+- Redirect URI: `https://escritoriohs.healthsafetytech.com/openid-callback`
 - `OPENID_CLIENT_ISSUER=https://login.microsoftonline.com/<tenant>/v2.0` (o
   mesmo tenant do `MS_TENANT_ID` do HS.OS)
 - `OPENID_SCOPE=openid email profile`
 - `DISABLE_ANONYMOUS=true` — sem login, não entra
-- **Atribuição obrigatória** no app, por grupo do Entra ("HS – Escritório").
-  Pôr ou tirar alguém é mexer no grupo, não em código.
+- ~~Atribuição obrigatória por grupo~~ — **revisto em 15/10/2026: a empresa
+  inteira acessa**, sem grupo; "Assignment required" = No. Quem barra é o app
+  ser single-tenant (só quem existe no diretório da HS — ⚠️ inclusive convidados
+  B2B; ver `escritoriohs/README.md`).
 
 **Nome do avatar: `OPENID_WOKA_NAME_POLICY=force_opid`.** O nome vem da conta
 Microsoft e a pessoa não muda. Num escritório de trabalho, saber quem é quem
@@ -133,7 +135,7 @@ inútil, desligá-lo.
 - `LIVEKIT_API_KEY`/`LIVEKIT_API_SECRET` gerados na instalação; só `back` e
   `play` os conhecem.
 
-**Coturn** (rede do host): `3478` (UDP e TCP), relay em `49160–49200/udp`,
+**Coturn** (rede do host): `3478` (UDP e TCP), relay em `49160–49999/udp`,
 autenticação por **static secret** (`TURN_STATIC_AUTH_SECRET`, credencial com
 validade), não usuário e senha fixos. Sem TLS na 5349 no começo — a mídia já
 vai cifrada pelo WebRTC; TLS no TURN só ajuda quem está atrás de firewall que
@@ -142,7 +144,7 @@ só deixa passar 443, o que não é o caso de quem está em casa.
 **Limites de recurso no Compose**, para reunião nunca derrubar o HS.OS:
 LiveKit até 2 CPU e 2 GB; Coturn até 0,5 CPU e 256 MB.
 
-**Firewall:** `~/escritorio-firewall.sh`, que o Erick roda uma vez no Konsole
+**Firewall:** `~/escritoriohs-firewall.sh`, que o Erick roda uma vez no Konsole
 com `sudo`, abre só as portas acima.
 
 ## Riscos que viram tarefa de validação — antes de qualquer outra coisa
@@ -174,7 +176,7 @@ com `sudo`, abre só as portas acima.
 - Mapas no volume do `map-storage`, uploads no do `uploader`. Não há banco; o
   `redis` é estado efêmero.
 - **Cópia diária do volume do `map-storage` para o R2** (o mesmo do HS.OS), no
-  prefixo `escritorio/backups/` — o trabalho de editar o mapa não se perde.
+  prefixo `escritoriohs/backups/` — o trabalho de editar o mapa não se perde.
 - `VERSION` fixa numa tag estável do WorkAdventure, **nunca `latest`**:
   atualização sozinha num serviço de vídeo quebra reunião sem aviso. Atualizar
   é decisão manual: ler o `UPGRADE.md` deles, trocar a tag, fazer o deploy.
@@ -191,12 +193,12 @@ com `sudo`, abre só as portas acima.
 | Entra recusa | não entra; erro da Microsoft | grupo do app; secret vencido |
 | `play` fora | o escritório não abre; o HS.OS segue normal | logs do serviço no EasyPanel |
 
-Essa tabela, os comandos e onde ficam os logs vão para `escritorio/README.md`.
+Essa tabela, os comandos e onde ficam os logs vão para `escritoriohs/README.md`.
 
 ## Critérios de aceite
 
-1. O Erick entra com a conta Microsoft; uma conta fora do grupo do Entra é
-   recusada.
+1. O Erick entra com a conta Microsoft; uma conta **de fora do
+   `healthsafetytech.com`** é recusada (revisto em 15/10/2026: sem grupo).
 2. Duas pessoas no prédio se aproximam e conversam com áudio e vídeo.
 3. Uma pessoa **fora da rede da HS** (4G do celular) conversa com alguém de
    dentro — exercita o Coturn.

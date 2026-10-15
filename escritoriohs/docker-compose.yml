@@ -1,0 +1,135 @@
+# WorkAdventure no EasyPanel (serviço Compose do projeto `escritoriohs`).
+# Origem: contrib/docker/docker-compose.prod.yaml do WA, sem o Traefik deles —
+# o roteamento por caminho está em borda/nginx.conf. Ver escritoriohs/README.md.
+# ⚠️ Esta VPS hospeda os bancos da empresa: todo serviço tem teto de memória.
+services:
+  borda:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./borda/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [play, back, map-storage, uploader, icon]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 128m }
+
+  play:
+    image: thecodingmachine/workadventure-play:${VERSION}
+    environment:
+      - ENABLE_MAP_EDITOR=true
+      - MAP_EDITOR_ALLOWED_USERS
+      - MAP_EDITOR_ALLOW_ALL_USERS
+      - PUSHER_URL=https://${DOMAIN}/
+      - ICON_URL=/icon
+      - TURN_SERVER
+      - TURN_STATIC_AUTH_SECRET
+      - STUN_SERVER
+      - DISABLE_ANONYMOUS
+      - SECRET_KEY
+      - API_URL=back:50051
+      - FRONT_URL=/
+      - INTERNAL_MAP_STORAGE_URL=http://map-storage:3000
+      - PUBLIC_MAP_STORAGE_URL=https://${DOMAIN}/map-storage
+      - START_ROOM_URL
+      - OPENID_PROMPT=login
+      - OPENID_WOKA_NAME_POLICY
+      - OPENID_CLIENT_ID
+      - OPENID_CLIENT_SECRET
+      - OPENID_CLIENT_ISSUER
+      - OPENID_SCOPE
+      - OPENID_USERNAME_CLAIM
+      - OPENID_LOGOUT_REDIRECT_URL
+      - FALLBACK_LOCALE
+      - ENABLE_CHAT
+      - ENABLE_CHAT_UPLOAD=false
+      - REDIS_HOST=redis
+      - ENABLE_TUTORIAL
+      - UPLOADER_URL=/uploader
+      - ENABLE_OPENAPI_ENDPOINT=false
+      - ROOM_API_PORT=50051
+      - ROOM_API_SECRET_KEY
+      - MAP_STORAGE_API_TOKEN
+      - LIVEKIT_API_KEY
+      - LIVEKIT_API_SECRET
+      - SECURITY_EMAIL
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 1536m }
+
+  back:
+    image: thecodingmachine/workadventure-back:${VERSION}
+    environment:
+      - PLAY_URL=https://${DOMAIN}
+      - ENABLE_MAP_EDITOR=true
+      - SECRET_KEY
+      - TURN_SERVER
+      - STUN_SERVER
+      - REDIS_HOST=redis
+      - MAP_STORAGE_URL=map-storage:50053
+      - INTERNAL_MAP_STORAGE_URL=http://map-storage:3000
+      - PUBLIC_MAP_STORAGE_URL=https://${DOMAIN}/map-storage
+      - ENABLE_CHAT
+      - ENABLE_CHAT_UPLOAD=false
+      - MAX_USERS_FOR_WEBRTC
+      - LIVEKIT_HOST
+      - LIVEKIT_API_KEY
+      - LIVEKIT_API_SECRET
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 1g }
+
+  uploader:
+    image: thecodingmachine/workadventure-uploader:${VERSION}
+    environment:
+      - UPLOADER_URL=https://${DOMAIN}/uploader
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ENABLE_CHAT_UPLOAD=false
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 256m }
+
+  icon:
+    image: matthiasluedtke/iconserver:v3.21.0
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 128m }
+
+  redis:
+    image: redis:6
+    # Teto antes do teto do container: sem ele o redis cresce até o kernel
+    # matá-lo. noeviction = escrita recusada quando cheio, em vez de jogar fora
+    # estado do WA em silêncio.
+    command: ["redis-server", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 640m }
+
+  map-storage:
+    image: thecodingmachine/workadventure-map-storage:${VERSION}
+    environment:
+      API_URL: back:50051
+      SECRET_KEY: ${SECRET_KEY}
+      PATH_PREFIX: "/map-storage"
+      ENABLE_BEARER_AUTHENTICATION: "true"
+      AUTHENTICATION_TOKEN: ${MAP_STORAGE_AUTHENTICATION_TOKEN}
+      ENTITY_COLLECTION_URLS: "https://${DOMAIN}/collections/FurnitureCollection.json,https://${DOMAIN}/collections/OfficeCollection.json"
+      MAP_STORAGE_API_TOKEN: ${MAP_STORAGE_API_TOKEN}
+      PUSHER_URL: "https://${DOMAIN}/"
+    volumes:
+      - map-storage-data:/maps
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 512m }
+
+volumes:
+  redisdata:
+  map-storage-data:

@@ -19,6 +19,11 @@ da **fase da migração** (escrito em 07–10/08), e essa fase fechou. Continua 
 para o básico — túnel, subida, login. Para o que mudou depois, veja
 [*Conferir no navegador*](#conferir-no-navegador) logo abaixo.
 
+🏢 **EscritorioHS no ar (15/10/2026)** — escritório virtual (WorkAdventure) em
+`escritoriohs.healthsafetytech.com`. Operação e aceite pendente em
+[`escritoriohs/README.md`](../escritoriohs/README.md). Próximos: sub-projeto B
+(ligação com o HS.OS) e C (agentes no escritório, começando por sondagem).
+
 ---
 
 ## O que aconteceu em 03/09/2026
