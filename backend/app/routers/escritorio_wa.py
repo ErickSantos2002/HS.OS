@@ -153,9 +153,19 @@ async def membro(member_id: str):
 
 @router.get("/api/room/tags", dependencies=_protegida)
 @router.get("/api/world/tags", dependencies=_protegida)
-@router.get("/api/room/sameWorld", dependencies=_protegida)
 async def listas_vazias():
     return []
+
+
+@router.get("/api/room/sameWorld", dependencies=_protegida)
+async def mesmo_mundo():
+    return wa.mapas_do_mundo(settings.ESCRITORIO_MAP_STORAGE_URL)
+
+
+@router.get("/api/chat/members", dependencies=_protegida)
+async def membros_do_chat():
+    # Sem capability que a desligue: o WA chama a cada abertura da lista do chat.
+    return {"total": 0, "members": []}
 
 
 async def _registrar(request: Request) -> Response:

@@ -209,7 +209,7 @@ def test_membro_inexistente_e_404(monkeypatch, cliente):
 
 # --- o resto ------------------------------------------------------------------------
 
-@pytest.mark.parametrize("caminho", ["/api/room/tags", "/api/world/tags", "/api/room/sameWorld"])
+@pytest.mark.parametrize("caminho", ["/api/room/tags", "/api/world/tags"])
 def test_listas_vazias(cliente, caminho):
     r = cliente.get(f"/escritorio-wa{caminho}?roomUrl={PLAY}", headers={"Authorization": TOKEN})
     assert r.status_code == 200
@@ -220,6 +220,30 @@ def test_listas_vazias(cliente, caminho):
 def test_posts_respondem_204(cliente, caminho):
     r = cliente.post(f"/escritorio-wa{caminho}", json={"x": 1}, headers={"Authorization": TOKEN})
     assert r.status_code == 204
+
+
+def test_mesmo_mundo_lista_os_dois_mapas(cliente):
+    """Com Admin API, o editor pergunta a nós quais mapas existem — é a lista do
+    destino de uma saída (`ExitPropertyEditor.svelte`). Vazia, o Erick não
+    consegue ligar o `hs` ao `office` pelo navegador."""
+    r = cliente.get(f"/escritorio-wa/api/room/sameWorld?roomUrl={PLAY}", headers={"Authorization": TOKEN})
+    assert r.status_code == 200
+    salas = {m["roomUrl"]: m for m in r.json()}
+    assert set(salas) == {"/~/hs/hs.wam", "/~/office.wam"}
+    assert salas["/~/hs/hs.wam"]["wamUrl"].endswith("/map-storage/hs/hs.wam")
+    assert all(m["name"] for m in r.json())
+
+
+def test_membros_do_chat_vazio_como_o_localadmin(cliente):
+    """`getWorldChatMembers` não depende de capability: sem a rota, cada abertura
+    da lista de pessoas do chat gerava um 404 aqui e um erro no play."""
+    r = cliente.get(f"/escritorio-wa/api/chat/members?playUri={PLAY}&searchText=", headers={"Authorization": TOKEN})
+    assert r.status_code == 200
+    assert r.json() == {"total": 0, "members": []}
+
+
+def test_membros_do_chat_exigem_token(cliente):
+    assert cliente.get("/escritorio-wa/api/chat/members").status_code == 403
 
 
 def test_room_api_recusada(cliente):

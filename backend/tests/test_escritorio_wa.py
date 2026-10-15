@@ -201,6 +201,7 @@ def test_recusa_no_formato_unauthorized():
         "title": "Acesso negado",
         "subtitle": "Só da HS",
         "details": "Entre com a conta da empresa.",
+        "buttonTitle": "Sair",
     }
 
 
@@ -212,3 +213,23 @@ def test_espera_no_formato_retry():
     assert r["canRetryManual"] is True
     assert r["code"] == "BANCO_FORA"
     assert {"title", "subtitle", "details"} <= set(r)
+
+
+def test_recusa_e_espera_tem_texto_no_botao():
+    """A tela de erro do WA desenha o botão mesmo sem `buttonTitle` — saía um botão
+    em branco, e quem é recusado não sabia que ele fazia logout."""
+    assert wa.recusa("X", "t", "s", "d")["buttonTitle"] == "Sair"
+    assert wa.espera("X", "t", "s", "d")["buttonTitle"] == "Tentar agora"
+
+
+def test_mapa_desliga_chat_matrix():
+    """Sem a chave, o front assume `enableMatrixChat ?? true` (com OpenID ligado) e
+    mostra botões de mensagem que não funcionam — não temos Matrix."""
+    r = wa.detalhes_do_mapa("https://e.com/~/hs/hs.wam", MS, SALA)
+    assert r["enableMatrixChat"] is False
+
+
+def test_mapas_do_mundo():
+    lista = wa.mapas_do_mundo(MS)
+    assert [m["roomUrl"] for m in lista] == ["/~/hs/hs.wam", "/~/office.wam"]
+    assert lista[1]["wamUrl"] == "https://e.com/map-storage/office.wam"

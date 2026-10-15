@@ -70,8 +70,9 @@ def _erro(tipo: str, code: str, titulo: str, subtitulo: str, detalhes: str) -> d
 
 
 def recusa(code: str, titulo: str, subtitulo: str, detalhes: str) -> dict:
-    """Tela de acesso negado do WA, com o botão de sair (`type: "unauthorized"`)."""
-    return _erro("unauthorized", code, titulo, subtitulo, detalhes)
+    """Tela de acesso negado do WA, com o botão de sair (`type: "unauthorized"`).
+    Sem `buttonTitle` o WA desenha o botão em branco (`ErrorScreen.svelte`)."""
+    return {**_erro("unauthorized", code, titulo, subtitulo, detalhes), "buttonTitle": "Sair"}
 
 
 def espera(code: str, titulo: str, subtitulo: str, detalhes: str, ms: int = 10000) -> dict:
@@ -80,6 +81,7 @@ def espera(code: str, titulo: str, subtitulo: str, detalhes: str, ms: int = 1000
         **_erro("retry", code, titulo, subtitulo, detalhes),
         "timeToRetry": ms,
         "canRetryManual": True,
+        "buttonTitle": "Tentar agora",
     }
 
 
@@ -111,7 +113,21 @@ def detalhes_do_mapa(play_uri: str, map_storage_url: str, sala_inicial: str) -> 
         "opidWokaNamePolicy": "force_opid",
         "contactPage": None,
         "opidLogoutRedirectUrl": None,
+        # Sem a chave o front assume `true` com OpenID ligado e mostra botões de
+        # mensagem que não funcionam: não temos Matrix (o LocalAdmin mandava false).
+        "enableMatrixChat": False,
     }
+
+
+# Os mapas do map-storage que o editor oferece como destino de saída
+# (`/api/room/sameWorld`). O LocalAdmin listava o map-storage; aqui são fixos.
+_MAPAS = (("EscritorioHS", "hs/hs.wam"), ("office", "office.wam"))
+
+
+def mapas_do_mundo(map_storage_url: str) -> list[dict]:
+    base = map_storage_url.rstrip("/")
+    return [{"name": nome, "roomUrl": f"/~/{caminho}", "wamUrl": f"{base}/{caminho}"}
+            for nome, caminho in _MAPAS]
 
 
 def _relativo_seguro(relativo: str) -> bool:

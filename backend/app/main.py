@@ -12,6 +12,7 @@ from app.auth.router import router as auth_router
 from app.config import settings
 from app.erros import instalar_tratamento_de_erros
 from app.escuta_banco import escutar
+from app.escritorio.log_sem_query import instalar as instalar_log_sem_query
 from app.escritorio.presenca import vigiar as vigiar_escritorio
 from app.coletor_metricas import rodar as rodar_metricas
 from app.coletor_uso import rodar as rodar_coletor
@@ -118,6 +119,8 @@ async def lifespan(app: FastAPI):
 
 
 logger = logging.getLogger(__name__)
+# Token Microsoft e token da sala chegam na query das rotas do escritório.
+instalar_log_sem_query()
 
 # ⚠️ **Lido uma vez, no import.** `APP_VERSION` vem do build arg `GIT_SHA` que o
 # EasyPanel já mandava e o Dockerfile ignorava. Fora de container não existe, e
