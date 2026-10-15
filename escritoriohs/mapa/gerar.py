@@ -1,12 +1,16 @@
-"""planta.json → saida/hs.tmj (blocos) + saida/hs.wam (áreas e objetos) + PNGs.
+"""planta.json → saida/hs.tmj (blocos) + saida/hs.wam (áreas e objetos) + PNGs
++ saida/escritorio.js (cópia de script/, o script do mapa).
 
 Uso: python3 gerar.py [planta.json] [saida]
 O gerador manda em paredes, salas, áreas e placas. Os objetos (móveis) ele
 cria uma vez; depois de publicados são do Erick (ver mesclar.py).
 """
-import hashlib, json, os, sys
+import hashlib, json, os, shutil, sys
 from PIL import Image, ImageDraw, ImageFont
 import blocos, modelo, objetos
+
+AQUI = os.path.dirname(os.path.abspath(__file__))
+SCRIPT = "escritorio.js"   # script/escritorio.js → propriedade `script` do mapa
 
 TIPO_PISO = {"sala": "madeira", "reuniao": "carpete", "diretoria": "carpete",
              "recepcao": "piso_claro", "cafe": "madeira", "silenciosa": "carpete"}
@@ -303,7 +307,10 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
            "version": "1.10", "tiledversion": "1.10.2", "nextlayerid": 20, "nextobjectid": 1,
            "properties": [{"name": "mapName", "type": "string", "value": "EscritorioHS"},
                           {"name": "mapCopyright", "type": "string",
-                           "value": "Blocos: WorkAdventure (CC-BY-SA 3.0). Planta: Health & Safety."}],
+                           "value": "Blocos: WorkAdventure (CC-BY-SA 3.0). Planta: Health & Safety."},
+                          # Status do HS.OS → WA (sub-projeto B). Relativo ao .tmj: o
+                          # arquivo vai junto no zip do envio (enviar.sh).
+                          {"name": "script", "type": "string", "value": SCRIPT}],
            "tilesets": tilesets,
            "layers": [camada("inicio"), camada("colisao"),
                       grupo("piso", [camada("piso1")]),
@@ -324,6 +331,7 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
     json.dump(tmj, open(os.path.join(pasta, "hs.tmj"), "w"), sort_keys=True, ensure_ascii=False)
     json.dump(_wam(P), open(os.path.join(pasta, "hs.wam"), "w"), sort_keys=True, ensure_ascii=False, indent=1)
     json.dump(ids_antigos(P), open(os.path.join(pasta, "ids-antigos.json"), "w"), sort_keys=True, indent=1)
+    shutil.copyfile(os.path.join(AQUI, "script", SCRIPT), os.path.join(pasta, SCRIPT))
 
 def _area(nome, x1, y1, x2, y2, props):
     return {"id": _id("area", nome), "name": nome, "visible": True,
@@ -348,7 +356,8 @@ def _wam(P):
             props = [{"id": _id(c.nome, "lock"), "type": "lockableAreaPropertyData"}]
             if c.tipo == "sala":
                 props.append({"id": _id(c.nome, "pessoal"), "type": "personalAreaPropertyData",
-                              "accessClaimMode": "static", "allowedTags": [], "ownerId": None})
+                              "accessClaimMode": "static", "allowedTags": [],
+                              "ownerId": c.dono.strip().lower() if c.dono else None})
             areas.append(_area(c.nome, x1, y1, x2, y2, props))
     entidades = {oid: {"x": x, "y": y, "name": rotulo,
                        "prefabRef": {"collectionName": objetos.PECAS[peca][0], "id": objetos.prefab_id(peca)}}

@@ -25,7 +25,7 @@ case "$ar" in
   *)   echo "ERRO: não deu para ler o mapa do ar (HTTP $ar) — nada foi enviado"; exit 1 ;;
 esac
 
-(cd saida && zip -qr "$tmp/hs.zip" hs.tmj hs.wam placas.png logo-hs.png tilesets)
+(cd saida && zip -qr "$tmp/hs.zip" hs.tmj hs.wam escritorio.js placas.png logo-hs.png tilesets)
 TOKEN=$(grep -oP '^MAP_STORAGE_AUTHENTICATION_TOKEN=\K.+' ~/escritoriohs.env | tr -d "\"' \r")  # sem aspas nem \r
 # O cabeçalho com o token vai pela entrada padrão (--config -), não pelo argv:
 # argumento de processo aparece no `ps` de qualquer usuário da máquina.
