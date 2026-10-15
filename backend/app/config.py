@@ -83,6 +83,23 @@ class Settings(BaseSettings):
     # colado em algum lugar, é o segredo indo com ele.
     GUARDRAILS_API_TOKEN: str = ""
 
+    # EscritorioHS (WorkAdventure) — Admin API e presença. Spec:
+    # `docs/superpowers/specs/2026-10-15-escritoriohs-b-ligacao-hsos-design.md`.
+    # Os dois tokens são segredo, lidos por `ler_segredo`; declarados aqui pelo
+    # mesmo motivo da OPENAI_API_KEY (chave desconhecida no `.env` derruba o boot).
+    # O ADMIN_API_TOKEN do `play`: o WA o manda cru no `Authorization`.
+    ESCRITORIO_ADMIN_API_TOKEN: str = ""
+    # O ADMIN_SOCKETS_TOKEN do `play`: assina o JWT do `/ws/admin/rooms` (presença).
+    ESCRITORIO_ADMIN_SOCKETS_TOKEN: str = ""
+    # E-mails por vírgula: quem edita o mapa (substitui o MAP_EDITOR_ALLOWED_USERS).
+    ESCRITORIO_EDITORES: str = ""
+    # Domínios por vírgula: quem entra no escritório.
+    ESCRITORIO_DOMINIOS: str = "healthsafetytech.com"
+    ESCRITORIO_URL: str = "https://escritoriohs.healthsafetytech.com"
+    ESCRITORIO_MAP_STORAGE_URL: str = "https://escritoriohs.healthsafetytech.com/map-storage"
+    # Para onde a raiz redireciona (substitui o START_ROOM_URL do WA).
+    ESCRITORIO_SALA_INICIAL: str = "/~/hs/hs.wam"
+
     @property
     def url_do_front(self) -> str:
         """A primeira origem do FRONTEND_URL — que também é lista do CORS."""

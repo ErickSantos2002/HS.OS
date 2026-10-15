@@ -29,6 +29,7 @@ from app.routers.channels import router as channels_router
 from app.routers.chat_extras import router as chat_extras_router
 from app.routers.recibos import router as recibos_router
 from app.routers.coletor import router as coletor_router
+from app.routers.escritorio_wa import router as escritorio_wa_router
 from app.routers.conversations import router as conversations_router
 from app.routers.gateway import router as gateway_router
 from app.routers.llm import router as llm_router
@@ -208,6 +209,7 @@ app.include_router(agent_export_router)
 app.include_router(auth_router)
 app.include_router(branding_router)
 app.include_router(coletor_router)
+app.include_router(escritorio_wa_router)
 app.include_router(conversations_router)
 app.include_router(channels_router)
 app.include_router(broadcast_router)
