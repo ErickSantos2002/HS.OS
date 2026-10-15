@@ -175,18 +175,17 @@ do WA, não erro nosso.
 
 ## Mapa
 
-- `office.tmj` do [map-starter-kit](https://github.com/workadventure/map-starter-kit)
-  (commit `1143646`), subido em 15/10/2026 para a raiz do map-storage
-  (`office.wam`); `START_ROOM_URL=/~/office.wam`.
-- Ajustes (salas, setores, logo) são feitos no editor do navegador e moram no
-  volume do `map-storage` — **não no git**. O backup diário é o que os protege.
-- ⚠️ **Não reenviar pelo starter kit com diretório `/` depois de editar no
-  navegador.** O upload com `/` apaga os outros `.wam` e sobrescreve o `office`
-  com a versão do kit — as edições somem.
-- Para subir de novo: clonar o kit fora do repo, `npm ci --ignore-scripts`,
-  `npm rebuild sharp`, `npm run buildmap`, e `npx upload-wa-map` com
-  `MAP_STORAGE_URL`, `MAP_STORAGE_API_KEY` (= `MAP_STORAGE_AUTHENTICATION_TOKEN`),
-  `UPLOAD_DIRECTORY` e `UPLOAD_MODE=MAP_STORAGE` no ambiente.
+**Entrada: o mapa `hs`, gerado por código** (`escritoriohs/mapa/`, ver o README
+de lá): planta desenhada pelo Erick, 28 salas individuais trancáveis, 2 salas
+de reunião LiveKit, recepção com o logo, café, silenciosa e Diretoria.
+`START_ROOM_URL=/~/hs/hs.wam` desde 15/10/2026. O `office` do starter kit
+continua em `/~/office.wam` como plano de volta.
+
+Link para mandar às pessoas: **https://escritoriohs.healthsafetytech.com**.
+
+Aceite do mapa (15/10/2026): paredes e móveis colidem ✅ · editor grava
+(`saving map hs/hs.wam` no log do map-storage) ✅ · tranca com 2 pessoas ⏳ ·
+3 na Reunião 01 na mesma chamada ⏳ · silenciosa ⏳.
 
 ## Backup dos mapas
 

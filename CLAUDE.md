@@ -935,6 +935,9 @@ Compose `wa`) e da mídia — LiveKit + Coturn em rede do host,
 `escritoriohs-midia.service`. Operação, segredos e aceite em
 `escritoriohs/README.md`; spec e plano em `docs/superpowers/` (2026-10-15).
 Sub-projeto A no ar; B (ligação com o HS.OS) e C (agentes no escritório) a seguir.
+O mapa (`hs`) é **gerado** por `escritoriohs/mapa/gerar.py` a partir de
+`planta.json`; móveis são objetos do editor e, depois de publicados, são do
+Erick (`publicados.json` impede o gerador de recriar o que ele apagou).
 
 ⚠️ **O firewall que vale é o do hPanel da Hostinger, não o da máquina.** O
 `ufw` está inativo; quem bloqueava todo UDP era o painel. E testar porta de

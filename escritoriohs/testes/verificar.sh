@@ -53,7 +53,7 @@ if [ "$alvo" = wa ] || [ "$alvo" = tudo ]; then
   # Sem anônimo: entrar numa sala sem login tem que mandar para a Microsoft.
   # A tela do WA é SPA: quem redireciona é o /login-screen, com o playUri da sala.
   # A redirect_uri tem que ser a registrada no app EscritorioHS do Entra.
-  sala=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$base/~/office.wam")
+  sala=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$base/~/hs/hs.wam")
   curl -s -m 15 -o /dev/null -w '%{redirect_url}' "$base/login-screen?playUri=$sala" \
     | grep -q "^https://login.microsoftonline.com/.*redirect_uri=https%3A%2F%2Fescritoriohs.healthsafetytech.com%2Fopenid-callback" \
     && ok "login redireciona para o Entra" || falha "login redireciona para o Entra"

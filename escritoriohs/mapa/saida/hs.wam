@@ -1,0 +1,3452 @@
+{
+ "areas": [
+  {
+   "height": 384,
+   "id": "140e3bca-add4-4000-8000-e2efa76070f4",
+   "name": "Recepção",
+   "properties": [
+    {
+     "id": "4fee14e5-201c-4000-8000-ca15c72df6b7",
+     "isDefault": true,
+     "type": "start"
+    }
+   ],
+   "visible": true,
+   "width": 960,
+   "x": 672,
+   "y": 32
+  },
+  {
+   "height": 384,
+   "id": "9333ac19-985d-4000-8000-8c6a2f86b845",
+   "name": "Reunião 02",
+   "properties": [
+    {
+     "id": "372b6825-92c4-4000-8000-30bd449528fe",
+     "livekitRoomConfig": {
+      "startWithAudioMuted": false,
+      "startWithVideoMuted": true
+     },
+     "roomName": "Reunião 02",
+     "type": "livekitRoomProperty"
+    }
+   ],
+   "visible": true,
+   "width": 320,
+   "x": 1664,
+   "y": 32
+  },
+  {
+   "height": 384,
+   "id": "a3e913bf-98fa-4000-8000-bc50ba97d7c4",
+   "name": "Silenciosa",
+   "properties": [
+    {
+     "id": "a02d9655-52a0-4000-8000-839370ad6c4d",
+     "type": "silent"
+    }
+   ],
+   "visible": true,
+   "width": 288,
+   "x": 2016,
+   "y": 32
+  },
+  {
+   "height": 352,
+   "id": "4d8f9908-4af1-4000-8000-fbef3a14d0a8",
+   "name": "Reunião 01",
+   "properties": [
+    {
+     "id": "a96469ea-34b9-4000-8000-3ce68302efe0",
+     "livekitRoomConfig": {
+      "startWithAudioMuted": false,
+      "startWithVideoMuted": true
+     },
+     "roomName": "Reunião 01",
+     "type": "livekitRoomProperty"
+    }
+   ],
+   "visible": true,
+   "width": 640,
+   "x": 32,
+   "y": 608
+  },
+  {
+   "height": 192,
+   "id": "9ce95cb5-29ec-4000-8000-03f70d598317",
+   "name": "Financeiro 02",
+   "properties": [
+    {
+     "id": "ea5bd42b-f0f9-4000-8000-c913b2f665f2",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "e5d80197-a1d7-4000-8000-5cec50cc5373",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 704,
+   "y": 608
+  },
+  {
+   "height": 192,
+   "id": "95e485ce-e780-4000-8000-796873cea710",
+   "name": "RH",
+   "properties": [
+    {
+     "id": "60611ff7-6f3f-4000-8000-9a11a3e6d914",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "efbbfe7f-6fab-4000-8000-5a77658a93cb",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 928,
+   "y": 608
+  },
+  {
+   "height": 192,
+   "id": "647cb6de-6551-4000-8000-c87f0ea5dd29",
+   "name": "Financeiro 01",
+   "properties": [
+    {
+     "id": "03adc11e-9797-4000-8000-a9c928f626ee",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "3e8f9f22-89c4-4000-8000-fe3e048f1112",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 928,
+   "y": 832
+  },
+  {
+   "height": 192,
+   "id": "43c97f71-fef1-4000-8000-89cc2e742081",
+   "name": "Suporte 01",
+   "properties": [
+    {
+     "id": "cd5b834e-e701-4000-8000-3691d2e54cc5",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "6cd71b11-069b-4000-8000-16653ec32e92",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 32,
+   "y": 992
+  },
+  {
+   "height": 192,
+   "id": "3d62feb6-c746-4000-8000-dbeead636609",
+   "name": "Suporte 02",
+   "properties": [
+    {
+     "id": "872cd4c3-068f-4000-8000-dfaef9127d11",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "d3f371c4-3192-4000-8000-01298167226d",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 256,
+   "y": 992
+  },
+  {
+   "height": 192,
+   "id": "f98d7219-8435-4000-8000-54573a060ab1",
+   "name": "Suporte 03",
+   "properties": [
+    {
+     "id": "cbb72400-256a-4000-8000-43036e0cca18",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "effed0a3-f4be-4000-8000-aef1b9da29f0",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 480,
+   "y": 992
+  },
+  {
+   "height": 192,
+   "id": "4fbb351f-a75c-4000-8000-47b03e8210b0",
+   "name": "TI 01",
+   "properties": [
+    {
+     "id": "c51b30b7-41d3-4000-8000-3de408008b73",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "3bf90b19-65af-4000-8000-f39b22068379",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 32,
+   "y": 1408
+  },
+  {
+   "height": 192,
+   "id": "5665799d-cd40-4000-8000-9e9eb5e7f49b",
+   "name": "TI 02",
+   "properties": [
+    {
+     "id": "4ab43f60-9d4a-4000-8000-710885573691",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "e20e1449-7b03-4000-8000-43ce29079a0c",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 256,
+   "y": 1408
+  },
+  {
+   "height": 192,
+   "id": "4552e60e-bd51-4000-8000-75a8fddec708",
+   "name": "TI 03",
+   "properties": [
+    {
+     "id": "761f5da7-7cb4-4000-8000-60f377fed3b3",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "b1b6bdd7-b4d1-4000-8000-00da6f2d8043",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 480,
+   "y": 1408
+  },
+  {
+   "height": 192,
+   "id": "34ad8df6-98d4-4000-8000-abbc05dfdbb4",
+   "name": "Lab 01",
+   "properties": [
+    {
+     "id": "6468b85c-107d-4000-8000-5fbac07e7399",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "b8eaa5d5-a6e5-4000-8000-914d12242be7",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 32,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "d7e273c1-2726-4000-8000-b67429cdd3cd",
+   "name": "Lab 02",
+   "properties": [
+    {
+     "id": "d00c1cd9-0420-4000-8000-aad693eedfe1",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "93be0909-46e9-4000-8000-62ee68d3c69b",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 256,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "991966d4-bc9a-4000-8000-c54dd8070f8f",
+   "name": "Lab 03",
+   "properties": [
+    {
+     "id": "0451b10d-c108-4000-8000-1bf329a8ce68",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "b9b83c26-c1df-4000-8000-3d734c090d61",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 480,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "a7b3c622-6034-4000-8000-5921c92309b5",
+   "name": "Qualidade 01",
+   "properties": [
+    {
+     "id": "886fde39-6dca-4000-8000-3adb7d635a28",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "dd4d27d2-c8e7-4000-8000-9ef4b1e4e5e1",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 704,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "535fa616-47ac-4000-8000-af864699f0c3",
+   "name": "Qualidade 02",
+   "properties": [
+    {
+     "id": "6cc328aa-cff2-4000-8000-f61113cef16b",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "ce34f820-9b51-4000-8000-98d370a05dd3",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 928,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "5bbaa1b3-ee7d-4000-8000-4c1a32b424c0",
+   "name": "Expedição 01",
+   "properties": [
+    {
+     "id": "20f7fe42-62ea-4000-8000-21bc4aab31b5",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "0ed5d341-9f25-4000-8000-5bbe7eab42db",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 224,
+   "x": 1152,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "c6b81ee8-88a0-4000-8000-4baf37fb66fe",
+   "name": "Expedição 02",
+   "properties": [
+    {
+     "id": "7c83c422-b4af-4000-8000-7a66922873e6",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "86d1b547-b181-4000-8000-1d20037a6614",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 224,
+   "x": 1408,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "013a0cb0-b9fb-4000-8000-130da6d9e6b8",
+   "name": "Comercial 01",
+   "properties": [
+    {
+     "id": "ecdb1392-37dc-4000-8000-89afc2a17c93",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "01bfb809-3c46-4000-8000-04957e199481",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1664,
+   "y": 608
+  },
+  {
+   "height": 192,
+   "id": "9cf5f562-272e-4000-8000-a244996b506e",
+   "name": "Comercial 02",
+   "properties": [
+    {
+     "id": "ccf189ff-e916-4000-8000-91be9fcb2096",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "bb82e106-eba7-4000-8000-92f1db9bd3a8",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1888,
+   "y": 608
+  },
+  {
+   "height": 192,
+   "id": "ab1a304e-a5b5-4000-8000-a8bbc3a7c679",
+   "name": "Comercial 03",
+   "properties": [
+    {
+     "id": "048b42e3-50d3-4000-8000-40dd1d3fe320",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "464b7a86-4d7d-4000-8000-d4f3d7902b5e",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 2112,
+   "y": 608
+  },
+  {
+   "height": 192,
+   "id": "3718fe6f-3663-4000-8000-b3534aef157b",
+   "name": "Comercial 04",
+   "properties": [
+    {
+     "id": "2e49bbab-daf6-4000-8000-9e0b317b3d8e",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "7d27d723-85a0-4000-8000-80ab55ca7913",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1664,
+   "y": 992
+  },
+  {
+   "height": 192,
+   "id": "90c11ecb-27da-4000-8000-3f8a12ad11dc",
+   "name": "Comercial 05",
+   "properties": [
+    {
+     "id": "659d9e84-250b-4000-8000-f61f17d52979",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "c5cda420-21e2-4000-8000-fac0edb3c8dd",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1888,
+   "y": 992
+  },
+  {
+   "height": 192,
+   "id": "09c5cad7-1953-4000-8000-80e26e95f6d6",
+   "name": "Comercial 06",
+   "properties": [
+    {
+     "id": "0b08f485-cbea-4000-8000-06574aed6007",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "63d06013-e34e-4000-8000-34f498d08f4b",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 2112,
+   "y": 992
+  },
+  {
+   "height": 320,
+   "id": "656ccecc-e7e1-4000-8000-0784cb6eca2a",
+   "name": "Diretoria",
+   "properties": [
+    {
+     "id": "01127e7c-576d-4000-8000-803fa454e5dc",
+     "type": "lockableAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 640,
+   "x": 1664,
+   "y": 1216
+  },
+  {
+   "height": 192,
+   "id": "f5bb008f-3acb-4000-8000-8efbfae94f4d",
+   "name": "Comercial 07",
+   "properties": [
+    {
+     "id": "c1c874e3-c614-4000-8000-49cf3758da20",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "7b14d500-9be5-4000-8000-daebdb5c7cdf",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1664,
+   "y": 1568
+  },
+  {
+   "height": 192,
+   "id": "ae926ace-e152-4000-8000-36847a074619",
+   "name": "Comercial 08",
+   "properties": [
+    {
+     "id": "20a7a437-6df8-4000-8000-5a65b9ce01cc",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "75d63175-8440-4000-8000-4c29280f9fc9",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1888,
+   "y": 1568
+  },
+  {
+   "height": 192,
+   "id": "cd5cbd89-26b2-4000-8000-447bc3a57ed3",
+   "name": "Comercial 09",
+   "properties": [
+    {
+     "id": "1d1e53d4-0c7a-4000-8000-034a06fa87ac",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "d2f93de7-0add-4000-8000-4f15c81a1fc5",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 2112,
+   "y": 1568
+  },
+  {
+   "height": 192,
+   "id": "c814e4f3-c456-4000-8000-a1f5b2a053d6",
+   "name": "Comercial 10",
+   "properties": [
+    {
+     "id": "12f2afcf-d60d-4000-8000-f1e07dd76435",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "ae1e66c9-6e05-4000-8000-4161bedd2e5b",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1664,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "1e667624-16c3-4000-8000-491c89b2fb03",
+   "name": "Comercial 11",
+   "properties": [
+    {
+     "id": "9a81080e-df04-4000-8000-b1ced5880a6a",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "6d35173a-900e-4000-8000-b8afb184a4c7",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 1888,
+   "y": 1984
+  },
+  {
+   "height": 192,
+   "id": "05319497-04a6-4000-8000-ce9fcf0570b6",
+   "name": "Comercial 12",
+   "properties": [
+    {
+     "id": "06d7f37c-5982-4000-8000-00b50a7ab2d0",
+     "type": "lockableAreaPropertyData"
+    },
+    {
+     "accessClaimMode": "static",
+     "allowedTags": [],
+     "id": "001a35f6-de2f-4000-8000-0ea93cda89b9",
+     "ownerId": null,
+     "type": "personalAreaPropertyData"
+    }
+   ],
+   "visible": true,
+   "width": 192,
+   "x": 2112,
+   "y": 1984
+  }
+ ],
+ "entities": {
+  "001f4f29-f2e9-4000-8000-e6fd8a908593": {
+   "name": "TI 02 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 256,
+   "y": 1536
+  },
+  "0099fc47-046a-4000-8000-4b649a308a13": {
+   "name": "Expedição 01 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 1312,
+   "y": 1984
+  },
+  "025d5296-b4ea-4000-8000-3257a3d71914": {
+   "name": "Comercial 05 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 2048,
+   "y": 992
+  },
+  "050229fd-0add-4000-8000-b21eac2c6f34": {
+   "name": "Qualidade 01 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 832,
+   "y": 2016
+  },
+  "055b1b31-7b09-4000-8000-0cc874711f4b": {
+   "name": "Expedição 01 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 1312,
+   "y": 2112
+  },
+  "05ee8ab8-92be-4000-8000-42abefa188f1": {
+   "name": "Comercial 09 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 2272,
+   "y": 1696
+  },
+  "05f04a02-6e05-4000-8000-f9d926a9ef1b": {
+   "name": "corredor · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 736,
+   "y": 1056
+  },
+  "07793602-b1a8-4000-8000-363641fa9955": {
+   "name": "Comercial 12 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 2144,
+   "y": 2144
+  },
+  "08374fb2-8e7b-4000-8000-1080174cd4f4": {
+   "name": "Suporte 02 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 416,
+   "y": 1056
+  },
+  "08f0fb49-09f9-4000-8000-e92d0e095412": {
+   "name": "Comercial 06 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 2112,
+   "y": 1024
+  },
+  "090935c3-f790-4000-8000-db39f6297f7c": {
+   "name": "Café · sofa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Couch:grey:Down"
+   },
+   "x": 448,
+   "y": 96
+  },
+  "09216479-d575-4000-8000-95cf8def0530": {
+   "name": "Silenciosa · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 2208,
+   "y": 320
+  },
+  "096d2c12-2d70-4000-8000-cbd6c820c6e1": {
+   "name": "Suporte 01 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 160,
+   "y": 1056
+  },
+  "0a139a4f-077a-4000-8000-9617c296485d": {
+   "name": "Lab 01 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 192,
+   "y": 2048
+  },
+  "0c2c9bda-769b-4000-8000-b9a9c32f7fe5": {
+   "name": "Suporte 02 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 384,
+   "y": 1120
+  },
+  "0d3a2a5c-661f-4000-8000-fb4e33961f04": {
+   "name": "Comercial 08 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 1920,
+   "y": 1728
+  },
+  "0eb15f86-b3a8-4000-8000-8d7a62cc0df8": {
+   "name": "Comercial 08 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 2016,
+   "y": 1600
+  },
+  "0ee29983-d54b-4000-8000-02816a4df78e": {
+   "name": "Silenciosa · poltrona",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:grey:Down"
+   },
+   "x": 2112,
+   "y": 256
+  },
+  "0f550c2f-e95d-4000-8000-61b0b4e70451": {
+   "name": "Financeiro 02 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 832,
+   "y": 640
+  },
+  "10ba37db-2cb7-4000-8000-5451f29a4145": {
+   "name": "Lab 03 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 640,
+   "y": 2112
+  },
+  "10c8cbd6-f41e-4000-8000-622980f89b13": {
+   "name": "TI 01 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 160,
+   "y": 1472
+  },
+  "117b1eb2-3ff5-4000-8000-b91c9de24c83": {
+   "name": "corredor · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 1024,
+   "y": 1056
+  },
+  "1340181e-0185-4000-8000-a405b01ead7a": {
+   "name": "Comercial 07 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 1792,
+   "y": 1632
+  },
+  "139b8344-e423-4000-8000-5f8f14f8f0c2": {
+   "name": "Qualidade 02 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 960,
+   "y": 2144
+  },
+  "1511e6e6-d856-4000-8000-abebbbef5c07": {
+   "name": "Comercial 03 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 2272,
+   "y": 672
+  },
+  "171d4908-39dc-4000-8000-ce972de42700": {
+   "name": "Recepção · sofa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Couch:grey:Down"
+   },
+   "x": 1440,
+   "y": 224
+  },
+  "1732a79f-a93b-4000-8000-2dda30a9a96a": {
+   "name": "Financeiro 01 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 928,
+   "y": 960
+  },
+  "183fe07e-5e10-4000-8000-3bd58ff5f202": {
+   "name": "Silenciosa · pufe",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Pouf:brown:Down"
+   },
+   "x": 2144,
+   "y": 160
+  },
+  "18c7fdf1-b8dd-4000-8000-8c820688528f": {
+   "name": "Café · estante",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Shelf:saddlebrown:Down"
+   },
+   "x": 160,
+   "y": 32
+  },
+  "1d5fe7f7-5826-4000-8000-8b4c467c6b49": {
+   "name": "Diretoria · estante_grande",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Big Shelf:saddlebrown:Down"
+   },
+   "x": 1696,
+   "y": 1216
+  },
+  "1f314ac9-e533-4000-8000-fd8a8e9c5d94": {
+   "name": "Expedição 01 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 1184,
+   "y": 2144
+  },
+  "1f50e1bf-f9db-4000-8000-8d9b3a29bcff": {
+   "name": "Comercial 09 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 2112,
+   "y": 1696
+  },
+  "205cd97a-650a-4000-8000-b63cdb0aea03": {
+   "name": "Silenciosa · pufe",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Pouf:brown:Down"
+   },
+   "x": 2208,
+   "y": 160
+  },
+  "208ca428-59b4-4000-8000-24cd7a4a4359": {
+   "name": "RH · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 1088,
+   "y": 672
+  },
+  "20a319fe-d46d-4000-8000-a548073d6794": {
+   "name": "Comercial 01 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 1792,
+   "y": 672
+  },
+  "217bbac0-342a-4000-8000-6f6c77ecd082": {
+   "name": "Comercial 09 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 2240,
+   "y": 1632
+  },
+  "21fc9cb8-f8c3-4000-8000-16cb5b7e415b": {
+   "name": "Comercial 07 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 1696,
+   "y": 1728
+  },
+  "22ea17b3-fd9a-4000-8000-5e32992d1e92": {
+   "name": "Comercial 11 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 2048,
+   "y": 2112
+  },
+  "2485465a-1e64-4000-8000-decd2480185f": {
+   "name": "Suporte 01 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 32,
+   "y": 1024
+  },
+  "25928a6b-349b-4000-8000-32f32782a358": {
+   "name": "Lab 02 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 256,
+   "y": 2112
+  },
+  "27025a07-7956-4000-8000-751cba9bcf55": {
+   "name": "Comercial 03 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 2272,
+   "y": 736
+  },
+  "2710412d-04a0-4000-8000-14d07b6c32da": {
+   "name": "Comercial 07 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 1824,
+   "y": 1632
+  },
+  "28bca638-b891-4000-8000-93d5b5beedfe": {
+   "name": "TI 01 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 64,
+   "y": 1568
+  },
+  "29082228-52ce-4000-8000-f7b3feb7f4ca": {
+   "name": "Qualidade 02 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 1088,
+   "y": 2048
+  },
+  "29efebde-bbec-4000-8000-5022d8db97e1": {
+   "name": "Comercial 06 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 2144,
+   "y": 1152
+  },
+  "2d36b373-0348-4000-8000-2956c9fab166": {
+   "name": "Comercial 04 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 1664,
+   "y": 1120
+  },
+  "2ffb2b14-d59b-4000-8000-b02b58ec2c0b": {
+   "name": "Qualidade 02 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 1088,
+   "y": 2112
+  },
+  "2ffb8fdd-ce2a-4000-8000-63b243cd77be": {
+   "name": "Suporte 02 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 384,
+   "y": 1056
+  },
+  "302e09ea-85c0-4000-8000-a16929223c9b": {
+   "name": "Comercial 07 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 1824,
+   "y": 1568
+  },
+  "30399428-c6f1-4000-8000-83e5f6b51d79": {
+   "name": "Financeiro 02 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 704,
+   "y": 640
+  },
+  "30801165-26d8-4000-8000-781dce55701b": {
+   "name": "Comercial 05 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 1920,
+   "y": 1152
+  },
+  "33a7d021-7443-4000-8000-1b5306c75f33": {
+   "name": "Qualidade 01 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 704,
+   "y": 2016
+  },
+  "354f4064-1322-4000-8000-547fcd62c72e": {
+   "name": "Café · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 544,
+   "y": 320
+  },
+  "35c9c0d5-87d6-4000-8000-7014f4a0ac23": {
+   "name": "RH · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 1088,
+   "y": 608
+  },
+  "3693d08a-4fe3-4000-8000-bb41149c9ecc": {
+   "name": "Comercial 07 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 1824,
+   "y": 1696
+  },
+  "369432a2-ab88-4000-8000-b91c3ebd8fb4": {
+   "name": "Comercial 08 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 2048,
+   "y": 1696
+  },
+  "37b26a6d-ba6d-4000-8000-fe586390499f": {
+   "name": "Financeiro 01 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 1056,
+   "y": 896
+  },
+  "37b7bde5-37d7-4000-8000-fb695f2a1197": {
+   "name": "Suporte 03 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 608,
+   "y": 1120
+  },
+  "387a687e-cceb-4000-8000-3fc3b5a3898b": {
+   "name": "corredor · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 1504,
+   "y": 480
+  },
+  "398f43bc-ebfc-4000-8000-7252eeb8c515": {
+   "name": "Comercial 04 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1792,
+   "y": 1120
+  },
+  "3ad3b2be-5763-4000-8000-58cfb09e433f": {
+   "name": "Suporte 03 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 608,
+   "y": 1024
+  },
+  "3af2644f-1934-4000-8000-2c74d4012ea7": {
+   "name": "Comercial 10 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 1664,
+   "y": 2112
+  },
+  "3b556aa4-9755-4000-8000-5c0cdab82005": {
+   "name": "Comercial 08 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 1888,
+   "y": 1600
+  },
+  "3be22bd0-cbff-4000-8000-c8a9ab0f4195": {
+   "name": "Lab 03 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 480,
+   "y": 2112
+  },
+  "3c077527-55c7-4000-8000-a0ea181ce4bb": {
+   "name": "Comercial 12 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 2112,
+   "y": 2112
+  },
+  "3c293301-73e5-4000-8000-78a5b9dedd1e": {
+   "name": "Qualidade 01 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 864,
+   "y": 1984
+  },
+  "3c6f9524-314d-4000-8000-359413db4032": {
+   "name": "Lab 01 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 192,
+   "y": 1984
+  },
+  "3d5b543e-fbdb-4000-8000-d2077d662667": {
+   "name": "Reunião 01 · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 576,
+   "y": 640
+  },
+  "3da5b706-59ab-4000-8000-82ad52633abc": {
+   "name": "Expedição 02 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 1536,
+   "y": 2048
+  },
+  "3e0f9239-dbef-4000-8000-13f8db2ab4cf": {
+   "name": "Suporte 01 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 64,
+   "y": 1152
+  },
+  "3e2c51e1-31b4-4000-8000-4462020ba869": {
+   "name": "Financeiro 02 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 736,
+   "y": 768
+  },
+  "3ea59279-096b-4000-8000-791e9fbed021": {
+   "name": "Suporte 01 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 192,
+   "y": 1056
+  },
+  "3f24923b-a0a9-4000-8000-888aaffae067": {
+   "name": "corredor · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 736,
+   "y": 1824
+  },
+  "3f648ea2-636b-4000-8000-97219097b741": {
+   "name": "Financeiro 01 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1056,
+   "y": 960
+  },
+  "401d41e5-41c1-4000-8000-f7e57cb3ff28": {
+   "name": "Comercial 12 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 2272,
+   "y": 1984
+  },
+  "408d90ae-c285-4000-8000-0e73cde8bb0f": {
+   "name": "Café · sofa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Couch:grey:Down"
+   },
+   "x": 544,
+   "y": 96
+  },
+  "4101b8d5-5c39-4000-8000-3b1991fb26bc": {
+   "name": "Comercial 09 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 2240,
+   "y": 1696
+  },
+  "45a8f9a1-2955-4000-8000-5c30d5f7fe6e": {
+   "name": "Silenciosa · estante_grande",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Big Shelf:saddlebrown:Down"
+   },
+   "x": 2240,
+   "y": 32
+  },
+  "46e29998-4882-4000-8000-4b13a68ec2e3": {
+   "name": "corredor · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 1184,
+   "y": 480
+  },
+  "4848d62f-f28b-4000-8000-9506f0c1a8b9": {
+   "name": "Qualidade 02 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 1056,
+   "y": 2048
+  },
+  "4859a87e-dbf9-4000-8000-b0da1f18368a": {
+   "name": "Reunião 02 · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 1888,
+   "y": 64
+  },
+  "487c64ed-fe3e-4000-8000-de706514f206": {
+   "name": "Comercial 08 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 2016,
+   "y": 1696
+  },
+  "48d53b4f-70ad-4000-8000-c937244692cd": {
+   "name": "Expedição 02 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1536,
+   "y": 2112
+  },
+  "4a860a26-4f33-4000-8000-6e7c91313746": {
+   "name": "RH · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 1056,
+   "y": 640
+  },
+  "4db19aba-147b-4000-8000-c820b617c5eb": {
+   "name": "Suporte 03 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 480,
+   "y": 1120
+  },
+  "4def36b6-abd2-4000-8000-b98194483f7e": {
+   "name": "Comercial 07 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 1664,
+   "y": 1600
+  },
+  "4e13ed3d-4745-4000-8000-1b7fc2289984": {
+   "name": "Expedição 02 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 1568,
+   "y": 2048
+  },
+  "4ea6147a-393b-4000-8000-7fb53053a5c6": {
+   "name": "Lab 03 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 640,
+   "y": 2048
+  },
+  "4f8f105a-9393-4000-8000-35b1b91abd52": {
+   "name": "TI 03 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 640,
+   "y": 1408
+  },
+  "51cbac56-9883-4000-8000-f6ac6898710b": {
+   "name": "Comercial 11 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 1888,
+   "y": 2112
+  },
+  "51d19541-4701-4000-8000-e87835408438": {
+   "name": "Comercial 07 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 1792,
+   "y": 1600
+  },
+  "5450cf5d-b310-4000-8000-e8a2da6b28c9": {
+   "name": "Comercial 04 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 1792,
+   "y": 1024
+  },
+  "55719418-6110-4000-8000-985a359e3f52": {
+   "name": "TI 02 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 256,
+   "y": 1440
+  },
+  "5578f047-eb8d-4000-8000-64209538c660": {
+   "name": "Qualidade 02 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 1056,
+   "y": 2016
+  },
+  "55ca8318-06de-4000-8000-9048265bad32": {
+   "name": "Comercial 10 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 1696,
+   "y": 2144
+  },
+  "55df8789-d0b9-4000-8000-be58776645b9": {
+   "name": "Lab 02 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 384,
+   "y": 2048
+  },
+  "562aed56-c0e6-4000-8000-8f25cf6a40fc": {
+   "name": "Comercial 10 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 1824,
+   "y": 2048
+  },
+  "56a7f20c-0c68-4000-8000-48698927f401": {
+   "name": "Comercial 11 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 1888,
+   "y": 2016
+  },
+  "583bf5a9-bd88-4000-8000-7c14ac37b936": {
+   "name": "Comercial 11 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 2048,
+   "y": 2048
+  },
+  "586c5dd6-ca7f-4000-8000-add2add9e953": {
+   "name": "Diretoria · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 2208,
+   "y": 1248
+  },
+  "596d0ae8-4e87-4000-8000-d8b7d52ff161": {
+   "name": "Expedição 02 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 1440,
+   "y": 2144
+  },
+  "5a822ce6-aaf0-4000-8000-679560ae945d": {
+   "name": "TI 02 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 416,
+   "y": 1408
+  },
+  "5b3487de-a3ba-4000-8000-29e2c5e9e6d7": {
+   "name": "Financeiro 01 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 1088,
+   "y": 832
+  },
+  "5dcd2f9f-022f-4000-8000-518bb3385097": {
+   "name": "Expedição 02 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 1568,
+   "y": 2112
+  },
+  "6019512b-4f6f-4000-8000-f79b169971b0": {
+   "name": "corredor · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 1024,
+   "y": 1824
+  },
+  "60899bd2-6933-4000-8000-d27bf29c85cc": {
+   "name": "TI 01 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 192,
+   "y": 1472
+  },
+  "638a7479-7c48-4000-8000-5ae068078c59": {
+   "name": "TI 03 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 480,
+   "y": 1440
+  },
+  "645c37f2-13aa-4000-8000-83e9cf8262ac": {
+   "name": "Qualidade 01 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 864,
+   "y": 2048
+  },
+  "664bc856-1320-4000-8000-a02a2ccd7842": {
+   "name": "Comercial 03 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 2272,
+   "y": 608
+  },
+  "681baa3f-1f01-4000-8000-c29779a9aaba": {
+   "name": "Comercial 09 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 2144,
+   "y": 1728
+  },
+  "6a322a6c-4656-4000-8000-0a718d576f68": {
+   "name": "Suporte 01 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 160,
+   "y": 1120
+  },
+  "6a3b10d5-3799-4000-8000-66a1cbfba15d": {
+   "name": "Comercial 12 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 2240,
+   "y": 2112
+  },
+  "6a868f4e-0123-4000-8000-cd306f9b5c57": {
+   "name": "Comercial 06 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 2272,
+   "y": 1056
+  },
+  "6b1b6b0d-4704-4000-8000-e26b711212b4": {
+   "name": "Diretoria · livros",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Books (Variant 1):black:Down"
+   },
+   "x": 1888,
+   "y": 1280
+  },
+  "6ca99d77-01c3-4000-8000-3e8d2ee28ab6": {
+   "name": "RH · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 960,
+   "y": 768
+  },
+  "6cd54de0-7ee0-4000-8000-0633f8eb0427": {
+   "name": "Suporte 02 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 288,
+   "y": 1152
+  },
+  "6d0553e5-b1db-4000-8000-b81faa09d416": {
+   "name": "RH · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 1056,
+   "y": 672
+  },
+  "6d895ef1-bc09-4000-8000-b318bfb425d0": {
+   "name": "TI 01 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 192,
+   "y": 1408
+  },
+  "6e8b0ee7-e7e8-4000-8000-c23e45559b95": {
+   "name": "Comercial 03 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 2112,
+   "y": 640
+  },
+  "70e68e29-5d3b-4000-8000-3b830800c80a": {
+   "name": "Comercial 12 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 2240,
+   "y": 2048
+  },
+  "7300d9cb-e69f-4000-8000-885d88e74743": {
+   "name": "Comercial 06 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 2240,
+   "y": 1056
+  },
+  "736a7fd2-6665-4000-8000-60624a6ab5e8": {
+   "name": "Comercial 05 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 2048,
+   "y": 1056
+  },
+  "7384679c-a7a6-4000-8000-e902f8b0b7b2": {
+   "name": "Lab 03 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 608,
+   "y": 2016
+  },
+  "750f0df2-b2a3-4000-8000-a730c4c1a5a9": {
+   "name": "TI 03 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 480,
+   "y": 1536
+  },
+  "756a2cbc-8170-4000-8000-45091d2f3df2": {
+   "name": "Comercial 04 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 1664,
+   "y": 1024
+  },
+  "75a20e37-e1a1-4000-8000-ccdc4cb684f4": {
+   "name": "Recepção · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 672,
+   "y": 64
+  },
+  "765b1ac1-afbd-4000-8000-08bfb438ea36": {
+   "name": "Lab 03 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 608,
+   "y": 2048
+  },
+  "76ea6003-58c8-4000-8000-001a3e21b460": {
+   "name": "Lab 02 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 416,
+   "y": 2112
+  },
+  "76fcb9e9-c32f-4000-8000-5a5966d7cc3c": {
+   "name": "Expedição 01 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 1280,
+   "y": 2048
+  },
+  "77764c8a-e89c-4000-8000-db099c4197b3": {
+   "name": "Diretoria · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1856,
+   "y": 1344
+  },
+  "78139c8b-e604-4000-8000-3c2d1da7a4f6": {
+   "name": "Comercial 02 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 1888,
+   "y": 640
+  },
+  "7959ff63-d4b6-4000-8000-5c77c7426b21": {
+   "name": "TI 03 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 608,
+   "y": 1440
+  },
+  "79e69e33-6c52-4000-8000-1bd5640b8b63": {
+   "name": "Suporte 03 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 608,
+   "y": 1056
+  },
+  "7be8c106-cdc1-4000-8000-5b6f38f122a4": {
+   "name": "corredor · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 64,
+   "y": 480
+  },
+  "7bf49271-30c0-4000-8000-772fa5aec727": {
+   "name": "Lab 03 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 608,
+   "y": 2112
+  },
+  "7c232038-a2c4-4000-8000-89ee5eb34f9f": {
+   "name": "Comercial 11 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 2048,
+   "y": 1984
+  },
+  "7c49986e-39e9-4000-8000-4f62f2f27dd1": {
+   "name": "Financeiro 01 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 960,
+   "y": 992
+  },
+  "7ca55511-afaf-4000-8000-89ee8a502854": {
+   "name": "Financeiro 01 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 1056,
+   "y": 864
+  },
+  "7cd69672-89eb-4000-8000-fc0635b1a8b2": {
+   "name": "TI 01 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 160,
+   "y": 1440
+  },
+  "7cf32fcb-8aa4-4000-8000-84738d009e15": {
+   "name": "Qualidade 01 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 832,
+   "y": 2112
+  },
+  "7e53e9e8-c4a8-4000-8000-28449fc9821e": {
+   "name": "Lab 01 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 160,
+   "y": 2048
+  },
+  "7e566d77-a257-4000-8000-97be2b67c2e9": {
+   "name": "Expedição 02 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 1408,
+   "y": 2016
+  },
+  "7f6159ea-1ca1-4000-8000-97874e5cf163": {
+   "name": "Expedição 02 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 1536,
+   "y": 2016
+  },
+  "80555e5b-6e01-4000-8000-7419b322784d": {
+   "name": "Comercial 02 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 1920,
+   "y": 768
+  },
+  "806f06ea-ea97-4000-8000-3c6b25e71964": {
+   "name": "Expedição 01 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 1152,
+   "y": 2112
+  },
+  "81d2a03d-cb7c-4000-8000-8394e02765ca": {
+   "name": "Recepção · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 1536,
+   "y": 64
+  },
+  "8286a672-7ece-4000-8000-49781514c3d3": {
+   "name": "Comercial 06 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 2240,
+   "y": 1120
+  },
+  "82e9f14f-1a6e-4000-8000-79ec0d988d57": {
+   "name": "Lab 01 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 32,
+   "y": 2016
+  },
+  "8337bd8c-5c09-4000-8000-a0b0e88c85c6": {
+   "name": "Suporte 03 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 640,
+   "y": 1056
+  },
+  "83f80991-28c0-4000-8000-5dccacc5c63f": {
+   "name": "Comercial 03 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 2112,
+   "y": 736
+  },
+  "84561398-b33e-4000-8000-ab8777211295": {
+   "name": "Comercial 08 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 2048,
+   "y": 1568
+  },
+  "8482d901-4249-4000-8000-89ce9f9818bc": {
+   "name": "Lab 02 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 416,
+   "y": 2048
+  },
+  "86246d86-1b1c-4000-8000-d9ed912e274b": {
+   "name": "Comercial 02 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 2048,
+   "y": 608
+  },
+  "87309242-f97a-4000-8000-9ab17a553028": {
+   "name": "TI 02 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 416,
+   "y": 1472
+  },
+  "888154aa-8496-4000-8000-9cfe91530aaa": {
+   "name": "TI 02 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 384,
+   "y": 1536
+  },
+  "8922ae9e-9981-4000-8000-e3d8c6c997de": {
+   "name": "Comercial 10 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 1824,
+   "y": 1984
+  },
+  "8a0822e4-a178-4000-8000-0768d0fe433e": {
+   "name": "Suporte 02 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 416,
+   "y": 1120
+  },
+  "8a0cdd60-5727-4000-8000-6af51a0ee8f4": {
+   "name": "TI 01 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "properties": [
+    {
+     "description": "",
+     "id": "2c63d80e-f051-497a-852d-2cf8aa299bd7",
+     "searchable": false,
+     "type": "entityDescriptionProperties"
+    }
+   ],
+   "x": 32,
+   "y": 1536
+  },
+  "8ae9654a-2ec0-4000-8000-f3e53b9c2bef": {
+   "name": "Lab 02 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 384,
+   "y": 2112
+  },
+  "8af7d6c8-71e4-4000-8000-29340c7911cf": {
+   "name": "Comercial 12 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 2112,
+   "y": 2016
+  },
+  "8cc828f1-e96a-4000-8000-22020beb4646": {
+   "name": "Diretoria · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 1792,
+   "y": 1216
+  },
+  "8eaf935a-c71c-4000-8000-7f8c91964142": {
+   "name": "RH · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1056,
+   "y": 736
+  },
+  "8f097a0b-1786-4000-8000-d4a3a9609057": {
+   "name": "TI 02 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 416,
+   "y": 1536
+  },
+  "8f84502b-390c-4000-8000-664e8110e832": {
+   "name": "Expedição 01 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1280,
+   "y": 2112
+  },
+  "8fad8c43-2ef3-4000-8000-2ab238beaaab": {
+   "name": "Lab 03 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 512,
+   "y": 2144
+  },
+  "8ff6e386-0f19-4000-8000-eedd792f7937": {
+   "name": "RH · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 928,
+   "y": 736
+  },
+  "90960e4e-df60-4000-8000-365d5130888c": {
+   "name": "Silenciosa · pufe",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Pouf:brown:Down"
+   },
+   "x": 2080,
+   "y": 160
+  },
+  "911fbd70-a256-4000-8000-4040cf0e1058": {
+   "name": "Diretoria · poltrona_esq",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Left"
+   },
+   "x": 2176,
+   "y": 1472
+  },
+  "91b91625-bdf5-4000-8000-4478619dd1f6": {
+   "name": "Comercial 12 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 2272,
+   "y": 2048
+  },
+  "91cc1512-844a-4000-8000-dd5b398d4003": {
+   "name": "Lab 01 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 160,
+   "y": 2016
+  },
+  "91e7abc8-3a2d-4000-8000-f3ed190416cb": {
+   "name": "Diretoria · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 1856,
+   "y": 1280
+  },
+  "92eaaadb-3775-4000-8000-bd8f3beff4f8": {
+   "name": "Comercial 02 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 2048,
+   "y": 672
+  },
+  "93c7e693-5824-4000-8000-8c2b65873da5": {
+   "name": "TI 03 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 608,
+   "y": 1536
+  },
+  "93cf95d1-2eca-4000-8000-dffd7c7f7a76": {
+   "name": "RH · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 928,
+   "y": 640
+  },
+  "94e4db88-3209-4000-8000-62112ce7b1be": {
+   "name": "corredor · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 1184,
+   "y": 928
+  },
+  "98197e14-31b8-4000-8000-8f92112cc8e0": {
+   "name": "Suporte 01 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 160,
+   "y": 1024
+  },
+  "98231c15-dea3-4000-8000-95037ee47e2b": {
+   "name": "Comercial 01 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 1664,
+   "y": 640
+  },
+  "98c293e2-49d6-4000-8000-2185991e03fd": {
+   "name": "TI 01 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 160,
+   "y": 1536
+  },
+  "99880c6b-3ae5-4000-8000-29dcd295932c": {
+   "name": "TI 01 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 192,
+   "y": 1536
+  },
+  "99eda5d1-bc23-4000-8000-67be3391fec9": {
+   "name": "Reunião 02 · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 1664,
+   "y": 64
+  },
+  "9bee5c11-b380-4000-8000-d0a4a64fdf16": {
+   "name": "Suporte 02 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 384,
+   "y": 1024
+  },
+  "9bf543ba-ed9f-4000-8000-7461bf016892": {
+   "name": "Comercial 06 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 2240,
+   "y": 1024
+  },
+  "9c9c41ca-4712-4000-8000-d6c2506d92a8": {
+   "name": "Expedição 02 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 1568,
+   "y": 1984
+  },
+  "9ccbe11f-ee82-4000-8000-96bdc4b9631f": {
+   "name": "Suporte 01 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 32,
+   "y": 1120
+  },
+  "9d9bb634-5436-4000-8000-6b5005df940f": {
+   "name": "Suporte 02 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 256,
+   "y": 1024
+  },
+  "9e3c529f-6a3a-4000-8000-7b7eacae9630": {
+   "name": "Comercial 04 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 1824,
+   "y": 1056
+  },
+  "9e9c52e6-3058-4000-8000-ad723afeaddf": {
+   "name": "TI 02 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 384,
+   "y": 1440
+  },
+  "9ed161f0-9497-4000-8000-2b50996708de": {
+   "name": "TI 01 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 32,
+   "y": 1440
+  },
+  "9f2da007-aa10-4000-8000-84ac5b774839": {
+   "name": "TI 03 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 608,
+   "y": 1472
+  },
+  "a06abd72-085e-4000-8000-b451dd715c8a": {
+   "name": "Comercial 10 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 1792,
+   "y": 2016
+  },
+  "a5232a75-7736-4000-8000-b3abbe15a373": {
+   "name": "Comercial 01 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 1696,
+   "y": 768
+  },
+  "a5bcfeaf-c7cb-4000-8000-168d77422b88": {
+   "name": "Expedição 01 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 1280,
+   "y": 2016
+  },
+  "a764226e-5f22-4000-8000-69a255992208": {
+   "name": "corredor · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 2176,
+   "y": 480
+  },
+  "a7a9624f-dce6-4000-8000-42f72a31fa8c": {
+   "name": "Comercial 11 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 2016,
+   "y": 2016
+  },
+  "a812ca8e-049e-4000-8000-b313ff673379": {
+   "name": "Comercial 10 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 1664,
+   "y": 2016
+  },
+  "aac9f456-3dc6-4000-8000-099036d2687e": {
+   "name": "Comercial 04 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 1696,
+   "y": 1152
+  },
+  "ab78547f-3c90-4000-8000-830e9a5dcbf1": {
+   "name": "Lab 03 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 640,
+   "y": 1984
+  },
+  "ac00db50-5896-4000-8000-30be69f0c9c7": {
+   "name": "Recepção · sofa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Couch:grey:Down"
+   },
+   "x": 800,
+   "y": 224
+  },
+  "adbd5e0f-8789-4000-8000-b811a1390387": {
+   "name": "Financeiro 02 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 864,
+   "y": 672
+  },
+  "ae199a77-c390-4000-8000-7776e91d6468": {
+   "name": "TI 03 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 640,
+   "y": 1536
+  },
+  "ae297ba4-9a62-4000-8000-2eb566f8f328": {
+   "name": "Suporte 01 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 192,
+   "y": 992
+  },
+  "af344593-fca5-4000-8000-c4782db2e2f7": {
+   "name": "Comercial 09 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 2112,
+   "y": 1600
+  },
+  "af7904a6-9566-4000-8000-dcf8181ee85c": {
+   "name": "TI 03 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 512,
+   "y": 1568
+  },
+  "b04be27f-ef94-4000-8000-0e34cbc35732": {
+   "name": "Comercial 02 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 2016,
+   "y": 672
+  },
+  "b089c81f-70be-4000-8000-9461847488b8": {
+   "name": "Comercial 05 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 1888,
+   "y": 1120
+  },
+  "b1325811-d164-4000-8000-42cad776be7d": {
+   "name": "Comercial 04 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 1824,
+   "y": 1120
+  },
+  "b142754f-794f-4000-8000-a2d98de31981": {
+   "name": "Comercial 06 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 2112,
+   "y": 1120
+  },
+  "b24d03d5-af3b-4000-8000-f7c30bb26180": {
+   "name": "Qualidade 02 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 928,
+   "y": 2112
+  },
+  "b263c905-cedb-4000-8000-0edacfec0574": {
+   "name": "Qualidade 01 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 864,
+   "y": 2112
+  },
+  "b2914e92-d1e8-4000-8000-7a32b0bcc168": {
+   "name": "Comercial 01 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 1824,
+   "y": 608
+  },
+  "b33a353a-d8fc-4000-8000-40046fcfbc9d": {
+   "name": "Qualidade 01 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 832,
+   "y": 2048
+  },
+  "b371d775-42a4-4000-8000-cd3e431bb6a2": {
+   "name": "Qualidade 02 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1056,
+   "y": 2112
+  },
+  "b409b2ee-6455-4000-8000-e5a7aee9496b": {
+   "name": "Diretoria · sofa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Couch:grey:Down"
+   },
+   "x": 2208,
+   "y": 1472
+  },
+  "b4493c7e-ea6f-4000-8000-5317e7ea1055": {
+   "name": "Silenciosa · poltrona",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:grey:Down"
+   },
+   "x": 2176,
+   "y": 256
+  },
+  "b47f267e-4506-4000-8000-08b3b0ff6f58": {
+   "name": "Comercial 02 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 2048,
+   "y": 736
+  },
+  "b6ca7371-5131-4000-8000-74d8c3fbc288": {
+   "name": "corredor · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 1504,
+   "y": 1824
+  },
+  "b6ea45c4-b6fe-4000-8000-811a54013020": {
+   "name": "Lab 02 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 416,
+   "y": 1984
+  },
+  "b7ca48ea-f10d-4000-8000-48d7be82a00a": {
+   "name": "Financeiro 01 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 928,
+   "y": 864
+  },
+  "b90d1414-8ff7-4000-8000-b312a48c6005": {
+   "name": "Financeiro 02 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 704,
+   "y": 736
+  },
+  "b9da68a5-4a49-4000-8000-3e61ba3caca6": {
+   "name": "Comercial 10 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1792,
+   "y": 2112
+  },
+  "bab57e73-48dc-4000-8000-85e789b79d21": {
+   "name": "Expedição 01 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 1312,
+   "y": 2048
+  },
+  "bc1b8242-faa0-4000-8000-790e3b37a116": {
+   "name": "Comercial 07 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1792,
+   "y": 1696
+  },
+  "bc344288-2d0f-4000-8000-999b3a88415a": {
+   "name": "Suporte 01 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 192,
+   "y": 1120
+  },
+  "bc548ba1-fe9e-4000-8000-85f6322670be": {
+   "name": "Lab 01 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 192,
+   "y": 2112
+  },
+  "bce76508-5abb-4000-8000-0dcf11d2c1db": {
+   "name": "Expedição 01 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 1152,
+   "y": 2016
+  },
+  "bd9a4fee-6e26-4000-8000-a3a78b199040": {
+   "name": "Comercial 04 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 1792,
+   "y": 1056
+  },
+  "bddc6435-dd99-4000-8000-604d11263d50": {
+   "name": "Comercial 06 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 2272,
+   "y": 1120
+  },
+  "beaa772a-35f3-4000-8000-46629b3bdd97": {
+   "name": "Café · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 32,
+   "y": 320
+  },
+  "bf7ddc18-c1ca-4000-8000-b20b316be7a9": {
+   "name": "Financeiro 01 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 1088,
+   "y": 960
+  },
+  "c1d6cd02-cf9e-4000-8000-5e2fc0a9e907": {
+   "name": "Financeiro 01 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 1088,
+   "y": 896
+  },
+  "c3475010-468b-4000-8000-7bcfc8932411": {
+   "name": "Expedição 02 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 1408,
+   "y": 2112
+  },
+  "c411fbc5-5bde-4000-8000-01caf995e59b": {
+   "name": "Comercial 11 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 2016,
+   "y": 2112
+  },
+  "c52633d0-0ad9-4000-8000-3826baf46bb6": {
+   "name": "Qualidade 01 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 736,
+   "y": 2144
+  },
+  "c69c1c65-7f47-4000-8000-a24fb2153002": {
+   "name": "Lab 01 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 64,
+   "y": 2144
+  },
+  "c6a26148-129d-4000-8000-2f9562d496eb": {
+   "name": "Qualidade 02 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 1088,
+   "y": 1984
+  },
+  "c809c4a0-9c0c-4000-8000-f2363b25206b": {
+   "name": "Comercial 03 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 2240,
+   "y": 672
+  },
+  "c8d458b1-df43-4000-8000-71bda29ae6ad": {
+   "name": "Comercial 09 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 2272,
+   "y": 1632
+  },
+  "ca8e6bfd-9d22-4000-8000-8e81de9a332b": {
+   "name": "Comercial 10 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 1824,
+   "y": 2112
+  },
+  "cbaf4ace-440d-4000-8000-19b5a188f834": {
+   "name": "Comercial 03 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 2240,
+   "y": 640
+  },
+  "cbbd4642-29c0-4000-8000-6b44724b3cb3": {
+   "name": "Comercial 09 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 2240,
+   "y": 1600
+  },
+  "cc3f69a1-0425-4000-8000-61e212d42bff": {
+   "name": "Comercial 05 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 2016,
+   "y": 1120
+  },
+  "cc9887a8-6bd9-4000-8000-364a3b109189": {
+   "name": "Recepção · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 1248,
+   "y": 32
+  },
+  "cd2673ad-401b-4000-8000-9dd08378b91a": {
+   "name": "Lab 03 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 480,
+   "y": 2016
+  },
+  "cd79724e-82f8-4000-8000-e924be5e5066": {
+   "name": "Lab 02 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 288,
+   "y": 2144
+  },
+  "cec974cd-29f9-4000-8000-ed41f06166e8": {
+   "name": "Silenciosa · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 2016,
+   "y": 320
+  },
+  "cee31c87-7b4b-4000-8000-5eda181531ee": {
+   "name": "Comercial 01 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1792,
+   "y": 736
+  },
+  "cf8d2af0-f9da-4000-8000-1ea44743ed81": {
+   "name": "Comercial 07 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 1664,
+   "y": 1696
+  },
+  "d04120e9-d3bf-4000-8000-35345ada93ff": {
+   "name": "Comercial 11 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 2016,
+   "y": 2048
+  },
+  "d192a4c4-5acf-4000-8000-038f2e55dbc3": {
+   "name": "Comercial 10 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 1792,
+   "y": 2048
+  },
+  "d2ffbdbb-2f23-4000-8000-8d4773fd2d08": {
+   "name": "Comercial 01 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 1824,
+   "y": 736
+  },
+  "d3b58b39-93b5-4000-8000-660a493c67ff": {
+   "name": "Suporte 03 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 640,
+   "y": 1120
+  },
+  "d4383ff0-d8c6-4000-8000-aa1c7543ad17": {
+   "name": "Comercial 11 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 1920,
+   "y": 2144
+  },
+  "d513e36a-ffa9-4000-8000-f6b37313639f": {
+   "name": "Comercial 01 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 1792,
+   "y": 640
+  },
+  "d6581555-d155-4000-8000-ae990ffe9b35": {
+   "name": "Comercial 02 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 2016,
+   "y": 736
+  },
+  "d6df7460-3087-4000-8000-63cc259e9cdf": {
+   "name": "Recepção · sofa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Couch:grey:Down"
+   },
+   "x": 1504,
+   "y": 224
+  },
+  "d7337b6d-5f91-4000-8000-03bbe5839ebc": {
+   "name": "Recepção · sofa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Couch:grey:Down"
+   },
+   "x": 736,
+   "y": 224
+  },
+  "d749633c-591c-4000-8000-842ff44c20d1": {
+   "name": "Financeiro 02 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 864,
+   "y": 608
+  },
+  "d769e2ce-de46-4000-8000-bd73fd66ef0b": {
+   "name": "TI 02 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 288,
+   "y": 1568
+  },
+  "d7e1bcc1-fb22-4000-8000-85c7f73dd420": {
+   "name": "Comercial 12 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 2240,
+   "y": 2016
+  },
+  "d85e5cac-dd9c-4000-8000-79736dd647ee": {
+   "name": "Comercial 09 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 2272,
+   "y": 1568
+  },
+  "d93463f2-f7de-4000-8000-3cd2793822f6": {
+   "name": "Comercial 08 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 2048,
+   "y": 1632
+  },
+  "d93d2961-23bd-4000-8000-b9d3ff99fb5d": {
+   "name": "Qualidade 01 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 704,
+   "y": 2112
+  },
+  "d97c6904-b85b-4000-8000-cb5d7888e475": {
+   "name": "Diretoria · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 1856,
+   "y": 1248
+  },
+  "dacb7825-6d63-4000-8000-bb0886a60955": {
+   "name": "Silenciosa · estante_grande",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Big Shelf:saddlebrown:Down"
+   },
+   "x": 2016,
+   "y": 32
+  },
+  "dae49ee5-5664-4000-8000-2bb0a42d909b": {
+   "name": "Comercial 05 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 2016,
+   "y": 1056
+  },
+  "decdcbe0-5523-4000-8000-5750a032a169": {
+   "name": "Café · cafeteira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Coffee Dispenser:black:Down"
+   },
+   "x": 128,
+   "y": 96
+  },
+  "df0ae364-646c-4000-8000-574b3e563b62": {
+   "name": "Comercial 02 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 2016,
+   "y": 640
+  },
+  "df1d67f3-8428-4000-8000-f324c232a94a": {
+   "name": "Comercial 04 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 1824,
+   "y": 992
+  },
+  "e0b46d1f-120b-4000-8000-aee38b8b25b1": {
+   "name": "Suporte 03 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 640,
+   "y": 992
+  },
+  "e16e0bd9-a40b-4000-8000-fdc19df6ac01": {
+   "name": "Comercial 03 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 2240,
+   "y": 736
+  },
+  "e3197b03-e836-4000-8000-c23ee2b1e8ca": {
+   "name": "TI 03 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 640,
+   "y": 1472
+  },
+  "e389c935-0b25-4000-8000-49763f24e953": {
+   "name": "Suporte 02 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 256,
+   "y": 1120
+  },
+  "e42fbe26-a22d-4000-8000-7cd04308fa87": {
+   "name": "Reunião 01 · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 32,
+   "y": 640
+  },
+  "e6893cdd-9372-4000-8000-108d39aa0f72": {
+   "name": "Comercial 08 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 1888,
+   "y": 1696
+  },
+  "e6f10d14-bfbc-4000-8000-f21b317fa554": {
+   "name": "Comercial 05 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 2016,
+   "y": 1024
+  },
+  "e72f5606-3fce-4000-8000-abdfddef45a5": {
+   "name": "Lab 02 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 384,
+   "y": 2016
+  },
+  "e83d6fa5-9934-4000-8000-698ecfc35089": {
+   "name": "Comercial 02 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 1888,
+   "y": 736
+  },
+  "eddbd4ab-de7e-4000-8000-88ce4073e389": {
+   "name": "corredor · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 1504,
+   "y": 928
+  },
+  "ef43d96e-5336-4000-8000-9231e4d3f57e": {
+   "name": "Comercial 06 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 2272,
+   "y": 992
+  },
+  "ef4578b1-8d11-4000-8000-0849e54ed735": {
+   "name": "Reunião 01 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 544,
+   "y": 608
+  },
+  "f0d6dee5-3b78-4000-8000-845a2e087c95": {
+   "name": "Comercial 05 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 1888,
+   "y": 1024
+  },
+  "f0f09593-ec3d-4000-8000-f0019db032fb": {
+   "name": "Reunião 02 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 1856,
+   "y": 32
+  },
+  "f1312605-363c-4000-8000-4a7896f6b322": {
+   "name": "Comercial 12 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 2272,
+   "y": 2112
+  },
+  "f264ad04-6a9f-4000-8000-d705955a7cba": {
+   "name": "corredor · planta_grande",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Plant:green:Down"
+   },
+   "x": 1184,
+   "y": 1824
+  },
+  "f2655d5e-3a75-4000-8000-f7d8e42a7798": {
+   "name": "RH · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 1088,
+   "y": 736
+  },
+  "f3c7a992-3632-4000-8000-b7a1a5c3a69f": {
+   "name": "Lab 01 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 32,
+   "y": 2112
+  },
+  "f3d4a1f6-a4ef-4000-8000-47ffcc754a4e": {
+   "name": "Comercial 01 · canecas",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Mugs:white:Down"
+   },
+   "x": 1824,
+   "y": 672
+  },
+  "f40364b0-a5b9-4000-8000-370cb15d1f40": {
+   "name": "Comercial 03 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 2144,
+   "y": 768
+  },
+  "f6a36610-2c9b-4000-8000-7cb86e94a1c4": {
+   "name": "Suporte 03 · lixeira",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Bin:grey:Down"
+   },
+   "x": 512,
+   "y": 1152
+  },
+  "f6d26ca5-828b-4000-8000-c8caabafca35": {
+   "name": "TI 02 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 384,
+   "y": 1472
+  },
+  "f7a8d326-c853-4000-8000-869e6cdefb22": {
+   "name": "Comercial 01 · poltrona_dir",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Armchair:black:Right"
+   },
+   "x": 1664,
+   "y": 736
+  },
+  "f82c9347-0d5b-4000-8000-c1bb128f7ba9": {
+   "name": "Comercial 05 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 2048,
+   "y": 1120
+  },
+  "f959ff29-889c-4000-8000-8b7be5e35ed1": {
+   "name": "Lab 02 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 256,
+   "y": 2016
+  },
+  "f9ad7ba5-5e68-4000-8000-65c61731cdca": {
+   "name": "Comercial 08 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 2016,
+   "y": 1632
+  },
+  "fc4bc34b-bf5d-4000-8000-d5f844dba394": {
+   "name": "Café · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 288,
+   "y": 32
+  },
+  "fc4da55e-27e0-4000-8000-13393eb45765": {
+   "name": "Lab 01 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 160,
+   "y": 2112
+  },
+  "fc70cc08-b6cc-4000-8000-4b076dcf2b78": {
+   "name": "Suporte 02 · relogio",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Round Mural Clock:white:Down"
+   },
+   "x": 416,
+   "y": 992
+  },
+  "fcdb55bc-cd63-4000-8000-5bb5b2778ea4": {
+   "name": "Financeiro 02 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 832,
+   "y": 736
+  },
+  "fd005247-a857-4000-8000-41e1434e3028": {
+   "name": "Financeiro 02 · monitor",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Computer Screen:black:Down"
+   },
+   "x": 832,
+   "y": 672
+  },
+  "fdaa9369-d5c8-4000-8000-0d02df84e7bb": {
+   "name": "Financeiro 02 · planta",
+   "prefabRef": {
+    "collectionName": "basic office decoration",
+    "id": "basic office decoration:Small Plant:green:Down"
+   },
+   "x": 864,
+   "y": 736
+  },
+  "fdfc9394-6410-4000-8000-afb882fd87c2": {
+   "name": "Qualidade 02 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 928,
+   "y": 2016
+  },
+  "fe1d2964-4583-4000-8000-d7392f8494f8": {
+   "name": "Suporte 03 · estante_parede",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Mural Shelf:saddlebrown:Down"
+   },
+   "x": 480,
+   "y": 1024
+  }
+ },
+ "entityCollections": [
+  {
+   "type": "file",
+   "url": "https://escritoriohs.healthsafetytech.com/collections/FurnitureCollection.json"
+  },
+  {
+   "type": "file",
+   "url": "https://escritoriohs.healthsafetytech.com/collections/OfficeCollection.json"
+  }
+ ],
+ "lastCommandId": "4731e403-492e-4220-92d5-7d27c17bee18",
+ "mapUrl": "./hs.tmj",
+ "metadata": {
+  "copyright": "Blocos: WorkAdventure (CC-BY-SA 3.0). Planta: Health & Safety.",
+  "description": "Escritório virtual da Health & Safety",
+  "name": "EscritorioHS"
+ },
+ "version": "2.1.0"
+}
