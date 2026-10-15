@@ -36,7 +36,9 @@ class Planta:
     largura: int
     altura: int
     comodos: tuple
+    decoracao: tuple = ()
 
 def carregar(caminho):
     d = json.load(open(caminho, encoding="utf-8"))
-    return Planta(d["largura"], d["altura"], tuple(Comodo(**c) for c in d["comodos"]))
+    return Planta(d["largura"], d["altura"], tuple(Comodo(**c) for c in d["comodos"]),
+                  tuple(d.get("decoracao", [])))

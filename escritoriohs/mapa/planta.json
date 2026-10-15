@@ -41,5 +41,25 @@
     {"nome": "Comercial 10", "tipo": "sala",       "x": 51, "y": 61, "w": 8,  "h": 8,  "porta": "N", "placa": "Comercial 10"},
     {"nome": "Comercial 11", "tipo": "sala",       "x": 58, "y": 61, "w": 8,  "h": 8,  "porta": "N", "placa": "Comercial 11"},
     {"nome": "Comercial 12", "tipo": "sala",       "x": 65, "y": 61, "w": 8,  "h": 8,  "porta": "N", "placa": "Comercial 12"}
+  ],
+  "decoracao": [
+    {"carimbo": "planta_alta", "x": 37, "y": 16},
+    {"carimbo": "planta_alta", "x": 49, "y": 16},
+    {"carimbo": "planta_alta", "x": 38, "y": 30},
+    {"carimbo": "banco", "x": 39, "y": 30},
+    {"carimbo": "planta_alta", "x": 41, "y": 30},
+    {"carimbo": "planta_alta", "x": 44, "y": 30},
+    {"carimbo": "banco", "x": 45, "y": 30},
+    {"carimbo": "planta_alta", "x": 47, "y": 30},
+    {"carimbo": "maquina_cafe", "x": 37, "y": 45},
+    {"carimbo": "planta_alta", "x": 37, "y": 58},
+    {"carimbo": "planta_alta", "x": 49, "y": 58},
+    {"carimbo": "planta_alta", "x": 23, "y": 34},
+    {"carimbo": "planta_alta", "x": 34, "y": 34},
+    {"carimbo": "banco", "x": 28, "y": 47},
+    {"carimbo": "planta_alta", "x": 23, "y": 58},
+    {"carimbo": "planta_alta", "x": 34, "y": 58},
+    {"carimbo": "planta_alta", "x": 2, "y": 16},
+    {"carimbo": "planta_alta", "x": 70, "y": 16}
   ]
 }

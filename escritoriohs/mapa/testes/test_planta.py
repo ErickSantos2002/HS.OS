@@ -42,3 +42,15 @@ def test_placas_unicas_e_so_em_comodo_com_placa():
     placas = [c.placa for c in P.comodos if c.placa]
     assert len(placas) == len(set(placas))
     assert all(c.placa for c in P.comodos if c.tipo == "sala")
+
+def test_decoracao_fica_no_corredor():
+    """Objeto de corredor dentro de uma sala ou em cima da parede dela bloquearia
+    porta ou passagem sem ninguém perceber na planta."""
+    import blocos
+    assert P.decoracao, "a planta deveria ter decoração de corredor"
+    for d in P.decoracao:
+        for dx, dy, _, _, _ in blocos.CARIMBOS[d["carimbo"]]:
+            x, y = d["x"] + dx, d["y"] + dy
+            assert 0 < x < P.largura - 1 and 0 < y < P.altura - 1, d
+            for c in P.comodos:
+                assert not c.contem(x, y), (d, "dentro de", c.nome)

@@ -83,6 +83,10 @@ def grade(planta):
             for dx, dy, _, _, colide in blocos.CARIMBOS[nome]:
                 if colide:
                     bloqueado.add((ox + dx, oy + dy))
+    for d in planta.decoracao:
+        for dx, dy, _, _, colide in blocos.CARIMBOS[d["carimbo"]]:
+            if colide:
+                bloqueado.add((d["x"] + dx, d["y"] + dy))
     # face de parede: 2 blocos abaixo de parede com piso logo ao sul — também colide
     for (x, y) in sorted(parede):
         if (x, y + 1) not in parede and y + 1 < H:
@@ -163,6 +167,10 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
             for dx, dy, camada, gid_, _ in blocos.CARIMBOS[nome]:
                 pôr(camada, ox + dx, oy + dy, gid_)
 
+    for d in P.decoracao:
+        for dx, dy, camada, gid_, _ in blocos.CARIMBOS[d["carimbo"]]:
+            pôr(camada, d["x"] + dx, d["y"] + dy, gid_)
+
     nomes = _placas(P, pasta)
     primeiro_placa = blocos.TILESETS[-1][1] + blocos.TILESETS[-1][3]
     for c in P.comodos:
@@ -196,6 +204,11 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
                  "properties": [{"name": "tilesetCopyright", "type": "string",
                                  "value": "WorkAdventure map-starter-kit — CC-BY-SA 3.0"}]}
                 for n, f, col, tot in blocos.TILESETS]
+    # ⚠️ Sem isto o WA ignora a camada de colisão inteira: o bloco só barra a
+    # passagem se a folha declarar `collides` (igual ao office.tmj oficial).
+    zonas = next(t for t in tilesets if t["name"] == "WA_Special_Zones")
+    zonas["tiles"] = [{"id": blocos.COLISAO - zonas["firstgid"],
+                       "properties": [{"name": "collides", "type": "bool", "value": True}]}]
     tilesets.append({"firstgid": primeiro_placa, "name": "placas_hs", "image": "placas.png",
                      "columns": 2, "tilecount": 2 * len(nomes), "tilewidth": 32, "tileheight": 32,
                      "margin": 0, "spacing": 0, "imagewidth": 64, "imageheight": 32 * len(nomes)})

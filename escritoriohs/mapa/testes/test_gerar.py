@@ -74,3 +74,18 @@ def test_camadas_tem_os_campos_que_o_map_storage_exige():
     andar(m["layers"])
     assert len(ids) == len(set(ids))
     assert m["nextlayerid"] > max(ids)
+
+def test_bloco_de_colisao_declara_collides():
+    """O WA só barra a passagem em bloco cuja folha declara `collides: true`.
+    Sem a declaração, a camada de colisão inteira é ignorada — no primeiro envio
+    (15/10/2026) dava para atravessar todas as paredes e móveis."""
+    import blocos
+    with tempfile.TemporaryDirectory() as d:
+        gerar.gerar("planta.json", d)
+        m = json.load(open(os.path.join(d, "hs.tmj")))
+    t = next(t for t in m["tilesets"] if t["name"] == "WA_Special_Zones")
+    indice = blocos.COLISAO - t["firstgid"]
+    props = {p["name"]: p["value"] for x in t.get("tiles", []) if x["id"] == indice for p in x["properties"]}
+    assert props.get("collides") is True
+    camada = next(l for l in m["layers"] if l["name"] == "colisao")
+    assert sum(1 for g in camada["data"] if g == blocos.COLISAO) > 1000
