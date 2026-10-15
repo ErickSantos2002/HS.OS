@@ -94,3 +94,30 @@ atrás.** Teste de WebSocket que só olha o 101 passa com tudo desligado.
 
 O `play` loga `MatrixProvider … Invalid URL` sem Matrix configurado — é ruído
 do WA, não erro nosso.
+
+## Entra — app EscritorioHS
+
+- App registration **EscritorioHS**, contas só deste diretório, redirect URI
+  `https://escritoriohs.healthsafetytech.com/openid-callback`.
+- **Sem grupo, por decisão (15/10/2026): a empresa inteira acessa.** Quem barra
+  é o app ser single-tenant — conta de fora do `healthsafetytech.com` é recusada
+  pela Microsoft. Por isso **"Assignment required" fica em No**: em Yes, sem
+  ninguém atribuído, a Microsoft recusaria todo mundo.
+- Client secret com a validade máxima do portal (24 meses → **vence por volta de
+  15/10/2028**). Quando vencer, ninguém entra e o erro é da Microsoft: gerar outro
+  secret no portal e trocar `OPENID_CLIENT_SECRET` no EasyPanel.
+
+## Mapa
+
+- `office.tmj` do [map-starter-kit](https://github.com/workadventure/map-starter-kit)
+  (commit `1143646`), subido em 15/10/2026 para a raiz do map-storage
+  (`office.wam`); `START_ROOM_URL=/~/office.wam`.
+- Ajustes (salas, setores, logo) são feitos no editor do navegador e moram no
+  volume do `map-storage` — **não no git**. O backup diário é o que os protege.
+- ⚠️ **Não reenviar pelo starter kit com diretório `/` depois de editar no
+  navegador.** O upload com `/` apaga os outros `.wam` e sobrescreve o `office`
+  com a versão do kit — as edições somem.
+- Para subir de novo: clonar o kit fora do repo, `npm ci --ignore-scripts`,
+  `npm rebuild sharp`, `npm run buildmap`, e `npx upload-wa-map` com
+  `MAP_STORAGE_URL`, `MAP_STORAGE_API_KEY` (= `MAP_STORAGE_AUTHENTICATION_TOKEN`),
+  `UPLOAD_DIRECTORY` e `UPLOAD_MODE=MAP_STORAGE` no ambiente.

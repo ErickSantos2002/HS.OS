@@ -86,8 +86,9 @@ neste app; dá para revogar o escritório sem tocar no login do HS.OS.
   mesmo tenant do `MS_TENANT_ID` do HS.OS)
 - `OPENID_SCOPE=openid email profile`
 - `DISABLE_ANONYMOUS=true` — sem login, não entra
-- **Atribuição obrigatória** no app, por grupo do Entra ("EscritorioHS").
-  Pôr ou tirar alguém é mexer no grupo, não em código.
+- ~~Atribuição obrigatória por grupo~~ — **revisto em 15/10/2026: a empresa
+  inteira acessa**, sem grupo; "Assignment required" = No. Quem barra é o app
+  ser single-tenant (só contas `@healthsafetytech.com`).
 
 **Nome do avatar: `OPENID_WOKA_NAME_POLICY=force_opid`.** O nome vem da conta
 Microsoft e a pessoa não muda. Num escritório de trabalho, saber quem é quem
@@ -195,8 +196,8 @@ Essa tabela, os comandos e onde ficam os logs vão para `escritoriohs/README.md`
 
 ## Critérios de aceite
 
-1. O Erick entra com a conta Microsoft; uma conta fora do grupo do Entra é
-   recusada.
+1. O Erick entra com a conta Microsoft; uma conta **de fora do
+   `healthsafetytech.com`** é recusada (revisto em 15/10/2026: sem grupo).
 2. Duas pessoas no prédio se aproximam e conversam com áudio e vídeo.
 3. Uma pessoa **fora da rede da HS** (4G do celular) conversa com alguém de
    dentro — exercita o Coturn.
