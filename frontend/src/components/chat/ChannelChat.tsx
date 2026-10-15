@@ -76,7 +76,6 @@ import { hasEveryoneMention, notifyChannelRecipients } from "@/lib/channel-notif
 import { MarkdownMessageContent, PlainMessageContent } from "./MessageContent";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
-import { UserStatusPicker } from "@/components/UserStatusPicker";
 import { UserStatusBadge } from "@/components/UserStatusBadge";
 import { formatStatusAge } from "@/lib/user-status";
 
@@ -1704,7 +1703,6 @@ export default function ChannelChat({
           {agentMembers.length > 0 && (
             <div className="flex items-center gap-1"><Bot className="h-3.5 w-3.5" /><span className="text-[10px]">{agentMembers.length}</span></div>
           )}
-          <UserStatusPicker variant="header-chip" align="end" compact={isMobile} />
           <button
             className="flex items-center gap-1.5 rounded-full border border-border/50 bg-card/60 backdrop-blur-sm px-2 py-1 hover:border-primary/40 hover:text-foreground transition-colors text-xs font-medium"
             onClick={() => setFilesOpen(true)}
