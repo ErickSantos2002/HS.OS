@@ -22,8 +22,10 @@ fi
 
 (cd saida && zip -qr "$tmp/hs.zip" hs.tmj hs.wam placas.png logo-hs.png tilesets)
 TOKEN=$(grep -oP '^MAP_STORAGE_AUTHENTICATION_TOKEN=\K.+' ~/escritoriohs.env)
-codigo=$(curl -s -o "$tmp/resposta" -w '%{http_code}' -X POST \
-  -H "Authorization: Bearer $TOKEN" -H "X-Map-Storage-Host: escritoriohs.healthsafetytech.com" \
+# O cabeçalho com o token vai pela entrada padrão (--config -), não pelo argv:
+# argumento de processo aparece no `ps` de qualquer usuário da máquina.
+codigo=$(printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" | curl --config - -s -o "$tmp/resposta" -w '%{http_code}' -X POST \
+  -H "X-Map-Storage-Host: escritoriohs.healthsafetytech.com" \
   -F "file=@$tmp/hs.zip" -F "directory=hs" \
   "$BASE/upload")
 unset TOKEN

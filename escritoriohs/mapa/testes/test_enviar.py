@@ -16,3 +16,10 @@ def test_enviar_mescla_com_o_mapa_no_ar_antes_de_zipar():
     s = open("enviar.sh").read()
     assert "mesclar.py" in s
     assert s.index("mesclar.py") < s.index("zip -qr")
+
+def test_token_nao_vai_na_linha_de_comando_do_curl():
+    """-H "Authorization: Bearer $TOKEN" aparece no `ps` enquanto o curl roda.
+    O cabeçalho vai pela entrada padrão (--config -)."""
+    s = open("enviar.sh").read()
+    assert '-H "Authorization: Bearer $TOKEN"' not in s
+    assert "--config -" in s
