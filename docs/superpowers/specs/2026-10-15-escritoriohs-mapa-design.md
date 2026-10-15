@@ -45,7 +45,7 @@ Quadrado. Os blocos "Locomover" do desenho são corredores.
 - **Direita:** Comercial 01–12 em quatro fileiras de três, com corredor entre
   as fileiras; Diretoria entre as fileiras 2 e 3.
 
-São **30 salas individuais** (Financeiro 2, RH 1, Suporte 2 + vaga, TI 3,
+São **28 salas individuais** (Financeiro 2, RH 1, Suporte 2 + vaga, TI 3,
 Lab 2 + vaga, Qualidade 2, Expedição 2, Comercial 12), mais Diretoria, 2
 salas de reunião, recepção, café e silenciosa. Marketing ocupa uma das salas
 do Comercial; Consultoria não tem sala.
@@ -70,7 +70,7 @@ aqui** — não há Jitsi. O formato certo para LiveKit é a área
 `allowedTags` opcional e guarda o estado em variável. A primeira tarefa do
 plano é uma sondagem com uma sala só: quem está dentro tranca, quem chega de
 fora é barrado, e alguém que já estava no mapa também. Se não se comportar
-assim, a decisão volta ao Erick antes de gerar as 30.
+assim, a decisão volta ao Erick antes de gerar as 28.
 
 **Proximidade:** o raio da bolha é ~2 blocos; as paredes da sala isolam quem
 está dentro de quem passa no corredor.
@@ -111,7 +111,7 @@ escritoriohs/mapa/
 5. Cada sala individual tem exatamente uma área trancável e uma pessoal, do
    tamanho do interior dela.
 6. Gerar duas vezes dá bytes idênticos.
-7. Os 30 nomes de sala batem com a lista desta spec (nenhuma esquecida).
+7. Os 28 nomes de sala batem com a lista desta spec (nenhuma esquecida).
 
 ## Fora deste escopo
 
