@@ -11,7 +11,7 @@
  * O erro foi a tela confiar na forma da resposta em seis lugares diferentes:
  * espalhar `??` por todos eles é como se esquece de um.
  *
- * ⚠️ **Falta de dado não vira zero.** `contexto` e `cacheTaxa` continuam nulos
+ * ⚠️ **Falta de dado não vira zero.** `contexto` e `diasNoAr` continuam nulos
  * quando ausentes — na parede, `0%` é lido como medição. Mesma régua do
  * `app/warroom.py` e do `coletor_metricas`.
  *
@@ -114,4 +114,18 @@ export function normalizar(bruto: unknown): Feed {
       conversasTime: numero(n.conversasTime),
     },
   };
+}
+
+/** HH:MM de um instante, ou `—` quando não há instante. `ts` ausente vira ""
+ *  no `normalizar`, e `new Date("")` sairia na TV como "Invalid Date". */
+export function horaMinuto(ms: number | string): string {
+  const d = new Date(ms);
+  if (ms === "" || Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** "N conversas agora": pessoa falando com agente ativo, mais DM vivo entre
+ *  pessoas. Agente trabalhando sem ninguém (cron, delegação) não é conversa. */
+export function contarConversas(f: Feed): number {
+  return f.agentes.filter((a) => a.estado !== "ocioso" && a.parceiroId).length + f.conversasTime.length;
 }

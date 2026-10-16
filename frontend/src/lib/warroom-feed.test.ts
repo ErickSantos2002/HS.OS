@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizar } from "./warroom-feed";
+import { contarConversas, horaMinuto, normalizar } from "./warroom-feed";
 
 describe("normalizar — a TV nunca cai por forma de resposta", () => {
   it("payload vazio vira feed vazio desenhável", () => {
@@ -52,5 +52,34 @@ describe("normalizar — a TV nunca cai por forma de resposta", () => {
 
   it("descarta agente sem id, que não teria onde ser desenhado", () => {
     expect(normalizar({ agentes: [{ nome: "sem id" }, { id: "ok" }] }).agentes).toHaveLength(1);
+  });
+});
+
+describe("horaMinuto — o Fluxo não escreve \"Invalid Date\" na parede", () => {
+  it("hora válida sai HH:MM", () => {
+    expect(horaMinuto("2026-10-16T13:05:00Z")).toMatch(/^\d{2}:\d{2}$/);
+  });
+
+  it("ts vazio ou lixo vira travessão", () => {
+    // O `normalizar` transforma ts ausente em "", e `new Date("")` é Invalid
+    // Date — que o `toLocaleTimeString` escreve por extenso na TV.
+    expect(horaMinuto("")).toBe("—");
+    expect(horaMinuto("ontem")).toBe("—");
+  });
+});
+
+describe("contarConversas — o \"N conversas agora\" do cabeçalho", () => {
+  it("agente trabalhando sozinho não é conversa", () => {
+    // Um cron rodando de madrugada acendia "1 conversa agora" numa sala vazia.
+    const f = normalizar({
+      pessoas: [{ id: "p1", nome: "A" }, { id: "p2", nome: "B" }, { id: "p3", nome: "C" }],
+      agentes: [
+        { id: "nina", estado: "pensando", parceiroId: "p1" },
+        { id: "bruce", estado: "pensando" },
+        { id: "iris", estado: "ocioso", parceiroId: "p2" },
+      ],
+      conversasTime: [{ a: "p2", b: "p3" }],
+    });
+    expect(contarConversas(f)).toBe(2);
   });
 });

@@ -407,3 +407,11 @@
 .wr-nome, .wr-tarefa, .wr-status-h, .wr-setor {
   paint-order: stroke; stroke: var(--wr-canvas); stroke-width: 3px; stroke-linejoin: round;
 }
+
+/* Sublinha do agente: apagada em repouso, clara quando ele trabalha. Era
+   `fill` fixo no JSX, e no tema claro o #A8B3C7 sumia no fundo warm — o
+   agente ocupado ficava justamente o MENOS legível. */
+.wr-tarefa.wr-sub-ocioso { fill: #5C6070; }
+.wr-tarefa.wr-sub-ativo  { fill: #A8B3C7; }
+.wr-raiz.wr-claro .wr-tarefa.wr-sub-ocioso { fill: var(--wr-faint); }
+.wr-raiz.wr-claro .wr-tarefa.wr-sub-ativo  { fill: #3A3D45; }

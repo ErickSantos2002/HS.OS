@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Sun, Moon, ArrowLeft, Maximize, Minimize } from "lucide-react";
 import { api } from "@/lib/api";
-import { type Feed, type Pessoa, normalizar } from "@/lib/warroom-feed";
+import { type Feed, type Pessoa, contarConversas, horaMinuto, normalizar } from "@/lib/warroom-feed";
 import {
   FONTE, QUADRO, R_AGENTE, R_PESSOA, ROTULO_AGENTE, ROTULO_PESSOA, ROTULO_STATUS, calcularLayout,
 } from "@/lib/warroom-layout";
@@ -174,9 +174,6 @@ function decorrido(desde: string | null): string {
   const s = Math.max(0, Math.floor((Date.now() - new Date(desde).getTime()) / 1000));
   return s >= 60 ? `${Math.floor(s / 60)}min ${s % 60}s` : `${s}s`;
 }
-
-const horaMinuto = (ms: number | string) =>
-  new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
 export default function WarRoomPage() {
   const [params] = useSearchParams();
@@ -358,7 +355,7 @@ export default function WarRoomPage() {
 
   const ativos = (feed?.agentes ?? []).filter((a) => a.estado !== "ocioso");
   const hora = new Date(agora).toLocaleTimeString("pt-BR", { hour12: false });
-  const nConversas = ativos.length + (feed?.conversasTime.length ?? 0);
+  const nConversas = feed ? contarConversas(feed) : 0;
 
   // Quem está numa linha agora: ponta de agente ativo ou de um DM vivo.
   const comAgente = new Set(ativos.map((a) => a.parceiroId).filter(Boolean) as string[]);
@@ -641,12 +638,12 @@ export default function WarRoomPage() {
                     <text textAnchor="middle" y={R_AGENTE + ROTULO_AGENTE.nome} fontSize={FONTE.agente}
                       className="wr-nome">{a.nome}</text>
                     <text textAnchor="middle" y={R_AGENTE + ROTULO_AGENTE.linha2} fontSize={FONTE.agenteSub}
-                      className="wr-tarefa" fill={a.estado === "ocioso" ? "#5C6070" : "#A8B3C7"}>
+                      className={`wr-tarefa ${ocupado ? "wr-sub-ativo" : "wr-sub-ocioso"}`}>
                       {linha2}
                     </text>
                     {linha3 && (
                       <text textAnchor="middle" y={R_AGENTE + ROTULO_AGENTE.linha3} fontSize={FONTE.agenteSub}
-                        className="wr-tarefa" fill={a.estado === "ocioso" ? "#5C6070" : "#A8B3C7"}>
+                        className="wr-tarefa wr-sub-ativo">
                         {linha3}
                       </text>
                     )}
