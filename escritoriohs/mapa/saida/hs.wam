@@ -738,7 +738,7 @@
     "id": "basic furniture:Basic Chair:grey:Down"
    },
    "x": 352,
-   "y": 736
+   "y": 720
   },
   "050229fd-0add-4000-8000-b21eac2c6f34": {
    "name": "Qualidade 01 · mesa",
@@ -999,7 +999,7 @@
     "id": "basic furniture:Basic Chair:grey:Down"
    },
    "x": 1760,
-   "y": 160
+   "y": 144
   },
   "1d5fe7f7-5826-4000-8000-8b4c467c6b49": {
    "name": "Diretoria · estante_grande",
@@ -1776,7 +1776,7 @@
     "id": "basic furniture:Basic Chair:grey:Down"
    },
    "x": 288,
-   "y": 736
+   "y": 720
   },
   "6a322a6c-4656-4000-8000-0a718d576f68": {
    "name": "Suporte 01 · cadeira_cima",
@@ -1875,7 +1875,7 @@
     "id": "basic furniture:Basic Chair:grey:Down"
    },
    "x": 256,
-   "y": 736
+   "y": 720
   },
   "7300d9cb-e69f-4000-8000-885d88e74743": {
    "name": "Comercial 06 · monitor",
@@ -2091,7 +2091,7 @@
     "id": "basic furniture:Basic Chair:grey:Down"
    },
    "x": 1824,
-   "y": 160
+   "y": 144
   },
   "7f6159ea-1ca1-4000-8000-97874e5cf163": {
    "name": "Expedição 02 · mesa",
@@ -2567,7 +2567,7 @@
     "id": "basic furniture:Basic Chair:grey:Down"
    },
    "x": 1792,
-   "y": 160
+   "y": 144
   },
   "a764226e-5f22-4000-8000-69a255992208": {
    "name": "corredor · planta_grande",
@@ -2648,7 +2648,7 @@
     "id": "basic furniture:Basic Chair:grey:Down"
    },
    "x": 1728,
-   "y": 160
+   "y": 144
   },
   "ae199a77-c390-4000-8000-7776e91d6468": {
    "name": "TI 03 · planta",
@@ -3377,7 +3377,7 @@
     "id": "basic furniture:Basic Chair:grey:Down"
    },
    "x": 320,
-   "y": 736
+   "y": 720
   },
   "eddbd4ab-de7e-4000-8000-88ce4073e389": {
    "name": "corredor · planta_grande",
