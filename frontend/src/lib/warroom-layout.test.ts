@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { QUADRO, R_PESSOA, calcularLayout, larguraRotulo, type EntradaLayout } from "./warroom-layout";
+import {
+  QUADRO, ROTULO_STATUS, calcularLayout, caixaSetor, caixasAgente, caixasPessoa,
+  type Caixa, type EntradaLayout,
+} from "./warroom-layout";
 
-/** O time real em 16/10/2026: 28 pessoas, 7 setores — o caso da foto. */
+/** O time real em 16/10/2026: 26 pessoas em 6 setores — o caso da foto. */
 const REAL: [string, string[]][] = [
   ["Diretoria", ["Nicholson"]],
   ["Comercial", ["Adriana", "André", "Cláudia", "Eduardo", "Ellen", "Gislayne", "Karolaine",
@@ -28,25 +31,32 @@ function entrada(setores: [string, string[]][]): EntradaLayout {
 const QUARENTA: [string, string[]][] = REAL.map(([s, ps]) => [s, [...ps]]);
 for (let i = 0; QUARENTA.flatMap(([, p]) => p).length < 40; i++) QUARENTA[1][1].push(`Pessoa${i}`);
 
-type Caixa = { x0: number; y0: number; x1: number; y1: number };
 const cruza = (a: Caixa, b: Caixa) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+const dentro = (c: Caixa) => c.x0 >= 0 && c.x1 <= QUADRO.w && c.y0 >= 0 && c.y1 <= QUADRO.h;
+
+/** O status mais largo — o teste supõe que TODO MUNDO está em reunião, que é
+ *  o rótulo de duas linhas mais largo e mais alto que a tela desenha. */
+const PIOR_STATUS = Object.values(ROTULO_STATUS).sort((a, b) => b.length - a.length)[0];
 
 function caixas(e: EntradaLayout) {
   const s = calcularLayout(e);
-  const r = R_PESSOA * s.escala;
-  const out: { id: string; no: Caixa; rotulo: Caixa }[] = [];
-  for (const [id, p] of Object.entries(s.pessoas)) {
-    const w = larguraRotulo(e.nomes[id], s.escala);
-    out.push({
-      id,
-      no: { x0: p.x - r, y0: p.y - r, x1: p.x + r, y1: p.y + r },
-      rotulo: { x0: p.x - w / 2, y0: p.y + r + 2, x1: p.x + w / 2, y1: p.y + r + 2 + 30 * s.escala },
-    });
-  }
+  const out = Object.entries(s.pessoas).map(([id, p]) => ({
+    id, ...caixasPessoa(p, e.nomes[id], PIOR_STATUS, s.escala),
+  }));
   return { s, out };
 }
 
-describe.each([["28 pessoas reais", REAL], ["40 pessoas", QUARENTA]])("layout com %s", (_, setores) => {
+/** Os agentes no pior caso: ocupados, conversando com o nome mais comprido do
+ *  time, há mais de uma hora — a linha mais larga que a tela escreve. */
+function caixasDosAgentes(e: EntradaLayout) {
+  const s = calcularLayout(e);
+  const longo = Object.values(e.nomes).sort((a, b) => b.length - a.length)[0];
+  return Object.entries(s.agentes).map(([id, p]) => ({
+    id, ...caixasAgente(p, id, `conversando com ${longo}`, "125min 59s"),
+  }));
+}
+
+describe.each([["26 pessoas reais", REAL], ["40 pessoas", QUARENTA]])("layout com %s", (_, setores) => {
   const e = entrada(setores);
 
   it("todo mundo tem lugar", () => {
@@ -65,18 +75,40 @@ describe.each([["28 pessoas reais", REAL], ["40 pessoas", QUARENTA]])("layout co
       }
   });
 
-  it("tudo dentro do quadro, rótulos de setor inclusive", () => {
+  it("tudo dentro do quadro, rótulos de setor e de agente inclusive", () => {
     const { s, out } = caixas(e);
-    for (const { rotulo, no } of out)
-      for (const c of [rotulo, no]) {
-        expect(c.x0).toBeGreaterThanOrEqual(0); expect(c.x1).toBeLessThanOrEqual(QUADRO.w);
-        expect(c.y0).toBeGreaterThanOrEqual(0); expect(c.y1).toBeLessThanOrEqual(QUADRO.h);
+    for (const { id, rotulo, no } of out) {
+      expect(dentro(rotulo), `rótulo ${id}`).toBe(true);
+      expect(dentro(no), `nó ${id}`).toBe(true);
+    }
+    for (const r of s.setores) expect(dentro(caixaSetor(r)), `setor ${r.nome}`).toBe(true);
+    for (const a of caixasDosAgentes(e)) expect(dentro(a.rotulo), `agente ${a.id}`).toBe(true);
+  });
+
+  it("o nome do setor não encosta em pessoa nem em nome de pessoa", () => {
+    const { s, out } = caixas(e);
+    for (const r of s.setores)
+      for (const p of out) {
+        expect(cruza(caixaSetor(r), p.no), `${r.nome} × nó ${p.id}`).toBe(false);
+        expect(cruza(caixaSetor(r), p.rotulo), `${r.nome} × ${p.id}`).toBe(false);
       }
-    for (const r of s.setores) {
-      const w = larguraRotulo(r.nome, 1.2);
-      const x0 = r.ancora === "end" ? r.x - w : r.ancora === "middle" ? r.x - w / 2 : r.x;
-      expect(x0).toBeGreaterThanOrEqual(0); expect(x0 + w).toBeLessThanOrEqual(QUADRO.w);
-      expect(r.y).toBeGreaterThanOrEqual(12); expect(r.y).toBeLessThanOrEqual(QUADRO.h);
+  });
+
+  it("agente ocupado: o rótulo não encosta em outro agente, no núcleo nem no anel de pessoas", () => {
+    const { s, out } = caixas(e);
+    const ag = caixasDosAgentes(e);
+    const nucleo: Caixa = { x0: s.nucleo.x - 40, y0: s.nucleo.y - 40, x1: s.nucleo.x + 40, y1: s.nucleo.y + 60 };
+    for (const a of ag) {
+      expect(cruza(a.rotulo, nucleo), `${a.id} × núcleo`).toBe(false);
+      for (const b of ag) if (b !== a) {
+        expect(cruza(a.rotulo, b.rotulo), `${a.id} × ${b.id}`).toBe(false);
+        expect(cruza(a.rotulo, b.no), `${a.id} × nó ${b.id}`).toBe(false);
+      }
+      for (const p of out) {
+        expect(cruza(a.rotulo, p.no), `${a.id} × nó ${p.id}`).toBe(false);
+        expect(cruza(a.rotulo, p.rotulo), `${a.id} × ${p.id}`).toBe(false);
+        expect(cruza(a.no, p.rotulo), `nó ${a.id} × ${p.id}`).toBe(false);
+      }
     }
   });
 

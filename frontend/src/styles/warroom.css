@@ -97,7 +97,9 @@
 
 .wr-palco {
   display: grid;
-  grid-template-columns: 1fr clamp(280px, 26vw, 460px);
+  /* O mapa ganha a largura: o Fluxo tem frases curtas, e cada pixel a mais no
+     mapa é fonte maior a 4 m. */
+  grid-template-columns: 1fr clamp(280px, 21vw, 400px);
   gap: clamp(12px, 1.2vw, 24px);
   min-height: 0;
 }
@@ -388,7 +390,9 @@
    ciano entre duas pessoas num DM. */
 .wr-setor {
   font-family: "JetBrains Mono", ui-monospace, monospace;
-  fill: var(--wr-muted); font-size: 13px; letter-spacing: 0.32em; font-weight: 600;
+  /* O tamanho vem do atributo (`FONTE.setor`): em SVG o CSS venceria o
+     atributo e o layout calcularia uma largura que a tela não desenha. */
+  fill: var(--wr-muted); letter-spacing: 0.32em; font-weight: 600;
 }
 .wr-nome-h   { font-weight: 600; }
 .wr-status-h {

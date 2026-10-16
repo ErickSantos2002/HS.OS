@@ -3,7 +3,9 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Sun, Moon, ArrowLeft, Maximize, Minimize } from "lucide-react";
 import { api } from "@/lib/api";
 import { type Feed, type Pessoa, normalizar } from "@/lib/warroom-feed";
-import { QUADRO, R_AGENTE, R_PESSOA, calcularLayout } from "@/lib/warroom-layout";
+import {
+  FONTE, QUADRO, R_AGENTE, R_PESSOA, ROTULO_AGENTE, ROTULO_PESSOA, ROTULO_STATUS, calcularLayout,
+} from "@/lib/warroom-layout";
 import "@/styles/warroom.css";
 
 /**
@@ -27,10 +29,6 @@ import "@/styles/warroom.css";
  * /warroom — a sessão autentica) ou direto numa TV, que não faz login, com o
  * token dedicado na URL (/warroom?t=…).
  */
-
-const ROTULO_STATUS: Record<string, string> = {
-  reuniao: "em reunião", foco: "foco", almoco: "almoço", ausente: "ausente",
-};
 
 /** O status vence a presença: em reunião dentro do escritório é âmbar. */
 function corDoPonto(p: Pessoa): string | null {
@@ -111,15 +109,22 @@ function controleTime(de: XY, para: XY, nucleo: XY, agentes: XY[], pessoas: XY[]
   // pessoas — nó e nome — também são obstáculo.
   const obstaculos = [
     { p: nucleo, r: 40 },
-    // O agente e as duas linhas embaixo dele (nome e "conversando com …").
+    // O agente e as linhas embaixo dele (nome, "conversando com …", tempo).
     ...agentes.flatMap((p) => [
       { p, r: R_AGENTE + 14 },
-      ...[-70, -35, 0, 35, 70].map((dx) => ({ p: { x: p.x + dx, y: p.y + R_AGENTE + 38 }, r: 16 })),
+      ...[ROTULO_AGENTE.nome - 6, ROTULO_AGENTE.linha2 - 4, ROTULO_AGENTE.linha3 - 4].flatMap((y) =>
+        // ±120: "conversando com Karolaine" tem ~220 de largura.
+        [-120, -90, -60, -30, 0, 30, 60, 90, 120].map((dx) => ({ p: { x: p.x + dx, y: p.y + R_AGENTE + y }, r: 14 }))),
     ]),
-    ...pessoas.flatMap((p) => [
-      { p, r: rP + 6 },
-      { p: { x: p.x, y: p.y + rP + 12 }, r: 16 },
-    ]),
+    // A pessoa, o nome e o status — mesmas medidas que o layout testa.
+    ...pessoas.flatMap((p) => {
+      const e = rP / R_PESSOA;
+      return [
+        { p, r: rP + 6 },
+        { p: { x: p.x, y: p.y + rP + (ROTULO_PESSOA.nome - 6) * e }, r: 18 * e },
+        { p: { x: p.x, y: p.y + rP + (ROTULO_PESSOA.status - 4) * e }, r: 14 * e },
+      ];
+    }),
   ];
   const folga = (c: XY) => {
     let min = Infinity;
@@ -546,7 +551,8 @@ export default function WarRoomPage() {
 
               {/* Nome do setor por fora do anel, antes dos nós. */}
               {layout.setores.map((s) => (
-                <text key={s.nome} x={s.x} y={s.y} textAnchor={s.ancora} className="wr-setor">
+                <text key={s.nome} x={s.x} y={s.y} textAnchor={s.ancora} className="wr-setor"
+                  fontSize={FONTE.setor}>
                   {s.nome.toUpperCase()}
                 </text>
               ))}
@@ -567,19 +573,23 @@ export default function WarRoomPage() {
                       strokeWidth={1.6}
                       style={{ animationDelay: `${(i % 8) * 0.55 + 0.3}s` }}
                     />
-                    <text textAnchor="middle" dy="0.36em" fontSize={14 * e} fontWeight={800}
+                    <text textAnchor="middle" dy="0.36em" fontSize={FONTE.inicial * e} fontWeight={800}
                       className={`wr-inicial${emConversa ? " wr-viva" : ""}`}>
                       {p.nome.slice(0, 1).toUpperCase()}
                     </text>
                     {ponto && (
-                      <circle cx={rP * 0.78} cy={-rP * 0.78} r={4.5 * e} fill={ponto}
+                      <circle cx={rP * 0.78} cy={-rP * 0.78} r={5.5 * e} fill={ponto}
                         stroke="var(--wr-canvas)" strokeWidth={1.5} />
                     )}
-                    <text y={rP + 15 * e} textAnchor="middle" className="wr-nome wr-nome-h" fontSize={13 * e}>
+                    {/* Linha de base e fonte saem de `ROTULO_PESSOA`/`FONTE`, as
+                        mesmas que o teste de sobreposição usa. */}
+                    <text y={rP + ROTULO_PESSOA.nome * e} textAnchor="middle" className="wr-nome wr-nome-h"
+                      fontSize={FONTE.nome * e}>
                       {p.nome}
                     </text>
                     {p.status && (
-                      <text y={rP + 29 * e} textAnchor="middle" className="wr-status-h" fontSize={10.5 * e}>
+                      <text y={rP + ROTULO_PESSOA.status * e} textAnchor="middle" className="wr-status-h"
+                        fontSize={FONTE.status * e}>
                         {ROTULO_STATUS[p.status]}
                       </text>
                     )}
@@ -595,9 +605,14 @@ export default function WarRoomPage() {
                 // aberto — conteúdo de conversa numa TV pública. Hoje o rótulo
                 // é só o estado: com quem e há quanto tempo, ou o papel.
                 const parceiro = a.parceiroId ? feed?.pessoas.find((p) => p.id === a.parceiroId)?.nome : null;
-                const linha2 = a.estado !== "ocioso"
-                  ? `${parceiro ? `conversando com ${parceiro}` : "trabalhando"}${a.desde ? ` · ${decorrido(a.desde)}` : ""}`
+                // O tempo desce para uma terceira linha: na fonte de 4 m,
+                // "conversando com Karolaine · 12min 30s" numa linha só
+                // passava por cima do agente vizinho.
+                const ocupado = a.estado !== "ocioso";
+                const linha2 = ocupado
+                  ? (parceiro ? `conversando com ${parceiro}` : "trabalhando")
                   : a.papel;
+                const linha3 = ocupado && a.desde ? decorrido(a.desde) : null;
                 return (
                   <g key={a.id} transform={`translate(${pos.x},${pos.y})`}>
                     <circle r={R_AGENTE + 10} fill={halo} filter="url(#wr-brilho)" />
@@ -623,11 +638,18 @@ export default function WarRoomPage() {
                       className={`wr-sigla wr-${a.estado}`}>
                       {a.nome.slice(0, 2).toUpperCase()}
                     </text>
-                    <text textAnchor="middle" y={R_AGENTE + 30} fontSize={16} className="wr-nome">{a.nome}</text>
-                    <text textAnchor="middle" y={R_AGENTE + 48} fontSize={11.5} className="wr-tarefa"
-                      fill={a.estado === "ocioso" ? "#5C6070" : "#A8B3C7"}>
+                    <text textAnchor="middle" y={R_AGENTE + ROTULO_AGENTE.nome} fontSize={FONTE.agente}
+                      className="wr-nome">{a.nome}</text>
+                    <text textAnchor="middle" y={R_AGENTE + ROTULO_AGENTE.linha2} fontSize={FONTE.agenteSub}
+                      className="wr-tarefa" fill={a.estado === "ocioso" ? "#5C6070" : "#A8B3C7"}>
                       {linha2}
                     </text>
+                    {linha3 && (
+                      <text textAnchor="middle" y={R_AGENTE + ROTULO_AGENTE.linha3} fontSize={FONTE.agenteSub}
+                        className="wr-tarefa" fill={a.estado === "ocioso" ? "#5C6070" : "#A8B3C7"}>
+                        {linha3}
+                      </text>
+                    )}
                   </g>
                 );
               })}
