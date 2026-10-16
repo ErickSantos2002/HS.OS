@@ -1,6 +1,6 @@
 # EscritorioHS — ponto de retomada
 
-Atualizado em **15/10/2026, fim do dia**. Leia isto antes de mexer no
+Atualizado em **16/10/2026, manhã**. Leia isto antes de mexer no
 escritório virtual.
 
 ## Onde estamos
@@ -9,7 +9,7 @@ escritório virtual.
 |---|---|---|
 | **A — escritório no ar** | ✅ em produção em `https://escritoriohs.healthsafetytech.com` | `escritoriohs/README.md`, spec/plano `docs/superpowers/*/2026-10-15-escritorio-virtual*` |
 | **Mapa próprio da HS** | ✅ é a entrada (`/~/hs/hs.wam`) | `escritoriohs/mapa/README.md` |
-| **B — ligação com o HS.OS** | 🟡 **código pronto na `main`; backend no ar; falta ligar no `wa` e enviar o mapa** | abaixo; spec `docs/superpowers/specs/2026-10-15-escritoriohs-b-ligacao-hsos-design.md`, plano `docs/superpowers/plans/2026-10-15-escritoriohs-b.md` |
+| **B — ligação com o HS.OS** | 🟢 **no ar desde 16/10** (Admin API ligada no `wa`, mapa com `escritorio.js` enviado); falta aceite com gente e donos das salas | abaixo; spec `docs/superpowers/specs/2026-10-15-escritoriohs-b-ligacao-hsos-design.md`, plano `docs/superpowers/plans/2026-10-15-escritoriohs-b.md` |
 | **C — agentes no escritório** | ⏳ depois do B; começa por sondagem | spec do A |
 
 Conferência rápida (de qualquer máquina com SSH na VPS):
@@ -54,7 +54,30 @@ final; correções da revisão em `362b575`.
 - O **front do HS.OS**: confirmar se o Erick fez deploy dele junto com o
   backend (o bloco "No escritório agora" só aparece com a presença ligada).
 
-## ▶ Próximos passos, em ordem (amanhã)
+## O que aconteceu em 16/10/2026
+
+- **Admin API ligada no `wa`** e deploy feito: `play` healthy com as 3
+  variáveis, presença do Erick aparecendo no HS.OS. `verificar.sh tudo`: 17
+  checagens (a raiz agora é 302 para a sala; ganhou a do `no-cache`).
+- **Editor vira admin no WA:** as tags `["admin","editor"]` liberam mensagem
+  global e gravação. A gravação não foi montada nem testada (LiveKit egress).
+- **Móvel nunca é bloco** (decisão do Erick): os carimbos de blocos saíam
+  quebrados — TV cortada, cadeira que era só o pé, mesa emendada. Tudo virou
+  objeto da coleção; TV e quadros saíram (não há na coleção).
+  `test_nenhum_movel_e_bloco` tranca.
+- **Cache:** o map-storage manda `s-max-age` (inválido) e o navegador segurava
+  o `hs.tmj` velho por horas — no Firefox do Erick, mesmo depois do
+  Ctrl+Shift+R. A `borda` agora força `no-cache` no `/map-storage/`. Quem entrou
+  antes de 16/10 pode precisar limpar os dados do site **uma vez**.
+- ⚠️ O classificador do auto mode às vezes bloqueia o deploy pelo MCP e o
+  `ssh` de leitura na VPS mesmo com a permissão dada; passa quando o Erick
+  autoriza na própria conversa.
+
+## ▶ Próximos passos, em ordem
+
+Feitos em 16/10: 1, 2 e 4 (o 4 falta a conferência do status no navegador).
+
+## ▶ Próximos passos, em ordem
 
 Os valores dos tokens estão em `~/escritoriohs-b.env` (`600`). **Não imprimir**:
 montar o bloco no clipboard por script, como foi feito:
