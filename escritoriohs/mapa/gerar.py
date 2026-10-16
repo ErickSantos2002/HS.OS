@@ -14,26 +14,6 @@ SCRIPT = "escritorio.js"   # script/escritorio.js → propriedade `script` do ma
 
 TIPO_PISO = {"sala": "madeira", "reuniao": "carpete", "diretoria": "carpete",
              "recepcao": "piso_claro", "cafe": "madeira", "silenciosa": "carpete"}
-# Cada tipo de cômodo: (carimbo, onde) — `onde` recebe o interior caminhável
-# (x1, y1, x2, y2) e devolve o canto do carimbo. y1 é a primeira linha abaixo
-# das faces; carimbos com dy=-1 (tv, quadro, topo da estante) caem na face.
-MOVEIS_POR_TIPO = {   # BLOCOS fixos: só o que não existe na coleção do editor
-    "sala": [],
-    "diretoria": [("quadro", lambda a: (a[2] - 5, a[1]))],
-    "reuniao": [("tv", lambda a: (a[0] + 2, a[1]))],
-    "cafe": [("balcao_cafe", lambda a: (a[0], a[1])),
-             ("mesa_redonda", lambda a: (a[0] + 2, a[1] + 3)),
-             ("mesa_redonda", lambda a: (a[0] + 7, a[1] + 3)),
-             ("mesa_redonda", lambda a: (a[0] + 12, a[1] + 3)),
-             ("mesa_redonda", lambda a: (a[0] + 4, a[1] + 6)),
-             ("mesa_redonda", lambda a: (a[0] + 9, a[1] + 6)),
-             ("quadro", lambda a: (a[2] - 7, a[1]))],
-    "silenciosa": [],
-    "recepcao": [("balcao_recepcao", lambda a: ((a[0] + a[2]) // 2 - 1, a[1] + 1)),
-                 ("quadro", lambda a: (a[0] + 3, a[1])),
-                 ("quadro", lambda a: (a[2] - 4, a[1]))],
-}
-
 def _mx(a): return (a[0] + a[2]) // 2 - 2
 def _my(a): return (a[1] + a[3]) // 2 - 2
 
@@ -80,7 +60,15 @@ OBJETOS_POR_TIPO = {
              ("planta_grande", lambda a: (a[0], a[3] - 2)),
              ("planta_grande", lambda a: (a[2] - 2, a[3] - 2)),
              ("cafeteira", lambda a: (a[0] + 3, a[1])),
-             ("relogio", lambda a: (a[0] + 8, a[1] - 2))],
+             ("relogio", lambda a: (a[0] + 8, a[1] - 2)),
+             # balcão (era carimbo de blocos até 16/10/2026)
+             ("mesa", lambda a: (a[0], a[1] - 1)),
+             ("canecas", lambda a: (a[0] + 1, a[1])),
+             # cinco mesinhas com uma cadeira de cada lado (eram blocos)
+             *[p for x, y in ((2, 3), (7, 3), (12, 3), (4, 6), (9, 6)) for p in (
+                 ("mesinha", (lambda x, y: lambda a: (a[0] + x + 1, a[1] + y - 1))(x, y)),
+                 ("cadeira_dir", (lambda x, y: lambda a: (a[0] + x, a[1] + y))(x, y)),
+                 ("cadeira_esq", (lambda x, y: lambda a: (a[0] + x + 2, a[1] + y))(x, y)))]],
     "silenciosa": [("estante_grande", lambda a: (a[0], a[1] - 2)),
                    ("estante_grande", lambda a: (a[2] - 1, a[1] - 2)),
                    ("pufe", lambda a: (a[0] + 2, a[1] + 2)),
@@ -97,7 +85,9 @@ OBJETOS_POR_TIPO = {
                  ("planta_grande", lambda a: (a[0], a[1] - 1)),
                  ("planta_grande", lambda a: (a[2] - 2, a[1] - 1)),
                  ("monitor", lambda a: ((a[0] + a[2]) // 2 - 1, a[1] + 1)),
-                 ("relogio", lambda a: ((a[0] + a[2]) // 2 + 4, a[1] - 2))],
+                 ("relogio", lambda a: ((a[0] + a[2]) // 2 + 4, a[1] - 2)),
+                 # balcão sob o monitor (era carimbo de blocos até 16/10/2026)
+                 ("mesa", lambda a: ((a[0] + a[2]) // 2 - 1, a[1]))],
 }
 
 def _com_ids(itens, prefixo):
@@ -168,19 +158,7 @@ def grade(planta):
     porta = {cel for c in planta.comodos for cel in c.celulas_porta()}
     parede -= porta
     bloqueado = set(parede)
-    for c in planta.comodos:
-        x1, y1, x2, y2 = _interior_caminhavel(c, parede)
-        for nome, onde in MOVEIS_POR_TIPO[c.tipo]:
-            ox, oy = onde((x1, y1, x2, y2))
-            for dx, dy, _, _, colide in blocos.CARIMBOS[nome]:
-                if colide:
-                    bloqueado.add((ox + dx, oy + dy))
-    for d in planta.decoracao:
-        if "carimbo" in d:
-            for dx, dy, _, _, colide in blocos.CARIMBOS[d["carimbo"]]:
-                if colide:
-                    bloqueado.add((d["x"] + dx, d["y"] + dy))
-    fixo = set(bloqueado)   # o que vai para a camada `colisao`: só blocos
+    fixo = set(bloqueado)   # o que vai para a camada `colisao`: só parede
     # Objetos: o WA aplica a collisionGrid onde a entidade ESTÁ. Pintá-la no tmj
     # deixaria parede invisível quando o Erick move ou apaga a mesa. Entra só
     # aqui, para os testes de alcance e de porta.
@@ -259,18 +237,6 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
                     pôr("paredes2", x, y + k, gid_)
     for (x, y) in g["fixo"]:
         pôr("colisao", x, y, blocos.COLISAO)
-
-    for c in P.comodos:
-        area = _interior_caminhavel(c, g["parede"])
-        for nome, onde in MOVEIS_POR_TIPO[c.tipo]:
-            ox, oy = onde(area)
-            for dx, dy, camada, gid_, _ in blocos.CARIMBOS[nome]:
-                pôr(camada, ox + dx, oy + dy, gid_)
-
-    for d in P.decoracao:
-        if "carimbo" in d:
-            for dx, dy, camada, gid_, _ in blocos.CARIMBOS[d["carimbo"]]:
-                pôr(camada, d["x"] + dx, d["y"] + dy, gid_)
 
     nomes = _placas(P, pasta)
     primeiro_placa = blocos.TILESETS[-1][1] + blocos.TILESETS[-1][3]

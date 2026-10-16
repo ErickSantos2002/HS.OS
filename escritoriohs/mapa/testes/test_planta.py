@@ -51,8 +51,6 @@ def test_decoracao_fica_no_corredor():
     from PIL import Image
     import objetos
     def celulas(d):
-        if "carimbo" in d:
-            return [(d["x"] + dx, d["y"] + dy) for dx, dy, _, _, _ in blocos.CARIMBOS[d["carimbo"]]]
         img = Image.open(objetos.caminho_imagem(d["objeto"]))   # objeto: a área da imagem inteira
         return [(d["x"] + i, d["y"] + j) for i in range(img.width // 32) for j in range(img.height // 32)]
     for d in P.decoracao:

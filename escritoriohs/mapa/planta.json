@@ -355,14 +355,14 @@
       "y": 29
     },
     {
-      "carimbo": "banco",
+      "objeto": "sofa",
       "x": 40,
-      "y": 31
+      "y": 30
     },
     {
-      "carimbo": "banco",
+      "objeto": "sofa",
       "x": 44,
-      "y": 31
+      "y": 30
     },
     {
       "objeto": "planta_grande",
@@ -370,7 +370,7 @@
       "y": 29
     },
     {
-      "carimbo": "maquina_cafe",
+      "objeto": "cafeteira",
       "x": 37,
       "y": 45
     },
@@ -395,9 +395,9 @@
       "y": 33
     },
     {
-      "carimbo": "banco",
+      "objeto": "sofa",
       "x": 28,
-      "y": 47
+      "y": 46
     },
     {
       "objeto": "planta_grande",

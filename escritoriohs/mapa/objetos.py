@@ -21,6 +21,8 @@ PECAS = {
     "mesinha": (_F, "Basic Small Table", "grey", "Down"),
     "cadeira_cima": (_F, "Basic Chair", "grey", "Up"),
     "cadeira": (_F, "Basic Chair", "grey", "Down"),
+    "cadeira_dir": (_F, "Basic Chair", "grey", "Right"),
+    "cadeira_esq": (_F, "Basic Chair", "grey", "Left"),
     "poltrona": (_F, "Armchair", "grey", "Down"),
     "poltrona_dir": (_F, "Armchair", "black", "Right"),
     "poltrona_esq": (_F, "Armchair", "black", "Left"),
