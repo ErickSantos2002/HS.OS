@@ -9,7 +9,7 @@ automações reais moram no gateway (`cron_jobs`), não na tabela `automations`;
 casa, e por bons motivos — teria subido uma TV em branco.
 
 Então as fontes mudaram, e só elas: o painel lê o que este sistema de fato
-produz — briefings publicados, conversas, consumo e o estado dos agentes.
+produz — briefings publicados, conversas, DMs, presença e o estado dos agentes.
 
 ⚠️ **Medido ou ausente, nunca zero inventado.** Mesma régua do
 `coletor_metricas`, pela mesma razão: numa parede vista de longe, `0%` é lido
@@ -28,7 +28,7 @@ selecionam `content`. Ver `docs/superpowers/specs/2026-10-16-warroom-tv-design.m
 import hmac
 import re
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 FUSO = ZoneInfo("America/Recife")
