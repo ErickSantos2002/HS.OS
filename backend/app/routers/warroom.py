@@ -63,8 +63,10 @@ async def feed(
 
     async with sessao(role="service_role") as conn:
         perfis_pessoa = await conn.fetch(
-            "SELECT id::text AS id, email, full_name, departamento, custom_status "
-            "FROM public.profiles")
+            # Conta desativada some da parede: quem saiu tem o acesso desligado
+            # e o perfil continua.
+            "SELECT p.id::text AS id, p.email, p.full_name, p.departamento, p.custom_status "
+            "FROM public.profiles p JOIN auth.users u ON u.id = p.id WHERE u.is_active")
         perfis = await conn.fetch(
             "SELECT agent_id, name, role, specialty FROM public.agent_profiles "
             "ORDER BY sort_order, name")
@@ -74,10 +76,12 @@ async def feed(
         # Só papel, hora e quem — o texto não sai do banco.
         ultimas = await conn.fetch(
             """SELECT DISTINCT ON (agent_id) agent_id, role, created_at, user_id::text AS user_id
-                 FROM public.conversations ORDER BY agent_id, created_at DESC""")
+                 FROM public.conversations
+                WHERE created_at >= now() - interval '2 hours'
+                ORDER BY agent_id, created_at DESC""")  # a janela do _ESQUECE
         publicados = await conn.fetch(
             "SELECT agent_id, title, created_at FROM public.wiki_documents "
-            "WHERE created_at >= $1 ORDER BY created_at DESC", hoje)
+            "WHERE created_at >= $1 AND agent_id IS NOT NULL ORDER BY created_at DESC", hoje)
         msgs_agente = await conn.fetch(
             "SELECT user_id::text AS user_id, agent_id, role, created_at "
             "FROM public.conversations WHERE created_at >= $1", hoje)
@@ -91,7 +95,8 @@ async def feed(
             """SELECT m.channel_id::text AS channel_id, m.author_id, m.created_at
                  FROM public.channel_messages m
                  JOIN public.channels c ON c.id = m.channel_id
-                WHERE c.type = 'dm' AND m.deleted_at IS NULL AND m.created_at >= $1""", hoje)
+                WHERE c.type = 'dm' AND m.deleted_at IS NULL
+                  AND m.author_type = 'human' AND m.created_at >= $1""", hoje)
         primeiro = await conn.fetchval("SELECT min(ts) FROM public.usage_events")
 
     pessoas, setores = warroom.montar_pessoas([dict(r) for r in perfis_pessoa], presentes)
