@@ -8,8 +8,13 @@ O mapa `hs` (entrada: `START_ROOM_URL=/~/hs/hs.wam`) é **gerado**:
 | parte | quem manda | como muda |
 |---|---|---|
 | paredes, piso, portas, salas, placas, logo, áreas (tranca, reunião, silenciosa, entrada) | o **gerador** | editar `planta.json`/`gerar.py` e reenviar |
-| balcões, mesa longa de reunião, TV, quadros, mesas redondas, bancos, máquina de café | o **gerador** (são blocos: não existem na coleção do editor) | idem |
-| móveis-objeto: mesa, cadeira, monitor, plantas, estantes, sofás, pufes, poltronas, relógios… | **o Erick, pelo editor do navegador**, depois de publicados | arrastar/apagar no navegador |
+| **todo móvel** — mesas (inclusive balcões e a mesa de reunião), cadeiras, monitor, plantas, estantes, sofás, pufes, poltronas, relógios, cafeteira… | **o Erick, pelo editor do navegador**, depois de publicados | arrastar/apagar no navegador |
+
+⚠️ **Móvel nunca é bloco** (decisão do Erick, 16/10/2026). Até essa data
+balcões, mesa de reunião, TV, quadros, mesinhas e bancos eram carimbos de
+blocos e saíam quebrados no WA (peça cortada, cadeira que era só o pé), além de
+não se mexerem pelo editor. O que não existe na coleção (TV, quadros) saiu do
+mapa. `test_nenhum_movel_e_bloco` recusa qualquer bloco das folhas de móveis.
 
 ⚠️ **Objeto publicado é do Erick.** `publicados.json` registra os ids que o
 gerador já pôs no ar. No envio, `mesclar.py`: mantém os objetos do ar como
