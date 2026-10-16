@@ -69,7 +69,10 @@ OBJETOS_POR_TIPO = {
                 ("planta_grande", lambda a: (a[2] - 2, a[1] - 1)),
                 ("relogio", lambda a: (a[2] - 3, a[1] - 2)),
                 *[("mesa", (lambda i: lambda a: (_mx(a) + 2 * i, _my(a)))(i)) for i in range(2)],
-                *[("cadeira", (lambda i: lambda a: (_mx(a) + i, _my(a)))(i)) for i in range(4)],
+                # Meia linha acima do tampo: a mesa tem `depthOffset: -64` na coleção
+                # e a cadeira não; na mesma linha o WA desempata como quiser e parte
+                # das cadeiras saía na frente da mesa (visto em 16/10/2026).
+                *[("cadeira", (lambda i: lambda a: (_mx(a) + i, _my(a) - 0.5))(i)) for i in range(4)],
                 *[("cadeira_cima", (lambda i: lambda a: (_mx(a) + i, _my(a) + 3))(i)) for i in range(4)]],
     "cafe": [("estante", lambda a: (a[0] + 4, a[1] - 2)),
              ("sofa", lambda a: (a[2] - 2, a[1])),
@@ -115,7 +118,7 @@ def objetos_do_mapa(planta):
         itens = []
         for peca, onde in OBJETOS_POR_TIPO[c.tipo]:
             tx, ty = onde(area)
-            itens.append((peca, tx * 32, ty * 32, f"{c.nome} · {peca}"))
+            itens.append((peca, round(tx * 32), round(ty * 32), f"{c.nome} · {peca}"))
         out += _com_ids(itens, c.nome)
     out += _com_ids([(d["objeto"], d["x"] * 32, d["y"] * 32, f"corredor · {d['objeto']}")
                      for d in planta.decoracao if "objeto" in d], "corredor")

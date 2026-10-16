@@ -95,6 +95,8 @@ CARIMBOS = {
     "planta_alta": [(0, 0, "moveis1", D(91), True)],
     "banco": [(0, 0, "moveis1", S(143), True), (1, 0, "moveis1", S(144), True)],
     "maquina_cafe": [(0, 0, "moveis1", M(57), True), (1, 0, "moveis1", M(56), True)],
-    "tv": [(x, -1, "placas", M(40 + x), False) for x in range(3)],       # na face da parede
+    # TV na face da parede. A tela ocupa DUAS linhas da folha (40–42 e a moldura
+    # de baixo em 50–52); até 16/10/2026 só a de cima entrava e ela saía cortada.
+    "tv": [(x, dy, "placas", M(40 + x + 10 * (dy + 2)), False) for x in range(3) for dy in (-2, -1)],
     "quadro": [(0, -1, "placas", D(0), False), (1, -1, "placas", D(1), False)],
 }
