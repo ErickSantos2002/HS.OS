@@ -49,10 +49,12 @@ colunas: as consultas do router **não as selecionam**.
   `^(Operação|Faturamento|Vendedores|SDR|Serviços) · \d{2}/\d{2}$`. Qualquer
   outro vira "publicou um documento" — agente pode publicar documento com
   título sensível (a `nina` já publicou lista nominal de clientes perdidos).
-- **Status:** só os quatro presets (`Em reunião`, `Foco / DND`, `Almoço`,
-  `Ausente` — os labels de `frontend/src/lib/user-status.ts`, mesma lista de
-  `app/escritorio/status_wa.py`). `custom_status` aceita texto livre de 200
-  caracteres; qualquer outro valor vira `null` na TV.
+- **Status:** pelos labels dos presets de `frontend/src/lib/user-status.ts`.
+  `Em reunião` → `reuniao`, `Foco / DND` → `foco`, `Almoço` → `almoco`,
+  `Ausente` → `ausente`. ⚠️ **`Doente` é dado de saúde e nunca aparece**:
+  `Doente`, `Férias / Folga` e `Viajando` viram `ausente`. `Home office` e
+  qualquer outro valor viram `null` — `custom_status` aceita texto livre de 200
+  caracteres, e texto livre não vai para a TV.
 - **Quem aparece:** só `@healthsafetytech.com`, e fora as contas cujo e-mail
   começa por `teste` (`teste.ceo@`). A consultora externa não é do time.
 - Teste que tranca: o router roda com linhas falsas cujo `content` é uma frase
@@ -76,7 +78,7 @@ interface Feed {
     desde: string | null; contexto: number | null;
     parceiroId: string | null;                      // id da pessoa (era o nome)
   }[];
-  conversasTime: { a: string; b: string; desde: string }[];  // DMs vivos
+  conversasTime: { a: string; b: string; ultima: string }[]; // DMs vivos (ids de pessoa)
   eventos: { ts: string; tipo: "entrega" | "agente" | "time"; texto: string }[];
   numeros: { entregas: number; atendidas: number; pessoasAtivas: number; conversasTime: number };
 }
