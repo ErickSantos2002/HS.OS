@@ -78,12 +78,6 @@ CARIMBOS = {
         (0, 0, "moveis2", M(25), True), (1, 0, "moveis2", M(24), True),
         (1, 2, "moveis1", S(119), False),
     ],
-    "mesa_reuniao": [  # mesa longa 4×2 com cadeiras em volta
-        *[(x, 1, "moveis1", T(10 if x == 0 else 13 if x == 3 else 11), True) for x in range(4)],
-        *[(x, 2, "moveis1", T(20 if x == 0 else 23 if x == 3 else 21), True) for x in range(4)],
-        *[(x, 0, "moveis1", S(134), False) for x in range(4)],
-        *[(x, 3, "moveis1", S(150), False) for x in range(4)],
-    ],
     "sofa": [(x, 0, "moveis1", S(13 + x), True) for x in range(3)],
     "sofa_azul": [(x, 0, "moveis1", S(16 + x), True) for x in range(3)],
     "pufes": [(2 * x, 0, "moveis1", S(176 + x), False) for x in range(4)],

@@ -20,8 +20,7 @@ TIPO_PISO = {"sala": "madeira", "reuniao": "carpete", "diretoria": "carpete",
 MOVEIS_POR_TIPO = {   # BLOCOS fixos: só o que não existe na coleção do editor
     "sala": [],
     "diretoria": [("quadro", lambda a: (a[2] - 5, a[1]))],
-    "reuniao": [("mesa_reuniao", lambda a: ((a[0] + a[2]) // 2 - 2, (a[1] + a[3]) // 2 - 2)),
-                ("tv", lambda a: (a[0] + 2, a[1]))],
+    "reuniao": [("tv", lambda a: (a[0] + 2, a[1]))],
     "cafe": [("balcao_cafe", lambda a: (a[0], a[1])),
              ("mesa_redonda", lambda a: (a[0] + 2, a[1] + 3)),
              ("mesa_redonda", lambda a: (a[0] + 7, a[1] + 3)),
@@ -34,6 +33,9 @@ MOVEIS_POR_TIPO = {   # BLOCOS fixos: só o que não existe na coleção do edit
                  ("quadro", lambda a: (a[0] + 3, a[1])),
                  ("quadro", lambda a: (a[2] - 4, a[1]))],
 }
+
+def _mx(a): return (a[0] + a[2]) // 2 - 2
+def _my(a): return (a[1] + a[3]) // 2 - 2
 
 # OBJETOS do editor: (peça, onde) — o Erick move e apaga pelo navegador.
 # `onde` devolve o bloco do canto de cima da IMAGEM (que pode subir na face).
@@ -56,9 +58,19 @@ OBJETOS_POR_TIPO = {
                   ("poltrona_esq", lambda a: (a[2] - 3, a[3] - 1)),
                   ("planta_grande", lambda a: (a[2] - 2, a[1] - 1)),
                   ("relogio", lambda a: (a[0] + 4, a[1] - 2))],
+    # Mesa longa = duas mesas da coleção encostadas, com quatro cadeiras de cada
+    # lado. Até 16/10/2026 era carimbo de blocos (`mesa_reuniao`) e saía quebrada:
+    # as cadeiras de cima eram só o pé da cadeira da folha e o tampo emendava
+    # pedaços de duas mesas diferentes. (mx, my) é o canto de cima da imagem da
+    # mesa, que tem uma linha de borda antes das duas que colidem.
+    # ⚠️ Peça nova vai no FIM da lista: saida/ids-antigos.json traduz os ids
+    # antigos por posição, e inserir no meio troca a tradução das que já estão no ar.
     "reuniao": [("planta_grande", lambda a: (a[0], a[1] - 1)),
                 ("planta_grande", lambda a: (a[2] - 2, a[1] - 1)),
-                ("relogio", lambda a: (a[2] - 3, a[1] - 2))],
+                ("relogio", lambda a: (a[2] - 3, a[1] - 2)),
+                *[("mesa", (lambda i: lambda a: (_mx(a) + 2 * i, _my(a)))(i)) for i in range(2)],
+                *[("cadeira", (lambda i: lambda a: (_mx(a) + i, _my(a)))(i)) for i in range(4)],
+                *[("cadeira_cima", (lambda i: lambda a: (_mx(a) + i, _my(a) + 3))(i)) for i in range(4)]],
     "cafe": [("estante", lambda a: (a[0] + 4, a[1] - 2)),
              ("sofa", lambda a: (a[2] - 2, a[1])),
              ("sofa", lambda a: (a[2] - 5, a[1])),
