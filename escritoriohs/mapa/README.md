@@ -37,15 +37,28 @@ a leitura do mapa do ar e o envio se perde.
 
 A mescla preserva do ar o `lastCommandId`.
 
-**Dono de sala** (sub-projeto B): `"dono": "<e-mail>"` num cômodo de
-`tipo: "sala"` em `planta.json` vira o `ownerId` da área pessoal, em
-minúsculas — é o `userUuid` que a Admin API do HS.OS devolve. Dono sem `@`, ou
-em cômodo que não é sala, para o gerador com erro. ⚠️ **Planta com `dono` vence
-o ar; planta sem `dono` preserva o dono do ar** (`ownerId`/`allowedTags`), ou
-seja, quem foi atribuído pelo editor do navegador continua lá. Para tirar o dono
-posto pela planta, apague o `dono` **e** desfaça pelo navegador. A `"placa"`
-continua manual: para pôr o nome da pessoa na porta, troque a placa. Quem é dono
-de qual sala é dado do Erick — o repositório não traz nenhum.
+**Dono de sala** (sub-projeto B; diretoria também desde 16/10/2026).
+⚠️ **Dono e nome NÃO ficam no repositório — ele é público.** Moram em
+`~/escritoriohs-donos.json` (600), na máquina do Erick:
+
+```json
+{"Comercial 01": {"dono": "comercial01@healthsafetytech.com", "pessoa": "Gislayne"}}
+```
+
+`gerar.py` o lê se existir (sem ele, mapa sem dono e placa só de setor — é
+assim que os testes rodam). `dono` vira o `ownerId` da área pessoal, em
+minúsculas — o `userUuid` que a Admin API do HS.OS devolve, ou seja, o
+**e-mail Microsoft com que a pessoa entra**. `pessoa` vira a segunda faixa da
+placa, embaixo do setor; texto acima de 60 px para o gerador (encurte no
+arquivo). Cômodo que não existe na planta também para. Por isso `saida/` está
+no `.gitignore`: depois de gerada ela tem e-mails (`hs.wam`) e nomes
+(`placas.png`).
+
+⚠️ **Planta com `dono` vence o ar; sem `dono`, vale o do ar**
+(`ownerId`/`allowedTags`): quem foi atribuído pelo editor do navegador
+continua lá. Para tirar um dono, apague do arquivo **e** desfaça pelo
+navegador. `placa_dx` (no `planta.json`) desloca a placa na parede — a da
+Diretoria ficava atrás da estante grande.
 
 A colisão dos objetos (mesas) **não vai para a camada `colisao` do mapa**: o
 WA a aplica onde a mesa está. Pintada no mapa, mesa movida deixava parede
@@ -79,7 +92,7 @@ do WA. 401 → desiste até a página ser recarregada.
 |---|---|
 | ambiente | `python3 -m venv .venv && .venv/bin/pip install pytest==8.3.3 pillow==12.3.0` |
 | trocar a placa de uma sala por um nome | editar `"placa"` em `planta.json` |
-| dar dono a uma sala | `"dono": "fulano@healthsafetytech.com"` no cômodo, em `planta.json` |
+| dar dono a uma sala | `~/escritoriohs-donos.json` (fora do repo) — ver acima |
 | ver como ficou | `.venv/bin/python gerar.py && cp -r tilesets saida/ && .venv/bin/python previa.py saida/hs.tmj saida/previa.png 0.5` |
 | conferir | `.venv/bin/python -m pytest testes -q` |
 | pôr no ar | `./enviar.sh` (pasta `hs/`; o `office` fica intacto; precisa de `~/escritoriohs.env` com o `MAP_STORAGE_AUTHENTICATION_TOKEN`) |

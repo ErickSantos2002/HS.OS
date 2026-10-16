@@ -82,3 +82,40 @@ def test_area_que_nao_esta_no_ar_fica_como_gerada():
     assert wam["areas"][0]["properties"][0]["ownerId"] == "a@x"
     wam, _ = mesclar.mesclar(_wam(None), no_ar, set())
     assert wam["areas"][0]["properties"][0]["ownerId"] is None
+
+
+# --- donos de fora do repositório (16/10/2026) ------------------------------
+def _donos(tmp_path, d):
+    p = tmp_path / "donos.json"; p.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+    return str(p)
+
+def test_donos_de_fora_viram_owner_id_e_placa_de_duas_faixas(tmp_path):
+    """O repositório é público: e-mail e nome das pessoas vêm de um arquivo
+    fora dele, e a placa ganha a faixa do nome sem perder a do setor."""
+    from PIL import Image
+    sala = _primeira(json.load(open("planta.json", encoding="utf-8"))["comodos"], "sala")["nome"]
+    donos = _donos(tmp_path, {sala: {"dono": "Fulano@HealthSafetyTech.com", "pessoa": "Fulano"},
+                              "Diretoria": {"dono": "ceo@healthsafetytech.com", "pessoa": "Ceo"}})
+    gerar.gerar("planta.json", str(tmp_path / "s"), donos)
+    wam = json.load(open(tmp_path / "s" / "hs.wam"))
+    assert _pessoal(wam, sala)["ownerId"] == "fulano@healthsafetytech.com"
+    assert _pessoal(wam, "Diretoria")["ownerId"] == "ceo@healthsafetytech.com"
+    placas = Image.open(tmp_path / "s" / "placas.png").convert("RGBA")
+    P = modelo.carregar("planta.json")
+    linhas = sorted({(c.placa, "") for c in P.comodos if c.placa and c.nome not in (sala, "Diretoria")}
+                    | {(next(c.placa for c in P.comodos if c.nome == sala), "Fulano"), ("Diretoria", "Ceo")})
+    y = 32 * linhas.index(("Diretoria", "Ceo"))
+    assert placas.getpixel((3, y + 5))[3] and placas.getpixel((3, y + 25))[3]   # duas faixas
+    y = 32 * linhas.index(next(l for l in linhas if l[1] == ""))
+    assert not placas.getpixel((3, y + 5))[3] and placas.getpixel((3, y + 16))[3]  # uma, no meio
+
+def test_donos_com_comodo_inexistente_param(tmp_path):
+    """Nome digitado errado deixaria a sala sem dono em silêncio."""
+    with pytest.raises(ValueError, match="Comercial 99"):
+        modelo.carregar("planta.json", {"Comercial 99": {"dono": "a@b"}})
+
+def test_nome_que_nao_cabe_na_placa_para(tmp_path):
+    sala = _primeira(json.load(open("planta.json", encoding="utf-8"))["comodos"], "sala")["nome"]
+    donos = _donos(tmp_path, {sala: {"dono": "a@b", "pessoa": "Nome Comprido Demais Para A Placa"}})
+    with pytest.raises(ValueError, match="não cabe"):
+        gerar.gerar("planta.json", str(tmp_path / "s"), donos)

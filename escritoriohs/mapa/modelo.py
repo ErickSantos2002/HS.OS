@@ -2,6 +2,8 @@
 import json
 from dataclasses import dataclass
 
+TEM_DONO = ("sala", "diretoria")
+
 @dataclass(frozen=True)
 class Comodo:
     nome: str
@@ -12,16 +14,23 @@ class Comodo:
     h: int
     porta: str | None = None
     placa: str | None = None
-    # E-mail do dono da sala (só `tipo: "sala"`). Vira o `ownerId` da área
-    # pessoal, em minúsculas: é o `userUuid` que a Admin API do HS.OS devolve.
+    # E-mail do dono (sala e diretoria). Vira o `ownerId` da área pessoal, em
+    # minúsculas: é o `userUuid` que a Admin API do HS.OS devolve.
+    # ⚠️ Dono e pessoa NÃO vêm do planta.json (o repositório é público): vêm de
+    # ~/escritoriohs-donos.json, mesclado em `carregar` — ver README.
     dono: str | None = None
+    # Nome na segunda faixa da placa, embaixo do setor.
+    pessoa: str | None = None
+    # Deslocamento da placa na parede, em blocos (a da Diretoria ficava atrás
+    # da estante grande).
+    placa_dx: int = 0
 
     def __post_init__(self):
         if self.dono is None:
             return
-        if self.tipo != "sala":
-            raise ValueError(f"{self.nome}: `dono` só vale em cômodo do tipo sala "
-                             f"(este é {self.tipo}) — só a sala tem área pessoal")
+        if self.tipo not in TEM_DONO:
+            raise ValueError(f"{self.nome}: `dono` só vale em sala ou diretoria "
+                             f"(este é {self.tipo}) — só elas têm área pessoal")
         if "@" not in self.dono.strip():
             raise ValueError(f"{self.nome}: `dono` tem que ser o e-mail da pessoa "
                              f"(veio {self.dono!r})")
@@ -51,7 +60,19 @@ class Planta:
     comodos: tuple
     decoracao: tuple = ()
 
-def carregar(caminho):
+def carregar(caminho, donos=None):
+    """`donos`: {nome do cômodo: {"dono": e-mail, "pessoa": nome na placa}},
+    lido de fora do repositório. Cômodo que não existe na planta para com erro —
+    um nome digitado errado deixaria a sala sem dono sem ninguém perceber."""
     d = json.load(open(caminho, encoding="utf-8"))
-    return Planta(d["largura"], d["altura"], tuple(Comodo(**c) for c in d["comodos"]),
+    comodos = [dict(c) for c in d["comodos"]]
+    por_nome = {c["nome"]: c for c in comodos}
+    for nome, extra in (donos or {}).items():
+        if nome not in por_nome:
+            raise ValueError(f"donos: não há cômodo chamado {nome!r} na planta")
+        desconhecido = set(extra) - {"dono", "pessoa"}
+        if desconhecido:
+            raise ValueError(f"donos: {nome}: campo desconhecido {sorted(desconhecido)}")
+        por_nome[nome].update(extra)
+    return Planta(d["largura"], d["altura"], tuple(Comodo(**c) for c in comodos),
                   tuple(d.get("decoracao", [])))

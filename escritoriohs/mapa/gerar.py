@@ -176,17 +176,32 @@ def _mascara(parede, x, y):
            ((x, y + 1) in parede) * 4 + ((x - 1, y) in parede) * 8
 
 def _placas(planta, pasta):
-    """Folha de placas: cada placa é 2×1 blocos com o texto. O nome mais longo
-    ("Expedição 02") tem que caber em 64 px — test_placa_cabe_na_largura."""
-    nomes = sorted({c.placa for c in planta.comodos if c.placa})
+    """Folha de placas: cada placa é 2×1 blocos. Só o setor: uma faixa azul no
+    meio. Com `pessoa`: duas faixas — o setor em cima, o nome embaixo, em branco
+    — para a sala dizer de quem é sem perder o setor. Os textos têm que caber
+    em 60 px — test_placa_cabe_na_largura."""
+    nomes = sorted({(c.placa, c.pessoa or "") for c in planta.comodos if c.placa})
     img = Image.new("RGBA", (64, 32 * len(nomes)), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     fonte = ImageFont.load_default(size=9)
-    for i, n in enumerate(nomes):
-        d.rounded_rectangle((1, 32 * i + 9, 62, 32 * i + 23), 3, fill=(24, 133, 200, 255),
-                            outline=(14, 79, 120, 255))
-        w = d.textlength(n, font=fonte)
-        d.text(((64 - w) / 2, 32 * i + 11), n, font=fonte, fill=(255, 255, 255, 255))
+    def faixa(y0, y1, texto, fundo, borda, cor):
+        d.rounded_rectangle((1, y0, 62, y1), 3, fill=fundo, outline=borda)
+        w = d.textlength(texto, font=fonte)
+        d.text(((64 - w) / 2, y0 + 2), texto, font=fonte, fill=cor)
+    azul = ((24, 133, 200, 255), (14, 79, 120, 255), (255, 255, 255, 255))
+    branco = ((250, 250, 250, 255), (14, 79, 120, 255), (14, 79, 120, 255))
+    for setor, pessoa in nomes:
+        for texto in (setor, pessoa):
+            if d.textlength(texto, font=fonte) > 60:
+                raise ValueError(f"placa {setor!r}: {texto!r} não cabe em 60 px — encurte "
+                                 "(no ~/escritoriohs-donos.json, se for o nome da pessoa)")
+    for i, (setor, pessoa) in enumerate(nomes):
+        y = 32 * i
+        if pessoa:
+            faixa(y + 2, y + 15, setor, *azul)
+            faixa(y + 17, y + 30, pessoa, *branco)
+        else:
+            faixa(y + 9, y + 23, setor, *azul)
     img.save(os.path.join(pasta, "placas.png"), optimize=False)
     return nomes
 
@@ -207,9 +222,14 @@ def _logo(pasta):
                                      caixa[1] + (caixa[3] - caixa[1] - logo.height) // 2))
     folha.save(os.path.join(pasta, "logo-hs.png"), optimize=False)
 
-def gerar(caminho_planta="planta.json", pasta="saida"):
+# Donos e nomes das salas: fora do repositório (ele é público). Sem o arquivo
+# o mapa sai sem dono e com placa só de setor — e os testes rodam assim.
+DONOS = os.path.expanduser("~/escritoriohs-donos.json")
+
+def gerar(caminho_planta="planta.json", pasta="saida", caminho_donos=None):
     os.makedirs(pasta, exist_ok=True)
-    P = modelo.carregar(caminho_planta)
+    donos = json.load(open(caminho_donos, encoding="utf-8")) if caminho_donos else None
+    P = modelo.carregar(caminho_planta, donos)
     W, H = P.largura, P.altura
     g = grade(P)
     vazio = lambda: [0] * (W * H)  # noqa: E731
@@ -242,8 +262,9 @@ def gerar(caminho_planta="planta.json", pasta="saida"):
     primeiro_placa = blocos.TILESETS[-1][1] + blocos.TILESETS[-1][3]
     for c in P.comodos:
         if c.placa:
-            i = nomes.index(c.placa)
+            i = nomes.index((c.placa, c.pessoa or ""))
             x1, y1, _, _ = c.interior()
+            x1 += c.placa_dx
             # canto esquerdo da parede: as colunas do meio são da porta norte
             pôr("placas", x1, y1, primeiro_placa + 2 * i)
             pôr("placas", x1 + 1, y1, primeiro_placa + 2 * i + 1)
@@ -335,7 +356,7 @@ def _wam(P):
             areas.append(_area(c.nome, x1, y1, x2, y2, [{"id": _id(c.nome, "silent"), "type": "silent"}]))
         elif c.tipo in ("sala", "diretoria"):
             props = [{"id": _id(c.nome, "lock"), "type": "lockableAreaPropertyData"}]
-            if c.tipo == "sala":
+            if c.tipo in modelo.TEM_DONO:
                 props.append({"id": _id(c.nome, "pessoal"), "type": "personalAreaPropertyData",
                               "accessClaimMode": "static", "allowedTags": [],
                               "ownerId": c.dono.strip().lower() if c.dono else None})
@@ -352,4 +373,7 @@ def _wam(P):
                          "copyright": "Blocos: WorkAdventure (CC-BY-SA 3.0). Planta: Health & Safety."}}
 
 if __name__ == "__main__":
-    gerar(*(sys.argv[1:3] or ["planta.json", "saida"]))
+    planta, pasta = (sys.argv[1:3] or ["planta.json", "saida"])
+    donos = DONOS if os.path.exists(DONOS) else None
+    print(f"donos: {DONOS if donos else 'nenhum (sem ~/escritoriohs-donos.json)'}")
+    gerar(planta, pasta, donos)

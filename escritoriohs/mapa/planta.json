@@ -275,7 +275,8 @@
       "w": 22,
       "h": 12,
       "porta": "W",
-      "placa": "Diretoria"
+      "placa": "Diretoria",
+      "placa_dx": 8
     },
     {
       "nome": "Comercial 07",
