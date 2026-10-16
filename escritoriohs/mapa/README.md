@@ -81,6 +81,15 @@ do WA. 401 → desiste até a página ser recarregada.
 
 ## O que já custou caro
 
+- ⚠️ **Depois de enviar, confira com Ctrl+Shift+R.** O map-storage serve o
+  `hs.tmj` com `cache-control: public, s-max-age=10` — `s-max-age` não existe
+  (o certo é `s-maxage`), então o navegador estima a validade pelo
+  `last-modified` e segura o mapa velho por horas. Em 16/10/2026 isso mostrou
+  os blocos antigos da mesa de reunião por baixo dos objetos novos (5 pés numa
+  mesa de 4) e pareceu que a correção tinha piorado. O `.wam` vem `no-cache`,
+  por isso os objetos atualizam e os blocos não.
+- **Objeto publicado não muda de lugar pelo gerador.** Para reposicionar o que
+  o gerador errou, tirar os ids do `publicados.json` antes do envio — o ar vence.
 - **Colisão ignorada:** o WA só barra passagem em bloco cuja folha declara
   `collides: true`. Sem isso dava para atravessar todas as paredes.
 - **Envio recusado (HTTP 400):** grupo de camadas sem `x`/`y` e camada
