@@ -59,9 +59,8 @@ from datetime import datetime, timedelta, timezone
 AGORA = datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc)
 
 
-def _msg(role, minutos, texto="e o funil?"):
-    return {"role": role, "content": texto, "created_at": AGORA - timedelta(minutes=minutos),
-            "autor": "Nicholson"}
+def _msg(role, minutos, user_id="u-nich"):
+    return {"role": role, "created_at": AGORA - timedelta(minutes=minutos), "user_id": user_id}
 
 
 def test_agente_sem_conversa_esta_ocioso():
@@ -92,32 +91,11 @@ def test_conversa_de_ontem_nao_acende_a_parede():
 PERFIL = {"agent_id": "iris", "name": "Iris", "role": "Faturamento"}
 
 
-def test_agente_conversando_ganha_parceiro():
-    """`parceiro` é a ponta da curva — sem ele a linha não tem para onde ir."""
-    a = w.montar_agentes([PERFIL], [], {"iris": _msg("user", 2)}, AGORA)[0]
-    assert a["parceiro"] == "Nicholson"
-
-
-def test_agente_ocioso_nao_tem_parceiro():
-    a = w.montar_agentes([PERFIL], [], {"iris": _msg("agent", 1)}, AGORA)[0]
-    assert a["parceiro"] is None
-
-
-def test_a_pergunta_aberta_vira_a_tarefa_na_tela():
-    a = w.montar_agentes([PERFIL], [], {"iris": _msg("user", 2)}, AGORA)[0]
-    assert a["tarefa"] == "e o funil?"
-
-
-def test_sem_conversa_a_tarefa_e_nula_e_a_tela_mostra_o_papel():
-    a = w.montar_agentes([PERFIL], [], {}, AGORA)[0]
-    assert a["tarefa"] is None and a["papel"] == "Faturamento"
-
-
 def test_contexto_e_fracao_entre_zero_e_um():
     """O anel do nó desenha `1 - contexto`; a tela quer fração, não porcento."""
     a = w.montar_agentes(
         [PERFIL], [{"agent_id": "iris", "total_tokens": 250_000, "context_tokens": 1_000_000}],
-        {}, AGORA)[0]
+        {}, AGORA, set())[0]
     assert a["contexto"] == 0.25
 
 
@@ -125,42 +103,8 @@ def test_contexto_sem_janela_conhecida_e_nulo():
     """`0` desenharia anel vazio, que na parede se lê como 'contexto limpo'.
     Nulo faz a tela não desenhar anel nenhum."""
     a = w.montar_agentes(
-        [PERFIL], [{"agent_id": "iris", "total_tokens": 900, "context_tokens": 0}], {}, AGORA)[0]
+        [PERFIL], [{"agent_id": "iris", "total_tokens": 900, "context_tokens": 0}], {}, AGORA, set())[0]
     assert a["contexto"] is None
-
-
-def test_sub_agentes_ficam_vazios_por_falta_de_fonte():
-    """Os satélites orbitando quem os criou dependem da `subagent_watch`, que
-    tem 0 linha e **nenhum escritor** — medido em 01/09/2026. Lista vazia é a
-    verdade; inventar filho seria desenhar órbita de coisa que não existe."""
-    assert w.montar_agentes([PERFIL], [], {}, AGORA)[0]["filhos"] == []
-
-
-# ── Eventos e números ────────────────────────────────────────────────────────
-
-def test_briefing_publicado_e_uma_entrega():
-    ev = w.montar_eventos(
-        [{"agent_id": "iris", "title": "Faturamento · 01/09", "created_at": AGORA}], [])[0]
-    assert ev["tipo"] == "entrega" and "Faturamento · 01/09" in ev["texto"]
-
-
-def test_eventos_vem_do_mais_novo_para_o_mais_velho():
-    evs = w.montar_eventos(
-        [{"agent_id": "iris", "title": "antigo", "created_at": AGORA - timedelta(hours=3)}],
-        [_msg("agent", 1, "recente")])
-    assert evs[0]["texto"].endswith("recente") or "recente" in evs[0]["texto"]
-
-
-def test_taxa_de_cache_sem_fonte_fica_nula():
-    """`cached_tokens` está zerado nas 217 linhas e nada escreve o campo — o
-    mesmo buraco achado no coletor hoje. `0%` na parede afirmaria que o cache
-    nunca acerta."""
-    assert w.montar_numeros({"tokens": 1, "custo": 0}, entregas=5, conversas=9)["cacheTaxa"] is None
-
-
-def test_numeros_contam_entregas_e_conversas():
-    n = w.montar_numeros({"tokens": 170_909, "custo": 0.052}, entregas=5, conversas=9)
-    assert n["entregas"] == 5 and n["conversas"] == 9 and n["tokens"] == 170_909
 
 
 # ── O rótulo do nó ───────────────────────────────────────────────────────────
@@ -173,13 +117,13 @@ PERFIL_REAL = {"agent_id": "iris", "name": "Iris", "role": "",
 
 
 def test_papel_sai_de_specialty_quando_role_esta_vazio():
-    a = w.montar_agentes([PERFIL_REAL], [], {}, AGORA)[0]
+    a = w.montar_agentes([PERFIL_REAL], [], {}, AGORA, set())[0]
     assert a["papel"].startswith("Dados do ERP Tiny")
 
 
 def test_papel_e_encurtado_para_caber_no_no():
     """É rótulo de nó numa TV, não descrição de catálogo."""
-    a = w.montar_agentes([PERFIL_REAL], [], {}, AGORA)[0]
+    a = w.montar_agentes([PERFIL_REAL], [], {}, AGORA, set())[0]
     assert len(a["papel"]) <= 40
 
 
@@ -187,24 +131,194 @@ def test_role_preenchido_tem_preferencia():
     """Se um dia alguém preencher `role`, é ele que vale — é o campo específico."""
     a = w.montar_agentes(
         [{"agent_id": "x", "name": "X", "role": "Faturamento", "specialty": "outra coisa"}],
-        [], {}, AGORA)[0]
+        [], {}, AGORA, set())[0]
     assert a["papel"] == "Faturamento"
 
+import json
 
-# ── A tarefa também precisa caber ────────────────────────────────────────────
-# Achado olhando a tela renderizada, não os testes: o rótulo do Atlas saiu
-# cuspindo `{ color:#E41A11; } .green { color:#22c55e; } .blue.bar > span {…`
-# atravessando a parede inteira. A mensagem era de um artefato publicado e
-# levava CSS junto. Eu encurtava `papel` e não `tarefa`.
+# ── TV pública: nada de conteúdo (16/10/2026) ────────────────────────────────
+# A War Room foi para a TV da empresa, que visitante vê, e o link é a
+# credencial. Até aqui o Fluxo mostrava "Nicholson: phoebus vendido em abril
+# qual empresa" e o rótulo do agente era a pergunta em aberto — e o JSON do
+# feed carregava esse texto para quem tivesse o link.
 
-def test_tarefa_longa_e_encurtada():
-    longa = {"role": "user", "content": "x" * 500, "created_at": AGORA, "autor": "Nicholson"}
-    a = w.montar_agentes([PERFIL], [], {"iris": longa}, AGORA)[0]
-    assert len(a["tarefa"]) <= 46
+SENTINELA = "PERGUNTA-SECRETA-DO-CEO"
+NOMES = {"u-nich": "Nicholson", "u-erick": "Erick", "u-welton": "Welton"}
+DO_TIME = set(NOMES)
 
 
-def test_tarefa_perde_a_quebra_de_linha():
-    """Numa linha só de SVG, `\\n` vira caractere solto no meio da frase."""
-    multi = {"role": "user", "content": "primeira\nsegunda", "created_at": AGORA, "autor": "N"}
-    a = w.montar_agentes([PERFIL], [], {"iris": multi}, AGORA)[0]
-    assert "\n" not in a["tarefa"]
+def test_nenhuma_funcao_deixa_o_conteudo_passar():
+    """Mesmo que uma linha chegue com `content`, nada dele sai."""
+    msgs = [{"user_id": "u-nich", "agent_id": "nina", "role": "user",
+             "created_at": AGORA, "content": SENTINELA}]
+    dms = [{"channel_id": "c1", "created_at": AGORA, "author_id": "u-erick", "content": SENTINELA}]
+    membros = {"c1": ("u-erick", "u-welton")}
+    saida = {
+        "agentes": w.montar_agentes([PERFIL], [], {"iris": {**msgs[0], "agent_id": "iris"}},
+                                    AGORA, DO_TIME),
+        "eventos": w.montar_eventos([], msgs, dms, membros, NOMES, {"nina": "Nina"}),
+        "dms": w.dms_vivos(membros, dms, AGORA),
+    }
+    assert SENTINELA not in json.dumps(saida, default=str)
+
+
+def test_agente_nao_tem_mais_tarefa():
+    a = w.montar_agentes([PERFIL], [], {"iris": _msg("user", 2)}, AGORA, DO_TIME)[0]
+    assert "tarefa" not in a and "parceiro" not in a and "filhos" not in a
+
+
+def test_agente_conversando_aponta_o_id_da_pessoa():
+    """`parceiroId` é a ponta da curva — id, não nome: nome curto pode repetir."""
+    a = w.montar_agentes([PERFIL], [], {"iris": _msg("user", 2)}, AGORA, DO_TIME)[0]
+    assert a["parceiroId"] == "u-nich"
+
+
+def test_agente_ocioso_nao_aponta_ninguem():
+    a = w.montar_agentes([PERFIL], [], {"iris": _msg("agent", 1)}, AGORA, DO_TIME)[0]
+    assert a["parceiroId"] is None
+
+
+def test_conversa_com_conta_de_fora_do_time_nao_desenha_linha():
+    a = w.montar_agentes([PERFIL], [], {"iris": _msg("user", 2, "u-teste")}, AGORA, DO_TIME)[0]
+    assert a["estado"] == "pensando" and a["parceiroId"] is None
+
+
+# ── Status: só o que pode ir para a parede ───────────────────────────────────
+
+def test_status_dos_presets():
+    assert w.status_publico("Em reunião") == "reuniao"
+    assert w.status_publico("Foco / DND") == "foco"
+    assert w.status_publico("Almoço") == "almoco"
+    assert w.status_publico("Ausente") == "ausente"
+
+
+def test_doente_nunca_aparece_vira_ausente():
+    """`Doente` é dado de saúde, numa TV que visitante vê."""
+    for label in ("Doente", "Férias / Folga", "Viajando"):
+        assert w.status_publico(label) == "ausente"
+
+
+def test_texto_livre_e_home_office_nao_vao_para_a_tv():
+    """`custom_status` aceita 200 caracteres de texto livre."""
+    assert w.status_publico("resolvendo o caso do cliente X") is None
+    assert w.status_publico("Home office") is None
+    assert w.status_publico(None) is None
+
+
+# ── Quem é do time, e como se chama na parede ────────────────────────────────
+
+def test_so_o_dominio_da_empresa_e_sem_conta_de_teste():
+    assert w.e_do_time("ti@healthsafetytech.com")
+    assert not w.e_do_time("teste.ceo@healthsafetytech.com")
+    assert not w.e_do_time("contato@ketlinscalco.com.br")
+    assert not w.e_do_time(None)
+
+
+def test_nome_curto_e_o_primeiro_nome():
+    assert w.nomes_curtos([{"id": "1", "full_name": "Erick Santos"}]) == {"1": "Erick"}
+
+
+def test_primeiro_nome_repetido_ganha_o_sobrenome():
+    """Dois "Lucas" na parede seriam dois nós com o mesmo rótulo."""
+    n = w.nomes_curtos([{"id": "1", "full_name": "Lucas Avezedo da Silva"},
+                        {"id": "2", "full_name": "Lucas Pereira"}])
+    assert n == {"1": "Lucas Silva", "2": "Lucas Pereira"}
+
+
+def test_setor_pela_tabela_e_comercial_pelo_prefixo():
+    assert w.setor_de("COMERCIAL-SDR") == "Comercial"
+    assert w.setor_de("MARKETING") == "Comercial"
+    assert w.setor_de("Expedição") == "Operação"
+    assert w.setor_de("RECURSOS HUMANOS") == "Administrativo"
+    assert w.setor_de("Consultoria") == "Outros"
+    assert w.setor_de(None) == "Outros"
+
+
+def test_montar_pessoas_ordena_por_setor_e_marca_presenca():
+    perfis = [
+        {"id": "a", "email": "ti@healthsafetytech.com", "full_name": "Erick Santos",
+         "departamento": "TI", "custom_status": "Em reunião"},
+        {"id": "b", "email": "np@healthsafetytech.com", "full_name": "Nicholson Pimentel",
+         "departamento": "DIRETORIA", "custom_status": None},
+        {"id": "c", "email": "teste.ceo@healthsafetytech.com", "full_name": "Teste CEO",
+         "departamento": None, "custom_status": None},
+    ]
+    pessoas, setores = w.montar_pessoas(perfis, {"np@healthsafetytech.com"})
+    assert [p["id"] for p in pessoas] == ["b", "a"]
+    assert pessoas[0] == {"id": "b", "nome": "Nicholson", "setor": "Diretoria",
+                          "noEscritorio": True, "status": None}
+    assert pessoas[1]["status"] == "reuniao" and pessoas[1]["noEscritorio"] is False
+    assert setores == [{"nome": "Diretoria", "pessoas": ["b"]}, {"nome": "TI", "pessoas": ["a"]}]
+
+
+# ── Conversa entre pessoas: só que existe ────────────────────────────────────
+
+def test_dm_so_conta_com_dois_humanos_do_time():
+    linhas = [{"channel_id": "c1", "membros": ["u-erick", "u-welton"]},
+              {"channel_id": "c2", "membros": ["u-erick", "u-teste"]},
+              {"channel_id": "c3", "membros": ["u-erick"]}]
+    assert w.membros_do_time(linhas, DO_TIME) == {"c1": ("u-erick", "u-welton")}
+
+
+def test_dm_com_mensagem_recente_vira_linha():
+    membros = {"c1": ("u-erick", "u-welton")}
+    msgs = [{"channel_id": "c1", "created_at": AGORA - timedelta(minutes=3)}]
+    assert w.dms_vivos(membros, msgs, AGORA) == [
+        {"a": "u-erick", "b": "u-welton", "ultima": (AGORA - timedelta(minutes=3)).isoformat()}]
+
+
+def test_dm_parado_ha_mais_de_dez_minutos_some():
+    membros = {"c1": ("u-erick", "u-welton")}
+    msgs = [{"channel_id": "c1", "created_at": AGORA - timedelta(minutes=11)}]
+    assert w.dms_vivos(membros, msgs, AGORA) == []
+
+
+# ── Fluxo: fatos, nunca texto ────────────────────────────────────────────────
+
+def test_briefing_mostra_o_titulo():
+    assert w.texto_entrega("Atlas", "Serviços · 16/10") == "Atlas publicou Serviços · 16/10"
+
+
+def test_documento_qualquer_nao_mostra_o_titulo():
+    """A `nina` já publicou lista nominal de clientes perdidos."""
+    assert w.texto_entrega("Nina", "Clientes que a Sandra perdeu") == "Nina publicou um documento"
+
+
+def test_vinte_mensagens_seguidas_sao_uma_linha_no_fluxo():
+    msgs = [{"user_id": "u-nich", "agent_id": "nina", "role": "user",
+             "created_at": AGORA - timedelta(minutes=i)} for i in range(20)]
+    ev = w.montar_eventos([], msgs, [], {}, NOMES, {"nina": "Nina"})
+    assert ev == [{"ts": AGORA.isoformat(), "tipo": "agente", "texto": "Nicholson conversou com Nina"}]
+
+
+def test_pausa_maior_que_a_janela_abre_outra_linha():
+    msgs = [{"user_id": "u-nich", "agent_id": "nina", "role": "user", "created_at": AGORA},
+            {"user_id": "u-nich", "agent_id": "nina", "role": "user",
+             "created_at": AGORA - timedelta(minutes=30)}]
+    assert len(w.montar_eventos([], msgs, [], {}, NOMES, {"nina": "Nina"})) == 2
+
+
+def test_dm_no_fluxo_diz_so_quem():
+    dms = [{"channel_id": "c1", "created_at": AGORA}]
+    ev = w.montar_eventos([], [], dms, {"c1": ("u-welton", "u-erick")}, NOMES, {})
+    assert ev[0]["texto"] == "Erick e Welton conversaram" and ev[0]["tipo"] == "time"
+
+
+def test_fluxo_do_mais_novo_para_o_mais_velho_e_com_limite():
+    pub = [{"agent_id": "atlas", "title": "SDR · 16/10", "created_at": AGORA - timedelta(hours=3)}]
+    msgs = [{"user_id": "u-nich", "agent_id": "nina", "role": "user", "created_at": AGORA}]
+    ev = w.montar_eventos(pub, msgs, [], {}, NOMES, {"nina": "Nina", "atlas": "Atlas"})
+    assert [e["tipo"] for e in ev] == ["agente", "entrega"]
+    muitos = [{"agent_id": "atlas", "title": "SDR · 16/10", "created_at": AGORA - timedelta(minutes=i)}
+              for i in range(30)]
+    assert len(w.montar_eventos(muitos, [], [], {}, NOMES, {})) == 14
+
+
+def test_numeros_do_dia():
+    msgs = [{"user_id": "u-nich", "agent_id": "nina", "role": "user"},
+            {"user_id": "u-nich", "agent_id": "nina", "role": "agent"},
+            {"user_id": "u-nich", "agent_id": "iris", "role": "agent"},
+            {"user_id": "u-teste", "agent_id": "nina", "role": "user"}]
+    dms = [{"channel_id": "c1", "author_id": "u-erick"}, {"channel_id": "c1", "author_id": "u-welton"}]
+    n = w.montar_numeros(5, msgs, dms, {"c1": ("u-erick", "u-welton")}, DO_TIME)
+    assert n == {"entregas": 5, "atendidas": 2, "pessoasAtivas": 3, "conversasTime": 1}

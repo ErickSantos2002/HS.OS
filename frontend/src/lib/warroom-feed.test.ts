@@ -1,61 +1,48 @@
-/**
- * A parede não pode dar tela branca.
- *
- * Em 01/09/2026 o painel subiu em produção mostrando "Algo deu errado": o
- * backend implantado era uma versão anterior do `/warroom/feed`, sem o campo
- * `filhos`, e a tela fazia `a.filhos.filter(...)` direto. Um campo ausente
- * derrubou o ErrorBoundary inteiro.
- *
- * ⚠️ O erro não foi o campo faltar — versão de API descasa, e numa TV que
- * ninguém opera isso vai acontecer de novo. O erro foi a tela confiar na forma
- * da resposta em seis lugares diferentes. A defesa mora aqui, na fronteira: o
- * que sai daqui é sempre desenhável.
- */
 import { describe, expect, it } from "vitest";
+import { contarConversas, horaMinuto, normalizar } from "./warroom-feed";
 
-import { normalizar } from "./warroom-feed";
+describe("normalizar — a TV nunca cai por forma de resposta", () => {
+  it("payload vazio vira feed vazio desenhável", () => {
+    const f = normalizar(null);
+    expect(f.pessoas).toEqual([]);
+    expect(f.setores).toEqual([]);
+    expect(f.conversasTime).toEqual([]);
+    expect(f.numeros).toEqual({ entregas: 0, atendidas: 0, pessoasAtivas: 0, conversasTime: 0 });
+  });
 
-describe("normalizar", () => {
+  it("backend antigo (sem setores, com tarefa) não derruba e não mostra tarefa", () => {
+    // Deploy não atômico: o front novo pode falar com o back velho por minutos.
+    const f = normalizar({
+      pessoas: [{ id: "p1", nome: "Erick Santos" }],
+      agentes: [{ id: "nina", nome: "Nina", estado: "pensando", tarefa: "segredo", parceiro: "Erick" }],
+      numeros: { entregas: 2, conversas: 9, tokens: 1, custo: 1 },
+    });
+    expect(f.setores).toEqual([{ nome: "Time", pessoas: ["p1"] }]);
+    expect(f.pessoas[0]).toMatchObject({ id: "p1", setor: "Time", noEscritorio: false, status: null });
+    expect(JSON.stringify(f)).not.toContain("segredo");
+    expect(f.agentes[0].parceiroId).toBeNull();
+    expect(f.numeros.entregas).toBe(2);
+  });
+
+  it("status desconhecido vira null, nunca texto", () => {
+    const f = normalizar({ pessoas: [{ id: "p", nome: "X", setor: "TI", status: "doente" }] });
+    expect(f.pessoas[0].status).toBeNull();
+  });
+
+  it("conversa entre pessoas sem as duas pontas é descartada", () => {
+    const f = normalizar({ conversasTime: [{ a: "p1", b: "" }, { a: "p1", b: "p2", ultima: "x" }] });
+    expect(f.conversasTime).toEqual([{ a: "p1", b: "p2", ultima: "x" }]);
+  });
+
+  // Herdados do teste de 01/09/2026 (tela branca por campo ausente), no contrato novo.
   it("sobrevive a uma resposta completamente vazia", () => {
     const f = normalizar({});
     expect(f.agentes).toEqual([]);
-    expect(f.pessoas).toEqual([]);
     expect(f.eventos).toEqual([]);
-  });
-
-  it("sobrevive a null, que é o que um backend fora do ar devolve", () => {
-    expect(normalizar(null).agentes).toEqual([]);
-  });
-
-  it("dá filhos vazio ao agente que veio sem o campo", () => {
-    // Exatamente a resposta da versão antiga que quebrou a produção.
-    const f = normalizar({ agentes: [{ id: "iris", nome: "Iris" }] });
-    expect(f.agentes[0].filhos).toEqual([]);
-  });
-
-  it("descarta filho que não é lista", () => {
-    const f = normalizar({ agentes: [{ id: "iris", filhos: "nenhum" }] });
-    expect(f.agentes[0].filhos).toEqual([]);
-  });
-
-  it("mantém os filhos de verdade", () => {
-    const f = normalizar({ agentes: [{ id: "iris", filhos: [{ nome: "sub", vivo: true }] }] });
-    expect(f.agentes[0].filhos).toHaveLength(1);
   });
 
   it("estado desconhecido vira ocioso, que é o desenho neutro", () => {
     expect(normalizar({ agentes: [{ id: "x" }] }).agentes[0].estado).toBe("ocioso");
-  });
-
-  it("garante numeros mesmo quando o bloco inteiro falta", () => {
-    const n = normalizar({}).numeros;
-    expect(n.tokens).toBe(0);
-    expect(n.entregas).toBe(0);
-  });
-
-  it("não inventa taxa de cache", () => {
-    // Zero afirmaria que o cache nunca acerta. Nulo diz que ninguém mediu.
-    expect(normalizar({}).numeros.cacheTaxa).toBeNull();
   });
 
   it("preserva contexto nulo em vez de virar zero", () => {
@@ -65,5 +52,34 @@ describe("normalizar", () => {
 
   it("descarta agente sem id, que não teria onde ser desenhado", () => {
     expect(normalizar({ agentes: [{ nome: "sem id" }, { id: "ok" }] }).agentes).toHaveLength(1);
+  });
+});
+
+describe("horaMinuto — o Fluxo não escreve \"Invalid Date\" na parede", () => {
+  it("hora válida sai HH:MM", () => {
+    expect(horaMinuto("2026-10-16T13:05:00Z")).toMatch(/^\d{2}:\d{2}$/);
+  });
+
+  it("ts vazio ou lixo vira travessão", () => {
+    // O `normalizar` transforma ts ausente em "", e `new Date("")` é Invalid
+    // Date — que o `toLocaleTimeString` escreve por extenso na TV.
+    expect(horaMinuto("")).toBe("—");
+    expect(horaMinuto("ontem")).toBe("—");
+  });
+});
+
+describe("contarConversas — o \"N conversas agora\" do cabeçalho", () => {
+  it("agente trabalhando sozinho não é conversa", () => {
+    // Um cron rodando de madrugada acendia "1 conversa agora" numa sala vazia.
+    const f = normalizar({
+      pessoas: [{ id: "p1", nome: "A" }, { id: "p2", nome: "B" }, { id: "p3", nome: "C" }],
+      agentes: [
+        { id: "nina", estado: "pensando", parceiroId: "p1" },
+        { id: "bruce", estado: "pensando" },
+        { id: "iris", estado: "ocioso", parceiroId: "p2" },
+      ],
+      conversasTime: [{ a: "p2", b: "p3" }],
+    });
+    expect(contarConversas(f)).toBe(2);
   });
 });

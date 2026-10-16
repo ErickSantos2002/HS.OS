@@ -143,6 +143,15 @@ Fora do `AppLayout` e **sem `ProtectedRoute`** — ele redirecionaria a TV para
 **O que ficou de fora** (YAGNI, entra se fizer falta): layout arrastável,
 watchdog de sessão longa, humanização de nome de cron e o modo voz.
 
+⚠️ **Desde 16/10/2026 é TV pública: nenhum conteúdo.** Pedido do Nicholson para
+a TV da empresa. O Fluxo mostrava a pergunta do CEO a um agente e o rótulo do
+nó era a pergunta em aberto — e o JSON carregava o texto para quem tivesse o
+link. Hoje as consultas não selecionam `content` (`test_warroom_rota.py` lê o
+SQL), o Fluxo é de frases fixas, título de documento só aparece se for de
+briefing, e o status `Doente` vira `ausente`. Entraram as DMs (linha ciano
+entre as duas pessoas, 10 min), a presença do escritório virtual e o status.
+Spec: `docs/superpowers/specs/2026-10-16-warroom-tv-design.md`.
+
 ---
 
 ### War room — como era antes da volta

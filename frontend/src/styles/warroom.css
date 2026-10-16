@@ -33,6 +33,9 @@
   --wr-g-anel:     rgba(210,220,255,0.16);
   --wr-humano:     #2BC4D6;
   --wr-humano-off: #1A5C66;
+  /* Pessoa com pessoa (DM): ciano mais aceso que o do hexágono, para a linha
+     se ler como conversa e não como contorno. */
+  --wr-time:       #22d3ee;
 
   position: fixed;
   inset: 0;
@@ -94,7 +97,9 @@
 
 .wr-palco {
   display: grid;
-  grid-template-columns: 1fr clamp(280px, 26vw, 460px);
+  /* O mapa ganha a largura: o Fluxo tem frases curtas, e cada pixel a mais no
+     mapa é fonte maior a 4 m. */
+  grid-template-columns: 1fr clamp(280px, 21vw, 400px);
   gap: clamp(12px, 1.2vw, 24px);
   min-height: 0;
 }
@@ -151,6 +156,8 @@
 }
 .wr-evento.autonomo { border-left-color: var(--wr-ink); }
 .wr-evento.entrega  { border-left-color: var(--wr-green); }
+.wr-evento.agente   { border-left-color: var(--wr-ink); }
+.wr-evento.time     { border-left-color: var(--wr-time); }
 .wr-hora {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: clamp(9px, 0.72vw, 12px); color: var(--wr-faint);
@@ -276,6 +283,7 @@
   --wr-g-anel:     #C9C3B6;
   --wr-humano:     #0B7C8C;
   --wr-humano-off: #A9B9BC;
+  --wr-time:       #0891b2;
 
   background-image:
     radial-gradient(1200px 700px at 18% 0%, rgba(61,97,255,0.07), transparent 60%),
@@ -376,3 +384,34 @@
 @media (prefers-reduced-motion: reduce) {
   .wr-anel.wr-ocioso, .wr-hex:not(.wr-viva), .wr-nucleo-onda { animation: none; }
 }
+
+/* ── TV por setor (16/10/2026) ──────────────────────────────────────────
+   Rótulo do setor por fora do anel, status curto embaixo do nome e a linha
+   ciano entre duas pessoas num DM. */
+.wr-setor {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  /* O tamanho vem do atributo (`FONTE.setor`): em SVG o CSS venceria o
+     atributo e o layout calcularia uma largura que a tela não desenha. */
+  fill: var(--wr-muted); letter-spacing: 0.32em; font-weight: 600;
+}
+.wr-nome-h   { font-weight: 600; }
+.wr-status-h {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  fill: var(--wr-muted);
+}
+.wr-rota-time     { stroke: var(--wr-time); stroke-width: 2; stroke-opacity: 0.85; }
+.wr-particula-time { fill: var(--wr-time); }
+/* Linha que chega no nó por baixo cruza o nome. Um contorno da cor do fundo
+   por trás do texto (paint-order) corta a linha só ali, e o nome continua
+   legível de longe — sem caixa nem fundo, que pesariam no anel. */
+.wr-nome, .wr-tarefa, .wr-status-h, .wr-setor {
+  paint-order: stroke; stroke: var(--wr-canvas); stroke-width: 3px; stroke-linejoin: round;
+}
+
+/* Sublinha do agente: apagada em repouso, clara quando ele trabalha. Era
+   `fill` fixo no JSX, e no tema claro o #A8B3C7 sumia no fundo warm — o
+   agente ocupado ficava justamente o MENOS legível. */
+.wr-tarefa.wr-sub-ocioso { fill: #5C6070; }
+.wr-tarefa.wr-sub-ativo  { fill: #A8B3C7; }
+.wr-raiz.wr-claro .wr-tarefa.wr-sub-ocioso { fill: var(--wr-faint); }
+.wr-raiz.wr-claro .wr-tarefa.wr-sub-ativo  { fill: #3A3D45; }
