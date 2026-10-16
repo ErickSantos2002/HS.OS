@@ -731,6 +731,15 @@
    "x": 2048,
    "y": 992
   },
+  "04cf566f-d83d-4000-8000-49a70cd2c6b8": {
+   "name": "Reunião 01 · cadeira",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Down"
+   },
+   "x": 352,
+   "y": 736
+  },
   "050229fd-0add-4000-8000-b21eac2c6f34": {
    "name": "Qualidade 01 · mesa",
    "prefabRef": {
@@ -830,6 +839,15 @@
    "x": 192,
    "y": 2048
   },
+  "0b777d3f-4b8d-4000-8000-24151603a9fa": {
+   "name": "Reunião 02 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 1728,
+   "y": 160
+  },
   "0c2c9bda-769b-4000-8000-b9a9c32f7fe5": {
    "name": "Suporte 02 · cadeira_cima",
    "prefabRef": {
@@ -847,6 +865,15 @@
    },
    "x": 1920,
    "y": 1728
+  },
+  "0e7d71e8-dfb9-4000-8000-71f04f3098a5": {
+   "name": "Reunião 01 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 320,
+   "y": 736
   },
   "0eb15f86-b3a8-4000-8000-8d7a62cc0df8": {
    "name": "Comercial 08 · mesa",
@@ -964,6 +991,15 @@
    },
    "x": 160,
    "y": 32
+  },
+  "1bbbc538-b287-4000-8000-9d38b147c8d2": {
+   "name": "Reunião 02 · cadeira",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Down"
+   },
+   "x": 1760,
+   "y": 160
   },
   "1d5fe7f7-5826-4000-8000-8b4c467c6b49": {
    "name": "Diretoria · estante_grande",
@@ -1109,6 +1145,15 @@
    "x": 2144,
    "y": 1152
   },
+  "2c4f6f13-da19-4000-8000-4decfad82384": {
+   "name": "Reunião 01 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 352,
+   "y": 832
+  },
   "2d36b373-0348-4000-8000-2956c9fab166": {
    "name": "Comercial 04 · poltrona_dir",
    "prefabRef": {
@@ -1227,12 +1272,24 @@
    "y": 1120
   },
   "387a687e-cceb-4000-8000-3fc3b5a3898b": {
+   "height": 96,
+   "id": "387a687e-cceb-4000-8000-3fc3b5a3898b",
+   "modifyProperties": false,
    "name": "corredor · planta_grande",
    "prefabRef": {
     "collectionName": "basic office decoration",
     "id": "basic office decoration:Plant:green:Down"
    },
-   "x": 1504,
+   "properties": [
+    {
+     "description": "",
+     "id": "a08e5222-0393-41c9-ae5e-e17792d9b94e",
+     "searchable": false,
+     "type": "entityDescriptionProperties"
+    }
+   ],
+   "width": 96,
+   "x": 1507,
    "y": 480
   },
   "398f43bc-ebfc-4000-8000-7252eeb8c515": {
@@ -1396,6 +1453,15 @@
    },
    "x": 2240,
    "y": 1696
+  },
+  "457d5411-eebc-4000-8000-fdbadcb8ada1": {
+   "name": "Reunião 02 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1792,
+   "y": 256
   },
   "45a8f9a1-2955-4000-8000-5c30d5f7fe6e": {
    "name": "Silenciosa · estante_grande",
@@ -1631,6 +1697,15 @@
    "x": 1088,
    "y": 832
   },
+  "5b3cc33a-41db-4000-8000-62161c8a78eb": {
+   "name": "Reunião 02 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 1792,
+   "y": 160
+  },
   "5dcd2f9f-022f-4000-8000-518bb3385097": {
    "name": "Expedição 02 · planta",
    "prefabRef": {
@@ -1693,6 +1768,15 @@
    },
    "x": 2144,
    "y": 1728
+  },
+  "694bcf58-f851-4000-8000-807b98ebe728": {
+   "name": "Reunião 01 · cadeira",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Down"
+   },
+   "x": 288,
+   "y": 736
   },
   "6a322a6c-4656-4000-8000-0a718d576f68": {
    "name": "Suporte 01 · cadeira_cima",
@@ -1783,6 +1867,15 @@
    },
    "x": 2240,
    "y": 2048
+  },
+  "72c768c6-c93c-4000-8000-91a61549ff48": {
+   "name": "Reunião 01 · cadeira",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Down"
+   },
+   "x": 256,
+   "y": 736
   },
   "7300d9cb-e69f-4000-8000-885d88e74743": {
    "name": "Comercial 06 · monitor",
@@ -1883,6 +1976,15 @@
    "x": 1888,
    "y": 640
   },
+  "7940482a-b43d-4000-8000-670779543ab8": {
+   "name": "Reunião 01 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 320,
+   "y": 832
+  },
   "7959ff63-d4b6-4000-8000-5c77c7426b21": {
    "name": "TI 03 · mesa",
    "prefabRef": {
@@ -1981,6 +2083,15 @@
    },
    "x": 1408,
    "y": 2016
+  },
+  "7e8fb8af-e42a-4000-8000-20ffbba02f4d": {
+   "name": "Reunião 02 · cadeira",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Down"
+   },
+   "x": 1824,
+   "y": 160
   },
   "7f6159ea-1ca1-4000-8000-97874e5cf163": {
    "name": "Expedição 02 · mesa",
@@ -2413,6 +2524,15 @@
    "x": 608,
    "y": 1472
   },
+  "9f374b9a-a2ec-4000-8000-2d5718c6a1f8": {
+   "name": "Reunião 02 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1728,
+   "y": 256
+  },
   "a06abd72-085e-4000-8000-b451dd715c8a": {
    "name": "Comercial 10 · mesa",
    "prefabRef": {
@@ -2440,6 +2560,15 @@
    "x": 1280,
    "y": 2016
   },
+  "a6c18d72-fa54-4000-8000-b331bb9bc6f3": {
+   "name": "Reunião 02 · cadeira",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Down"
+   },
+   "x": 1792,
+   "y": 160
+  },
   "a764226e-5f22-4000-8000-69a255992208": {
    "name": "corredor · planta_grande",
    "prefabRef": {
@@ -2466,6 +2595,15 @@
    },
    "x": 1664,
    "y": 2016
+  },
+  "aabca4d9-b99f-4000-8000-30862bb10595": {
+   "name": "Reunião 01 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 288,
+   "y": 832
   },
   "aac9f456-3dc6-4000-8000-099036d2687e": {
    "name": "Comercial 04 · lixeira",
@@ -2502,6 +2640,15 @@
    },
    "x": 864,
    "y": 672
+  },
+  "adc9f96f-dd81-4000-8000-4faa3779dcf6": {
+   "name": "Reunião 02 · cadeira",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Down"
+   },
+   "x": 1728,
+   "y": 160
   },
   "ae199a77-c390-4000-8000-7776e91d6468": {
    "name": "TI 03 · planta",
@@ -2890,6 +3037,15 @@
    "x": 1248,
    "y": 32
   },
+  "cd195b3d-1479-4000-8000-07539c2780e0": {
+   "name": "Reunião 01 · mesa",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Wood Table:orange:Down"
+   },
+   "x": 256,
+   "y": 736
+  },
   "cd2673ad-401b-4000-8000-9dd08378b91a": {
    "name": "Lab 03 · estante_parede",
    "prefabRef": {
@@ -3097,6 +3253,15 @@
    "x": 2016,
    "y": 1056
   },
+  "dddff7e4-ddb3-4000-8000-f60d7f1f5853": {
+   "name": "Reunião 02 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1824,
+   "y": 256
+  },
   "decdcbe0-5523-4000-8000-5750a032a169": {
    "name": "Café · cafeteira",
    "prefabRef": {
@@ -3205,6 +3370,15 @@
    "x": 1888,
    "y": 736
   },
+  "eaf3ab50-3aa0-4000-8000-7b2f89147624": {
+   "name": "Reunião 01 · cadeira",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Down"
+   },
+   "x": 320,
+   "y": 736
+  },
   "eddbd4ab-de7e-4000-8000-88ce4073e389": {
    "name": "corredor · planta_grande",
    "prefabRef": {
@@ -3231,6 +3405,15 @@
    },
    "x": 544,
    "y": 608
+  },
+  "ef575277-c2fa-4000-8000-13fb1fcf632a": {
+   "name": "Reunião 02 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 1760,
+   "y": 256
   },
   "f0d6dee5-3b78-4000-8000-845a2e087c95": {
    "name": "Comercial 05 · estante_parede",
@@ -3349,6 +3532,15 @@
    "x": 256,
    "y": 2016
   },
+  "f9853e75-70ce-4000-8000-a464a6315336": {
+   "name": "Reunião 01 · cadeira_cima",
+   "prefabRef": {
+    "collectionName": "basic furniture",
+    "id": "basic furniture:Basic Chair:grey:Up"
+   },
+   "x": 256,
+   "y": 832
+  },
   "f9ad7ba5-5e68-4000-8000-65c61731cdca": {
    "name": "Comercial 08 · monitor",
    "prefabRef": {
@@ -3441,7 +3633,7 @@
    "url": "https://escritoriohs.healthsafetytech.com/collections/OfficeCollection.json"
   }
  ],
- "lastCommandId": "4731e403-492e-4220-92d5-7d27c17bee18",
+ "lastCommandId": "31fda8e3-a26e-43c2-9249-e72bcf70434c",
  "mapUrl": "./hs.tmj",
  "metadata": {
   "copyright": "Blocos: WorkAdventure (CC-BY-SA 3.0). Planta: Health & Safety.",
