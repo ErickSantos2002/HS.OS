@@ -71,6 +71,9 @@ if [ "$alvo" = wa ] || [ "$alvo" = tudo ]; then
                 *) falha "WebSocket chega no play ($ws)";; esac
   roteado /map-storage/ && ok "map-storage roteado" || falha "map-storage roteado"
   roteado /api/ && ok "back roteado" || falha "back roteado"
+  # Sem isto o navegador segura o hs.tmj velho por horas (borda/nginx.conf).
+  curl -sI -m 15 $base/map-storage/hs/hs.tmj | grep -qi '^cache-control: no-cache' \
+    && ok "mapa sai com no-cache" || falha "mapa sai com no-cache"
 fi
 
 if [ "$alvo" = admin ] || [ "$alvo" = tudo ]; then
