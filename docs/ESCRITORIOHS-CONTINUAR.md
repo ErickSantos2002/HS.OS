@@ -82,7 +82,7 @@ final; correções da revisão em `362b575`.
 
 ## ▶ Próximos passos, em ordem
 
-Feitos em 16/10: 1, 2 e 4 (o 4 falta a conferência do status no navegador).
+Feitos em 16/10: 1, 2, 4 (status Em reunião → Ocupado conferido no navegador) e 5 (26 de 29 salas com dono, Diretoria inclusa; placa com setor + nome). Donos e nomes moram em `~/escritoriohs-donos.json`, **fora do repo, que é público** — trocar alguém de sala é editar esse arquivo e rodar `escritoriohs/mapa/enviar.sh`. Falta o 3 (aceite com gente).
 
 ## ▶ Próximos passos, em ordem
 
