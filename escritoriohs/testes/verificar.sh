@@ -49,7 +49,9 @@ fi
 
 if [ "$alvo" = wa ] || [ "$alvo" = tudo ]; then
   base=https://escritoriohs.healthsafetytech.com
-  [ "$(curl -s -o /dev/null -w '%{http_code}' -m 15 $base/)" = 200 ] && ok "play abre" || falha "play abre"
+  # Com a Admin API ligada a raiz é 302 para a sala do hs; sem ela, 200 direto.
+  # -L segue o redirecionamento: o que importa é a tela abrir.
+  [ "$(curl -s -L -o /dev/null -w '%{http_code}' -m 15 $base/)" = 200 ] && ok "play abre" || falha "play abre"
   # Sem anônimo: entrar numa sala sem login tem que mandar para a Microsoft.
   # A tela do WA é SPA: quem redireciona é o /login-screen, com o playUri da sala.
   # A redirect_uri tem que ser a registrada no app EscritorioHS do Entra.
