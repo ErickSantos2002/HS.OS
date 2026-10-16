@@ -89,6 +89,6 @@ if [ "$alvo" = admin ] || [ "$alvo" = tudo ]; then
 fi
 
 # Conta o que rodou: um bloco pulado em silêncio também é falso verde.
-esperado=$(case "$alvo" in midia) echo 9;; wa) echo 5;; admin) echo 2;; *) echo 16;; esac)
+esperado=$(case "$alvo" in midia) echo 9;; wa) echo 6;; admin) echo 2;; *) echo 17;; esac)
 [ "$checagens" -eq "$esperado" ] || falha "rodaram $checagens checagens, esperadas $esperado"
 echo; [ "$falhas" -eq 0 ] && echo "tudo certo ($checagens checagens)" || { echo "$falhas falha(s)"; exit 1; }

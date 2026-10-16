@@ -16,7 +16,7 @@ Conferência rápida (de qualquer máquina com SSH na VPS):
 
 ```bash
 escritoriohs/testes/testar-config.sh            # config estática
-escritoriohs/testes/verificar.sh tudo           # produção: 16 checagens (inclui `admin`)
+escritoriohs/testes/verificar.sh tudo           # produção: 17 checagens (inclui `admin`)
 (cd escritoriohs/mapa && .venv/bin/python -m pytest testes -q)   # gerador: 69 testes
 (cd backend && ./.venv/bin/python -m pytest tests -q)            # 625 testes
 ```
