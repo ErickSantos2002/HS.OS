@@ -73,6 +73,13 @@ final; correções da revisão em `362b575`.
   `ssh` de leitura na VPS mesmo com a permissão dada; passa quando o Erick
   autoriza na própria conversa.
 
+- **Carga de 28 pessoas / 20 câmeras:** não cabe nesta VPS (LiveKit no teto
+  de 2 CPUs e preso depois do teste). VPS própria para a mídia **só se o
+  escritório for adiante** (decisão do Erick). Números no `escritoriohs/README.md`.
+- Pendente pequeno: o Console acusa
+  `…/map-storageassets/entities/entities.json` (falta `/` na URL da coleção de
+  objetos enviados pelo editor). Não afeta os móveis.
+
 ## ▶ Próximos passos, em ordem
 
 Feitos em 16/10: 1, 2 e 4 (o 4 falta a conferência do status no navegador).

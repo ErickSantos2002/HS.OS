@@ -135,6 +135,21 @@ número que vale é o da carga vinda de fora, pelo domínio:
 | perda de pacotes | 5,8% | **0,29%** |
 | CPU do LiveKit | 150–196% | **pico de 123% ao conectar; 20–37% em regime** |
 
+⚠️ **Reunião de 28 com 20 câmeras NÃO cabe nesta VPS** (medido em 16/10/2026,
+de fora, `lk load-test --layout 5x5 --video-resolution medium`, 60 s):
+
+| carga | trilhas | perda | CPU do LiveKit (teto 200%) |
+|---|---|---|---|
+| 20 câmeras + 8 áudio, 8 assistindo | 224/224 | 0,13% | média 154% · pico 174% |
+| 20 câmeras + 8 áudio, 28 assistindo | 756/784 | 0,05% | **média 185% · pico 257%** |
+
+A qualidade segurou, mas no teto, e **depois da carga o LiveKit ficou preso em
+~150% de CPU sem sala nenhuma** e com a memória subindo — 2 dos 4 núcleos da
+VPS dos bancos. O teste só de áudio rodado em seguida não vale (pegou o
+servidor ocupado). Banda não é o gargalo: ~3,3 Mbps por pessoa, ~90 Mbps de
+saída. **Decisão do Erick:** LiveKit em VPS própria só se o escritório for
+adiante; até lá, reunião grande é com câmera desligada.
+
 ⚠️ **Faixa de relay do Coturn: 840 portas, não 41.** Com TURN configurado, o
 navegador reserva relay para **cada conexão da bolha**, em UDP e em TCP, mesmo
 quando não vai precisar — e cada reserva prende uma porta por até 10 min. A
