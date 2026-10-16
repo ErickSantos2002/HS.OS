@@ -96,9 +96,57 @@ function bezier(de: XY, c: XY, para: XY, t: number): XY {
  *  de quem é `a` e quem é `b`. Entre duas pessoas vizinhas no anel, metade das
  *  vezes ela abria para FORA — por cima dos nomes. Puxando para o centro a
  *  linha sempre passa por dentro do anel, onde não há rótulo. */
-function controleTime(de: XY, para: XY, nucleo: XY): XY {
+function controleTime(de: XY, para: XY, nucleo: XY, agentes: XY[], pessoas: XY[], rP: number): XY {
   const mx = (de.x + para.x) / 2, my = (de.y + para.y) / 2;
-  return { x: mx + (nucleo.x - mx) * 0.35, y: my + (nucleo.y - my) * 0.35 };
+  const padrao = { x: mx + (nucleo.x - mx) * 0.35, y: my + (nucleo.y - my) * 0.35 };
+
+  // ⚠️ Pessoas em lados OPOSTOS do anel: o meio já é o núcleo, puxar para ele
+  // não entorta nada, e a linha saía reta atravessando o HS.OS e um agente —
+  // de longe lia "Gabriel → núcleo → Iris → Ellen", uma afirmação falsa numa
+  // tela cujo trabalho é dizer quem fala com quem. Quando a curva padrão
+  // encosta num agente ou no núcleo, ela contorna: o controle vai para a
+  // perpendicular do segmento, no MENOR afastamento que livra tudo. Afastar
+  // demais é o mesmo erro do outro lado: a linha passava por cima do anel de
+  // pessoas e "ligava" quem não estava na conversa. Por isso as outras
+  // pessoas — nó e nome — também são obstáculo.
+  const obstaculos = [
+    { p: nucleo, r: 40 },
+    // O agente e as duas linhas embaixo dele (nome e "conversando com …").
+    ...agentes.flatMap((p) => [
+      { p, r: R_AGENTE + 14 },
+      ...[-70, -35, 0, 35, 70].map((dx) => ({ p: { x: p.x + dx, y: p.y + R_AGENTE + 38 }, r: 16 })),
+    ]),
+    ...pessoas.flatMap((p) => [
+      { p, r: rP + 6 },
+      { p: { x: p.x, y: p.y + rP + 12 }, r: 16 },
+    ]),
+  ];
+  const folga = (c: XY) => {
+    let min = Infinity;
+    for (let i = 1; i < 24; i++) {
+      const q = bezier(de, c, para, i / 24);
+      for (const o of obstaculos) min = Math.min(min, Math.hypot(q.x - o.p.x, q.y - o.p.y) - o.r);
+    }
+    return min;
+  };
+  if (folga(padrao) >= 8) return padrao;
+
+  const dx = para.x - de.x, dy = para.y - de.y;
+  const comp = Math.hypot(dx, dy) || 1;
+  const nx = -dy / comp, ny = dx / comp;
+  let melhor = padrao, melhorFolga = folga(padrao);
+  // O ápice da quadrática fica no meio do caminho entre o meio e o controle,
+  // então o controle vai ao dobro da distância que se quer de afastamento.
+  // Do menor para o maior: o primeiro que livra tudo é o que vale. Se nenhum
+  // livrar, fica o de mais folga.
+  for (let d = 120; d <= 320; d += 15)
+    for (const lado of [1, -1]) {
+      const c = { x: mx + nx * lado * 2 * d, y: my + ny * lado * 2 * d };
+      const f = folga(c);
+      if (f >= 4) return c;
+      if (f > melhorFolga) { melhor = c; melhorFolga = f; }
+    }
+  return melhor;
 }
 
 /** Caminha por várias pernas encadeadas com velocidade constante: sem pesar
@@ -246,6 +294,20 @@ export default function WarRoomPage() {
   const posPessoa = useMemo(() => new Map(Object.entries(layout.pessoas)), [layout]);
   const posAgente = useMemo(() => new Map(Object.entries(layout.agentes)), [layout]);
   const NUCLEO = layout.nucleo;
+  // Controle de cada linha de DM: a busca do contorno amostra a curva, então
+  // sai do laço de animação e só refaz quando muda o mapa ou a lista de DMs.
+  const controlesDm = useMemo(() => {
+    const agentes = Object.values(layout.agentes);
+    const r = R_PESSOA * layout.escala;
+    const m = new Map<string, XY>();
+    for (const c of feed?.conversasTime ?? []) {
+      const de = layout.pessoas[c.a], para = layout.pessoas[c.b];
+      if (!de || !para) continue;
+      const outras = Object.entries(layout.pessoas).filter(([id]) => id !== c.a && id !== c.b).map(([, p]) => p);
+      m.set(`${c.a}-${c.b}`, controleTime(de, para, layout.nucleo, agentes, outras, r));
+    }
+    return m;
+  }, [layout, feed?.conversasTime]);
   const rP = R_PESSOA * layout.escala;
 
   // Diferença entre leituras → partículas. Um agente que acabou de começar a
@@ -457,7 +519,8 @@ export default function WarRoomPage() {
               {(feed?.conversasTime ?? []).map((c) => {
                 const de = posPessoa.get(c.a), para = posPessoa.get(c.b);
                 if (!de || !para) return null;
-                const ctrl = controleTime(de, para, NUCLEO);
+                const ctrl = controlesDm.get(`${c.a}-${c.b}`);
+                if (!ctrl) return null;
                 const t = (agoraFrame / 2600) % 1;
                 const p = bezier(de, ctrl, para, t);
                 const opacidade = Math.min(1, Math.min(t, 1 - t) * 14);
@@ -533,7 +596,7 @@ export default function WarRoomPage() {
                 // é só o estado: com quem e há quanto tempo, ou o papel.
                 const parceiro = a.parceiroId ? feed?.pessoas.find((p) => p.id === a.parceiroId)?.nome : null;
                 const linha2 = a.estado !== "ocioso"
-                  ? `${parceiro ? `conversando com ${parceiro}` : "trabalhando"} · ${decorrido(a.desde)}`
+                  ? `${parceiro ? `conversando com ${parceiro}` : "trabalhando"}${a.desde ? ` · ${decorrido(a.desde)}` : ""}`
                   : a.papel;
                 return (
                   <g key={a.id} transform={`translate(${pos.x},${pos.y})`}>
