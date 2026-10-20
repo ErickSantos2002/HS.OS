@@ -155,7 +155,16 @@ export function useAuth() {
     [state.role],
   );
 
-  return { ...state, signOut, hasAccess, retryAuth };
+  // Quem salva o perfil atualiza a sessão na hora: a foto entra no INSERT de
+  // cada mensagem a partir do `profile`, e sem isto a mensagem seguinte à
+  // troca saía com a foto antiga até a pessoa recarregar a página.
+  const atualizarPerfil = useCallback(
+    (parcial: Partial<{ full_name: string; avatar_url: string | null }>) =>
+      setState((prev) => (prev.profile ? { ...prev, profile: { ...prev.profile, ...parcial } } : prev)),
+    [],
+  );
+
+  return { ...state, signOut, hasAccess, retryAuth, atualizarPerfil };
 }
 
 export { isTransientError, withTimeout };

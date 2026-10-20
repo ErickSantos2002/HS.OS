@@ -174,9 +174,18 @@ _TIPOS = {"public", "private", "dm"}
 _TIPOS_MEMBRO = {"human", "agent"}
 _PAGINA = 200
 
+# ⚠️ **A foto de quem escreveu é a ATUAL, não a do dia do envio.** A mensagem
+# grava `author_avatar` no INSERT, e até 20/10/2026 era isso que voltava: quem
+# trocava a foto continuava com a antiga (ou com a letra) em tudo que já tinha
+# escrito. Agora é a do perfil, com a gravada como recuo — agente não tem
+# perfil. A subconsulta não usa alias de `m.` fora do recuo de propósito: as
+# rotas de escrita reaproveitam isto num RETURNING com `.replace('m.', '')`.
 _COLUNAS_MSG = """
     m.id::text AS id, m.channel_id::text AS channel_id, m.author_id,
-    m.author_type::text AS author_type, m.author_name, m.author_avatar,
+    m.author_type::text AS author_type, m.author_name,
+    COALESCE((SELECT pf.avatar_url FROM public.profiles pf
+               WHERE pf.id::text = m.author_id AND m.author_type::text = 'human'),
+             m.author_avatar) AS author_avatar,
     m.content, m.thread_id::text AS thread_id, m.audio_url, m.attachments,
     to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at,
     to_char(m.edited_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS edited_at,

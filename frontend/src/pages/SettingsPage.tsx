@@ -66,7 +66,7 @@ export default function SettingsPage() {
 
 
   // Profile state
-  const { user, profile, role } = useAuthContext();
+  const { user, profile, role, atualizarPerfil } = useAuthContext();
   const { resolvedTheme, setTheme } = useTheme();
   const isAdmin = role === "administrador";
   const [fullName, setFullName] = useState(profile?.full_name ?? "");
@@ -231,10 +231,14 @@ export default function SettingsPage() {
     setPrimaryColor(branding.primaryColor);
   }, [branding]);
 
+  // Separados: salvar a foto atualiza o `profile`, e um efeito só, preso a
+  // ele inteiro, apagaria o nome que a pessoa estivesse digitando.
   useEffect(() => {
     setFullName(profile?.full_name ?? "");
+  }, [profile?.full_name]);
+  useEffect(() => {
     setAvatarUrl(profile?.avatar_url ?? "");
-  }, [profile]);
+  }, [profile?.avatar_url]);
 
   const handleTest = async () => {
     setTesting(true);
@@ -352,18 +356,36 @@ export default function SettingsPage() {
       toast({ title: "Erro ao enviar foto", variant: "destructive" });
       return;
     }
-    setAvatarUrl(urlPublica("agent-files", filePath));
+    await salvarFoto(urlPublica("agent-files", filePath));
+  };
+
+  // ⚠️ **A foto é salva ao escolher, não no "Salvar".** Até 20/10/2026 o upload
+  // só trocava a prévia e o arquivo ficava órfão se a pessoa saísse sem clicar
+  // em Salvar — nenhuma das 28 contas tinha foto. Remover vale na hora também.
+  const salvarFoto = async (url: string | null) => {
+    try {
+      await api("/profiles/me", { method: "PATCH", body: { avatar_url: url } });
+    } catch {
+      toast({ title: "Não foi possível salvar a foto", variant: "destructive" });
+      return;
+    }
+    setAvatarUrl(url ?? "");
+    atualizarPerfil({ avatar_url: url });
+    toast({ title: url ? "Foto atualizada" : "Foto removida" });
   };
 
   const handleSaveProfile = async () => {
     if (!user) return;
     setProfileSaving(true);
-    await api("/profiles/me", {
-      method: "PATCH",
-      body: { full_name: fullName, avatar_url: avatarUrl || null },
-    }).catch(() => toast({ title: "Não foi possível salvar o perfil", variant: "destructive" }));
-    toast({ title: "Perfil atualizado" });
-    setProfileSaving(false);
+    try {
+      await api("/profiles/me", { method: "PATCH", body: { full_name: fullName } });
+      atualizarPerfil({ full_name: fullName });
+      toast({ title: "Perfil atualizado" });
+    } catch {
+      toast({ title: "Não foi possível salvar o perfil", variant: "destructive" });
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
   const handleChangePassword = async () => {
@@ -590,7 +612,7 @@ export default function SettingsPage() {
                     </button>
                     {avatarUrl && (
                       <button
-                        onClick={() => setAvatarUrl("")}
+                        onClick={() => void salvarFoto(null)}
                         className="text-xs px-3 py-1.5 rounded-md text-destructive hover:bg-destructive/10 transition-colors"
                       >
                         Remover
