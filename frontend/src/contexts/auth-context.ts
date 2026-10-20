@@ -30,6 +30,8 @@ export interface AuthContextValue {
   signOut: () => Promise<void>;
   hasAccess: (roles: AppRole[]) => boolean;
   retryAuth: () => Promise<void>;
+  /** Aplica no perfil da sessão o que acabou de ser salvo, sem reler da API. */
+  atualizarPerfil: (parcial: Partial<{ full_name: string; avatar_url: string | null }>) => void;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
