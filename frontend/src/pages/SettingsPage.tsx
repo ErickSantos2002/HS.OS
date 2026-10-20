@@ -28,6 +28,8 @@ import MissionControlDossierPage from "@/pages/MissionControlDossierPage";
 import UsersPage from "@/pages/UsersPage";
 import DocumentationPage from "@/pages/DocumentationPage";
 import { APP_VERSION, formatBuildDate } from "@/lib/app-version";
+import { AjusteDaFoto, recortarFoto } from "@/components/settings/AjusteDaFoto";
+import type { Area } from "react-easy-crop";
 import {
   isSupported as isBrowserNotifSupported,
   isEnabled as isBrowserNotifEnabled,
@@ -73,6 +75,9 @@ export default function SettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url ?? "");
   const [profileSaving, setProfileSaving] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  // Foto escolhida esperando o ajuste: o arquivo original e o objectURL do recorte.
+  const [fotoEmAjuste, setFotoEmAjuste] = useState<{ arquivo: File; src: string } | null>(null);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -345,18 +350,34 @@ export default function SettingsPage() {
     await processSquareIconFile(file, "markDark");
   };
 
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Escolher a foto abre o ajuste; o envio só acontece no "Usar foto".
+  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user) return;
-    const ext = file.name.split(".").pop() || "png";
-    const filePath = `avatars/${user.id}/${Date.now()}.${ext}`;
+    // Limpo para escolher o mesmo arquivo de novo depois de cancelar.
+    e.target.value = "";
+    if (!file) return;
+    setFotoEmAjuste({ arquivo: file, src: URL.createObjectURL(file) });
+  };
+
+  const fecharAjuste = () => {
+    if (fotoEmAjuste) URL.revokeObjectURL(fotoEmAjuste.src);
+    setFotoEmAjuste(null);
+  };
+
+  const enviarFotoAjustada = async (area: Area) => {
+    if (!fotoEmAjuste || !user) return;
+    setEnviandoFoto(true);
     try {
-      await enviarArquivo("agent-files", filePath, file, file.name);
+      const recortada = await recortarFoto(fotoEmAjuste.arquivo, area);
+      const filePath = `avatars/${user.id}/${Date.now()}.webp`;
+      await enviarArquivo("agent-files", filePath, recortada, recortada.name);
+      await salvarFoto(urlPublica("agent-files", filePath));
+      fecharAjuste();
     } catch {
       toast({ title: "Erro ao enviar foto", variant: "destructive" });
-      return;
+    } finally {
+      setEnviandoFoto(false);
     }
-    await salvarFoto(urlPublica("agent-files", filePath));
   };
 
   // ⚠️ **A foto é salva ao escolher, não no "Salvar".** Até 20/10/2026 o upload
@@ -621,6 +642,13 @@ export default function SettingsPage() {
                   </div>
                 </div>
                 <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                <AjusteDaFoto
+                  key={fotoEmAjuste?.src ?? "fechado"}
+                  src={fotoEmAjuste?.src ?? null}
+                  enviando={enviandoFoto}
+                  onCancelar={fecharAjuste}
+                  onConfirmar={enviarFotoAjustada}
+                />
               </div>
             </div>
           </div>
