@@ -47,6 +47,11 @@ def url_de_autorizacao(state: str) -> str:
         "response_mode": "query",
         "scope": ESCOPOS,
         "state": state,
+        # ⚠️ Sem isto a Microsoft entra direto com a conta já logada no
+        # navegador — e quem tem a pessoal e a da HS no mesmo PC caía na
+        # errada sem chance de trocar (20/10/2026). `select_account` sempre
+        # mostra a escolha; não há opção "só se houver mais de uma".
+        "prompt": "select_account",
     }
     return f"{_base()}/authorize?{urlencode(parametros)}"
 
