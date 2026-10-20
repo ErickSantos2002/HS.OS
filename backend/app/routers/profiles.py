@@ -194,6 +194,15 @@ async def atualizar_perfil(
                     "WHERE id = $1::uuid",
                     user_id, campos["status"],
                 )
+                # ⚠️ **Quem barra o login é `auth.users.is_active`, não o
+                # `profiles.status`.** Até 20/10/2026 esta rota só gravava o
+                # segundo: "Desativar" na tela de Usuários mudava o selo para
+                # "Inativo" e a pessoa continuava entrando. As duas vão juntas,
+                # na mesma transação.
+                await conn.execute(
+                    "UPDATE auth.users SET is_active = $2 WHERE id = $1::uuid",
+                    user_id, campos["status"] == "active",
+                )
                 await _registrar_acesso(
                     conn, usuario.id,
                     "deactivate_user" if campos["status"] == "inactive" else "activate_user",

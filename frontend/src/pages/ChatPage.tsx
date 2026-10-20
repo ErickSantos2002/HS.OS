@@ -2447,7 +2447,9 @@ export default function ChatPage() {
   })), [agents, lastMessages, selection, agentUnreadTotal, agentUnreadIdsForDm]);
 
   const listaPessoas: DmItem[] = useMemo(() => ordenarConversas(
-    people.filter((p) => p.id !== user?.id).map((person) => {
+    // Conta desativada (quem saiu da empresa) não aparece para começar
+    // conversa; se já havia conversa, ela fica — o histórico é de quem ficou.
+    people.filter((p) => p.id !== user?.id && (p.status !== "inactive" || !!peerIdToChannelId[p.id])).map((person) => {
       const canalId = peerIdToChannelId[person.id];
       const quando = canalId ? dmLastActivity[canalId] : null;
       const aberto = !!canalId && selection?.type === "channel" && selection.channel.id === canalId;
