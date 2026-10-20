@@ -60,6 +60,24 @@ continua lá. Para tirar um dono, apague do arquivo **e** desfaça pelo
 navegador. `placa_dx` (no `planta.json`) desloca a placa na parede — a da
 Diretoria ficava atrás da estante grande.
 
+⚠️ **A área pessoal cobre o cômodo inteiro, paredes inclusive** (20/10/2026).
+O WA só deixa o dono pôr objeto cuja **imagem** caiba inteira numa área dele;
+com a área só no interior, o que encostava na parede ficava vermelho. A borda
+extra é só parede (`test_area_pessoal_cobre_o_comodo_com_as_paredes`): um bloco
+a mais e a tranca fecharia o corredor. Vizinhos dividem a parede do meio.
+
+⚠️ **Mesa (objeto com colisão) não entra em área pessoal sem Shift — defeito do
+WA, não nosso.** Conferido no código da v1.33.11 e ainda igual no `develop` em
+20/10/2026: `applyPathfindingAreaWeights` pinta todo bloco de área pessoal (e de
+reunião) com um peso de caminho ≠ 0, e `isSpaceAvailable` trata qualquer valor
+≠ 0 como ocupado. Vale até para quem pode editar o mapa inteiro. **Segurar
+Shift** ao soltar ou arrastar (a prévia fica laranja) pula essa checagem — e
+pula também a de parede, então confira onde soltou. Objeto sem colisão (planta,
+quadro) não sofre disso.
+
+Placas usam **Liberation Sans** (`fontes/`, SIL OFL 1.1): a fonte embutida do
+Pillow não tem acento e "Expedição" saía com um quadrado no lugar do "çã".
+
 A colisão dos objetos (mesas) **não vai para a camada `colisao` do mapa**: o
 WA a aplica onde a mesa está. Pintada no mapa, mesa movida deixava parede
 invisível no lugar antigo.
