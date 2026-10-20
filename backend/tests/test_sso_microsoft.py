@@ -145,6 +145,14 @@ def test_inicio_manda_para_a_microsoft_com_state_no_cookie(sso_ligado):
     assert "HttpOnly" in cookie and "Path=/auth/microsoft" in cookie and "Secure" in cookie
 
 
+def test_inicio_sempre_pede_para_escolher_a_conta(sso_ligado):
+    """Sem `prompt=select_account` a Microsoft entra direto com a conta já
+    logada no navegador: quem tinha a conta pessoal e a da HS no mesmo PC
+    caía na errada sem ter como trocar (20/10/2026)."""
+    _, q = destino(cliente().get("/auth/microsoft"))
+    assert q["prompt"] == "select_account"
+
+
 def test_inicio_com_sso_desligado_volta_ao_login_com_o_motivo(monkeypatch):
     monkeypatch.setattr(settings, "MS_TENANT_ID", "")
     monkeypatch.setattr(settings, "FRONTEND_URL", FRONT)
