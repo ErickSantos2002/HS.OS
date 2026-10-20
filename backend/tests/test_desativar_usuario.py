@@ -78,3 +78,13 @@ def test_desativar_desliga_o_login(escritas):
 def test_reativar_religa_o_login(escritas):
     _patch("active")
     assert _is_active_gravado(escritas) == [("alvo-1", True)]
+
+
+def test_foto_de_outra_pessoa_vai_para_o_perfil_dela(escritas):
+    """A tela de Usuários gravava a foto de outra pessoa no `/profiles/me` —
+    no perfil do administrador. A rota de admin tem que aceitar `avatar_url`
+    e gravá-lo no perfil do alvo."""
+    asyncio.run(rota.atualizar_perfil(
+        "alvo-1", rota.PerfilAdminPatch(avatar_url="https://foto"), _Admin()))
+    gravou = [a for sql, a in escritas if sql.startswith("UPDATE public.profiles SET avatar_url")]
+    assert gravou == [("alvo-1", "https://foto")]

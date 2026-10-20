@@ -120,13 +120,17 @@ class PerfilAdminPatch(BaseModel):
     # promove sozinho no perfil quebra a lista que o RH usa para conferir.
     departamento: str | None = Field(default=None, max_length=120)
     cargo: str | None = Field(default=None, max_length=120)
+    # ⚠️ A tela de Usuários deixa o administrador trocar a foto de outra pessoa,
+    # e até 20/10/2026 gravava a URL no `/profiles/me` — o perfil de QUEM
+    # trocava. A foto do Gustavo virava a do administrador.
+    avatar_url: str | None = Field(default=None, max_length=2000)
 
 
 _PAPEIS = {"administrador", "colaborador"}
 # Campos de texto que o administrador edita direto em `profiles`. Ficam numa
 # lista para o UPDATE ser montado a partir dela — acrescentar um campo novo
 # deixa de exigir mexer no SQL.
-_CAMPOS_TEXTO = ("departamento", "cargo")
+_CAMPOS_TEXTO = ("departamento", "cargo", "avatar_url")
 _STATUS_PERFIL = {"active", "inactive"}
 
 

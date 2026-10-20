@@ -15,7 +15,11 @@ export async function uploadUserAvatar(userId: string, dataUrl: string): Promise
   // O `?t=` continua: o caminho é sempre o mesmo, então sem isto o navegador
   // mostraria a foto antiga do cache até o cabeçalho expirar.
   const url = `${urlPublica("agent-files", path)}?t=${Date.now()}`;
-  await api("/profiles/me", { method: "PATCH", body: { avatar_url: url } });
+  // ⚠️ **No perfil do ALVO, não no `/profiles/me`.** Quem chama é a tela de
+  // Usuários, com o administrador trocando a foto de outra pessoa; até
+  // 20/10/2026 isto gravava no perfil de quem trocava, e a foto do Gustavo
+  // virava a do administrador. A rota exige `administrador`.
+  await api(`/profiles/${encodeURIComponent(userId)}`, { method: "PATCH", body: { avatar_url: url } });
   return url;
 }
 
