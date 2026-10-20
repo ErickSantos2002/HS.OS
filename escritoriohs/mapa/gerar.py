@@ -175,6 +175,14 @@ def _mascara(parede, x, y):
     return ((x, y - 1) in parede) * 1 + ((x + 1, y) in parede) * 2 + \
            ((x, y + 1) in parede) * 4 + ((x - 1, y) in parede) * 8
 
+# A fonte embutida do Pillow (Aileron) não tem acento: "Expedição", "Cláudia" e
+# "André" saíam com um quadrado no lugar da letra, no ar, desde 15/10/2026.
+# Liberation Sans (SIL OFL 1.1, fontes/LICENSE.LiberationSans) tem.
+FONTE = os.path.join(AQUI, "fontes", "LiberationSans-Regular.ttf")
+
+def fonte_da_placa():
+    return ImageFont.truetype(FONTE, 9)
+
 def _placas(planta, pasta):
     """Folha de placas: cada placa é 2×1 blocos. Só o setor: uma faixa azul no
     meio. Com `pessoa`: duas faixas — o setor em cima, o nome embaixo, em branco
@@ -183,7 +191,7 @@ def _placas(planta, pasta):
     nomes = sorted({(c.placa, c.pessoa or "") for c in planta.comodos if c.placa})
     img = Image.new("RGBA", (64, 32 * len(nomes)), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    fonte = ImageFont.load_default(size=9)
+    fonte = fonte_da_placa()
     def faixa(y0, y1, texto, fundo, borda, cor):
         d.rounded_rectangle((1, y0, 62, y1), 3, fill=fundo, outline=borda)
         w = d.textlength(texto, font=fonte)
@@ -360,7 +368,11 @@ def _wam(P):
                 props.append({"id": _id(c.nome, "pessoal"), "type": "personalAreaPropertyData",
                               "accessClaimMode": "static", "allowedTags": [],
                               "ownerId": c.dono.strip().lower() if c.dono else None})
-            areas.append(_area(c.nome, x1, y1, x2, y2, props))
+            # Área pessoal = o cômodo inteiro, paredes inclusive (20/10/2026). O
+            # WA só deixa o dono pôr objeto cuja IMAGEM cabe inteira na área, e
+            # só no interior o que encostava na parede ficava de fora. A borda
+            # extra é parede — o corredor continua fora, e a tranca não o fecha.
+            areas.append(_area(c.nome, x1 - 1, y1 - 1, x2 + 1, y2 + 1, props))
     entidades = {oid: {"x": x, "y": y, "name": rotulo,
                        "prefabRef": {"collectionName": objetos.PECAS[peca][0], "id": objetos.prefab_id(peca)}}
                  for oid, peca, x, y, rotulo in objetos_do_mapa(P)}

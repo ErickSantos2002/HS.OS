@@ -215,7 +215,7 @@
       "w": 8,
       "h": 8,
       "porta": "S",
-      "placa": "Comercial 01"
+      "placa": "Vendedor 01"
     },
     {
       "nome": "Comercial 02",
@@ -225,7 +225,7 @@
       "w": 8,
       "h": 8,
       "porta": "S",
-      "placa": "Comercial 02"
+      "placa": "Vendedor 02"
     },
     {
       "nome": "Comercial 03",
@@ -235,7 +235,7 @@
       "w": 8,
       "h": 8,
       "porta": "S",
-      "placa": "Comercial 03"
+      "placa": "Vendedor 03"
     },
     {
       "nome": "Comercial 04",
@@ -245,7 +245,7 @@
       "w": 8,
       "h": 8,
       "porta": "N",
-      "placa": "Comercial 04"
+      "placa": "Vendedor 04"
     },
     {
       "nome": "Comercial 05",
@@ -255,7 +255,7 @@
       "w": 8,
       "h": 8,
       "porta": "N",
-      "placa": "Comercial 05"
+      "placa": "Vendedor 05"
     },
     {
       "nome": "Comercial 06",
@@ -265,7 +265,7 @@
       "w": 8,
       "h": 8,
       "porta": "N",
-      "placa": "Comercial 06"
+      "placa": "Vendedor 06"
     },
     {
       "nome": "Diretoria",
@@ -286,7 +286,7 @@
       "w": 8,
       "h": 8,
       "porta": "S",
-      "placa": "Comercial 07"
+      "placa": "Serviços 01"
     },
     {
       "nome": "Comercial 08",
@@ -296,7 +296,7 @@
       "w": 8,
       "h": 8,
       "porta": "S",
-      "placa": "Comercial 08"
+      "placa": "Serviços 02"
     },
     {
       "nome": "Comercial 09",
@@ -306,7 +306,7 @@
       "w": 8,
       "h": 8,
       "porta": "S",
-      "placa": "Comercial 09"
+      "placa": "Serviços 03"
     },
     {
       "nome": "Comercial 10",
@@ -316,7 +316,7 @@
       "w": 8,
       "h": 8,
       "porta": "N",
-      "placa": "Comercial 10"
+      "placa": "SDR 01"
     },
     {
       "nome": "Comercial 11",
@@ -326,7 +326,7 @@
       "w": 8,
       "h": 8,
       "porta": "N",
-      "placa": "Comercial 11"
+      "placa": "Marketing 01"
     },
     {
       "nome": "Comercial 12",
@@ -336,7 +336,7 @@
       "w": 8,
       "h": 8,
       "porta": "N",
-      "placa": "Comercial 12"
+      "placa": "SALA VAGA"
     }
   ],
   "decoracao": [
