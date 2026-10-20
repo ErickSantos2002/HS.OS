@@ -87,7 +87,7 @@ function ChannelStreamingActivity({ agentIds }: { agentIds: string[] }) {
   const firstAgent = agentIds[0] ?? "";
   return <StreamingActivityIndicator agentId={firstAgent} isWorking={agentIds.length > 0} hasStreamingText={false} />;
 }
-import { shouldShowDateDivider } from "@/lib/chat-date-groups";
+import { continuaSequencia, shouldShowDateDivider } from "@/lib/chat-date-groups";
 
 function TypingDots({ className = "" }: { className?: string }) {
   return (
@@ -223,6 +223,7 @@ export const MessageBubble = memo(function MessageBubble({
   resumoLigado = true,
   visto,
   onDadosDaMensagem,
+  continuacao = false,
 }: {
   msg: ChannelMessage;
   currentUserId: string;
@@ -245,6 +246,8 @@ export const MessageBubble = memo(function MessageBubble({
   /** Visto da mensagem — só faz sentido na minha (spec 2026-10-14). */
   visto?: EstadoDoVisto;
   onDadosDaMensagem?: () => void;
+  /** Segue a mensagem anterior do mesmo autor: sai sem foto e sem nome. */
+  continuacao?: boolean;
 }) {
   const isAgent = msg.author_type === "agent";
   const agentIdForAvatar = isAgent ? normalizeAgentId(msg.author_id || "") : "";
@@ -437,11 +440,22 @@ export const MessageBubble = memo(function MessageBubble({
   return (
     <div
       ref={wrapperRef}
-      className={`flex gap-3 group relative px-3 py-1.5 -mx-3 transition-colors ${isOwn ? "flex-row-reverse" : ""} ${threadHasUnread ? "bg-primary/[0.06] border-l-4 border-primary rounded-r-md" : isMarkedUnread ? "bg-primary/[0.04] border-l-2 border-primary/50" : ""}`}
+      className={`flex gap-3 group relative px-3 ${continuacao ? "py-0.5" : "py-1.5"} -mx-3 transition-colors ${isOwn ? "flex-row-reverse" : ""} ${threadHasUnread ? "bg-primary/[0.06] border-l-4 border-primary rounded-r-md" : isMarkedUnread ? "bg-primary/[0.04] border-l-2 border-primary/50" : ""}`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
+      {continuacao ? (
+        // Sem foto, o espaço fica para alinhar com a primeira da sequência; o
+        // horário de quem não sou eu aparece aqui ao passar o mouse.
+        <div className="w-9 shrink-0 flex items-start justify-center pt-2.5">
+          {!isOwn && (
+            <span className="hidden group-hover:inline text-[10px] leading-none text-muted-foreground">
+              {format(new Date(msg.created_at), "HH:mm")}
+            </span>
+          )}
+        </div>
+      ) : (
       <div className={`h-9 w-9 shrink-0 mt-0.5 overflow-hidden ring-2 ring-border/30 ${isAgent ? "rounded-md" : "rounded-full"}`}>
         {isAgent ? (
           agentAvatar ? (
@@ -459,8 +473,26 @@ export const MessageBubble = memo(function MessageBubble({
           </div>
         )}
       </div>
+      )}
       <div className={`min-w-0 flex-1 flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
-        {!isOwn && (
+        {!isOwn && continuacao && (isMarkedUnread || threadHasUnread || (isEdited && !isDeleted)) && (
+          <div className="flex items-center gap-2">
+            {isMarkedUnread && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-primary/20">
+                <BellDot className="h-3 w-3" />
+                Não lida
+              </span>
+            )}
+            {threadHasUnread && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground shadow-sm">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary-foreground animate-pulse" />
+                Nova resposta
+              </span>
+            )}
+            {isEdited && !isDeleted && <span className="text-[10px] text-muted-foreground italic">(editado)</span>}
+          </div>
+        )}
+        {!isOwn && !continuacao && (
           <>
             <div className="flex items-center gap-2">
               <span className={`font-semibold text-sm ${isAgent ? "text-foreground" : "text-foreground"}`}>{msg.author_name}</span>
@@ -1805,11 +1837,14 @@ export default function ChannelChat({
           messages.map((msg, index) => {
             const previousMessage = messages[index - 1];
             const showDateDivider = shouldShowDateDivider(msg.created_at, previousMessage?.created_at);
+            const continuacao = continuaSequencia(msg, previousMessage);
 
             return (
               <Fragment key={msg.id}>
                 {showDateDivider && <DateDivider date={msg.created_at} />}
-                <div data-message-index={index} data-message-id={msg.id}>
+                {/* O space-y-4 da lista separa as sequências; dentro de uma, as
+                    mensagens ficam coladas (marginTop inline vence o seletor). */}
+                <div data-message-index={index} data-message-id={msg.id} style={continuacao ? { marginTop: "0.125rem" } : undefined}>
                   {editingId === msg.id ? (
                     <EditingBubble
                       msg={msg}
@@ -1844,6 +1879,7 @@ export default function ChannelChat({
                       authorStatus={statusByUserId.get(msg.author_id) ?? null}
                       visto={msg.author_id === user?.id ? estadoNoCanal(msg.id, recibos) : undefined}
                       onDadosDaMensagem={() => setDadosDaMensagemId(msg.id)}
+                      continuacao={continuacao}
                     />
                   )}
                 </div>
