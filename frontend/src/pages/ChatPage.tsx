@@ -11,7 +11,7 @@ import { useAudioRecorder, getAudioFileExtension } from "@/hooks/use-audio-recor
 import { useAudioLevel } from "@/hooks/use-audio-level";
 import { useChannels, type Channel } from "@/hooks/use-channels";
 import { usePeople, findOrCreateDm, type Person } from "@/hooks/use-people";
-import NovaConversaDialog from "@/components/chat/NovaConversaDialog";
+import { casaBusca, ordenarConversas, type ItemDaLista } from "@/lib/lista-de-conversas";
 import { useDmPeers } from "@/hooks/use-dm-members";
 import { useMobileChatViewport } from "@/hooks/use-mobile-chat-viewport";
 import { usePersistentDraft } from "@/hooks/use-persistent-draft";
@@ -28,7 +28,6 @@ import { acrescentarCitacao, semPedidoDaBusca } from "@/lib/conversas-anteriores
 import { formatFileSize } from "@/lib/file-upload";
 import { Bot, FileText, File as FileIcon, Copy, Check, BellDot } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { lerChave } from "@/lib/chaves-locais";
 import {
   loadPersistedHistory,
   loadOlderMessages,
@@ -69,7 +68,7 @@ import {
   Send, User, Loader2, WifiOff,
   Mic, Paperclip, Image as ImageIcon,
   X, ZoomIn, Info, Volume2, Square,
-  RefreshCw, Hash, Lock, MessageCircle, Plus, Star, Bell, RotateCcw, History,
+  RefreshCw, Hash, Lock, MessageCircle, Plus, RotateCcw, History, Search,
 } from "lucide-react";
 import { usePendingAgentTask } from "@/hooks/use-pending-agent-task";
 import { playNotificationSound } from "@/lib/notification-sound";
@@ -667,7 +666,7 @@ export default function ChatPage() {
   const { presenca: presencaEscritorio, estaNoEscritorio } = useEscritorioPresenca();
   const { user, profile, role } = useAuthContext();
   const { peers: dmPeers, peerIdToChannelId } = useDmPeers(channels, user?.id);
-  const { notifications, unreadByChannel, unreadByAgentOnly, unreadCount, markAsRead, markAllAsReadForChannel, markAllAsReadForAgent, setActiveChannel, setActiveAgent } = useNotificationsContext();
+  const { unreadByChannel, unreadByAgentOnly, markAllAsReadForChannel, markAllAsReadForAgent, setActiveChannel, setActiveAgent } = useNotificationsContext();
   const isMobile = useIsMobile();
   const { bottomOffset, isKeyboardOpen } = useMobileChatViewport();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -701,6 +700,22 @@ export default function ChatPage() {
     refetchedForChannelRef.current.add(channelParam);
     refetchChannels();
   }, [channelParam, channels, channelsLoading, refetchChannels]);
+
+  // ⚠️ **DM que outra pessoa acabou de criar não está na lista carregada.**
+  // A notificação chega com o `channel_id` novo, mas sem o canal a lateral não
+  // sabe de quem é — não havia contador, e o clique na antiga aba "Não lidas"
+  // não achava o que abrir (a primeira mensagem do Gustavo, 20/10/2026).
+  // Recarregar a lista uma vez por canal desconhecido resolve os dois.
+  useEffect(() => {
+    if (channelsLoading) return;
+    const conhecidos = new Set(channels.map((c) => c.id));
+    const novo = Object.keys(unreadByChannel).find(
+      (id) => (unreadByChannel[id] || 0) > 0 && !conhecidos.has(id) && !refetchedForChannelRef.current.has(id),
+    );
+    if (!novo) return;
+    refetchedForChannelRef.current.add(novo);
+    refetchChannels();
+  }, [unreadByChannel, channels, channelsLoading, refetchChannels]);
 
   const agentIdFromChannelParam = useMemo(() => {
     if (!channelParam) return null;
@@ -789,7 +804,8 @@ export default function ChatPage() {
     if (!aberto && anteriorParam) setSearchParams(semPedidoDaBusca(searchParams), { replace: true });
   }, [anteriorParam, searchParams, setSearchParams]);
   const [createOpen, setCreateOpen] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState<"channels" | "dms" | "unreads">("dms");
+  const [sidebarTab, setSidebarTab] = useState<"dms" | "agentes" | "channels">("dms");
+  const [buscaPessoa, setBuscaPessoa] = useState("");
 
   // Persist sidebar tab selection and restore on mount
   useEffect(() => {
@@ -798,7 +814,9 @@ export default function ChatPage() {
   useEffect(() => {
     try {
       const saved = localStorage.getItem("mc_last_chat_tab");
-      if (saved === "channels" || saved === "dms" || saved === "unreads") setSidebarTab(saved);
+      // "unreads" era a aba "Não lidas", que saiu em 20/10/2026 — quem a tinha
+      // como última cai em DMs, que é onde a não lida agora aparece.
+      if (saved === "channels" || saved === "dms" || saved === "agentes") setSidebarTab(saved);
     } catch {}
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -865,10 +883,13 @@ export default function ChatPage() {
       }
       const ch = channels.find((c) => c.id === channelId);
       if (ch) setSelection({ type: "channel", channel: ch });
+      // Canal fora da lista (DM recém-criado): pela URL, que recarrega a
+      // lista e abre quando ele chegar. Antes o clique não fazia nada.
+      else if (channelId) navigate(`/chat?channel=${encodeURIComponent(channelId)}`);
     };
     window.addEventListener("navigate-to-channel", handler);
     return () => window.removeEventListener("navigate-to-channel", handler);
-  }, [channels, getAgentIdForDmChannel, setSelection]);
+  }, [channels, getAgentIdForDmChannel, setSelection, navigate]);
 
   // Listen for toast click → navigate to agent DM
   useEffect(() => {
@@ -2277,12 +2298,6 @@ export default function ChatPage() {
 
   /* ── Open DM with a person ── */
   const [openingDm, setOpeningDm] = useState<string | null>(null);
-  const [novaConversaAberta, setNovaConversaAberta] = useState(false);
-  // Eu mesmo não entro na lista de com quem conversar.
-  const pessoasParaConversar = useMemo(
-    () => people.filter((p) => p.id !== user?.id),
-    [people, user?.id],
-  );
   const handleOpenPersonDm = useCallback(async (person: Person) => {
     if (!user || openingDm) return;
     setOpeningDm(person.id);
@@ -2305,7 +2320,6 @@ export default function ChatPage() {
   const dmChannels = useMemo(() => channels.filter((c) => c.type === "dm"), [channels]);
   const dmChannelIdsKey = useMemo(() => dmChannels.map(c => c.id).sort().join(","), [dmChannels]);
   const typingByDmChannel = useTypingActivity(dmChannels.map((c) => c.id), user?.id ?? null);
-  const [dmPickerOpen, setDmPickerOpen] = useState(false);
 
   const [agentUnreadIdsForDm, setAgentUnreadIdsForDm] = useState<string[]>(() => getUnreadAgentIds());
   useEffect(() => {
@@ -2313,45 +2327,6 @@ export default function ChatPage() {
     window.addEventListener(AGENT_UNREAD_EVENT, handler);
     return () => window.removeEventListener(AGENT_UNREAD_EVENT, handler);
   }, []);
-  const dmUnreadCount = useMemo(
-    () => {
-      const visibleAgentDmChannelIds = agents.flatMap((agent) =>
-        getAgentIdAliases(agent.id)
-          .map((alias) => agentDmChannelMap[alias])
-          .filter(Boolean)
-      );
-      const visibleDmChannelIds = new Set([
-        ...visibleAgentDmChannelIds,
-        ...Object.values(peerIdToChannelId),
-      ]);
-      const dbUnread = dmChannels.reduce(
-        (acc, c) => acc + (visibleDmChannelIds.has(c.id) && c.id !== activeNotificationChannelId ? (unreadByChannel[c.id] || 0) : 0),
-        0,
-      );
-      // Órfãs (agent_id sem canal) dos agentes visíveis, exceto o chat aberto.
-      const orphanUnread = agents.reduce((acc, agent) => {
-        const aliases = getAgentIdAliases(agent.id);
-        if (selection?.type === "agent" && aliases.includes(selection.id)) return acc;
-        return acc + aliases.reduce((sum, alias) => sum + (unreadByAgentOnly[alias] || 0), 0);
-      }, 0);
-
-      const localAgentUnread = agentUnreadIdsForDm.filter((agentId) => {
-        const aliases = getAgentIdAliases(agentId);
-        if (selection?.type === "agent" && aliases.includes(selection.id)) return false;
-        // Já contado como órfã no banco — não recontar pelo rastreador local.
-        if (aliases.some((alias) => (unreadByAgentOnly[alias] || 0) > 0)) return false;
-        const dmChannelId = aliases
-          .map((alias) => agentDmChannelMap[alias])
-          .find(Boolean);
-        if (dmChannelId && dmChannelId === activeNotificationChannelId) return false;
-        if (dmChannelId) return false;
-        return agents.some((agent) => aliases.includes(agent.id));
-      }).length;
-
-      return dbUnread + orphanUnread + localAgentUnread;
-    },
-    [activeNotificationChannelId, agentDmChannelMap, agentUnreadIdsForDm, agents, dmChannels, peerIdToChannelId, selection, unreadByChannel, unreadByAgentOnly]
-  );
   const channelUnreadCount = useMemo(() => [...publicChannels, ...privateChannels].reduce((acc, c) => acc + (unreadByChannel[c.id] || 0), 0), [publicChannels, privateChannels, unreadByChannel]);
 
   // Populate agent_id → DM channel_id mapping for badge display
@@ -2401,52 +2376,6 @@ export default function ChatPage() {
   // Track last activity for DM channels (people)
   const [dmLastActivity, setDmLastActivity] = useState<Record<string, string>>({});
 
-  // DM sidebar sub-filter: all | unread | favorites
-  const [dmFilter, setDmFilter] = useState<"all" | "unread" | "favorites">("all");
-
-  // Handler for the "Unreads" tab — open the right context (channel/DM/thread) and mark as read
-  const openNotification = useCallback((notif: any) => {
-    const channelId: string | null = notif.channel_id ?? null;
-    const threadRootId: string | null = notif.message_id ?? null;
-    const agentId: string | null = notif.agent_id ?? null;
-
-    const channel = channelId ? channels.find((c) => c.id === channelId) : null;
-    if (channel) {
-      setSelection({ type: "channel", channel });
-      if (threadRootId) {
-        // wait until ChannelChat mounts/messages load, then dispatch
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent("navigate-to-channel", { detail: { channelId, threadRootId } }));
-        }, 250);
-      }
-    } else if (agentId) {
-      const agent = agents.find((a) => a.id === agentId);
-      if (agent) setSelection({ type: "agent", id: agent.id });
-    } else if (channelId) {
-      // channel not yet in list — let global handler resolve once channels load
-      window.dispatchEvent(new CustomEvent("navigate-to-channel", { detail: { channelId, threadRootId } }));
-    }
-
-    void markAsRead(notif.id);
-  }, [channels, agents, markAsRead]);
-
-
-  const [dmFavorites, setDmFavorites] = useState<Set<string>>(() => {
-    try {
-      const raw = lerChave("hsos:dm:favorites");
-      if (raw) return new Set(JSON.parse(raw));
-    } catch {}
-    return new Set();
-  });
-  const toggleDmFavorite = useCallback((id: string) => {
-    setDmFavorites(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      try { localStorage.setItem("hsos:dm:favorites", JSON.stringify(Array.from(next))); } catch {}
-      return next;
-    });
-  }, []);
-
   useEffect(() => {
     if (!dmChannelIdsKey) return;
     let cancelled = false;
@@ -2493,47 +2422,56 @@ export default function ChatPage() {
     return () => { cancelamentos.forEach((c) => c()); };
   }, [dmChannelIdsKey]);
 
-  // Unified DM list: agents + people sorted by last activity
+  // Duas listas desde 20/10/2026: DMs só com pessoas — TODAS, não só quem já
+  // tem conversa — e Agentes numa aba própria, para quem tem algum liberado.
+  // Ordem e busca em `lib/lista-de-conversas.ts`.
   type DmItem =
-    | { kind: "agent"; agent: typeof agents[0]; lastActivity: number }
-    | { kind: "person"; person: Person; lastActivity: number };
+    | ({ kind: "agent"; agent: typeof agents[0] } & ItemDaLista)
+    | ({ kind: "person"; person: Person } & ItemDaLista);
 
-  const unifiedDmList: DmItem[] = useMemo(() => {
-    const items: DmItem[] = [];
-    for (const agent of agents) {
-      const lastMsg = lastMessages[agent.id];
-      const ts = lastMsg ? new Date(lastMsg.created_at).getTime() : 0;
-      items.push({ kind: "agent", agent, lastActivity: ts });
-    }
-    // ⚠️ **Pessoa voltou a esta lista em 01/09/2026**, revertendo a decisão de
-    // 17/08 — a conversa entre pessoas voltou ao produto e a empresa inteira
-    // entrou (27 contas, contra 4).
-    //
-    // Só entra quem JÁ tem conversa. Com 26 pessoas, listar todas empurraria os
-    // agentes — que são o foco do produto — para baixo da dobra logo na
-    // primeira semana, quando ainda não existe conversa nenhuma. Começar uma
-    // conversa nova é o botão "Nova conversa", que busca por nome e por setor.
-    for (const person of people) {
-      if (person.id === user?.id) continue;
+  const listaAgentes: DmItem[] = useMemo(() => ordenarConversas(agents.map((agent) => {
+    const lastMsg = lastMessages[agent.id];
+    const aliases = getAgentIdAliases(agent.id);
+    const aberto = selection?.type === "agent" && aliases.includes(selection.id);
+    // O rastreador local marca resposta que chegou com a tela em outro lugar
+    // e ainda não virou notificação no banco — vale um, para acender.
+    const doBanco = agentUnreadTotal(agent.id);
+    const local = agentUnreadIdsForDm.some((id) => aliases.includes(id)) ? 1 : 0;
+    return {
+      kind: "agent" as const,
+      agent,
+      nome: agent.name,
+      ultimaAtividade: lastMsg ? new Date(lastMsg.created_at).getTime() : 0,
+      naoLidas: aberto ? 0 : (doBanco || local),
+    };
+  })), [agents, lastMessages, selection, agentUnreadTotal, agentUnreadIdsForDm]);
+
+  const listaPessoas: DmItem[] = useMemo(() => ordenarConversas(
+    people.filter((p) => p.id !== user?.id).map((person) => {
       const canalId = peerIdToChannelId[person.id];
-      if (!canalId) continue;
-      const quando = dmLastActivity[canalId];
-      items.push({
-        kind: "person",
+      const quando = canalId ? dmLastActivity[canalId] : null;
+      const aberto = !!canalId && selection?.type === "channel" && selection.channel.id === canalId;
+      return {
+        kind: "person" as const,
         person,
-        lastActivity: quando ? new Date(quando).getTime() : 0,
-      });
-    }
-    items.sort((a, b) => {
-      if (a.lastActivity && b.lastActivity) return b.lastActivity - a.lastActivity;
-      if (a.lastActivity && !b.lastActivity) return -1;
-      if (!a.lastActivity && b.lastActivity) return 1;
-      const nameA = a.kind === "agent" ? a.agent.name : (a.person.full_name || a.person.email);
-      const nameB = b.kind === "agent" ? b.agent.name : (b.person.full_name || b.person.email);
-      return nameA.localeCompare(nameB);
-    });
-    return items;
-  }, [agents, people, lastMessages, peerIdToChannelId, dmLastActivity, user?.id]);
+        nome: person.full_name || person.email,
+        ultimaAtividade: quando ? new Date(quando).getTime() : 0,
+        naoLidas: canalId && !aberto ? (unreadByChannel[canalId] || 0) : 0,
+      };
+    }),
+  ), [people, user?.id, peerIdToChannelId, dmLastActivity, selection, unreadByChannel]);
+
+  const pessoasNaoLidas = listaPessoas.reduce((acc, i) => acc + i.naoLidas, 0);
+  const agentesNaoLidas = listaAgentes.reduce((acc, i) => acc + i.naoLidas, 0);
+  // A aba some para quem não tem agente liberado; quem a tinha como última
+  // e perdeu o acesso cai em DMs.
+  const temAgentes = agents.length > 0;
+  const abaAtual = sidebarTab === "agentes" && !temAgentes ? "dms" : sidebarTab;
+  const listaDaAba: DmItem[] = abaAtual === "agentes"
+    ? listaAgentes
+    : listaPessoas.filter((i) => i.kind === "person" && casaBusca(
+        [i.person.full_name, i.person.email, i.person.departamento, i.person.cargo], buscaPessoa,
+      ));
 
   /* ── Agent DM Content (shared between mobile and desktop) ── */
   const renderAgentChat = () => (
@@ -2801,151 +2739,6 @@ export default function ChatPage() {
     </div>
   );
 
-  // Shared list for the "Não Lidas" tab (mobile + desktop)
-  const renderUnreadsList = () => {
-    const unread = [...notifications].filter((n) => !n.read);
-
-    // Agent-only unreads (in-memory tracker) that don't already have a
-    // matching DB notification — otherwise the global badge counts them
-    // but they never appear in the list, leaving a "ghost" unread.
-    const dbCoveredAgentIds = new Set<string>();
-    for (const n of unread) {
-      if (n.agent_id) dbCoveredAgentIds.add(n.agent_id);
-      if (n.channel_id) {
-        for (const agent of agents) {
-          if (getAgentIdAliases(agent.id).some((a) => agentDmChannelMap[a] === n.channel_id)) {
-            dbCoveredAgentIds.add(agent.id);
-          }
-        }
-      }
-    }
-    const orphanAgentUnreads = agentUnreadIdsForDm.filter((id) => !dbCoveredAgentIds.has(id));
-
-    if (unread.length === 0 && orphanAgentUnreads.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center py-10 text-center px-4">
-          <div className="h-10 w-10 rounded-full bg-secondary/50 flex items-center justify-center mb-3">
-            <Bell className="h-5 w-5 text-muted-foreground" />
-          </div>
-          <p className="text-sm font-medium text-foreground">Tudo em dia!</p>
-          <p className="text-xs text-muted-foreground mt-1">Você não tem mensagens não lidas.</p>
-        </div>
-      );
-    }
-
-    // Group by main-chat vs thread. Threads always show as their own row (one per thread root).
-    // Multiple unread messages in the same main chat collapse to a single row with a counter.
-    const groups = new Map<string, { items: any[]; isThread: boolean }>();
-    for (const n of unread) {
-      const scope = n.channel_id || n.agent_id || "unknown";
-      const isThread = !!n.message_id;
-      const key = isThread ? `thread:${scope}:${n.message_id}` : `main:${scope}`;
-      const g = groups.get(key);
-      if (g) g.items.push(n);
-      else groups.set(key, { items: [n], isThread });
-    }
-
-    // Sort each group's items ascending (oldest first → click opens the first unread)
-    // and the group list descending by most recent activity.
-    const groupList = Array.from(groups.values()).map((g) => {
-      const items = g.items.slice().sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
-      return { ...g, items, latestAt: items[items.length - 1].created_at };
-    });
-    groupList.sort((a, b) => (a.latestAt < b.latestAt ? 1 : -1));
-
-    return (
-      <div className="divide-y divide-border/40">
-        {groupList.map((g) => {
-          const first = g.items[0]; // oldest unread — opens first
-          const latest = g.items[g.items.length - 1];
-          const count = g.items.length;
-          const ch = first.channel_id ? channels.find((c) => c.id === first.channel_id) : null;
-          const agentId = first.agent_id || null;
-          const agent = agentId ? agents.find((a) => a.id === agentId) : null;
-          const isDm = !!agent || (ch && ch.type === "dm");
-          const contextLabel = agent
-            ? `DM • ${agent.name}`
-            : ch
-              ? (ch.type === "dm" ? `DM • ${dmPeers[ch.id]?.peerName || ch.name}` : `#${ch.name}`)
-              : "Conversa";
-          const title = count > 1 && !g.isThread
-            ? (agent?.name || (ch?.type === "dm" ? (dmPeers[ch.id]?.peerName || ch.name) : ch?.name) || first.author_name)
-            : first.author_name;
-          return (
-            <button
-              key={(g.isThread ? "t:" : "m:") + (first.channel_id || first.agent_id) + ":" + (first.message_id || "")}
-              onClick={() => openNotification(first)}
-              className="w-full text-left px-3 py-3 hover:bg-secondary/40 active:bg-secondary/60 transition-colors"
-            >
-              <div className="flex items-start gap-3 min-w-0">
-                <div className="h-9 w-9 shrink-0 rounded-full bg-secondary flex items-center justify-center">
-                  {isDm ? <User className="h-4 w-4 text-muted-foreground" /> : <Hash className="h-4 w-4 text-muted-foreground" />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-sm font-semibold text-foreground truncate">{title}</span>
-                      {count > 1 && (
-                        <span className="shrink-0 rounded-full bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 leading-none">
-                          {count > 99 ? "99+" : count}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-muted-foreground shrink-0">{getRelativeTime(latest.created_at)}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    {g.isThread && (
-                      <span className="rounded-full bg-primary/15 text-primary text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5">Thread</span>
-                    )}
-                    <span className="text-[11px] text-muted-foreground truncate">{contextLabel}</span>
-                  </div>
-                  {latest.content_preview && (
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2 break-words">
-                      {count > 1 && !g.isThread ? `${latest.author_name}: ` : ""}{latest.content_preview}
-                    </p>
-                  )}
-                </div>
-                <span className="h-2 w-2 mt-2 rounded-full bg-primary shrink-0" />
-              </div>
-            </button>
-          );
-        })}
-        {orphanAgentUnreads.map((agentId) => {
-          const agent = agents.find((a) => a.id === agentId);
-          const name = agent?.name || agentId;
-          return (
-            <button
-              key={`orphan-agent:${agentId}`}
-              onClick={() => {
-                clearUnreadAgent(agentId);
-                if (agent) setSelection({ type: "agent", id: agent.id });
-              }}
-              className="w-full text-left px-3 py-3 hover:bg-secondary/40 active:bg-secondary/60 transition-colors"
-            >
-              <div className="flex items-start gap-3 min-w-0">
-                <div className="h-9 w-9 shrink-0 rounded-full bg-secondary flex items-center justify-center">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-foreground truncate">{name}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[11px] text-muted-foreground truncate">DM • {name}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2 break-words">Nova resposta do agente</p>
-                </div>
-                <span className="h-2 w-2 mt-2 rounded-full bg-primary shrink-0" />
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    );
-  };
-
-
-
   /* ── MOBILE LAYOUT ── */
   /* ⚠️ **Este diálogo vivia SÓ dentro do `if (isMobile)`.**
      O botão que o abre está em `renderAgentChat`, que os dois layouts usam —
@@ -3004,24 +2797,61 @@ export default function ChatPage() {
       </>
   );
 
-  // Mesma razão do `dialogoNovaConversa` acima: usado pelos dois returns
-  // (mobile e desktop), fica numa variável em vez de duplicar o JSX.
-  const dialogoEscolherPessoa = (
-    <NovaConversaDialog
-      aberto={novaConversaAberta}
-      onFechar={() => setNovaConversaAberta(false)}
-      pessoas={pessoasParaConversar}
-      onEscolher={(pessoa) => {
-        setNovaConversaAberta(false);
-        const canalId = peerIdToChannelId[pessoa.id];
-        const existente = canalId ? channels.find((c) => c.id === canalId) : null;
-        // Conversa que já existe é seleção, não criação — o
-        // `find_or_create_dm` devolveria o mesmo canal, mas passar pela rede
-        // para descobrir o que a tela já sabe é volta à toa.
-        if (existente) setSelection({ type: "channel", channel: existente });
-        else void handleOpenPersonDm(pessoa);
-      }}
-    />
+  // Abas e busca são as mesmas no mobile e no desktop — numa variável, pela
+  // mesma razão do `dialogoNovaConversa` acima.
+  const abasDaLateral = (
+    <Tabs value={abaAtual} onValueChange={(v) => setSidebarTab(v as "dms" | "agentes" | "channels")} className="w-full">
+      <TabsList className="w-full bg-transparent border-b border-border/30 rounded-none p-0 h-auto justify-start gap-6">
+        <TabsTrigger value="dms" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
+          DMs
+          {pessoasNaoLidas > 0 && (
+            <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
+              {pessoasNaoLidas > 99 ? "99+" : pessoasNaoLidas}
+            </span>
+          )}
+        </TabsTrigger>
+        {temAgentes && (
+          <TabsTrigger value="agentes" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
+            Agentes
+            {agentesNaoLidas > 0 && (
+            <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
+              {agentesNaoLidas > 99 ? "99+" : agentesNaoLidas}
+            </span>
+          )}
+          </TabsTrigger>
+        )}
+        <TabsTrigger value="channels" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
+          Canais
+          {channelUnreadCount > 0 && (
+            <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
+              {channelUnreadCount > 99 ? "99+" : channelUnreadCount}
+            </span>
+          )}
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+
+  const campoBuscaPessoa = (
+    <div className="relative mb-2">
+      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+      <input
+        value={buscaPessoa}
+        onChange={(e) => setBuscaPessoa(e.target.value)}
+        placeholder="Buscar por nome ou setor"
+        aria-label="Buscar pessoa"
+        className="w-full h-8 rounded-lg bg-secondary/50 pl-8 pr-7 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-primary/40"
+      />
+      {buscaPessoa && (
+        <button onClick={() => setBuscaPessoa("")} aria-label="Limpar busca" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+
+  const semResultadoBusca = abaAtual === "dms" && buscaPessoa.trim() && listaDaAba.length === 0 && (
+    <p className="px-2 py-6 text-center text-xs text-muted-foreground">Ninguém com esse nome ou setor.</p>
   );
 
   if (isMobile) {
@@ -3039,53 +2869,19 @@ export default function ChatPage() {
             <div className="border-b border-border/30 shrink-0 px-3 pt-3 pb-2 bg-gradient-to-b from-primary/5 to-transparent">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-lg font-display font-bold text-foreground">Chat</h2>
-                {sidebarTab === "channels" && role === "administrador" && (
+                {abaAtual === "channels" && role === "administrador" && (
                   <button onClick={() => setCreateOpen(true)} className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors touch-target" title="Criar canal">
                     <Plus className="h-5 w-5" />
                   </button>
                 )}
-                {sidebarTab === "dms" && (
-                  <button onClick={() => setNovaConversaAberta(true)} className="text-xs text-primary hover:underline">
-                    Nova conversa
-                  </button>
-                )}
               </div>
-              <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "channels" | "dms" | "unreads")} className="w-full">
-                <TabsList className="w-full bg-transparent border-b border-border/30 rounded-none p-0 h-auto justify-start gap-6">
-                  <TabsTrigger value="dms" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
-                    DMs
-                    {dmUnreadCount > 0 && (
-                      <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
-                        {dmUnreadCount > 99 ? "99+" : dmUnreadCount}
-                      </span>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="channels" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
-                    Canais
-                    {channelUnreadCount > 0 && (
-                      <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
-                        {channelUnreadCount > 99 ? "99+" : channelUnreadCount}
-                      </span>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="unreads" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
-                    Não Lidas
-                    {unreadCount > 0 && (
-                      <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
-                        {unreadCount > 99 ? "99+" : unreadCount}
-                      </span>
-                    )}
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+              {abasDaLateral}
             </div>
 
 
             <ScrollArea className="flex-1">
               <div className="px-3 py-2 pb-20">
-                {sidebarTab === "unreads" ? (
-                  renderUnreadsList()
-                ) : sidebarTab === "channels" ? (
+                {abaAtual === "channels" ? (
                   <>
                     {publicChannels.length > 0 && (
                       <div className="mb-3">
@@ -3111,7 +2907,9 @@ export default function ChatPage() {
                   </>
                 ) : (
                   <>
-                  <NoEscritorioAgora presenca={presencaEscritorio} />
+                  {abaAtual === "dms" && <NoEscritorioAgora presenca={presencaEscritorio} />}
+                  {abaAtual === "dms" && campoBuscaPessoa}
+                  {semResultadoBusca}
                   <div className="mb-2 divide-y divide-border/40">
                   {loading && agents.length === 0 && (
                     <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-primary" /></div>
@@ -3119,10 +2917,10 @@ export default function ChatPage() {
                   {error && (
                     <div className="p-2 text-xs text-destructive flex items-center gap-1"><WifiOff className="h-3 w-3" /> {error}</div>
                   )}
-                  {unifiedDmList.map((item) => {
+                  {listaDaAba.map((item) => {
                     if (item.kind === "agent") {
                       const agent = item.agent;
-                      const unread = agentUnreadTotal(agent.id);
+                      const unread = item.naoLidas;
                       const hasUnread = unread > 0;
                       const lastMsg = lastMessages[agent.id];
                       return (
@@ -3156,7 +2954,7 @@ export default function ChatPage() {
                     } else {
                       const person = item.person;
                       const existingChannelId = peerIdToChannelId[person.id];
-                      const unread = existingChannelId ? (unreadByChannel[existingChannelId] || 0) : 0;
+                      const unread = item.naoLidas;
                       const existingChannel = existingChannelId ? channels.find((c) => c.id === existingChannelId) : null;
                       const hasUnread = unread > 0;
                       const lastAct = existingChannelId ? dmLastActivity[existingChannelId] : null;
@@ -3234,7 +3032,6 @@ export default function ChatPage() {
 
         <CreateChannelDialog open={createOpen} onOpenChange={setCreateOpen} onCreate={handleCreateChannel} />
         {dialogoNovaConversa}
-        {dialogoEscolherPessoa}
         <Dialog open={!!lightboxSrc} onOpenChange={() => setLightboxSrc(null)}>
           <DialogContent className="max-w-3xl p-2 bg-transparent border-none shadow-none">
             {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80vh] object-contain" />}
@@ -3252,52 +3049,18 @@ export default function ChatPage() {
         <div className="p-3 border-b border-border/30 space-y-2 bg-gradient-to-b from-primary/5 to-transparent">
           <div className="flex items-center justify-between">
             <h2 className="text-[10px] font-display font-semibold uppercase tracking-wider text-muted-foreground">Chat</h2>
-            {sidebarTab === "channels" && role === "administrador" && (
+            {abaAtual === "channels" && role === "administrador" && (
               <button onClick={() => setCreateOpen(true)} className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" title="Criar canal">
                 <Plus className="h-3.5 w-3.5" />
               </button>
             )}
-            {sidebarTab === "dms" && (
-              <button onClick={() => setNovaConversaAberta(true)} className="text-xs text-primary hover:underline">
-                Nova conversa
-              </button>
-            )}
           </div>
-          <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "channels" | "dms" | "unreads")} className="w-full">
-            <TabsList className="w-full bg-transparent border-b border-border/30 rounded-none p-0 h-auto justify-start gap-6">
-              <TabsTrigger value="dms" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
-                DMs
-                {dmUnreadCount > 0 && (
-                  <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
-                    {dmUnreadCount > 99 ? "99+" : dmUnreadCount}
-                  </span>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="channels" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
-                Canais
-                {channelUnreadCount > 0 && (
-                  <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
-                    {channelUnreadCount > 99 ? "99+" : channelUnreadCount}
-                  </span>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="unreads" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
-                Não Lidas
-                {unreadCount > 0 && (
-                  <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
-                )}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {abasDaLateral}
         </div>
 
         <ScrollArea className="flex-1 [&>[data-radix-scroll-area-viewport]>div]:!block [&>[data-radix-scroll-area-viewport]>div]:!w-full">
           <div className="px-2 py-1.5 w-full min-w-0">
-            {sidebarTab === "unreads" ? (
-              renderUnreadsList()
-            ) : sidebarTab === "channels" ? (
+            {abaAtual === "channels" ? (
 
               <>
                 {publicChannels.length > 0 && (
@@ -3324,7 +3087,9 @@ export default function ChatPage() {
               </>
             ) : (
               <div className="mb-2">
-                <NoEscritorioAgora presenca={presencaEscritorio} />
+                {abaAtual === "dms" && <NoEscritorioAgora presenca={presencaEscritorio} />}
+                {abaAtual === "dms" && campoBuscaPessoa}
+                {semResultadoBusca}
 
                 {loading && agents.length === 0 && (
                   <div className="flex items-center justify-center py-4"><Loader2 className="h-3 w-3 animate-spin text-primary" /></div>
@@ -3332,25 +3097,15 @@ export default function ChatPage() {
                 {error && (
                   <div className="p-2 text-xs text-destructive flex items-center gap-1"><WifiOff className="h-3 w-3" /> {error}</div>
                 )}
-                {unifiedDmList
-                  .filter((item) => {
-                    const id = item.kind === "agent" ? item.agent.id : item.person.id;
-                    if (dmFilter === "favorites") return dmFavorites.has(id);
-                    if (dmFilter === "unread") {
-                      const chId = item.kind === "agent" ? agentDmChannelMap[id] : peerIdToChannelId[id];
-                      return chId ? (unreadByChannel[chId] || 0) > 0 : false;
-                    }
-                    return true;
-                  })
+                {listaDaAba
                   .map((item) => {
                   if (item.kind === "agent") {
                     const agent = item.agent;
                     const isActive = selection?.type === "agent" && selection.id === agent.id;
-                    const agentDmChId = agentDmChannelMap[agent.id];
-                    const hasUnread = !isActive && (agentDmChId ? ((unreadByChannel[agentDmChId] || 0) > 0) : false);
+                    const unread = item.naoLidas;
+                    const hasUnread = unread > 0;
                     const agentIsWorking = Boolean(realtimePendingByAgent[agent.id]) || pendingAgentIds.has(agent.id) || (isActive && bgPending);
                     const lastMsg = lastMessages[agent.id];
-                    const isFav = dmFavorites.has(agent.id);
                     return (
                       <div key={`agent-${agent.id}`} className="group relative">
                         <button onClick={() => setSelection({ type: "agent", id: agent.id })}
@@ -3370,7 +3125,7 @@ export default function ChatPage() {
                               </div>
                               {hasUnread && (
                                 <div className="flex justify-end mt-0.5">
-                                  <span className="flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold shrink-0">1</span>
+                                  <span className="flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold shrink-0">{unread > 99 ? "99+" : unread}</span>
                                 </div>
                               )}
                             </div>
@@ -3381,12 +3136,11 @@ export default function ChatPage() {
                   } else {
                     const person = item.person;
                     const existingChannelId = peerIdToChannelId[person.id];
-                    const unread = existingChannelId ? (unreadByChannel[existingChannelId] || 0) : 0;
+                    const unread = item.naoLidas;
                     const existingChannel = existingChannelId ? channels.find((c) => c.id === existingChannelId) : null;
                     const isActive = existingChannel && selection?.type === "channel" && selection.channel.id === existingChannel.id;
                     const lastAct = existingChannelId ? dmLastActivity[existingChannelId] : null;
                     const isHumanTyping = existingChannelId ? (typingByDmChannel[existingChannelId]?.length ?? 0) > 0 : false;
-                    const isFav = dmFavorites.has(person.id);
                     return (
                       <div key={`person-${person.id}`} className="group relative">
                         <button onClick={() => { if (existingChannel) setSelection({ type: "channel", channel: existingChannel }); else handleOpenPersonDm(person); }}
@@ -3428,7 +3182,7 @@ export default function ChatPage() {
                               )}
                               {unread > 0 && (
                                 <div className="flex justify-end mt-0.5">
-                                  <span className="flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold shrink-0">{unread}</span>
+                                  <span className="flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold shrink-0">{unread > 99 ? "99+" : unread}</span>
                                 </div>
                               )}
                             </div>
@@ -3473,7 +3227,6 @@ export default function ChatPage() {
 
       <CreateChannelDialog open={createOpen} onOpenChange={setCreateOpen} onCreate={handleCreateChannel} />
         {dialogoNovaConversa}
-        {dialogoEscolherPessoa}
       <Dialog open={!!lightboxSrc} onOpenChange={() => setLightboxSrc(null)}>
         <DialogContent className="max-w-3xl p-2 bg-transparent border-none shadow-none">
           {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80vh] object-contain" />}
