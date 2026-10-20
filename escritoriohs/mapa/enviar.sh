@@ -38,3 +38,17 @@ echo "envio: HTTP $codigo"
 [ "$codigo" = 200 ] || { head -c 600 "$tmp/resposta"; echo; exit 1; }
 mv publicados.json.novo publicados.json
 curl -s -o /dev/null -w 'hs.wam no ar: HTTP %{http_code}\n' "$BASE/hs/hs.wam"
+
+# Pedir a recarga a quem está no escritório. O map-storage deveria fazer isso
+# sozinho, mas anuncia o mapa sem o PATH_PREFIX (`https://<host>hs/hs.wam`, sem
+# `/map-storage/`) e o `back` só avisa a sala cujo wamUrl é IGUAL — nunca é.
+# Conferido no código da v1.33.11 em 20/10/2026, quando o envio não recarregou
+# ninguém. A rota do play mostra o mesmo aviso de 30 s e recarrega sozinha.
+# Token: o ADMIN_API_TOKEN do play, guardado como ESCRITORIO_ADMIN_API_TOKEN.
+SALA=https://escritoriohs.healthsafetytech.com/~/hs/hs.wam
+ADMIN=$(grep -oP '^ESCRITORIO_ADMIN_API_TOKEN=\K.+' ~/escritoriohs-b.env | tr -d "\"' \r")
+recarga=$(printf 'header = "Authorization: %s"\n' "$ADMIN" | curl --config - -s --max-time 30 -o /dev/null -w '%{http_code}' -X POST \
+  -H 'Content-Type: application/json' -d "{\"roomId\":\"$SALA\"}" \
+  https://escritoriohs.healthsafetytech.com/room/refresh || echo 000)
+unset ADMIN
+echo "recarga pedida a quem está na sala: HTTP $recarga"

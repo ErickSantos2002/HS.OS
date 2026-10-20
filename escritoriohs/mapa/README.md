@@ -117,6 +117,13 @@ do WA. 401 → desiste até a página ser recarregada.
 
 ## O que já custou caro
 
+- ⚠️ **O envio só recarrega quem está no escritório porque o `enviar.sh` pede.**
+  O map-storage deveria avisar sozinho, mas anuncia o mapa sem o
+  `PATH_PREFIX` e o `back` só avisa a sala de `wamUrl` idêntico — nunca casa.
+  Em 20/10/2026 o envio subiu e ninguém recarregou; parecia cache, e o servidor
+  já mandava `no-cache` desde 16/10. O fim do `enviar.sh` chama
+  `POST /room/refresh` do play (aviso de 30 s, depois recarrega).
+
 - ⚠️ **Depois de enviar, confira com Ctrl+Shift+R.** O map-storage serve o
   `hs.tmj` com `cache-control: public, s-max-age=10` — `s-max-age` não existe
   (o certo é `s-maxage`), então o navegador estima a validade pelo

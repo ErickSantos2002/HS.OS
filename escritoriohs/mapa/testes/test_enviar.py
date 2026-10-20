@@ -29,3 +29,13 @@ def test_registro_de_publicados_so_avanca_depois_do_200():
     chegaram ao ar não seriam criados nunca mais."""
     s = open("enviar.sh").read()
     assert s.index('[ "$codigo" = 200 ]') < s.index("mv publicados.json.novo publicados.json")
+
+def test_enviar_pede_a_recarga_depois_do_200():
+    """O aviso automático do map-storage nunca chega aqui: ele anuncia o mapa
+    sem o /map-storage/ e o back só avisa a sala de endereço idêntico. Em
+    20/10/2026 o envio subiu, ninguém recarregou e parecia cache. A recarga
+    vem da rota do play — depois do envio, nunca antes, e sem o token no argv."""
+    s = open("enviar.sh").read()
+    assert "/room/refresh" in s
+    assert s.index('[ "$codigo" = 200 ]') < s.index("/room/refresh")
+    assert '-H "Authorization: $ADMIN"' not in s
