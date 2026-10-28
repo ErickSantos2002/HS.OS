@@ -17,6 +17,16 @@ recalculado aqui.
 as colunas na leitura, antes de qualquer outra coisa. Ela pediu explicitamente
 para não reproduzir diagnóstico.
 
+**v2.1 (28/10/2026) — Cálculo Diário do FLASH, quarto arquivo, opcional mas
+recomendado.** Com ele o calendário de cada pessoa é o do FLASH (`Natureza
+Dia`), as batidas são as `Marcações Válidas` (tratadas por ele), e o dia útil
+sem marcação com evento que só o FLASH conhece sai do denominador. O que
+custou: o export de Eventos de setembro não trazia cinco dias de férias que o
+FLASH conhecia, e eles apareciam como "sem marcação". ⚠️ **O FLASH não trata
+intervalo sozinho** — num dia de 2 batidas ele conta o dia inteiro —, então o
+Cálculo não resolve intervalo pendente: dá a evidência. `CPF`, `PIS`, `CNPJ` e
+`Admissão` são descartados na leitura, como o `CID`.
+
 Módulo puro: bytes entram, `Relatorio` sai; o histórico é um `dict` montado
 aqui e gravado no R2 por `app/routers/mcp_anexos.py`.
 """
@@ -32,7 +42,8 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-VERSAO_REGUA = "2026-10-28"
+# .1 = v2.1: o Cálculo Diário muda o calendário e a exclusão de dias.
+VERSAO_REGUA = "2026-10-28.1"
 TETO_LINHAS = 5000
 
 
@@ -80,10 +91,15 @@ _COL_EVENTOS = {"EventoId", "Motivo", "Data Inicio", "Status"}
 # vaza por descuido numa aba nova.
 _EVENTOS_USADAS = ("Matrícula", "Nome", "Departamento", "EventoId", "Motivo", "Descrição",
                    "Data Inicio", "Data Fim", "Hora Inicio", "Hora Fim", "Qtde", "Status")
+_COL_CALCULO = {"Marcações Válidas", "Natureza Dia", "Jornada Considerada"}
+# Idem no Cálculo Diário: `CPF`, `PIS`, `CNPJ` e `Admissão` não passam daqui.
+_CALCULO_USADAS = ("Matrícula", "Nome", "Data", "Natureza Dia", "Nome Escala", "Marcações Válidas",
+                   "Jornada Considerada", "Horas Trabalhadas", "Eventos")
 TIPOS = {
     "marcacoes": "marcações (MarcacoesOriginaisJustificadas)",
     "eventos": "eventos (Eventos)",
     "banco": "banco de horas (BancoHoras)",
+    "calculo": "cálculo diário (CalculoDiario)",
 }
 
 
@@ -194,6 +210,8 @@ class Ocorrencia:
     evento: str           # evidência do evento que justifica ("" se nenhum)
     batidas: str          # "07:52 · 12:00 · 13:00 · 17:05"
     ajuste: str           # "batida ajustada: <motivo>" ("" se original)
+    flash_jornada: str = ""   # Cálculo Diário, quando veio
+    flash_eventos: str = ""
 
 
 @dataclass
@@ -204,6 +222,41 @@ class Pendencia:
     data: date
     medida: str           # dia | saída | intervalo | fora da escala | aviso
     motivo: str
+    # Evidência do Cálculo Diário daquele dia ("" sem o arquivo ou sem a linha).
+    flash_jornada: str = ""
+    flash_horas: str = ""
+    flash_marcacoes: str = ""
+    flash_eventos: str = ""
+
+
+@dataclass
+class CalcDia:
+    """Uma linha do Cálculo Diário: o que o FLASH diz daquele pessoa-dia."""
+    natureza: str         # Trabalho | Folga | Feriado
+    marcacoes: list[int]  # Marcações Válidas, em minutos e em ordem
+    marcacoes_txt: str    # como veio ("07:40 - 12:28 | 13:08 - 17:00", "-")
+    jornada: str          # Jornada Considerada
+    horas: str            # Horas Trabalhadas
+    eventos: str          # nomes separados por vírgula, "-" quando nenhum
+
+    @property
+    def trabalho(self) -> bool:
+        return self.natureza.strip().lower() == "trabalho"
+
+    @property
+    def tem_evento(self) -> bool:
+        return self.eventos.strip() not in ("", "-")
+
+
+@dataclass
+class Aviso:
+    """Diferença entre o Cálculo Diário e o resto — não é ocorrência nem pendência."""
+    tipo: str             # calendário | marcações | pessoa-dia
+    chave: str
+    matricula: str
+    nome: str
+    data: date
+    texto: str
 
 
 @dataclass
@@ -222,6 +275,7 @@ class Pessoa:
     setor: str
     dias_uteis: int = 0
     dias_fora: int = 0
+    dias_fora_flash: int = 0     # dos `dias_fora`, os que só o Cálculo Diário conhecia
     dias_elegiveis: int = 0
     dias_pendentes: int = 0
     identificadas: dict = field(default_factory=lambda: dict.fromkeys(INDICADORES, 0))
@@ -266,6 +320,10 @@ class Relatorio:
     tem_banco: bool
     conferencias: list[Conferencia] = field(default_factory=list)
     comparacao: Comparacao | None = None
+    tem_calculo: bool = False
+    avisos: list[Aviso] = field(default_factory=list)
+    # trabalho, marcacoes_comparadas, marcacoes_iguais, dias_fora_flash
+    calculo: dict = field(default_factory=dict)
 
 
 # ── leitura ─────────────────────────────────────────────────────────────────
@@ -279,7 +337,7 @@ def _decodificar(dados: bytes) -> str:
 
 
 def identificar(nome: str, dados: bytes) -> tuple[str, list[dict]]:
-    """`("marcacoes" | "eventos" | "banco", registros)` — pelo cabeçalho, não pelo nome."""
+    """`("marcacoes" | "eventos" | "banco" | "calculo", registros)` — pelo cabeçalho, não pelo nome."""
     leitor = csv.DictReader(io.StringIO(_decodificar(dados)), delimiter=";")
     try:
         colunas = {(c or "").strip() for c in (leitor.fieldnames or [])}
@@ -289,13 +347,16 @@ def identificar(nome: str, dados: bytes) -> tuple[str, list[dict]]:
         tipo = "marcacoes"
     elif _COL_EVENTOS <= colunas:
         tipo = "eventos"
+    elif _COL_CALCULO <= colunas:
+        tipo = "calculo"
     elif _COL_BANCO <= colunas:
         tipo = "banco"
     else:
         raise ErroPonto(
             f"{nome} não parece um export do Flash: esperava o CSV de marcações "
-            "(MarcacoesOriginaisJustificadas), o de eventos (Eventos) ou o de banco de "
-            "horas (BancoHoras).")
+            "(MarcacoesOriginaisJustificadas), o de eventos (Eventos), o de banco de "
+            "horas (BancoHoras) ou o de cálculo diário (CalculoDiario).")
+    usadas = {"eventos": _EVENTOS_USADAS, "calculo": _CALCULO_USADAS}.get(tipo)
     try:
         registros = []
         for r in leitor:
@@ -303,8 +364,8 @@ def identificar(nome: str, dados: bytes) -> tuple[str, list[dict]]:
                 continue
             linha = {(k or "").strip(): _CONTROLE.sub("", v if isinstance(v, str) else "").strip()
                      for k, v in r.items()}
-            if tipo == "eventos":
-                linha = {k: linha.get(k, "") for k in _EVENTOS_USADAS}
+            if usadas:
+                linha = {k: linha.get(k, "") for k in usadas}
             registros.append(linha)
     except csv.Error as e:
         raise ErroPonto(f"{nome} não pôde ser lido como CSV: {e}.") from e
@@ -432,6 +493,51 @@ def _ler_eventos(registros: list[dict], nome_arq: str) -> list[Evento]:
     return eventos
 
 
+def _ler_calculo(registros: list[dict], nome_arq: str, mes: int, ano: int,
+                 casar) -> dict[tuple[str, date], CalcDia]:
+    """`{(chave, dia): CalcDia}` das pessoas que têm marcação no mês.
+
+    Quem só existe no Cálculo (o CEO, sem matrícula e sem marcação) fica de
+    fora, como na v2. O arquivo tem que ser do mesmo mês das marcações.
+    """
+    datas = []
+    for n, l in enumerate(registros, start=2):
+        d = _data(l.get("Data", ""))
+        if d is None:
+            raise ErroPonto(f"{nome_arq}: data inválida {l.get('Data', '')!r} na linha {n} "
+                            "(esperado dd/mm/aaaa).")
+        datas.append(d)
+    outros = sorted({(d.month, d.year) for d in datas} - {(mes, ano)})
+    if outros:
+        rotulos = ", ".join(f"{m:02d}/{a}" for m, a in outros)
+        raise ErroPonto(f"O CSV de Cálculo Diário ({nome_arq}) precisa ser do mesmo mês das "
+                        f"marcações ({mes:02d}/{ano}); veio também: {rotulos}.")
+    calc: dict[tuple[str, date], CalcDia] = {}
+    linha_de: dict[tuple[str, date], int] = {}
+    for n, (l, d) in enumerate(zip(registros, datas), start=2):
+        dono = casar(_matricula(l.get("Matrícula", "")), l.get("Nome", ""))
+        if dono is None:
+            continue
+        if (dono, d) in calc:
+            raise ErroPonto(f"{nome_arq}: a linha {n} repete pessoa e dia da linha "
+                            f"{linha_de[(dono, d)]} ({d:%d/%m/%Y}).")
+        txt = l.get("Marcações Válidas", "")
+        linha_de[(dono, d)] = n
+        calc[(dono, d)] = CalcDia(
+            natureza=l.get("Natureza Dia", ""),
+            marcacoes=[_hm(x) for x in re.findall(r"\b\d{1,2}:\d{2}\b", txt)],
+            marcacoes_txt=txt, jornada=l.get("Jornada Considerada", ""),
+            horas=l.get("Horas Trabalhadas", ""), eventos=l.get("Eventos", ""))
+    return calc
+
+
+def _pausas(batidas: list[int]) -> str:
+    """Pares (entrada, saída): as pausas são da saída de um à entrada do seguinte."""
+    pausas = [(batidas[i], batidas[i + 1]) for i in range(1, len(batidas) - 1, 2)]
+    return (f"FLASH registrou {len(pausas)} pausas: "
+            + ", ".join(f"{_fmt(a)}–{_fmt(b)} ({b - a} min)" for a, b in pausas))
+
+
 def _evidencia_ajuste(linha: dict, posicoes: list[int]) -> str:
     motivos = [linha.get(f"Motivo Marcação {i}", "") or "sem motivo"
                for i in posicoes if linha.get(f"Tipo Marcação {i}") == "Justificada"]
@@ -439,7 +545,8 @@ def _evidencia_ajuste(linha: dict, posicoes: list[int]) -> str:
 
 
 def gerar(arquivos: list[tuple[str, bytes]]) -> Relatorio:
-    """`arquivos` = [(nome, bytes)]: marcações e eventos (obrigatórios), banco (opcional)."""
+    """`arquivos` = [(nome, bytes)]: marcações e eventos (obrigatórios), banco e
+    cálculo diário (opcionais; o cálculo, recomendado)."""
     lidos: dict[str, list[dict]] = {}
     nomes: dict[str, str] = {}
     hashes = []
@@ -493,12 +600,72 @@ def gerar(arquivos: list[tuple[str, bytes]]) -> Relatorio:
             return f"m:{mat}"
         return por_nome.get(_sem_acento(nome))
 
+    primeiro_dia = date(ano, mes, 1)
+    ultimo_dia = date(ano, mes, calendar.monthrange(ano, mes)[1])
+    dias_do_mes = list(_intervalo(primeiro_dia, ultimo_dia))
+
+    # v2.1 — Cálculo Diário (opcional). Sem ele, `calc` fica vazio e tudo
+    # abaixo cai na v2: calendário da lista, batidas do CSV de marcações.
+    tem_calculo = "calculo" in lidos
+    calc = _ler_calculo(lidos["calculo"], nomes["calculo"], mes, ano, casar) if tem_calculo else {}
+    avisos: list[Aviso] = []
+
+    def avisar(tipo: str, chave: str, d: date, texto: str) -> None:
+        p = pessoas[chave]
+        avisos.append(Aviso(tipo, chave, p.matricula, p.nome, d, texto))
+
+    def nosso_dia(d: date) -> str:
+        if d in uteis_set:
+            return "dia útil"
+        if d in fer:
+            return f"feriado ({fer[d][0]})"
+        return "sábado" if d.weekday() == 5 else "domingo"
+
+    # 1. Calendário do FLASH vence; a lista de feriados é o recuo do dia sem linha.
+    util_por: dict[str, set[date]] = {}
+    for chave in pessoas:
+        util_por[chave] = set()
+        for d in dias_do_mes:
+            c = calc.get((chave, d))
+            util = c.trabalho if c else d in uteis_set
+            if c and util != (d in uteis_set):
+                avisar("calendário", chave, d, f"FLASH diz {c.natureza or 'vazio'} em {d:%d/%m}, "
+                                               f"nossa régua dizia {nosso_dia(d)}; vale o FLASH")
+            if util:
+                util_por[chave].add(d)
+
+    # 2 e 5. Marcações Válidas × CSV de marcações, e pessoa-dia de um × do outro.
+    batidas_de: dict[tuple[str, date], list[int]] = {}
+    comparadas = iguais = 0
+    if tem_calculo:
+        for chave in pessoas:
+            for d in dias_do_mes:
+                c = calc.get((chave, d))
+                no_csv = _batidas(por_dia.get((chave, d), (0, {}))[1])
+                if c is None:
+                    if no_csv:
+                        avisar("pessoa-dia", chave, d, "dia com marcação no CSV de marcações que não "
+                                                       "está no Cálculo Diário; valem as do CSV")
+                    continue
+                batidas_de[(chave, d)] = c.marcacoes
+                if no_csv:
+                    comparadas += 1
+                    iguais += no_csv == c.marcacoes
+                elif c.marcacoes:
+                    avisar("pessoa-dia", chave, d, "o Cálculo Diário tem marcação ("
+                                                   f"{_texto_batidas(c.marcacoes)}) e o CSV de "
+                                                   "marcações não; valem as do FLASH")
+                    continue
+                if no_csv != c.marcacoes:
+                    avisar("marcações", chave, d,
+                           f"Marcações Válidas do FLASH ({_texto_batidas(c.marcacoes) or 'nenhuma'}) "
+                           f"diferem do CSV de marcações ({_texto_batidas(no_csv)}); valem as do FLASH")
+
     # Eventos: o que tira dia do denominador e o que justifica período.
     eventos = _ler_eventos(lidos["eventos"], nomes["eventos"])
     dias_fora: dict[tuple[str, date], Evento] = {}
     parciais: dict[tuple[str, date], list[Evento]] = defaultdict(list)
-    primeiro_dia = date(ano, mes, 1)
-    ultimo_dia = date(ano, mes, calendar.monthrange(ano, mes)[1])
+    com_evento: set[tuple[str, date]] = set()   # qualquer evento, de qualquer status
     for e in eventos:
         dono = casar(e.matricula, e.nome)
         if dono:
@@ -506,7 +673,9 @@ def gerar(arquivos: list[tuple[str, bytes]]) -> Relatorio:
         # Recorta ao mês ANTES de andar: as datas vêm do arquivo, e um evento de
         # 2000 a 9999 seriam milhões de dias por linha (revisão de 28/10/2026).
         no_mes = list(_intervalo(max(e.inicio, primeiro_dia), min(e.fim, ultimo_dia)))
-        uteis_ev = [d for d in no_mes if d in uteis_set]
+        if dono:
+            com_evento.update((dono, d) for d in no_mes)
+        uteis_ev = [d for d in no_mes if d in util_por.get(dono, uteis_set)]
         if not e.aprovado:
             e.por_que = f"não: status {e.status or 'vazio'} — só Aprovado justifica"
         elif dono is None:
@@ -533,28 +702,44 @@ def gerar(arquivos: list[tuple[str, bytes]]) -> Relatorio:
     pendencias: list[Pendencia] = []
 
     def pendencia(p: Pessoa, d: date, medida: str, motivo: str) -> None:
-        pendencias.append(Pendencia(p.chave, p.matricula, p.nome, d, medida, motivo))
+        # 4. Toda pendência de um dia que está no Cálculo leva o que o FLASH diz.
+        c = calc.get((p.chave, d))
+        ev_flash = (c.jornada, c.horas, c.marcacoes_txt, c.eventos) if c else ("",) * 4
+        pendencias.append(Pendencia(p.chave, p.matricula, p.nome, d, medida, motivo, *ev_flash))
 
-    # Marcação fora da escala: sábado, domingo ou feriado não entra em indicador.
+    # Marcação fora da escala: sábado, domingo ou feriado (ou folga no FLASH)
+    # não entra em indicador.
     for (chave, d), (_, l) in sorted(por_dia.items(), key=lambda x: (x[0][0], x[0][1])):
-        if d in uteis_set:
+        if d in util_por[chave]:
             continue
         p = pessoas[chave]
-        quando = f"feriado ({fer[d][0]})" if d in fer else ("sábado" if d.weekday() == 5 else "domingo")
+        c = calc.get((chave, d))
+        quando = nosso_dia(d) if d not in uteis_set else f"{c.natureza or 'dia não útil'} no FLASH"
         if _batidas(l):
             pendencia(p, d, "fora da escala", f"marcação fora da escala: {quando}")
 
     for p in pessoas.values():
-        p.dias_uteis = len(uteis)
-        for d in uteis:
+        uteis_p = sorted(util_por[p.chave])
+        p.dias_uteis = len(uteis_p)
+        for d in uteis_p:
             linha = por_dia.get((p.chave, d), (0, {}))[1]
-            batidas = _batidas(linha)
+            c = calc.get((p.chave, d))
+            do_csv = _batidas(linha)
+            batidas = batidas_de.get((p.chave, d), do_csv)
             if (p.chave, d) in dias_fora:
                 p.dias_fora += 1
                 if batidas:
                     ev = dias_fora[(p.chave, d)]
                     pendencia(p, d, "aviso", f"marcação em dia de evento de dia inteiro ({ev.evidencia()}); "
                                              "dia fora do denominador — conferir")
+                continue
+            # 3. Evento que só o FLASH conhece: sem marcação, nada no CSV de
+            # Eventos naquele dia (nem cancelado) e `Eventos` no Cálculo.
+            if not batidas and c and c.tem_evento and (p.chave, d) not in com_evento:
+                p.dias_fora += 1
+                p.dias_fora_flash += 1
+                pendencia(p, d, "aviso", f"FLASH: {c.eventos} (não consta no export de Eventos); "
+                                         "dia fora do denominador")
                 continue
             p.dias_elegiveis += 1
             evs = parciais.get((p.chave, d), [])
@@ -571,6 +756,10 @@ def gerar(arquivos: list[tuple[str, bytes]]) -> Relatorio:
                 elif evs:
                     motivo = ("sem marcação; há evento parcial aprovado ("
                               + ", ".join(e.evidencia() for e in evs) + ") — conferir")
+                elif c:
+                    # O FLASH chama esses dias de `Falta`; nós continuamos não chamando.
+                    motivo = (f"FLASH: {c.jornada}, eventos: {c.eventos} — sem marcação e sem "
+                              "evento aprovado; não é falta, conferir")
                 else:
                     motivo = "sem marcação e sem evento aprovado — não é falta; conferir"
                 pendencia(p, d, "dia", motivo)
@@ -583,14 +772,22 @@ def gerar(arquivos: list[tuple[str, bytes]]) -> Relatorio:
             if n == 4:
                 medidas["intervalo"] = (batidas[2] - batidas[1], [2, 3])
             dia_av = DiaAvaliado(p.chave, d, dict.fromkeys(MEDIDAS))
-            texto_batidas = " · ".join(_fmt(b) for b in batidas)
+            texto_batidas = _texto_batidas(batidas)
             for m in MEDIDAS:
                 if m not in medidas:
                     p.pendentes[m] += 1
-                    if m == "saida":
-                        motivo = f"{n} batida(s): saída não verificável — conferir no Cálculos Diários"
+                    medida_txt = "saída" if m == "saida" else "intervalo"
+                    if c is None:
+                        motivo = f"{n} batida(s): {medida_txt} não verificável — conferir no Cálculos Diários"
+                    elif m == "intervalo" and n == 2:
+                        # O FLASH não trata intervalo: conta o dia inteiro.
+                        motivo = f"FLASH sem intervalo registrado (horas trabalhadas {c.horas})"
+                    elif m == "intervalo" and n % 2 == 0:
+                        # Qual das pausas é o intervalo é decisão do RH, não nossa.
+                        motivo = _pausas(batidas)
                     else:
-                        motivo = f"{n} batida(s): intervalo não verificável — conferir no Cálculos Diários"
+                        motivo = (f"{n} batida(s): {medida_txt} não verificável — FLASH: {c.jornada} "
+                                  f"(horas trabalhadas {c.horas})")
                     pendencia(p, d, NOME_MEDIDA[m], motivo)
                     continue
                 valor, posicoes = medidas[m]
@@ -605,10 +802,14 @@ def gerar(arquivos: list[tuple[str, bytes]]) -> Relatorio:
                     e.justificou.append(f"{f} em {d:%d/%m}")
                 situacao = JUSTIFICADA if quem else IDENTIFICADA
                 (p.justificadas if quem else p.identificadas)[f] += 1
+                if batidas != do_csv:
+                    ajuste = f"valem as Marcações Válidas do FLASH (CSV de marcações: {_texto_batidas(do_csv)})"
+                else:
+                    ajuste = _evidencia_ajuste(linha, posicoes)
                 ocorrencias.append(Ocorrencia(
                     p.chave, p.matricula, p.nome, d, f, valor, situacao,
-                    "; ".join(e.evidencia() for e in quem), texto_batidas,
-                    _evidencia_ajuste(linha, posicoes)))
+                    "; ".join(e.evidencia() for e in quem), texto_batidas, ajuste,
+                    c.jornada if c else "", c.eventos if c else ""))
             dias.append(dia_av)
 
     for e in eventos:
@@ -628,7 +829,12 @@ def gerar(arquivos: list[tuple[str, bytes]]) -> Relatorio:
         dias=dias,
         ocorrencias=sorted(ocorrencias, key=lambda o: (ordem[o.chave], o.data, o.indicador)),
         pendencias=sorted(pendencias, key=lambda x: (ordem[x.chave], x.data, x.medida)),
-        eventos=eventos, tem_banco="banco" in lidos)
+        eventos=eventos, tem_banco="banco" in lidos, tem_calculo=tem_calculo,
+        avisos=sorted(avisos, key=lambda x: (ordem[x.chave], x.data, x.tipo)))
+    if tem_calculo:
+        r.calculo = {"trabalho": sum(1 for c in calc.values() if c.trabalho),
+                     "marcacoes_comparadas": comparadas, "marcacoes_iguais": iguais,
+                     "dias_fora_flash": sum(p.dias_fora_flash for p in pessoas.values())}
     r.conferencias = conferir(r)
     exigir_fechamento(r)
     return r
@@ -639,6 +845,10 @@ def _intervalo(inicio: date, fim: date):
     while d <= fim:
         yield d
         d += timedelta(days=1)
+
+
+def _texto_batidas(batidas: list[int]) -> str:
+    return " · ".join(_fmt(b) for b in batidas)
 
 
 def _batidas(linha: dict) -> list[int]:
@@ -735,6 +945,7 @@ def historico(r: Relatorio, gerado_em: str) -> dict:
         }
     return {
         "periodo": periodo(r), "versao_regua": VERSAO_REGUA, "gerado_em": gerado_em,
+        "com_calculo_diario": r.tem_calculo,
         "arquivos": [{"nome": n, "sha256": h} for n, h in r.arquivos],
         "colaboradores": len(r.pessoas),
         "sem_matricula": sum(1 for p in r.pessoas if not p.matricula),
@@ -757,12 +968,21 @@ def _rotulo_periodo(per: str) -> str:
 def comparar(atual: dict, anteriores: list[dict]) -> Comparacao:
     """Compara com o mês anterior apurado na MESMA `VERSAO_REGUA` (o mais recente vale).
 
-    Régua diferente não se compara: diz qual foi e pede reprocessamento.
+    Régua diferente não se compara: diz qual foi e pede reprocessamento. Com e
+    sem o Cálculo Diário também não (v2.1): o calendário e os dias fora mudam
+    com o arquivo, então é outra régua na prática, mesmo com a mesma versão.
     """
     alvo = periodo_anterior(atual["periodo"])
     rot = _rotulo_periodo(alvo)
     do_mes = [h for h in anteriores if isinstance(h, dict) and h.get("periodo") == alvo]
-    mesma = [h for h in do_mes if h.get("versao_regua") == atual["versao_regua"]]
+    mesma_versao = [h for h in do_mes if h.get("versao_regua") == atual["versao_regua"]]
+    com_calc = bool(atual.get("com_calculo_diario"))
+    mesma = [h for h in mesma_versao if bool(h.get("com_calculo_diario")) == com_calc]
+    if mesma_versao and not mesma:
+        antes, agora = ("sem", "com") if com_calc else ("com", "sem")
+        return Comparacao("outra_versao", alvo,
+                          f"{rot} foi apurado {antes} o Cálculo Diário; este mês, {agora}. "
+                          f"Reprocesse {rot} {agora} ele para comparar.")
     if not mesma:
         if do_mes:
             versoes = ", ".join(sorted({str(h.get("versao_regua")) for h in do_mes}))
@@ -869,6 +1089,18 @@ def montar_xlsx(r: Relatorio) -> bytes:
         ("Fechamento", "conferido" if all(c.ok for c in r.conferencias) else "NÃO FECHA"),
     ):
         ws.append([rot, valor])
+    ws.append([])
+    if r.tem_calculo:
+        k = r.calculo
+        ws.append(["Cálculo Diário do FLASH", "usado: calendário e marcações do FLASH"])
+        ws.append(["Marcações iguais ao CSV (dias)", k["marcacoes_iguais"]])
+        ws.append(["Marcações comparadas (dias)", k["marcacoes_comparadas"]])
+        ws.append(["Pessoa-dia de Trabalho no FLASH", k["trabalho"]])
+        ws.append(["Dias fora só pelo FLASH (sem evento no export)", k["dias_fora_flash"]])
+        ws.append(["Avisos (aba Conferência)", len(r.avisos)])
+    else:
+        ws.append(["Cálculo Diário do FLASH", "não veio: calendário pela lista de feriados; "
+                                              "dias fora do padrão sem a evidência do FLASH"])
     if comp:
         ws.append([])
         ws.append(["Comparação com o mês anterior", comp.mensagem])
@@ -883,6 +1115,8 @@ def montar_xlsx(r: Relatorio) -> bytes:
     for a in INDICADORES:
         cols += [f"{a} identificadas", f"{a} denominador", f"{a} %", f"{a} justificadas"]
     cols += ["Saldo banco", "Saldo (min)"]
+    if r.tem_calculo:
+        cols += ["Dias fora só pelo FLASH"]
     _cabecalho(ws, cols)
     for p in r.pessoas:
         linha = [p.matricula, p.nome, p.setor, p.dias_uteis, p.dias_fora, p.dias_elegiveis,
@@ -894,23 +1128,31 @@ def montar_xlsx(r: Relatorio) -> bytes:
                       p.justificadas[a]]
             fmts[len(linha) - 1] = "0.0%"
         linha += [p.saldo_txt, p.saldo_min]
+        if r.tem_calculo:
+            linha += [p.dias_fora_flash]
         ws.append(linha)
         _formatar(ws, fmts)
 
-    # 3. Ocorrências
+    # 3. Ocorrências — a evidência do FLASH vai no fim, só quando o Cálculo veio.
     ws = wb.create_sheet(ABAS[2])
     _cabecalho(ws, ["Matrícula", "Nome", "Data", "Indicador", "Horário / duração", "Situação",
-                    "Evento que justifica", "Batidas do dia", "Batida ajustada"])
+                    "Evento que justifica", "Batidas do dia", "Batida ajustada"]
+               + (["FLASH: jornada considerada", "FLASH: eventos"] if r.tem_calculo else []))
     for o in r.ocorrencias:
         ws.append([o.matricula, o.nome, o.data, rotulo(o.indicador), _hora(o.minutos), o.situacao,
-                   o.evento, o.batidas, o.ajuste])
+                   o.evento, o.batidas, o.ajuste]
+                  + ([o.flash_jornada, o.flash_eventos] if r.tem_calculo else []))
         _formatar(ws, {3: "dd/mm/yyyy", 5: "hh:mm"})
 
     # 4. Pendências
     ws = wb.create_sheet(ABAS[3])
-    _cabecalho(ws, ["Matrícula", "Nome", "Data", "Medida", "Motivo"])
+    _cabecalho(ws, ["Matrícula", "Nome", "Data", "Medida", "Motivo"]
+               + (["FLASH: jornada considerada", "FLASH: horas trabalhadas", "FLASH: marcações válidas",
+                   "FLASH: eventos"] if r.tem_calculo else []))
     for x in r.pendencias:
-        ws.append([x.matricula, x.nome, x.data, x.medida, x.motivo])
+        ws.append([x.matricula, x.nome, x.data, x.medida, x.motivo]
+                  + ([x.flash_jornada, x.flash_horas, x.flash_marcacoes, x.flash_eventos]
+                     if r.tem_calculo else []))
         _formatar(ws, {3: "dd/mm/yyyy"})
 
     # 5. Eventos — sem CID e sem justificativa (nem chegaram a ser lidos).
@@ -928,6 +1170,20 @@ def montar_xlsx(r: Relatorio) -> bytes:
     _cabecalho(ws, ["Verificação", "Esperado", "Obtido", "Fecha?"])
     for c in r.conferencias:
         ws.append([c.verificacao, c.esperado, c.obtido, "SIM" if c.ok else "NÃO"])
+    if r.tem_calculo:
+        # Avisos não são fechamento: a apuração sai, e a RH confere a diferença.
+        ws.append([])
+        _cabecalho(ws, ["Cálculo Diário × demais arquivos", "Valor"])
+        ws.append(["Marcações Válidas iguais às batidas do CSV (dias)",
+                   f"{r.calculo['marcacoes_iguais']} de {r.calculo['marcacoes_comparadas']}"])
+        ws.append(["Pessoa-dia de Trabalho no FLASH", r.calculo["trabalho"]])
+        ws.append([])
+        _cabecalho(ws, ["Aviso", "Matrícula", "Nome", "Data", "Detalhe"])
+        for a in r.avisos:
+            ws.append([a.tipo, a.matricula, a.nome, a.data, a.texto])
+            _formatar(ws, {4: "dd/mm/yyyy"})
+        if not r.avisos:
+            ws.append(["nenhum: calendário, marcações e pessoa-dia batem"])
 
     # Injeção de fórmula: nome, motivo e setor são texto que vem do Flash.
     # Começando com = + - @, o Excel da RH os executaria (ex.: =HYPERLINK).
@@ -985,6 +1241,19 @@ def resumo(r: Relatorio) -> str:
                 var = ant["variacao_pp"]
                 partes.append(f"  {a}: antes {ant['identificadas']}/{ant['denominador']} = {_pct(ant['pct'])}"
                               + ("" if var is None else f", variação {var:+.1f} p.p.".replace(".", ",")))
+    if r.tem_calculo:
+        k = r.calculo
+        por_tipo = Counter(a.tipo for a in r.avisos)
+        partes.append(
+            f"Cálculo Diário: marcações iguais em {k['marcacoes_iguais']} de {k['marcacoes_comparadas']} "
+            f"dias; {k['trabalho']} pessoa-dia de Trabalho no FLASH; {k['dias_fora_flash']} dia(s) fora "
+            "só pelo FLASH (evento que não consta no export de Eventos); avisos: "
+            + (", ".join(f"{k2}: {v}" for k2, v in sorted(por_tipo.items())) if por_tipo else "nenhum")
+            + ".")
+    else:
+        partes.append("Sem o CSV de Cálculo Diário (CalculoDiario): calendário pela lista de "
+                      "feriados da régua e dias fora do padrão sem a evidência do FLASH. É "
+                      "opcional, mas recomendado — peça na próxima vez.")
     if not r.tem_banco:
         partes.append("Sem o CSV de banco de horas: a planilha sai sem saldo.")
     return "\n".join(partes)
