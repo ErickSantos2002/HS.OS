@@ -1297,6 +1297,15 @@ coordenadora de RH, em `app/relatorios/ponto.py` — **mudou na conversa com ela
 muda lá**, com teste. O xlsx dela vem com número de verdade; o do
 `enviar_arquivo` continua todo texto.
 
+⚠️ **Régua v2 (Grupo A, A1–A6) desde 28/10/2026** —
+`docs/superpowers/specs/2026-10-28-regua-ponto-v2-design.md`. São **três** CSV:
+marcações e **eventos obrigatórios**, banco opcional. Na homologação a ferramenta
+aceitava dois, vieram três, e o `bruce` contou de cabeça — errado (21/2 em vez de
+20/3). Mudou a régua, muda `VERSAO_REGUA`: o histórico mensal (bucket privado
+`ponto-historico`, **sem rota de leitura**, só o servidor) só compara meses da
+mesma versão. `CID` e `Justificativa` de evento nem são lidos; o resumo ao agente
+não traz nome; a ferramenta **recusa entregar** planilha que não fecha.
+
 ### Resumo em áudio nas respostas — pedido do CEO, 13/10/2026
 
 Toda resposta de agente ganha, segundos depois, um áudio **embaixo do texto**:

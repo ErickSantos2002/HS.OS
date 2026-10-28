@@ -240,3 +240,12 @@ def test_audio_messages_nao_se_le_pela_porta_privada():
 
 def test_cliente_nao_grava_mais_em_audio_messages():
     assert s._cliente_pode_escrever("audio-messages") is False
+
+
+def test_historico_de_ponto_nao_tem_porta_nenhuma():
+    """O `ponto-historico` guarda números por matrícula do RH. Só o servidor
+    lê e grava (`relatorio_ponto`); nem o dono de pasta, nem o cliente."""
+    assert "ponto-historico" in s._PRIVADOS
+    assert s._pode_ler_privado("ponto-historico", f"{DONO}/2026-09/x.json", DONO) is False
+    assert s._pode_ler_privado("ponto-historico", "2026-09/x.json", DONO) is False
+    assert s._cliente_pode_escrever("ponto-historico") is False
