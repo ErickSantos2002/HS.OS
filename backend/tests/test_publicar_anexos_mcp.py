@@ -37,7 +37,7 @@ def test_cada_agente_recebe_a_propria_url_com_o_proprio_hmac():
 
 
 def test_filtro_e_cabecalhos():
-    e = pub.montar_entradas(MODELO, "segredo", AGENTES)["hsos-anexos-bruce"]
+    e = pub.montar_entradas(MODELO, "segredo", AGENTES)["hsos-anexos-nina"]
     assert e["toolFilter"] == {"include": ["ler_anexo", "enviar_arquivo"]}
     assert e["headers"] == MODELO["headers"]
     assert e["transport"] == "streamable-http"
@@ -63,7 +63,7 @@ def test_mascaramento_e_lista_branca():
     terminal (e no transcript). Só `transport`, `toolFilter`, `url` mascarada e
     `headers` como texto fixo aparecem; o resto vira `<omitido>`."""
     modelo = {**MODELO, "env": {"TOKEN": "segredo-do-env"}, "auth": "Bearer xyz"}
-    m = pub.mascarar_entradas(pub.montar_entradas(modelo, "segredo", ["bruce"]))["hsos-anexos-bruce"]
+    m = pub.mascarar_entradas(pub.montar_entradas(modelo, "segredo", ["nina"]))["hsos-anexos-nina"]
     assert m["transport"] == "streamable-http"
     assert m["toolFilter"] == {"include": ["ler_anexo", "enviar_arquivo"]}
     assert m["headers"] == "<copiados de hsos-relatorios>"
@@ -160,3 +160,11 @@ def test_sem_token_e_cabecalho_redigido_falha_antes_do_gateway():
     import pytest
     with pytest.raises(ValueError, match="GUARDRAILS_API_TOKEN"):
         pub.montar_entradas(MODELO_REDIGIDO, "segredo", ["bruce"])
+
+
+def test_filtro_da_entrada_inclui_a_ferramenta_restrita_so_de_quem_pode():
+    """Sem isto o gateway filtra a `relatorio_ponto` da entrada do `bruce` —
+    foi o que o deixou sem ela de 13 a 28/10/2026."""
+    novos = pub.montar_entradas(MODELO, "segredo", ["bruce", "nina"], "tok")
+    assert "relatorio_ponto" in novos["hsos-anexos-bruce"]["toolFilter"]["include"]
+    assert novos["hsos-anexos-nina"]["toolFilter"] == {"include": ["ler_anexo", "enviar_arquivo"]}

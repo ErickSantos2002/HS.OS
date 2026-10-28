@@ -1823,6 +1823,21 @@ FERRAMENTAS_ANEXOS = ("ler_anexo", "enviar_arquivo")
 _PREFIXO_ANEXOS = "hsos-anexos-"
 
 
+def ferramentas_anexos(agent_id: str) -> tuple[str, ...]:
+    """As comuns mais as restritas que ESTE agente pode ter.
+
+    ⚠️ **A restrição tem que chegar ao `toolFilter` da entrada, não só ao
+    servidor.** A `relatorio_ponto` é escondida pelo próprio servidor a quem não
+    é o `bruce` (`_FERRAMENTAS_RESTRITAS`, em `mcp_anexos.py`, que continua sendo
+    a fonte). Mas o `include` da entrada listava só as duas comuns, e o gateway
+    filtrava a terceira também do `bruce`: de 13 a 28/10/2026 ele não a teve,
+    disse à RH que não havia ferramenta e calculou o ponto de cabeça — errado.
+    """
+    from app.routers.mcp_anexos import _FERRAMENTAS_RESTRITAS  # evita ciclo no import
+    return FERRAMENTAS_ANEXOS + tuple(
+        sorted(f for f, agentes in _FERRAMENTAS_RESTRITAS.items() if agent_id in agentes))
+
+
 def escopo_mcp_do_agente(agent_id: str, tools: dict, servidores: dict) -> dict:
     """O `tools` do agente com o escopo de MCP recalculado. Puro: devolve cópia.
 
@@ -1840,7 +1855,7 @@ def escopo_mcp_do_agente(agent_id: str, tools: dict, servidores: dict) -> dict:
     `publicar-anexos-mcp.py`) fica sem anexos, mas também sem os dos outros.
     """
     t = dict(tools or {})
-    proprias = [f"mcp__{_PREFIXO_ANEXOS}{agent_id}__{f}" for f in FERRAMENTAS_ANEXOS]
+    proprias = [f"mcp__{_PREFIXO_ANEXOS}{agent_id}__{f}" for f in ferramentas_anexos(agent_id)]
     atuais = [
         x for x in (t.get("alsoAllow") or [])
         if not _sem_prefixo(x).startswith(_PREFIXO_ANEXOS) or x in proprias
