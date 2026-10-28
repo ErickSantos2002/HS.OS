@@ -613,3 +613,260 @@ def test_evento_de_seculos_nao_trava_a_apuracao():
     r = rel(mes_inteiro(ANA), eventos)
     assert time.perf_counter() - t0 < 2
     assert pessoa(r).dias_elegiveis == 0
+
+
+# ── v2.1 — Cálculo Diário do FLASH ──────────────────────────────────────────
+#
+# ⚠️ **O que custou:** o export de Eventos de setembro/2026 não trazia cinco
+# dias de férias de uma pessoa (01–04 e 08/09) que o FLASH conhecia. Sem o
+# Cálculo Diário, a v2 os listava como "sem marcação e sem evento" — cinco das
+# onze pendências do mês eram férias. E nos dias de 2 batidas a v2 mandava
+# "conferir no Cálculos Diários"; conferido, o FLASH também não desconta
+# intervalo nenhum (07:40–17:48 = 10:08 trabalhadas). O arquivo é opcional,
+# mas sem ele a régua enxerga menos do que o RH.
+
+CAB_CALC = ["CNPJ", "Nome", "Matrícula", "PIS", "CPF", "Admissão", "Demissão", "Filial",
+            "Departamento", "Cargo", "Data", "Dia", "Jornada Esperada", "Horas Esperadas",
+            "Nome Escala", "Natureza Dia", "Marcações Válidas", "Jornada Considerada",
+            "Horas Trabalhadas", "Eventos", "Centro Custo", "Grupos"]
+_ESCALA = "SEG - SEX 07:30 12:00 - 13:00 17:00"
+_DIAS_SEMANA = ("Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo")
+
+
+def _pares(batidas):
+    pares = [f"{batidas[i]} - {batidas[i + 1]}" for i in range(0, len(batidas) - 1, 2)]
+    if len(batidas) % 2:
+        pares.append(batidas[-1])
+    return " | ".join(pares) or "-"
+
+
+def calc(pessoa, dia, batidas=(), natureza=None, jornada=None, horas="08:30", eventos="-"):
+    """Uma linha do Cálculo Diário. CPF, PIS e CNPJ são inventados e marcados
+    para o teste de que não saem em lugar nenhum."""
+    nome, matricula = pessoa
+    d = date(2026, 9, dia)
+    if natureza is None:
+        natureza = "Trabalho" if dia in UTEIS_SET else ("Feriado" if dia == 7 else "Folga")
+    if jornada is None:
+        jornada = {"Folga": "Folga", "Feriado": "Feriado"}.get(
+            natureza, "Trabalho Esperado" if batidas else "Falta")
+    return ["00.000.000/0001-CNPJSECRETO", nome, matricula, "PISSECRETO", "CPFSECRETO",
+            "01/01/2020", "", "MATRIZ", "LABORATÓRIO", "Analista", f"{d:%d/%m/%Y}",
+            _DIAS_SEMANA[d.weekday()], "07:30 - 12:00 | 13:00 - 17:00", "08:30",
+            _ESCALA if natureza != "Folga" else "Folga", natureza, _pares(list(batidas)),
+            jornada, horas if batidas else "00:00", eventos, "", ""]
+
+
+def calc_mes(pessoa, batidas=NORMAL, sem=(), especiais=None):
+    """O mês inteiro (30 linhas, inclusive folga e feriado), como o FLASH exporta.
+    `sem` = dias úteis sem marcação; `especiais` = {dia: kwargs de `calc`}."""
+    especiais = especiais or {}
+    linhas = []
+    for dia in range(1, 31):
+        if dia in especiais:
+            linhas.append(calc(pessoa, dia, **especiais[dia]))
+        elif dia in UTEIS_SET and dia not in sem:
+            linhas.append(calc(pessoa, dia, batidas))
+        else:
+            linhas.append(calc(pessoa, dia))
+    return linhas
+
+
+def rel_calc(linhas_marc, linhas_calc, eventos=()):
+    return p.gerar([("m.csv", csv(CAB_MARC, linhas_marc)), ("e.csv", csv(CAB_EVENTOS, list(eventos))),
+                    ("c.csv", csv(CAB_CALC, linhas_calc))])
+
+
+def test_reconhece_o_calculo_diario_pelo_cabecalho_e_nao_le_cpf_nem_pis():
+    """Cabeçalho, não nome do arquivo — igual aos outros três. CPF, PIS, CNPJ
+    e Admissão são descartados na leitura, como o CID nos eventos."""
+    tipo, registros = p.identificar("qualquer.csv", csv(CAB_CALC, [calc(ANA, 1, NORMAL)]))
+    assert tipo == "calculo"
+    assert not {"CPF", "PIS", "CNPJ", "Admissão"} & set(registros[0])
+    assert registros[0]["Marcações Válidas"] == "07:30 - 12:00 | 13:00 - 17:00"
+
+
+def test_cpf_e_pis_nao_saem_no_xlsx_nem_no_resumo_nem_no_historico():
+    r = rel_calc(mes_inteiro(ANA, exceto=(15,)), calc_mes(ANA, sem=(15,)))
+    for texto in (_todo_texto_do_xlsx(r), p.resumo(r), json.dumps(p.historico(r, "x"))):
+        assert "SECRETO" not in texto
+
+
+def test_dois_calculos_diarios_sao_recusados():
+    c = csv(CAB_CALC, calc_mes(ANA))
+    with pytest.raises(p.ErroPonto, match="dois CSV de cálculo diário"):
+        p.gerar([("m.csv", csv(CAB_MARC, mes_inteiro(ANA))), ("e.csv", csv(CAB_EVENTOS, [])),
+                 ("c1.csv", c), ("c2.csv", c)])
+
+
+def test_calculo_de_outro_mes_e_recusado():
+    linha = calc(ANA, 1, NORMAL)
+    linha[10] = "01/10/2026"
+    with pytest.raises(p.ErroPonto, match="Cálculo Diário.*10/2026"):
+        rel_calc(mes_inteiro(ANA), [linha])
+
+
+def test_folga_do_flash_num_dia_de_semana_tira_o_dia_e_vira_aviso():
+    """Calendário do FLASH vence: é ele que sabe da escala de cada pessoa."""
+    r = rel_calc(mes_inteiro(ANA, exceto=(15,)),
+                 calc_mes(ANA, especiais={15: dict(natureza="Folga")}))
+    a = pessoa(r)
+    assert (a.dias_uteis, a.dias_elegiveis, a.dias_pendentes) == (20, 20, 0)
+    assert r.pendencias == []
+    [av] = [x for x in r.avisos if x.tipo == "calendário"]
+    assert av.data == date(2026, 9, 15) and "FLASH diz Folga em 15/09" in av.texto
+    assert "dia útil" in av.texto
+
+
+def test_trabalho_do_flash_num_feriado_da_lista_poe_o_dia():
+    """07/09 está na lista de feriados; se o FLASH diz Trabalho, a marcação é
+    avaliada em vez de ir para "fora da escala"."""
+    b = ("07:50", "12:00", "13:00", "17:00")
+    r = rel_calc(mes_inteiro(ANA) + [marc(ANA, 7, *b)],
+                 calc_mes(ANA, especiais={7: dict(natureza="Trabalho", batidas=b)}))
+    a = pessoa(r)
+    assert a.dias_uteis == 22 and a.dias_elegiveis == 22
+    assert ocorr(r, 7) == [("A2", "identificada")]
+    assert not [x for x in r.pendencias if x.medida == "fora da escala"]
+    [av] = [x for x in r.avisos if x.tipo == "calendário"]
+    assert "FLASH diz Trabalho em 07/09" in av.texto and "Independência" in av.texto
+
+
+def test_calendario_igual_nao_gera_aviso():
+    r = rel_calc(mes_inteiro(ANA), calc_mes(ANA))
+    assert r.avisos == [] and pessoa(r).dias_uteis == 21
+    assert r.calculo["trabalho"] == 21 and r.calculo["marcacoes_iguais"] == 21
+    assert r.calculo["marcacoes_comparadas"] == 21
+
+
+def test_marcacoes_validas_diferentes_valem_as_do_calculo_e_viram_aviso():
+    """"Utilizar os registros válidos e tratados pela FLASH" (texto dela)."""
+    r = rel_calc(mes_inteiro(ANA, exceto=(1,)) + [marc(ANA, 1, "07:50", "12:00", "13:00", "17:00")],
+                 calc_mes(ANA))
+    assert ocorr(r, 1) == []          # a entrada vale 07:30, a do Cálculo
+    [av] = [x for x in r.avisos if x.tipo == "marcações"]
+    assert av.data == date(2026, 9, 1)
+    assert "07:50 · 12:00 · 13:00 · 17:00" in av.texto and "07:30 · 12:00 · 13:00 · 17:00" in av.texto
+    assert r.calculo["marcacoes_iguais"] == 20 and r.calculo["marcacoes_comparadas"] == 21
+
+
+def test_ocorrencia_com_marcacao_do_calculo_traz_as_batidas_do_flash():
+    r = rel_calc(mes_inteiro(ANA, exceto=(1,)) + [marc(ANA, 1, *NORMAL)],
+                 calc_mes(ANA, especiais={1: dict(batidas=("07:52", "12:00", "13:00", "17:00"))}))
+    [o] = r.ocorrencias
+    assert o.indicador == "A2" and o.batidas == "07:52 · 12:00 · 13:00 · 17:00"
+    assert "Marcações Válidas do FLASH" in o.ajuste
+
+
+def test_evento_que_so_o_flash_conhece_tira_o_dia_com_evidencia():
+    """O caso de setembro: férias no FLASH, ausentes do export de Eventos.
+    Sem o Cálculo seriam cinco "sem marcação"; com ele, saem do denominador."""
+    dias = (1, 2, 3, 4, 8)
+    r = rel_calc(mes_inteiro(ANA, exceto=dias),
+                 calc_mes(ANA, especiais={d: dict(eventos="Férias") for d in dias}))
+    a = pessoa(r)
+    assert (a.dias_uteis, a.dias_fora, a.dias_elegiveis, a.dias_pendentes) == (21, 5, 16, 0)
+    assert a.dias_fora_flash == 5
+    fora = [x for x in r.pendencias if x.data.day in dias]
+    assert len(fora) == 5 and all(x.medida == "aviso" for x in fora)
+    assert all("FLASH: Férias (não consta no export de Eventos)" in x.motivo for x in fora)
+
+
+def test_evento_cancelado_no_csv_nao_deixa_o_flash_tirar_o_dia():
+    """Se o CSV de Eventos tem algo no dia, vale a regra da v2: cancelado não
+    justifica, e o Cálculo só entra como evidência."""
+    r = rel_calc(mes_inteiro(ANA, exceto=(15,)),
+                 calc_mes(ANA, especiais={15: dict(eventos="Atestado Médico")}),
+                 [ev(ANA, "15/09/2026", status="Cancelado", motivo="Atestado Médico")])
+    a = pessoa(r)
+    assert (a.dias_fora, a.dias_elegiveis, a.dias_pendentes) == (0, 21, 1)
+    [x] = r.pendencias
+    assert x.medida == "dia" and x.flash_eventos == "Atestado Médico"
+
+
+def test_dia_sem_marcacao_traz_o_que_o_flash_diz_mas_nao_chama_de_falta():
+    r = rel_calc(mes_inteiro(ANA, exceto=(15,)), calc_mes(ANA, sem=(15,)))
+    [x] = r.pendencias
+    assert x.medida == "dia" and "FLASH: Falta, eventos: -" in x.motivo
+    assert "não é falta" in x.motivo
+    assert (x.flash_jornada, x.flash_horas, x.flash_marcacoes) == ("Falta", "00:00", "-")
+
+
+def test_duas_batidas_flash_sem_intervalo_registrado():
+    """O FLASH não trata intervalo sozinho: 07:40–17:48 dá 10:08 trabalhadas.
+    Continua pendente — não se presume intervalo — mas com a evidência."""
+    b = ("07:40", "17:48")
+    r = rel_calc(mes_inteiro(ANA, exceto=(1,)) + [marc(ANA, 1, *b)],
+                 calc_mes(ANA, especiais={1: dict(batidas=b, horas="10:08",
+                                                  jornada="Trabalho com Horas Excedentes")}))
+    [x] = [x for x in r.pendencias if x.data.day == 1]
+    assert x.medida == "intervalo"
+    assert x.motivo == "FLASH sem intervalo registrado (horas trabalhadas 10:08)"
+    assert x.flash_jornada == "Trabalho com Horas Excedentes" and x.flash_marcacoes == "07:40 - 17:48"
+    assert pessoa(r).avaliados["intervalo"] == 20
+
+
+def test_seis_batidas_flash_lista_as_pausas_com_minutos():
+    """Qual das pausas é o intervalo é decisão do RH, não nossa."""
+    b = ("07:30", "12:00", "13:00", "15:00", "15:30", "17:00")
+    r = rel_calc(mes_inteiro(ANA, exceto=(1,)) + [marc(ANA, 1, *b)],
+                 calc_mes(ANA, especiais={1: dict(batidas=b)}))
+    [x] = [x for x in r.pendencias if x.data.day == 1]
+    assert x.motivo == "FLASH registrou 2 pausas: 12:00–13:00 (60 min), 15:00–15:30 (30 min)"
+
+
+def test_pessoa_dia_que_nao_bate_entre_os_arquivos_vira_aviso():
+    """Marcação sem linha no Cálculo, ou o contrário: algum dos exports está
+    incompleto e a RH precisa saber."""
+    linhas = [l for l in calc_mes(ANA) if not l[10].startswith("02/")]
+    r = rel_calc(mes_inteiro(ANA), linhas)
+    [av] = [x for x in r.avisos if x.tipo == "pessoa-dia"]
+    assert av.data == date(2026, 9, 2) and "não está no Cálculo Diário" in av.texto
+
+
+def test_pessoa_so_no_calculo_fica_de_fora():
+    """O CEO (matrícula `-`) está no Cálculo e não tem marcação no mês."""
+    r = rel_calc(mes_inteiro(ANA), calc_mes(ANA) + calc_mes(("Chefe Teste", "-"), batidas=()))
+    assert [x.nome for x in r.pessoas] == ["Ana Teste"] and r.avisos == []
+
+
+def test_xlsx_com_calculo_tem_a_evidencia_e_os_avisos():
+    r = rel_calc(mes_inteiro(ANA, exceto=(15, 16)),
+                 calc_mes(ANA, sem=(15,), especiais={16: dict(natureza="Folga")}))
+    wb = _livro(r)
+    cab = [c.value for c in wb["Pendências"][1]]
+    assert {"FLASH: jornada considerada", "FLASH: horas trabalhadas",
+            "FLASH: marcações válidas", "FLASH: eventos"} <= set(cab)
+    texto = "\n".join(str(c.value) for linha in wb["Conferência"].iter_rows() for c in linha if c.value)
+    assert "FLASH diz Folga em 16/09" in texto
+
+
+def test_resumo_traz_o_calculo_ou_avisa_que_faltou():
+    com = p.resumo(rel_calc(mes_inteiro(ANA), calc_mes(ANA)))
+    assert "Cálculo Diário: marcações iguais em 21 de 21 dias" in com
+    assert "Sem o CSV de Cálculo Diário" in p.resumo(rel(mes_inteiro(ANA)))
+
+
+def test_sem_o_calculo_diario_tudo_igual_a_v2():
+    """O arquivo é opcional: sem ele, os números e as pendências são os da v2."""
+    r = rel(mes_inteiro(ANA, exceto=(15, 16)) + [marc(ANA, 16, "07:40", "17:48")])
+    assert not r.tem_calculo and r.avisos == []
+    assert pessoa(r).dias_uteis == 21 and pessoa(r).dias_pendentes == 1
+    motivos = sorted(x.motivo for x in r.pendencias)
+    assert motivos == ["2 batida(s): intervalo não verificável — conferir no Cálculos Diários",
+                       "sem marcação e sem evento aprovado — não é falta; conferir"]
+    assert "FLASH: jornada considerada" not in [c.value for c in _livro(r)["Pendências"][1]]
+
+
+def test_historico_marca_se_houve_calculo_e_nao_compara_um_com_o_outro():
+    """O calendário e a exclusão de dias mudam com o arquivo: setembro apurado
+    sem ele não é comparável com outubro apurado com ele."""
+    h = p.historico(rel_calc(mes_inteiro(ANA), calc_mes(ANA)), "x")
+    assert h["com_calculo_diario"] is True
+    ant = dict(_hist("2026-08", p.VERSAO_REGUA, 1, 10), com_calculo_diario=False)
+    c = p.comparar(h, [ant])
+    assert c.status == "outra_versao" and "Cálculo Diário" in c.mensagem
+
+
+def test_versao_da_regua_v2_1():
+    assert p.VERSAO_REGUA == "2026-10-28.1"

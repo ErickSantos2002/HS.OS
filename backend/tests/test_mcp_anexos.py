@@ -407,6 +407,10 @@ import dataclasses
 PONTO_M = "﻿Nome;Matrícula;Departamento;Data da Marcação;Tipo Marcação 1;Hora da Marcação 1\nAna Teste;000001;LAB;01/09/2026;Original;07:55\n".encode()
 PONTO_E = "﻿Matrícula;Nome;EventoId;Motivo;Descrição;Justificativa;CID;Data Inicio;Data Fim;Hora Inicio;Hora Fim;Qtde;Status\n000001;Ana Teste;9000001;Férias;;;;02/09/2026;03/09/2026;;;2 Dias;Aprovado\n".encode()
 PONTO_B = "﻿Ano;Mês;Matrícula;Nome;Saldo banco total\n2026;9;000001;Ana Teste;(-01:00)\n".encode()
+# Cálculo Diário (v2.1) com CPF e PIS inventados — não podem voltar no resumo.
+PONTO_C = ("﻿Nome;Matrícula;CPF;PIS;Data;Natureza Dia;Marcações Válidas;Jornada Considerada;"
+           "Horas Trabalhadas;Eventos\nAna Teste;000001;CPFSECRETO;PISSECRETO;01/09/2026;Trabalho;07:55;"
+           "Trabalho com horas negativas;00:00;-\n").encode()
 
 
 def test_relatorio_ponto_so_aparece_para_o_bruce():
@@ -422,7 +426,9 @@ def test_description_do_relatorio_ponto_diz_que_eventos_e_obrigatorio():
     assert "OBRIGATÓRIOS" in f["description"] and "Eventos" in f["description"]
     assert "publicar_pagina" in f["description"]
     ids = f["inputSchema"]["properties"]["ids"]
-    assert (ids["minItems"], ids["maxItems"]) == (2, 3)
+    assert (ids["minItems"], ids["maxItems"]) == (2, 4)
+    # v2.1: o quarto arquivo é opcional, e a description diz que é recomendado.
+    assert "CalculoDiario" in f["description"] and "recomendado" in f["description"]
 
 
 def test_outro_agente_chamando_relatorio_ponto_recebe_ferramenta_desconhecida(monkeypatch):
@@ -443,10 +449,11 @@ def test_outro_agente_chamando_relatorio_ponto_recebe_ferramenta_desconhecida(mo
 
 @pytest.fixture
 def ponto(isolado, monkeypatch):
-    """Três anexos da mesma pessoa, em turno; um R2 em dicionário; a entrega é capturada."""
+    """Quatro anexos da mesma pessoa, em turno; um R2 em dicionário; a entrega é capturada."""
     anexos = {k: _anexo(id=k, caminho=k, nome=n, dono_conversa=PESSOA)
-              for k, n in (("m", "Marcacoes.csv"), ("e", "Eventos.csv"), ("b", "BancoHoras.csv"))}
-    r2 = {"anexos/m": PONTO_M, "anexos/e": PONTO_E, "anexos/b": PONTO_B}
+              for k, n in (("m", "Marcacoes.csv"), ("e", "Eventos.csv"), ("b", "BancoHoras.csv"),
+                           ("c", "CalculoDiario.csv"))}
+    r2 = {"anexos/m": PONTO_M, "anexos/e": PONTO_E, "anexos/b": PONTO_B, "anexos/c": PONTO_C}
     entregas = []
 
     async def buscar(conn, anexo_id):
@@ -491,6 +498,24 @@ def test_relatorio_ponto_entrega_ao_dono_e_grava_o_historico(ponto):
     assert "Ana" not in json.dumps(h) and set(h["por_matricula"]) == {"1"}
 
 
+def test_relatorio_ponto_aceita_o_calculo_diario_como_quarto_arquivo(ponto):
+    """v2.1: o Cálculo Diário é opcional mas recomendado; com ele são 4 ids.
+    O export de Eventos de setembro/2026 não trazia 5 dias de férias que o
+    FLASH conhecia — é o Cálculo que os tira do denominador."""
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["c", "b", "e", "m"]}))
+    assert not erro, texto
+    assert len(ponto["entregas"]) == 1
+    assert "Cálculo Diário: marcações iguais em 1 de 1 dias" in texto
+    assert "SECRETO" not in texto
+    [(_, h)] = _historicos(ponto["r2"]).items()
+    assert h["com_calculo_diario"] is True and "SECRETO" not in json.dumps(h)
+
+
+def test_relatorio_ponto_sem_calculo_avisa_que_ele_faltou(ponto):
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "e"]}))
+    assert not erro and "Sem o CSV de Cálculo Diário" in texto
+
+
 def test_relatorio_ponto_sem_banco_funciona(ponto):
     texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "e"]}))
     assert not erro, texto
@@ -524,10 +549,10 @@ def test_relatorio_ponto_sem_eventos_diz_o_que_falta(ponto):
     assert _historicos(ponto["r2"]) == {}
 
 
-@pytest.mark.parametrize("ids", [["m"], ["m", "e", "b", "x"], "m,e", ["m", ""]])
-def test_relatorio_ponto_exige_de_2_a_3_ids(ponto, ids):
+@pytest.mark.parametrize("ids", [["m"], ["m", "e", "b", "c", "x"], "m,e", ["m", ""]])
+def test_relatorio_ponto_exige_de_2_a_4_ids(ponto, ids):
     texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ids}))
-    assert erro and "2 ou 3" in texto and ponto["entregas"] == []
+    assert erro and "2 a 4" in texto and ponto["entregas"] == []
 
 
 def test_relatorio_ponto_recusa_anexos_de_pessoas_diferentes_sem_ler_o_r2(ponto, monkeypatch):
