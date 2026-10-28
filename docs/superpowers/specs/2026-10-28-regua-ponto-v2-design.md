@@ -246,7 +246,7 @@ arquivo que falta.
 ## Homologação
 
 Reprocessar setembro/2026 com os três CSV de 27/10 e entregar a ela A1–A6. Os
-números conferidos à mão por nós antes de entregar: 20 dias úteis (07/09
+números conferidos à mão por nós antes de entregar: 21 dias úteis (22 dias de semana; 07/09
 feriado), 20 eventos aprovados e 3 cancelados (`4686575`, `4806494`,
 `4806560`), 424 dias de 4 batidas, 7 de 2 e 4 de 6.
 
