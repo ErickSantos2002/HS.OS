@@ -22,6 +22,7 @@ aqui e gravado no R2 por `app/routers/mcp_anexos.py`.
 """
 from __future__ import annotations
 
+import calendar
 import csv
 import hashlib
 import io
@@ -496,11 +497,15 @@ def gerar(arquivos: list[tuple[str, bytes]]) -> Relatorio:
     eventos = _ler_eventos(lidos["eventos"], nomes["eventos"])
     dias_fora: dict[tuple[str, date], Evento] = {}
     parciais: dict[tuple[str, date], list[Evento]] = defaultdict(list)
+    primeiro_dia = date(ano, mes, 1)
+    ultimo_dia = date(ano, mes, calendar.monthrange(ano, mes)[1])
     for e in eventos:
         dono = casar(e.matricula, e.nome)
         if dono:
             e.chave = dono
-        no_mes = [d for d in _intervalo(e.inicio, e.fim) if d.month == mes and d.year == ano]
+        # Recorta ao mês ANTES de andar: as datas vêm do arquivo, e um evento de
+        # 2000 a 9999 seriam milhões de dias por linha (revisão de 28/10/2026).
+        no_mes = list(_intervalo(max(e.inicio, primeiro_dia), min(e.fim, ultimo_dia)))
         uteis_ev = [d for d in no_mes if d in uteis_set]
         if not e.aprovado:
             e.por_que = f"não: status {e.status or 'vazio'} — só Aprovado justifica"

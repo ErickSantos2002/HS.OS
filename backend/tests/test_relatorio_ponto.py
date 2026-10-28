@@ -596,3 +596,20 @@ def test_comparacao_entra_no_resumo_e_na_planilha():
     assert "Comparado com AGOSTO/2026" in p.resumo(r)
     ws = _livro(r)["Resumo"]
     assert "Variação (p.p.)" in [c.value for linha in ws.iter_rows() for c in linha]
+
+
+def test_evento_de_seculos_nao_trava_a_apuracao():
+    """O dia a dia do evento era percorrido INTEIRO e só depois filtrado pelo mês.
+
+    `Data Fim` é texto que vem do arquivo: um evento de 01/01/2000 a 31/12/9999
+    faria o laço andar ~2,9 milhões de dias, e o CSV aceita até 5.000 linhas —
+    o worker travaria. Revisão de segurança de 28/10/2026. O intervalo é
+    recortado ao mês apurado antes de andar.
+    """
+    import time
+    eventos = [ev(ANA, "01/01/2000", "31/12/9999", ident=str(9100000 + i), motivo="Férias")
+               for i in range(20)]
+    t0 = time.perf_counter()
+    r = rel(mes_inteiro(ANA), eventos)
+    assert time.perf_counter() - t0 < 2
+    assert pessoa(r).dias_elegiveis == 0
