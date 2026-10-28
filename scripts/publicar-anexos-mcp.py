@@ -31,10 +31,9 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend"))
 from app.gateway.patch import aplicar_patch, config_do_gateway  # noqa: E402
-from app.routers.integracoes import FERRAMENTAS_ANEXOS, escopo_mcp_do_agente  # noqa: E402
+from app.routers.integracoes import escopo_mcp_do_agente, ferramentas_anexos  # noqa: E402
 from app.routers.mcp_anexos import assinatura_do_agente  # noqa: E402
 
-FERRAMENTAS = list(FERRAMENTAS_ANEXOS)
 
 
 REDIGIDO = "__OPENCLAW_REDACTED__"
@@ -72,7 +71,7 @@ def montar_entradas(modelo: dict, segredo: str, agentes, token: str = "") -> dic
             raise ValueError("os cabeçalhos do modelo vieram redigidos pelo config.get; "
                              "passe GUARDRAILS_API_TOKEN no ambiente")
         entrada["url"] = f"{base}/mcp/anexos/{aid}/{assinatura_do_agente(segredo, aid)}"
-        entrada["toolFilter"] = {"include": list(FERRAMENTAS)}
+        entrada["toolFilter"] = {"include": list(ferramentas_anexos(aid))}
         novos[f"hsos-anexos-{aid}"] = entrada
     return novos
 
@@ -144,7 +143,7 @@ def conferir_escopo(parsed: dict, novos: dict) -> bool:
         t = a.get("tools") or {}
         also, deny = t.get("alsoAllow") or [], set(t.get("deny") or [])
         for outro in ids - {aid}:
-            for f in FERRAMENTAS:
+            for f in ferramentas_anexos(outro):
                 if f"mcp__hsos-anexos-{outro}__{f}" in also:
                     return False
                 if f"hsos-anexos-{outro}" in s and f"hsos-anexos-{outro}__{f}" not in deny:

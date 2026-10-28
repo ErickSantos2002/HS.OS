@@ -79,3 +79,29 @@ def test_isencao_do_alerta_e_pelo_nome_exato_nao_por_substring():
     assert "hsos-anexos-alerta-x__ler_anexo" in t["deny"]
     assert "hsos-anexos-alerta-x__enviar_arquivo" in t["deny"]
     assert "hsos-alerta__avisar_administrador" not in t["deny"]
+
+
+def test_ferramenta_restrita_entra_so_no_escopo_de_quem_pode():
+    """A `relatorio_ponto` existia desde 13/10/2026 e o `bruce` nunca a teve.
+
+    O `toolFilter.include` da entrada `hsos-anexos-bruce` listava só as duas
+    ferramentas comuns, então o gateway filtrava a terceira antes de o agente
+    vê-la. Por duas semanas a coordenadora de RH anexou os CSV do Flash, o
+    `bruce` respondeu "não há ferramenta de cálculo de ponto no meu ambiente" —
+    e calculou de cabeça: 21 eventos aprovados e 2 cancelados, quando o arquivo
+    tinha 20 e 3. A restrição por agente vivia só no servidor (`tools/list`);
+    o escopo do gateway não sabia dela.
+    """
+    from app.routers.integracoes import ferramentas_anexos
+    assert "relatorio_ponto" in ferramentas_anexos("bruce")
+    assert "relatorio_ponto" not in ferramentas_anexos("nina")
+
+    servidores = {**SERVIDORES, "hsos-anexos-bruce": {
+        "toolFilter": {"include": list(ferramentas_anexos("bruce"))}}}
+    bruce = escopo_mcp_do_agente("bruce", {}, servidores)
+    assert "mcp__hsos-anexos-bruce__relatorio_ponto" in bruce["alsoAllow"]
+    assert "hsos-anexos-bruce__relatorio_ponto" not in bruce["deny"]
+
+    nina = escopo_mcp_do_agente("nina", {}, servidores)
+    assert "mcp__hsos-anexos-nina__relatorio_ponto" not in nina["alsoAllow"]
+    assert "hsos-anexos-bruce__relatorio_ponto" in nina["deny"]
