@@ -15,6 +15,7 @@ import hmac
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 
 import anyio
 
@@ -96,18 +97,23 @@ _FERRAMENTAS = [{
 }, {
     "name": "relatorio_ponto",
     "description": (
-        "Monta o controle de jornada do mês a partir dos DOIS CSV do Flash que a pessoa "
-        "anexou: o de marcações (MarcacoesOriginaisJustificadas) e o de banco de horas "
-        "(BancoHoras). Passe os dois ids, em qualquer ordem. O servidor calcula com a "
-        "régua do RH e envia a planilha à pessoa na conversa e na Documentos; você recebe "
-        "só o resumo. NÃO recalcule nem reescreva os números: repasse o resumo e diga que "
-        "a planilha chegou. A Tratativa e a confirmação caso a caso são da pessoa."
+        "Monta o controle de jornada do mês (Grupo A: A1–A6) a partir dos CSV do Flash que "
+        "a pessoa anexou. Passe em `ids` os ids de 2 ou 3 anexos, em qualquer ordem: "
+        "marcações (MarcacoesOriginaisJustificadas) e eventos (Eventos) são OBRIGATÓRIOS; "
+        "banco de horas (BancoHoras) é opcional. Sem o de eventos não há denominador: peça "
+        "o arquivo, não calcule sem ele. O servidor calcula com a régua do RH, confere o "
+        "fechamento, compara com o mês anterior e envia a planilha à pessoa na conversa e "
+        "na Documentos; você recebe só o resumo, sem nomes. NÃO conte eventos, batidas ou "
+        "ocorrências por conta própria nem reescreva os números: repasse o resumo e diga que "
+        "a planilha chegou. NUNCA publique página (publicar_pagina) com dado de ponto: os "
+        "detalhes por pessoa ficam só na planilha, que é privada."
     ),
     "inputSchema": {
         "type": "object",
         "properties": {
-            "ids": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2,
-                    "description": "Os ids dos dois anexos, como vieram em [anexo: … id=…]."},
+            "ids": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 3,
+                    "description": "Os ids dos anexos (marcações, eventos e, se veio, banco de "
+                                   "horas), como vieram em [anexo: … id=…]."},
         },
         "required": ["ids"],
     },
@@ -239,12 +245,14 @@ async def _ler_anexo(agent_id: str, args: dict) -> tuple[str, bool]:
 
 async def _relatorio_ponto(agent_id: str, args: dict) -> tuple[str, bool]:
     ids = args.get("ids")
-    if not isinstance(ids, list) or len(ids) != 2 or not all(isinstance(i, str) and i.strip() for i in ids):
-        return "Passe `ids` com os ids dos DOIS anexos do Flash (marcações e banco de horas).", True
+    if (not isinstance(ids, list) or not 2 <= len(ids) <= 3
+            or not all(isinstance(i, str) and i.strip() for i in ids)):
+        return ("Passe `ids` com os ids de 2 ou 3 anexos do Flash: marcações e eventos "
+                "(obrigatórios) e, se veio, banco de horas."), True
     ids = [i.strip() for i in ids]
-    if ids[0] == ids[1]:
-        return ("Os dois ids são o mesmo anexo. Preciso de dois arquivos: o CSV de marcações "
-                "e o de banco de horas."), True
+    if len(set(ids)) != len(ids):
+        return ("Há id repetido. Preciso de arquivos diferentes: o CSV de marcações, o de "
+                "eventos e, se veio, o de banco de horas."), True
     try:
         async with sessao(role="service_role") as conn:
             anexos = []
@@ -258,8 +266,8 @@ async def _relatorio_ponto(agent_id: str, args: dict) -> tuple[str, bool]:
                     return ("Este anexo não pertence a uma conversa sua. Não tente de novo; "
                             "peça à pessoa para anexar os arquivos aqui."), True
                 anexos.append(anexo)
-            if anexos[0].dono_conversa != anexos[1].dono_conversa:
-                return "Os dois anexos têm que ser da mesma pessoa, na conversa com você.", True
+            if len({a.dono_conversa for a in anexos}) != 1:
+                return "Os anexos têm que ser da mesma pessoa, na conversa com você.", True
             dono = str(anexos[0].dono_conversa)
             if not await turno_em_curso(conn, agent_id, dono):
                 return _FORA_DO_TURNO_LER, True
@@ -273,17 +281,22 @@ async def _relatorio_ponto(agent_id: str, args: dict) -> tuple[str, bool]:
         logger.exception("relatorio_ponto: falha interna (agente %s)", agent_id)
         return "Falha interna ao ler os anexos; avise o administrador.", True
 
-    def calcular():
-        r = ponto.gerar(arquivos)
-        return r, ponto.montar_xlsx(r)
-
     try:
         # Numa thread: CSV + openpyxl são síncronos; no loop travariam o worker.
-        relatorio, xlsx = await anyio.to_thread.run_sync(calcular)
+        relatorio = await anyio.to_thread.run_sync(lambda: ponto.gerar(arquivos))
     except ponto.ErroPonto as e:
         return str(e), True
     except Exception:  # noqa: BLE001
         logger.exception("relatorio_ponto: falha ao calcular (agente %s)", agent_id)
+        return "Não consegui montar a planilha com estes arquivos; avise o administrador.", True
+
+    atual = ponto.historico(relatorio, datetime.now(timezone.utc).isoformat())
+    relatorio.comparacao = await _comparar_com_o_mes_anterior(atual)
+
+    try:
+        xlsx = await anyio.to_thread.run_sync(lambda: ponto.montar_xlsx(relatorio))
+    except Exception:  # noqa: BLE001
+        logger.exception("relatorio_ponto: falha ao montar o xlsx (agente %s)", agent_id)
         return "Não consegui montar a planilha com estes arquivos; avise o administrador.", True
 
     texto, erro = await _entregar(
@@ -291,8 +304,51 @@ async def _relatorio_ponto(agent_id: str, args: dict) -> tuple[str, bool]:
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     if erro:
         return texto, True
+    nota = await _gravar_historico(atual)
     logger.info("relatorio_ponto: %s montou %s para %s", agent_id, ponto.nome_do_arquivo(relatorio), dono)
-    return f"{ponto.resumo(relatorio)}\n\n{texto}", False
+    return f"{ponto.resumo(relatorio)}\n\n{texto}{nota}", False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Histórico mensal da régua de ponto — bucket `ponto-historico`, só o servidor
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Montar e comparar é puro (`app/relatorios/ponto.py`); aqui só se lê e grava.
+# Falhar aqui NÃO impede a entrega: a planilha do mês vale sozinha, e a pessoa
+# fica sabendo que a comparação ou o registro não saíram.
+
+async def _comparar_com_o_mes_anterior(atual: dict) -> "ponto.Comparacao":
+    alvo = ponto.periodo_anterior(atual["periodo"])
+    try:
+        itens = await arm.listar(arm.chave(_BUCKET_HISTORICO, alvo) + "/", recursivo=True)
+        anteriores = []
+        for item in itens:
+            if not item["nome"].endswith(".json"):
+                continue
+            dados = await arm.ler(item["chave"])
+            try:
+                anteriores.append(json.loads(dados or b"null"))
+            except ValueError:
+                logger.warning("relatorio_ponto: histórico ilegível em %s", item["chave"])
+    except Exception:  # noqa: BLE001
+        logger.exception("relatorio_ponto: não consegui ler o histórico de %s", alvo)
+        return ponto.Comparacao("indisponivel", alvo,
+                                "Não consegui ler o histórico do mês anterior; sem comparação desta vez.")
+    return ponto.comparar(atual, anteriores)
+
+
+async def _gravar_historico(atual: dict) -> str:
+    try:
+        await arm.gravar(arm.chave(_BUCKET_HISTORICO, ponto.caminho_historico(atual)),
+                         json.dumps(atual, ensure_ascii=False).encode(), "application/json")
+    except Exception:  # noqa: BLE001
+        logger.exception("relatorio_ponto: não consegui gravar o histórico de %s", atual["periodo"])
+        return ("\n(O histórico deste mês não foi gravado: o próximo mês sai sem comparação. "
+                "Avise o administrador.)")
+    return ""
+
+
+_BUCKET_HISTORICO = "ponto-historico"
 
 
 async def _ja_conversa(conn, agent_id: str, pessoa: str) -> bool:

@@ -405,6 +405,7 @@ def test_enviar_com_run_ja_respondido_nao_escreve_nada(monkeypatch):
 import dataclasses
 
 PONTO_M = "﻿Nome;Matrícula;Departamento;Data da Marcação;Tipo Marcação 1;Hora da Marcação 1\nAna Teste;000001;LAB;01/09/2026;Original;07:55\n".encode()
+PONTO_E = "﻿Matrícula;Nome;EventoId;Motivo;Descrição;Justificativa;CID;Data Inicio;Data Fim;Hora Inicio;Hora Fim;Qtde;Status\n000001;Ana Teste;9000001;Férias;;;;02/09/2026;03/09/2026;;;2 Dias;Aprovado\n".encode()
 PONTO_B = "﻿Ano;Mês;Matrícula;Nome;Saldo banco total\n2026;9;000001;Ana Teste;(-01:00)\n".encode()
 
 
@@ -412,6 +413,16 @@ def test_relatorio_ponto_so_aparece_para_o_bruce():
     assert "relatorio_ponto" in [f["name"] for f in m.ferramentas_de("bruce")]
     assert "relatorio_ponto" not in [f["name"] for f in m.ferramentas_de("nina")]
     assert {"ler_anexo", "enviar_arquivo"} <= {f["name"] for f in m.ferramentas_de("nina")}
+
+
+def test_description_do_relatorio_ponto_diz_que_eventos_e_obrigatorio():
+    """Na homologação de 10/2026 vieram três CSV, a ferramenta aceitava dois e o
+    `bruce` calculou de cabeça — errado. A regra mora onde ele lê."""
+    f = next(f for f in m._FERRAMENTAS if f["name"] == "relatorio_ponto")
+    assert "OBRIGATÓRIOS" in f["description"] and "Eventos" in f["description"]
+    assert "publicar_pagina" in f["description"]
+    ids = f["inputSchema"]["properties"]["ids"]
+    assert (ids["minItems"], ids["maxItems"]) == (2, 3)
 
 
 def test_outro_agente_chamando_relatorio_ponto_recebe_ferramenta_desconhecida(monkeypatch):
@@ -432,37 +443,91 @@ def test_outro_agente_chamando_relatorio_ponto_recebe_ferramenta_desconhecida(mo
 
 @pytest.fixture
 def ponto(isolado, monkeypatch):
-    """Dois anexos da mesma pessoa, em turno; R2 devolve os CSV; a entrega é capturada."""
-    anexos = {"m": _anexo(id="m", caminho="m", nome="Marcacoes.csv", dono_conversa=PESSOA),
-              "b": _anexo(id="b", caminho="b", nome="BancoHoras.csv", dono_conversa=PESSOA)}
-    conteudo = {"m": PONTO_M, "b": PONTO_B}
+    """Três anexos da mesma pessoa, em turno; um R2 em dicionário; a entrega é capturada."""
+    anexos = {k: _anexo(id=k, caminho=k, nome=n, dono_conversa=PESSOA)
+              for k, n in (("m", "Marcacoes.csv"), ("e", "Eventos.csv"), ("b", "BancoHoras.csv"))}
+    r2 = {"anexos/m": PONTO_M, "anexos/e": PONTO_E, "anexos/b": PONTO_B}
     entregas = []
 
     async def buscar(conn, anexo_id):
         return anexos.get(anexo_id)
 
     async def ler(chave):
-        return conteudo[chave.split("/")[-1]]
+        return r2.get(chave)
+
+    async def gravar(chave, dados, mime):
+        r2[chave] = dados
+
+    async def listar(prefixo, recursivo=False):
+        return [{"chave": k, "nome": k.rsplit("/", 1)[-1], "tamanho": len(v)}
+                for k, v in sorted(r2.items()) if k.startswith(prefixo)]
 
     async def entregar(agent_id, para, nome, dados, mime):
         entregas.append((agent_id, para, nome, dados))
         return "Enviado.", False
 
     monkeypatch.setattr(m, "buscar_anexo", buscar)
-    monkeypatch.setattr(m.arm, "chave", lambda bucket, caminho: f"{bucket}/{caminho}")
     monkeypatch.setattr(m.arm, "ler", ler)
+    monkeypatch.setattr(m.arm, "gravar", gravar)
+    monkeypatch.setattr(m.arm, "listar", listar)
     monkeypatch.setattr(m, "_entregar", entregar)
-    isolado.update(anexos=anexos, entregas=entregas)
+    isolado.update(anexos=anexos, entregas=entregas, r2=r2)
     return isolado
 
 
-def test_relatorio_ponto_entrega_ao_dono_dos_anexos(ponto):
-    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["b", "m"]}))
+def _historicos(r2):
+    return {k: json.loads(v) for k, v in r2.items() if k.startswith("ponto-historico/")}
+
+
+def test_relatorio_ponto_entrega_ao_dono_e_grava_o_historico(ponto):
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["b", "e", "m"]}))
     assert not erro, texto
     [(agente, para, nome, dados)] = ponto["entregas"]
     assert (agente, para, nome) == ("bruce", PESSOA, "Controle de jornada - SETEMBRO-2026.xlsx")
     assert dados[:2] == b"PK"  # xlsx é zip
-    assert "SETEMBRO/2026" in texto and "Enviado." in texto
+    assert "SETEMBRO/2026" in texto and "Enviado." in texto and "Ana" not in texto
+    [(chave, h)] = _historicos(ponto["r2"]).items()
+    assert chave.startswith(f"ponto-historico/2026-09/{m.ponto.VERSAO_REGUA}-")
+    assert "Ana" not in json.dumps(h) and set(h["por_matricula"]) == {"1"}
+
+
+def test_relatorio_ponto_sem_banco_funciona(ponto):
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "e"]}))
+    assert not erro, texto
+    assert len(ponto["entregas"]) == 1
+
+
+def test_relatorio_ponto_compara_com_o_mes_anterior_da_mesma_regua(ponto):
+    totais = {a: {"identificadas": 0, "justificadas": 0, "pendentes": 0, "denominador": 10, "pessoas": 0}
+              for a in m.ponto.INDICADORES}
+    ant = {"periodo": "2026-08", "versao_regua": m.ponto.VERSAO_REGUA, "gerado_em": "2026-09-01",
+           "totais": totais}
+    ponto["r2"]["ponto-historico/2026-08/x.json"] = json.dumps(ant).encode()
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "e"]}))
+    assert not erro and "Comparado com AGOSTO/2026" in texto
+
+
+def test_relatorio_ponto_entrega_mesmo_se_o_historico_falhar(ponto, monkeypatch):
+    """O histórico é acessório: a planilha do mês vale sozinha."""
+    async def quebra(*a, **k):
+        raise RuntimeError("R2 fora")
+    monkeypatch.setattr(m.arm, "listar", quebra)
+    monkeypatch.setattr(m.arm, "gravar", quebra)
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "e"]}))
+    assert not erro and len(ponto["entregas"]) == 1
+    assert "histórico deste mês não foi gravado" in texto and "sem comparação" in texto
+
+
+def test_relatorio_ponto_sem_eventos_diz_o_que_falta(ponto):
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "b"]}))
+    assert erro and "eventos" in texto and "obrigatório" in texto and ponto["entregas"] == []
+    assert _historicos(ponto["r2"]) == {}
+
+
+@pytest.mark.parametrize("ids", [["m"], ["m", "e", "b", "x"], "m,e", ["m", ""]])
+def test_relatorio_ponto_exige_de_2_a_3_ids(ponto, ids):
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ids}))
+    assert erro and "2 ou 3" in texto and ponto["entregas"] == []
 
 
 def test_relatorio_ponto_recusa_anexos_de_pessoas_diferentes_sem_ler_o_r2(ponto, monkeypatch):
@@ -471,18 +536,18 @@ def test_relatorio_ponto_recusa_anexos_de_pessoas_diferentes_sem_ler_o_r2(ponto,
     async def ler_proibido(chave):
         raise AssertionError("leu o R2 com anexos de duas pessoas")
     monkeypatch.setattr(m.arm, "ler", ler_proibido)
-    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "b"]}))
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "e", "b"]}))
     assert erro and "mesma pessoa" in texto and ponto["entregas"] == []
 
 
-def test_relatorio_ponto_com_o_mesmo_id_duas_vezes(ponto):
-    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "m"]}))
-    assert erro and "dois" in texto and ponto["entregas"] == []
+def test_relatorio_ponto_com_id_repetido(ponto):
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "e", "m"]}))
+    assert erro and "repetido" in texto and ponto["entregas"] == []
 
 
 def test_relatorio_ponto_sem_turno_e_recusado(ponto):
     ponto["runs"] = []
-    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "b"]}))
+    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "e"]}))
     assert erro and texto == m._FORA_DO_TURNO_LER and ponto["entregas"] == []
 
 
@@ -492,13 +557,6 @@ def test_relatorio_ponto_com_id_de_fora_da_conversa_nao_toca_o_r2(ponto, monkeyp
     monkeypatch.setattr(m.arm, "ler", ler_proibido)
     texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "nao-existe"]}))
     assert erro and "não pertence" in texto and ponto["entregas"] == []
-
-
-def test_relatorio_ponto_com_dois_csv_de_marcacoes_diz_o_que_falta(ponto):
-    # o R2 devolve marcações para os dois ids
-    ponto["anexos"]["b"] = dataclasses.replace(ponto["anexos"]["b"], caminho="m")
-    texto, erro = asyncio.run(m._relatorio_ponto("bruce", {"ids": ["m", "b"]}))
-    assert erro and "banco de horas" in texto and ponto["entregas"] == []
 
 
 def test_enviar_arquivo_com_erro_que_nao_e_valueerror_vira_resposta_mcp(monkeypatch):
