@@ -98,9 +98,12 @@ _FERRAMENTAS = [{
     "name": "relatorio_ponto",
     "description": (
         "Monta o controle de jornada do mês (Grupo A: A1–A6) a partir dos CSV do Flash que "
-        "a pessoa anexou. Passe em `ids` os ids de 2 ou 3 anexos, em qualquer ordem: "
+        "a pessoa anexou. Passe em `ids` os ids de 2 a 4 anexos, em qualquer ordem: "
         "marcações (MarcacoesOriginaisJustificadas) e eventos (Eventos) são OBRIGATÓRIOS; "
-        "banco de horas (BancoHoras) é opcional. Sem o de eventos não há denominador: peça "
+        "banco de horas (BancoHoras) é opcional; cálculo diário (CalculoDiario) é opcional "
+        "mas recomendado — com ele valem o calendário e as marcações tratadas pelo FLASH, "
+        "e eventos que faltam no export de Eventos saem do denominador. Se não veio, monte "
+        "assim mesmo e sugira mandá-lo na próxima. Sem o de eventos não há denominador: peça "
         "o arquivo, não calcule sem ele. O servidor calcula com a régua do RH, confere o "
         "fechamento, compara com o mês anterior e envia a planilha à pessoa na conversa e "
         "na Documentos; você recebe só o resumo, sem nomes. NÃO conte eventos, batidas ou "
@@ -111,9 +114,9 @@ _FERRAMENTAS = [{
     "inputSchema": {
         "type": "object",
         "properties": {
-            "ids": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 3,
-                    "description": "Os ids dos anexos (marcações, eventos e, se veio, banco de "
-                                   "horas), como vieram em [anexo: … id=…]."},
+            "ids": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 4,
+                    "description": "Os ids dos anexos (marcações, eventos e, se vieram, banco de "
+                                   "horas e cálculo diário), como vieram em [anexo: … id=…]."},
         },
         "required": ["ids"],
     },
@@ -245,14 +248,14 @@ async def _ler_anexo(agent_id: str, args: dict) -> tuple[str, bool]:
 
 async def _relatorio_ponto(agent_id: str, args: dict) -> tuple[str, bool]:
     ids = args.get("ids")
-    if (not isinstance(ids, list) or not 2 <= len(ids) <= 3
+    if (not isinstance(ids, list) or not 2 <= len(ids) <= 4
             or not all(isinstance(i, str) and i.strip() for i in ids)):
-        return ("Passe `ids` com os ids de 2 ou 3 anexos do Flash: marcações e eventos "
-                "(obrigatórios) e, se veio, banco de horas."), True
+        return ("Passe `ids` com os ids de 2 a 4 anexos do Flash: marcações e eventos "
+                "(obrigatórios) e, se vieram, banco de horas e cálculo diário."), True
     ids = [i.strip() for i in ids]
     if len(set(ids)) != len(ids):
         return ("Há id repetido. Preciso de arquivos diferentes: o CSV de marcações, o de "
-                "eventos e, se veio, o de banco de horas."), True
+                "eventos e, se vieram, o de banco de horas e o de cálculo diário."), True
     try:
         async with sessao(role="service_role") as conn:
             anexos = []
