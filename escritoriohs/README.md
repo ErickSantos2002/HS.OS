@@ -38,6 +38,7 @@ e `livekit.healthsafetytech.com`. VPS: `62.72.11.28` (Hostinger, `srv815732`).
 | UDP bloqueado | ninguém de fora tem vídeo | firewall do **hPanel** (não o da máquina) — ver Validações |
 | Microsoft recusa | não entra; erro `AADSTS…` | secret vencido (≈ 15/10/2028); app no Entra |
 | `play` fora | o escritório não abre; o HS.OS segue normal | logs do serviço `wa` no EasyPanel |
+| Firefox numa máquina com Docker/Tailscale | câmera ok, mas a tela que OUTRO compartilha cai em "reconectando" após ~5 s | `about:config` → `media.peerconnection.ice.default_address_only = true` (28/10/2026: o Firefox oferecia as bridges do Docker e o `100.x` do Tailscale como caminho; o Coturn registra `peer IP … denied`) |
 | backend do HS.OS fora (com `ADMIN_API_URL`) | **ninguém entra**; o `play` nem sobe | `verificar.sh admin`; volta atrás em "Admin API" |
 
 Conferência geral, de qualquer máquina: `escritoriohs/testes/verificar.sh tudo`.
