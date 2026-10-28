@@ -1,5 +1,10 @@
 # Relatório de ponto (Flash) no `bruce` — design
 
+> ⚠️ **SUBSTITUÍDA em 28/10/2026** pela régua v2 (Grupo A, A1–A6):
+> [`2026-10-28-regua-ponto-v2-design.md`](2026-10-28-regua-ponto-v2-design.md).
+> As duas réguas, a recorrência e os status abaixo foram suspensos pelo RH.
+> Fica como registro.
+
 **Data:** 2026-10-13 · **Escopo:** `backend/` (régua, ferramenta MCP, skill) e o
 `AGENTS.md` do `bruce` no gateway.
 
