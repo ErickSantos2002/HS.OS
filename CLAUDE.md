@@ -1306,6 +1306,16 @@ aceitava dois, vieram três, e o `bruce` contou de cabeça — errado (21/2 em v
 mesma versão. `CID` e `Justificativa` de evento nem são lidos; o resumo ao agente
 não traz nome; a ferramenta **recusa entregar** planilha que não fecha.
 
+⚠️ **v2.1 (`2026-10-28.1`): o Cálculo Diário do FLASH é o quarto CSV, opcional
+mas recomendado** (`ids` de 2 a 4; seção "v2.1" no fim da mesma spec). Com ele o
+calendário e as batidas são os do FLASH, e dia útil sem marcação com evento que
+só o FLASH conhece sai do denominador — o export de Eventos de setembro não
+trazia 5 dias de férias, e eles apareciam como "sem marcação". ⚠️ **O FLASH não
+trata intervalo sozinho** (2 batidas = dia inteiro trabalhado): intervalo
+pendente continua pendente, agora com a evidência dele. Diferença entre ele e os
+outros arquivos é **aviso**, não fechamento. `CPF`/`PIS`/`CNPJ`/`Admissão` nem
+são lidos. Histórico apurado com e sem ele não se compara.
+
 ### Resumo em áudio nas respostas — pedido do CEO, 13/10/2026
 
 Toda resposta de agente ganha, segundos depois, um áudio **embaixo do texto**:
