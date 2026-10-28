@@ -94,7 +94,7 @@ def ler_ticket(ticket: str, usuario_id: str) -> dict:
 # Buckets que só o servidor grava (documentos gerados e relatórios). Nenhuma
 # tela escreve lá; permitir ao cliente deixaria qualquer pessoa autenticada
 # gravar na pasta de outra.
-_SO_SERVIDOR_ESCREVE = {"generated-documents", "audio-messages"}
+_SO_SERVIDOR_ESCREVE = {"generated-documents", "audio-messages", "ponto-historico"}
 
 
 def _cliente_pode_escrever(bucket: str) -> bool:
@@ -608,6 +608,10 @@ def _pode_ler_privado(bucket: str, caminho: str, usuario_id: str) -> bool:
         # Anexo tem regra própria — participar da conversa — e porta própria
         # (`GET /anexos/{id}/url`). Duas regras para o mesmo arquivo é o que
         # produz o próximo buraco.
+        return False
+    if bucket == "ponto-historico":
+        # Histórico da régua de ponto: só o servidor lê (`mcp_anexos.py`). Não
+        # há porta para ninguém, nem administrador.
         return False
     if bucket not in _DIRETORIO_POR_PESSOA:
         return True

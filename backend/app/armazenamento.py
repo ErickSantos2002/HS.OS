@@ -30,7 +30,11 @@ BUCKETS_PUBLICOS = {"agent-files", "wiki-uploads"}
 # `audio-messages` era público até 13/10/2026 — quem tivesse o link ouvia a
 # mensagem de voz sem login. Áudio novo vai para `anexos`; este fica só com os
 # antigos, ilegível por caminho (ver `_pode_ler_privado` em routers/storage.py).
-BUCKETS_PRIVADOS = {"company-docs", "generated-documents", "anexos", "audio-messages"}
+# `ponto-historico` (28/10/2026): os números mensais da régua de ponto, por
+# matrícula. Só o servidor lê e grava — nenhuma rota o serve. Fica no R2 e não
+# numa tabela para não cair ao alcance do `banco-hsos` da `nina`.
+BUCKETS_PRIVADOS = {"company-docs", "generated-documents", "anexos", "audio-messages",
+                    "ponto-historico"}
 BUCKETS = BUCKETS_PUBLICOS | BUCKETS_PRIVADOS
 
 TAMANHO_MAXIMO = 100 * 1024 * 1024
