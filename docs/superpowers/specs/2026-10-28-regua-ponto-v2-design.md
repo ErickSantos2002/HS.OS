@@ -252,8 +252,69 @@ feriado), 20 eventos aprovados e 3 cancelados (`4686575`, `4806494`,
 
 ## Fora do escopo
 
-- Ler o "Cálculos Diários" (falta o export).
 - Rótulos de reincidência (suspensos por ela).
 - Grupos de indicador além do A.
 - Dashboard.
 - Jornada contratada por pessoa / escalas diferentes da padrão.
+
+## v2.1 — Cálculo Diário (28/10/2026)
+
+A Lidisay mandou o export `CalculoDiario_Empresa_5747_*.csv` de setembro. É o
+relatório que ela mandou conferir nos dias fora do padrão, e o que ele mostrou
+mudou o plano: **o FLASH não trata intervalo sozinho.** Num dia de 2 batidas
+(07:40 e 17:48) ele dá `Horas Trabalhadas` 10:08, o dia inteiro, sem desconto.
+Ou seja, o Cálculo Diário não resolve o intervalo desses dias: confirma que não
+há intervalo registrado. Pela regra dela ("não presumir intervalo reduzido"),
+eles **continuam pendentes**, agora com a evidência do FLASH, não com "conferir".
+
+### Entrada
+
+Quarto arquivo, **opcional mas recomendado**: `ids` aceita 2 a 4. Reconhecido
+pelo cabeçalho (`Marcações Válidas`, `Natureza Dia`, `Jornada Considerada`).
+Uma linha por pessoa × dia do mês (inclusive folga e feriado). Colunas usadas:
+`Matrícula`, `Nome`, `Data`, `Natureza Dia` (`Trabalho` / `Folga` /
+`Feriado`), `Nome Escala`, `Marcações Válidas` (pares `HH:MM - HH:MM`
+separados por `|`), `Jornada Considerada` (`Trabalho Esperado`, `Trabalho com
+Horas Excedentes`, `Trabalho com horas negativas`, `Falta`, `Folga`,
+`Feriado`), `Horas Trabalhadas`, `Eventos` (nomes separados por vírgula, `-`
+quando nenhum). **`CPF`, `PIS`, `CNPJ` e `Admissão` não são lidos.** Sem o
+arquivo, tudo funciona como na v2, e o resumo avisa que ele faltou.
+
+### O que ele muda
+
+1. **Calendário do FLASH vence.** Com o arquivo, dia útil da pessoa =
+   `Natureza Dia = Trabalho`. A lista de feriados continua como recuo. Toda
+   diferença entre as duas vira aviso na Conferência ("FLASH diz Folga em
+   dd/mm, nossa régua dizia dia útil").
+2. **Marcações tratadas pelo FLASH vencem.** `Marcações Válidas` são os
+   registros tratados ("utilizar os registros válidos e tratados pela FLASH").
+   Quando diferirem das batidas do CSV de marcações, valem as do Cálculo e a
+   diferença vira aviso, com as duas listas. (Setembro: 435 de 435 iguais.)
+3. **Evento que só o FLASH conhece.** Dia útil sem marcação, sem evento nenhum
+   no CSV de Eventos naquele dia, e com `Eventos` preenchido no Cálculo → sai
+   dos dias elegíveis, com a evidência "FLASH: <Eventos> (não consta no export
+   de Eventos)". Em setembro são 5 dias de férias de uma pessoa (01–04 e 08/09)
+   que o export de Eventos não traz. Se o CSV de Eventos tem algo no dia
+   (parcial, cancelado), vale a regra da v2 e o Cálculo só entra como evidência.
+4. **Evidência nas pendências.** Toda pendência de um dia que está no Cálculo
+   ganha `Jornada Considerada`, `Horas Trabalhadas`, `Marcações Válidas` e
+   `Eventos` do FLASH. O texto do motivo muda:
+   - 2 batidas → "FLASH sem intervalo registrado (horas trabalhadas HH:MM)";
+   - 6 batidas → "FLASH registrou N pausas: HH:MM–HH:MM (X min), …" — qual
+     delas é o intervalo é decisão do RH, não nossa;
+   - sem marcação → "FLASH: <Jornada Considerada>, eventos: <Eventos>". O
+     FLASH chama esses dias de `Falta`; nós continuamos **não** chamando.
+5. **Conferência nova.** Pessoa-dia do Cálculo × pessoa-dia das marcações: dia
+   com marcação que não está no Cálculo (ou o contrário) vira aviso. Pessoa que
+   só existe no Cálculo e não tem marcação no mês (o CEO, matrícula `-`) fica
+   de fora, como na v2.
+
+`VERSAO_REGUA` passa a `"2026-10-28.1"`: o calendário e a exclusão de dias
+mudam com o arquivo, então o histórico de setembro apurado sem ele não é
+comparável.
+
+### Conferido à mão em setembro
+
+Marcações Válidas iguais às batidas em 435/435 dias. Calendário do FLASH: 483
+pessoa-dia de `Trabalho` = 23 × 21, igual ao nosso. Os 11 dias "sem marcação e
+sem evento" da v2 viram **6**: os 5 de férias da matrícula 39 saem.
