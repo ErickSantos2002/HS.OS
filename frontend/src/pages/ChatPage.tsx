@@ -1053,21 +1053,6 @@ export default function ChatPage() {
     resumePendingBackgroundTasks(user.id);
   }, [user?.id]);
 
-  const sortedAgents = useMemo(() => {
-    const withConvo: typeof agents = [];
-    const withoutConvo: typeof agents = [];
-    for (const agent of agents) {
-      if (lastMessages[agent.id]) withConvo.push(agent);
-      else withoutConvo.push(agent);
-    }
-    withConvo.sort((a, b) => {
-      const ta = new Date(lastMessages[a.id]?.created_at ?? 0).getTime();
-      const tb = new Date(lastMessages[b.id]?.created_at ?? 0).getTime();
-      return tb - ta;
-    });
-    return [...withConvo, ...withoutConvo];
-  }, [agents, lastMessages]);
-
   const effectiveAgentId = selection?.type === "agent" ? selection.id : "";
   const effectiveAgentIdRef = useRef(effectiveAgentId);
   effectiveAgentIdRef.current = effectiveAgentId;
@@ -1350,35 +1335,13 @@ export default function ChatPage() {
   // Listen for nav-reset to go back to list view (mobile) — no longer needed with URL nav
   // BottomNav now navigates to /chat directly
 
-  // Auto-select: restore last session or fallback to first channel/agent (desktop only)
-  useEffect(() => {
-    if (selection) return;
-    if (isMobile) return; // Mobile starts on list view
-    if (hasExplicitSelectionParam) return; // Wait for URL-driven channel/agent resolution
-
-    // Try restoring last session from localStorage
-    try {
-      const saved = localStorage.getItem("mc_last_chat");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.type === "agent" && parsed.id) {
-          setSelection({ type: "agent", id: parsed.id });
-          return;
-        }
-        if (parsed.type === "channel" && parsed.channelId) {
-          const ch = channels.find((c) => c.id === parsed.channelId);
-          if (ch) { setSelection({ type: "channel", channel: ch }); return; }
-        }
-      }
-    } catch {}
-
-    // Fallback
-    if (channels.length > 0) {
-      setSelection({ type: "channel", channel: channels[0] });
-    } else if (sortedAgents.length > 0) {
-      setSelection({ type: "agent", id: sortedAgents[0].id });
-    }
-  }, [channels, sortedAgents, selection, isMobile, hasExplicitSelectionParam, setSelection]);
+  // ⚠️ Aqui havia um "auto-select" que, no desktop, reabria a última conversa —
+  // ou o primeiro canal — SEMPRE que não houvesse nenhuma aberta. Era o que
+  // tornava impossível ficar sem conversa (o Esc fechava e ele reabria no mesmo
+  // render, 29/10/2026), e o primeiro canal marcava como lido o que a pessoa
+  // nem tinha escolhido ver. Removido de propósito: entrar em /chat restaura a
+  // última conversa UMA vez (o efeito do `restoreAttemptedRef`, acima); sem
+  // ela, o painel fica vazio, como no WhatsApp Web.
 
   // Join channel on select (notification tracking is handled by the unified effect above)
   useEffect(() => {
