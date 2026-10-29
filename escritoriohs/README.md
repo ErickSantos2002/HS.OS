@@ -151,6 +151,16 @@ servidor ocupado). Banda não é o gargalo: ~3,3 Mbps por pessoa, ~90 Mbps de
 saída. **Decisão do Erick:** LiveKit em VPS própria só se o escritório for
 adiante; até lá, reunião grande é com câmera desligada.
 
+✅ **Reunião de 23 com UMA câmera + tela cabe** (29/10/2026, de fora, antes do
+expediente; `~/carga-reuniao-terca.sh`): 2 vídeos `high`, 22 áudios e 23
+assistindo por 3 min. **CPU do LiveKit 43–49% (teto 200%)**, perda 0,4%, e
+**voltou a ~0% logo depois, sem ficar preso** como em 16/10. A memória subiu a
+265 MiB e devolveu em 4 min. ⚠️ O `lk load-test` assina só as faixas do
+`--layout` (6 no `speaker`, 9 no `3x3`), não as 24: na reunião real cada um
+recebe os 22 áudios. Microfone mudo não manda pacote, então a diferença real é
+pequena — mas o número acima é piso, não teto. Formato usado na reunião do CEO
+de 03/11: só ele com câmera e tela, o resto câmera desligada e microfone mudo.
+
 ⚠️ **Faixa de relay do Coturn: 840 portas, não 41.** Com TURN configurado, o
 navegador reserva relay para **cada conexão da bolha**, em UDP e em TCP, mesmo
 quando não vai precisar — e cada reserva prende uma porta por até 10 min. A
