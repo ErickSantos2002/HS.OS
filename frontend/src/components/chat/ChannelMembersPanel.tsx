@@ -24,12 +24,14 @@ interface MemberInfo {
 interface Props {
   channelId: string;
   channelCreatedBy: string;
+  /** DM tem duas pessoas por construção: o servidor recusa convidar e remover. */
+  isDm?: boolean;
   open: boolean;
   onClose: () => void;
   onMembersChanged: () => void;
 }
 
-export default function ChannelMembersPanel({ channelId, channelCreatedBy, open, onClose, onMembersChanged }: Props) {
+export default function ChannelMembersPanel({ channelId, channelCreatedBy, isDm = false, open, onClose, onMembersChanged }: Props) {
   const { user, role } = useAuthContext();
   const [members, setMembers] = useState<MemberInfo[]>([]);
   const [showInvite, setShowInvite] = useState(false);
@@ -39,7 +41,8 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, open,
   const { agents } = useAgents();
   const agentAvatars = useAllAvatars();
 
-  const canManage = role === "administrador" || user?.id === channelCreatedBy;
+  // Em DM ninguém gerencia membros — nem o admin. Ver `remover_membro` no backend.
+  const canManage = !isDm && (role === "administrador" || user?.id === channelCreatedBy);
 
   useEffect(() => {
     if (!open) return;
@@ -152,7 +155,7 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, open,
       {/* Panel */}
       <div className="absolute right-0 top-0 bottom-0 z-50 flex w-72 flex-col overflow-hidden rounded-l-2xl border-l border-border/40 bg-card/95 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-right-5 duration-200">
         <div className="aurora-glow h-14 border-b border-border/30 flex items-center justify-between px-4 shrink-0">
-          <h3 className="font-display font-bold text-sm text-foreground relative z-10">Membros do canal</h3>
+          <h3 className="font-display font-bold text-sm text-foreground relative z-10">{isDm ? "Participantes" : "Membros do canal"}</h3>
           <button onClick={onClose} className="h-7 w-7 rounded-xl bg-secondary/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-all relative z-10">
             <X className="h-3.5 w-3.5" />
           </button>
