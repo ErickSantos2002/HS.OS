@@ -861,6 +861,33 @@ export default function ChatPage() {
       restoreAttemptedRef.current = true;
     }
   }, [hasExplicitSelectionParam, location.pathname, channelsLoading, navigate, isMobile]);
+  // Esc fecha a conversa e deixa o painel vazio, igual ao WhatsApp Web — pedido
+  // do Erick e de um colaborador, 29/10/2026. Sem isso não havia como ficar sem
+  // conversa aberta, e a que estava na tela ia marcando como lido tudo que
+  // chegava. Por isso o `mc_last_chat` sai junto: recarregar a página não pode
+  // reabrir o que a pessoa acabou de fechar.
+  //
+  // O Esc é de quem chegou antes: diálogo/menu aberto, edição de mensagem ou
+  // lista de menção (os três dão `preventDefault`) e campo com texto digitado
+  // ficam com ele. Composer vazio e focado fecha — é o caso comum.
+  useEffect(() => {
+    if (isMobile || !selection) return;
+    const aoTeclar = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return;
+      const alvo = e.target as HTMLElement | null;
+      if (alvo instanceof HTMLInputElement || alvo instanceof HTMLTextAreaElement) {
+        if (alvo.value.trim()) return;
+      } else if (alvo?.isContentEditable && alvo.textContent?.trim()) {
+        return;
+      }
+      try { localStorage.removeItem("mc_last_chat"); } catch {}
+      navigate("/chat");
+    };
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [isMobile, selection, navigate]);
+
   const [activeArtifact, setActiveArtifact] = useState<{ type: ArtifactType; code: string } | null>(null);
   const [activeLiveArtifactId, setActiveLiveArtifactId] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -3222,8 +3249,12 @@ export default function ChatPage() {
           )}
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm rounded-2xl border border-border/40 bg-card/40 backdrop-blur-xl">
-          Selecione um canal ou agente para começar
+        <div className="flex-1 flex flex-col items-center justify-center gap-2 text-center text-muted-foreground rounded-2xl border border-border/40 bg-card/40 backdrop-blur-xl">
+          <MessageCircle className="h-8 w-8 text-muted-foreground/50" />
+          <p className="text-sm font-medium text-foreground/80">Nenhuma conversa aberta</p>
+          <p className="text-xs max-w-xs">
+            Escolha uma conversa ao lado. Com uma aberta, <kbd className="px-1 py-0.5 rounded border border-border/60 bg-secondary/40 font-mono text-[10px]">Esc</kbd> fecha e nada mais é marcado como lido.
+          </p>
         </div>
       )}
 

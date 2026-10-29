@@ -153,7 +153,7 @@ function ThreadEditingCard({
                   e.preventDefault();
                   onSave(value.trim());
                 }
-                if (e.key === "Escape") onCancel();
+                if (e.key === "Escape") { e.preventDefault(); onCancel(); }
               }}
               className="min-h-[36px] max-h-[200px] flex-1 resize-none py-2 text-sm leading-relaxed"
               rows={1}
