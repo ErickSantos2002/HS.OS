@@ -1258,8 +1258,24 @@ async def remover_membro(
     user_id: str,
     usuario: Usuario = Depends(usuario_atual),
 ):
-    """Tira alguém do canal. Serve também para sair sozinho."""
+    """Tira alguém do canal. Serve também para sair sozinho.
+
+    ⚠️ **DM não perde gente** — 29/10/2026. O `POST` já recusava DM desde 02/09,
+    mas o `DELETE` ficou só com a RLS herdada, que deixa quem criou o canal (e o
+    admin) tirar o outro, e cada um tirar a si mesmo. O painel de membros
+    oferecia a lixeira na conversa do Erick com a Lidisay: um clique e sobrava
+    uma DM de uma pessoa só, que a tela de DM não sabe desenhar. É o espelho do
+    guarda do `adicionar_membros` — DM tem duas pessoas por construção.
+    """
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        tipo = await conn.fetchval(
+            "SELECT c.type::text FROM public.channels c WHERE c.id = $1::uuid", channel_id
+        )
+        if tipo == "dm":
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Uma conversa direta é entre duas pessoas — ninguém sai nem é removido dela.",
+            )
         marca = await conn.execute(
             "DELETE FROM public.channel_members WHERE channel_id = $1::uuid AND user_id = $2",
             channel_id, user_id,

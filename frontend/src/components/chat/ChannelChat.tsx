@@ -2307,6 +2307,7 @@ export default function ChannelChat({
       <ChannelMembersPanel
         channelId={channel.id}
         channelCreatedBy={channel.created_by}
+        isDm={isDm}
         open={membersOpen}
         onClose={() => setMembersOpen(false)}
         onMembersChanged={() => setMembersVersion((v) => v + 1)}
