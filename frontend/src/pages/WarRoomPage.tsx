@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useKeepAwake } from "@/hooks/use-keep-awake";
+import { deveManterAcordada, ehWebOS } from "@/lib/manter-acordada";
 import { Sun, Moon, ArrowLeft, Maximize, Minimize } from "lucide-react";
 import { api } from "@/lib/api";
 import { type Feed, type Pessoa, contarConversas, horaMinuto, normalizar } from "@/lib/warroom-feed";
@@ -181,6 +183,11 @@ export default function WarRoomPage() {
   // `?t=`, o mesmo parâmetro que `GET /warroom/feed` espera e que o
   // `~/hsos-token-warroom.sh` imprime pronto para colar na TV.
   const chave = params.get("t") ?? "";
+  // A TV LG apaga em até 30 min sem tocar no controle — a página se mantém em
+  // uso. Só na TV: quem espelha de um notebook logado não liga isto.
+  const acordada = useKeepAwake(
+    deveManterAcordada(params, navigator.userAgent), ehWebOS(navigator.userAgent));
+  const depurar = params.get("debug") === "1";
   const [feed, setFeed] = useState<Feed | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   // Hora da última leitura que deu certo — é o que o aviso de parede parada
@@ -417,6 +424,17 @@ export default function WarRoomPage() {
 
   return (
     <div className={`wr-raiz ${claro ? "wr-claro" : ""}`}>
+      {depurar && (
+        // `?debug=1`: qual camada segura a tela e se está segurando.
+        <div role="status" style={{
+          position: "fixed", right: 8, bottom: 8, zIndex: 50, padding: "4px 8px",
+          font: "12px monospace", borderRadius: 4, background: "rgba(0,0,0,0.75)",
+          color: acordada.rodando ? "#4ade80" : "#f87171",
+        }}>
+          acordada: {acordada.metodo} · {acordada.rodando ? "rodando" : "parada"}
+          {acordada.detalhe ? ` · ${acordada.detalhe}` : ""}
+        </div>
+      )}
       <div className="wr-tv">
         <header className="wr-topo">
           <div className="wr-marca">
