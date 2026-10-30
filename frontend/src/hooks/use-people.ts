@@ -52,20 +52,21 @@ export function usePeople() {
     fetchPeople();
   }, [fetchPeople]);
 
-  // Re-derive presence every 60s so dots fade to away/offline without refetching
+  // ⚠️ A cada 60 s pergunta de novo ao servidor — não só re-deriva. Até
+  // 30/10/2026 este efeito re-derivava a presença do `last_seen_at` da leitura
+  // do mount, e com o chat aberto o dia inteiro todo mundo apagava (amarelo em
+  // 3 min, cinza em 30) mesmo online; trocar de página remontava e as cores
+  // voltavam. Se a leitura falhar, re-deriva do que já tem, para apagar quem
+  // de fato sumiu em vez de congelar o verde.
   useEffect(() => {
     const id = setInterval(() => {
       setPeople((prev) =>
         prev.map((p) => ({ ...p, presence: derivePresence(p.last_seen_at) })),
       );
+      void fetchPeople();
     }, 60_000);
     return () => clearInterval(id);
-  }, []);
-
-  // Antes havia uma assinatura de realtime do Supabase que sincronizava
-  // custom_status entre abas. O substituto (WebSocket próprio) ainda não
-  // existe; até lá, a lista atualiza no refetch e a presença é re-derivada a
-  // cada 60s pelo efeito acima. Nada quebra — só demora mais a refletir.
+  }, [fetchPeople]);
 
   return { people, loading, refetch: fetchPeople };
 }
