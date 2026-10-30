@@ -50,3 +50,42 @@ def test_canal_de_grupo_continua_removendo(monkeypatch):
     conn, remover = _remover(monkeypatch, "private")
     remover()
     assert conn.apagou is True
+
+
+# ── Conta desativada não entra em canal — 30/10/2026 ─────────────────────────
+#
+# O Erick criou o canal "Geral" marcando todo mundo e a Cláudia e a Karolaine,
+# as duas desativadas, entraram junto: o seletor lista todo perfil e nenhuma
+# das duas rotas que gravam membro olhava o status. Membro desativado recebe
+# recibo de leitura que nunca vira azul e aparece na lista do canal.
+
+
+class ConexaoInativos:
+    def __init__(self, nomes):
+        self.nomes = nomes
+        self.args = None
+
+    async def fetch(self, sql, *args):
+        self.args = args
+        return [{"nome": n} for n in self.nomes]
+
+
+def test_conta_desativada_e_recusada_com_o_nome():
+    conn = ConexaoInativos(["Cláudia Silva dos Santos", "Karolaine Martins"])
+    with pytest.raises(HTTPException) as erro:
+        asyncio.run(c._recusar_desativados(conn, ["a", "b", "c"]))
+    assert erro.value.status_code == 400
+    assert "Cláudia Silva dos Santos" in erro.value.detail
+    assert "Karolaine Martins" in erro.value.detail
+
+
+def test_so_gente_ativa_passa():
+    conn = ConexaoInativos([])
+    asyncio.run(c._recusar_desativados(conn, ["a"]))
+    assert conn.args == (["a"],)
+
+
+def test_lista_vazia_nem_consulta():
+    conn = ConexaoInativos(["x"])
+    asyncio.run(c._recusar_desativados(conn, []))
+    assert conn.args is None

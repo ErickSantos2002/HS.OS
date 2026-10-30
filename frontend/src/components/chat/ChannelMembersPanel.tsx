@@ -87,7 +87,8 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, isDm 
 
     const { data: profiles } = await api<any[]>("/profiles").then((d) => ({ data: d })).catch(() => ({ data: [] as any[] }));
     const humans = (profiles ?? [])
-      .filter((p: any) => !memberIds.has(p.id))
+      // Conta desativada não é convidável — o backend recusa (30/10/2026).
+      .filter((p: any) => !memberIds.has(p.id) && p.status !== "inactive")
       .map((p: any) => ({ id: p.id, name: p.full_name || p.email, type: "human" as const, avatar_url: p.avatar_url }));
 
     const availableAgents = agents

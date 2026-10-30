@@ -28,7 +28,10 @@ export default function CreateChannelDialog({ open, onOpenChange, onCreate }: Pr
   const [agents, setAgents] = useState<string[]>([]);
   const [members, setMembers] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
-  const { people } = usePeople();
+  const { people: todasAsPessoas } = usePeople();
+  // Conta desativada não entra em canal — o backend recusa; aqui ela nem aparece.
+  // Em 30/10/2026 o "Geral" nasceu com duas pessoas desativadas dentro.
+  const people = useMemo(() => todasAsPessoas.filter((p) => p.status !== "inactive"), [todasAsPessoas]);
   const { agents: availableAgents } = useAgents();
 
   const sortedAgents = useMemo(
