@@ -12,7 +12,9 @@ class Settings(BaseSettings):
     # Auth própria — substitui supabase.auth
     JWT_SECRET: str = "dev-only-trocar-em-producao"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_HOURS: int = 24
+    # Uma semana (decisão do Erick, 30/10/2026): com 24 h o time reclamava de
+    # cair todo dia. Produção define a env no EasyPanel — mude lá também.
+    JWT_EXPIRE_HOURS: int = 168
 
     FRONTEND_URL: str = "http://localhost:8080"
 

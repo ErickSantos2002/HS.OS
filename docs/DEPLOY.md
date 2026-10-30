@@ -102,7 +102,7 @@ morar em `backend/skills/`, dentro do contexto.
 DATABASE_URL=postgresql://hsos_app:SENHA@62.72.11.28:2222/hsos
 JWT_SECRET=<segredo longo e aleatório>
 JWT_ALGORITHM=HS256
-JWT_EXPIRE_HOURS=24
+JWT_EXPIRE_HOURS=168
 FRONTEND_URL=https://hsos.healthsafetytech.com
 R2_ACCOUNT_ID=<id da conta Cloudflare>
 R2_ACCESS_KEY_ID=<chave do token R2>

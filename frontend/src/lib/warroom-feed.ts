@@ -25,7 +25,7 @@ export type StatusPessoa = "reuniao" | "foco" | "almoco" | "ausente";
 
 export interface Pessoa {
   id: string; nome: string; setor: string;
-  noEscritorio: boolean; status: StatusPessoa | null;
+  online: boolean; status: StatusPessoa | null;
 }
 export interface Agente {
   id: string; nome: string; papel: string; estado: Estado;
@@ -63,7 +63,7 @@ export function normalizar(bruto: unknown): Feed {
       id: texto(p.id),
       nome: texto(p.nome),
       setor: texto(p.setor) || "Time",
-      noEscritorio: p.noEscritorio === true,
+      online: p.online === true,
       status: STATUS.includes(texto(p.status) as StatusPessoa) ? (texto(p.status) as StatusPessoa) : null,
     }))
     .filter((p) => p.id);

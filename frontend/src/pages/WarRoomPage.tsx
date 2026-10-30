@@ -30,11 +30,12 @@ import "@/styles/warroom.css";
  * token dedicado na URL (/warroom?t=…).
  */
 
-/** O status vence a presença: em reunião dentro do escritório é âmbar. */
+/** O status vence a presença: em reunião com o HS.OS aberto é âmbar. Verde é
+ *  estar no HS.OS (heartbeat), não no EscritorioHS — ver `montar_pessoas`. */
 function corDoPonto(p: Pessoa): string | null {
   if (p.status === "reuniao" || p.status === "foco") return "var(--wr-amber)";
   if (p.status === "almoco" || p.status === "ausente") return "var(--wr-muted)";
-  return p.noEscritorio ? "var(--wr-green)" : null;
+  return p.online ? "var(--wr-green)" : null;
 }
 
 type XY = { x: number; y: number };

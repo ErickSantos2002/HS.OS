@@ -22,7 +22,6 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app import warroom
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
-from app.escritorio import presenca as escritorio_presenca
 from app.integracoes import ler_segredo
 
 router = APIRouter(prefix="/warroom", tags=["warroom"])
@@ -58,14 +57,12 @@ async def feed(
     agora = datetime.now(timezone.utc)
     hoje = datetime.now(warroom.FUSO).replace(hour=0, minute=0, second=0, microsecond=0)
 
-    estado = escritorio_presenca.presenca  # lido a cada chamada (o teste o troca)
-    presentes = {p["email"] for p in estado.pessoas()} if estado.conectado else set()
-
     async with sessao(role="service_role") as conn:
         perfis_pessoa = await conn.fetch(
             # Conta desativada some da parede: quem saiu tem o acesso desligado
             # e o perfil continua.
-            "SELECT p.id::text AS id, p.email, p.full_name, p.departamento, p.custom_status "
+            "SELECT p.id::text AS id, p.email, p.full_name, p.departamento, p.custom_status, "
+            "p.last_seen_at "
             "FROM public.profiles p JOIN auth.users u ON u.id = p.id WHERE u.is_active")
         perfis = await conn.fetch(
             "SELECT agent_id, name, role, specialty FROM public.agent_profiles "
@@ -99,7 +96,7 @@ async def feed(
                   AND m.author_type = 'human' AND m.created_at >= $1""", hoje)
         primeiro = await conn.fetchval("SELECT min(ts) FROM public.usage_events")
 
-    pessoas, setores = warroom.montar_pessoas([dict(r) for r in perfis_pessoa], presentes)
+    pessoas, setores = warroom.montar_pessoas([dict(r) for r in perfis_pessoa], agora)
     do_time = {p["id"] for p in pessoas}
     nomes = {p["id"]: p["nome"] for p in pessoas}
     nomes_agente = {r["agent_id"]: (r["name"] or r["agent_id"]) for r in perfis}
