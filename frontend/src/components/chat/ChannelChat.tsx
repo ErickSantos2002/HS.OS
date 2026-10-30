@@ -33,7 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, Copy, Info } from "lucide-react";
+import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, Copy, Info, EyeOff } from "lucide-react";
 import { format } from "date-fns";
 import ChannelMembersPanel from "./ChannelMembersPanel";
 import ChannelFilesPanel from "./ChannelFilesPanel";
@@ -224,6 +224,7 @@ export const MessageBubble = memo(function MessageBubble({
   resumoLigado = true,
   visto,
   onDadosDaMensagem,
+  onApagarParaMim,
   continuacao = false,
 }: {
   msg: ChannelMessage;
@@ -247,6 +248,8 @@ export const MessageBubble = memo(function MessageBubble({
   /** Visto da mensagem — só faz sentido na minha (spec 2026-10-14). */
   visto?: EstadoDoVisto;
   onDadosDaMensagem?: () => void;
+  /** "Apagar para mim": some só para quem está vendo (30/10/2026). */
+  onApagarParaMim?: () => void;
   /** Segue a mensagem anterior do mesmo autor: sai sem foto e sem nome. */
   continuacao?: boolean;
 }) {
@@ -396,6 +399,9 @@ export const MessageBubble = memo(function MessageBubble({
       { rotulo: "Editar", icone: Pencil, aoEscolher: () => { onEdit(); setShowMobileMenu(false); } },
       { rotulo: "Apagar", icone: Trash2, perigo: true, aoEscolher: () => { onDelete(); setShowMobileMenu(false); } },
     ] : []),
+    // Em qualquer mensagem, inclusive a minha — como no WhatsApp. O autor não
+    // fica sabendo; o "Apagar" de cima é que some para todos.
+    ...(onApagarParaMim ? [{ rotulo: "Apagar para mim", icone: EyeOff, aoEscolher: () => { onApagarParaMim(); setShowMobileMenu(false); } }] : []),
   ];
 
 
@@ -762,7 +768,7 @@ export default function ChannelChat({
   const currentUserName = (profile?.full_name && profile.full_name.trim()) || user?.email?.split("@")[0] || "Alguém";
   const isMobile = useIsMobile();
   const { bottomOffset, isKeyboardOpen } = useMobileChatViewport();
-  const { messages, loading: msgsLoading, sendMessage, ensureMessageLoaded } = useChannelMessages(channel.id);
+  const { messages, loading: msgsLoading, sendMessage, ensureMessageLoaded, esconder, reexibir } = useChannelMessages(channel.id);
   const threadCounts = useThreadCounts(channel.id);
   const { ligado: resumoLigado } = useResumoEmAudio();
   const [membersVersion, setMembersVersion] = useState(0);
@@ -1589,6 +1595,33 @@ export default function ChannelChat({
     setActiveThreadMessage((aberta) => threadDepoisDeApagar(aberta, id));
   };
 
+  /** "Apagar para mim" (30/10/2026): some daqui na hora, o servidor grava, e o
+   *  aviso oferece desfazer. O autor e os outros membros não percebem nada. */
+  const apagarParaMim = useCallback(async (msg: ChannelMessage) => {
+    const rota = `/channels/${channel.id}/messages/${msg.id}/apagar-para-mim`;
+    esconder(msg.id);
+    setActiveThreadMessage((aberta) => threadDepoisDeApagar(aberta, msg.id));
+    try {
+      await api(rota, { method: "POST" });
+    } catch (erro) {
+      reexibir(msg);
+      toast.error(erro instanceof Error ? erro.message : "Não consegui apagar a mensagem para você.");
+      return;
+    }
+    toast("Mensagem apagada para você", {
+      duration: 6000,
+      action: {
+        label: "Desfazer",
+        onClick: () => {
+          void api(rota, { method: "DELETE" }).then(
+            () => reexibir(msg),
+            () => toast.error("Não consegui desfazer."),
+          );
+        },
+      },
+    });
+  }, [channel.id, esconder, reexibir]);
+
   const handleSendThreadReply = useCallback(async (content: string, rootMessageId: string, attachments?: ChannelAttachment[] | null) => {
     if (!user) return;
     if (sendingRef.current) return;
@@ -1897,6 +1930,7 @@ export default function ChannelChat({
                       authorStatus={statusByUserId.get(msg.author_id) ?? null}
                       visto={msg.author_id === user?.id ? estadoNoCanal(msg.id, recibos) : undefined}
                       onDadosDaMensagem={() => setDadosDaMensagemId(msg.id)}
+                      onApagarParaMim={() => { void apagarParaMim(msg); }}
                       continuacao={continuacao}
                     />
                   )}

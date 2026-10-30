@@ -274,6 +274,16 @@ _COLUNAS_MSG = """
 """
 
 
+# "Apagar para mim" (022): some só para quem escondeu. Entra em TODA leitura de
+# mensagem do canal — lista, thread, arquivos — e na busca (`chat_extras`); a
+# mensagem que volta por um caminho esquecido é o defeito típico deste recurso.
+# ⚠️ Depende do alias `m` e de rodar como `authenticated` (é o `auth.uid()`).
+_VISIVEL_PARA_MIM = (
+    "NOT EXISTS (SELECT 1 FROM public.mensagens_ocultas o "
+    "WHERE o.message_id = m.id AND o.user_id = auth.uid())"
+)
+
+
 class CanalOut(BaseModel):
     id: str
     name: str
@@ -711,7 +721,7 @@ async def mensagens(
     carregadas à parte, pelo painel de thread — era assim no hook, e trazer tudo
     junto misturaria resposta com mensagem principal na tela.
     """
-    condicoes = ["m.channel_id = $1::uuid", "m.thread_id IS NULL"]
+    condicoes = ["m.channel_id = $1::uuid", "m.thread_id IS NULL", _VISIVEL_PARA_MIM]
     args: list = [channel_id]
 
     corte = _instante(desde, "desde")
@@ -1205,7 +1215,7 @@ async def arquivos(
              WHERE m.channel_id = $1::uuid
                AND m.attachments IS NOT NULL
                AND jsonb_array_length(m.attachments) > 0
-               AND m.deleted_at IS NULL
+               AND m.deleted_at IS NULL AND {_VISIVEL_PARA_MIM}
              ORDER BY m.created_at DESC
              LIMIT $2
             """,
@@ -1275,7 +1285,7 @@ async def threads(
             SELECT {_COLUNAS_MSG}
               FROM public.channel_messages m
              WHERE m.channel_id = $1::uuid AND m.thread_id IS NOT NULL
-               AND m.deleted_at IS NULL
+               AND m.deleted_at IS NULL AND {_VISIVEL_PARA_MIM}
              ORDER BY m.created_at
              LIMIT $2
             """,
@@ -1298,7 +1308,7 @@ async def thread(
             SELECT {_COLUNAS_MSG}
               FROM public.channel_messages m
              WHERE m.channel_id = $1::uuid AND m.thread_id = $2::uuid
-               AND m.deleted_at IS NULL
+               AND m.deleted_at IS NULL AND {_VISIVEL_PARA_MIM}
              ORDER BY m.created_at
              LIMIT $3
             """,
@@ -1376,6 +1386,44 @@ async def apagar_mensagem(
             status.HTTP_404_NOT_FOUND, "Mensagem não encontrada ou não é sua."
         )
     hub.publicar(topico_canal(channel_id), "mensagem-removida", {"id": message_id})
+
+
+@router.post("/{channel_id}/messages/{message_id}/apagar-para-mim",
+             status_code=status.HTTP_204_NO_CONTENT)
+async def apagar_para_mim(channel_id: str, message_id: str,
+                          usuario: Usuario = Depends(usuario_atual)):
+    """Esconde a mensagem só para quem pede — o autor não fica sabendo.
+
+    O INSERT parte de `channel_messages` sob RLS: só esconde o que a pessoa
+    enxerga. Repetir é inócuo.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        achou = await conn.fetchval(
+            """WITH alvo AS (
+                   SELECT m.id FROM public.channel_messages m
+                    WHERE m.id = $2::uuid AND m.channel_id = $1::uuid)
+               , ins AS (
+                   INSERT INTO public.mensagens_ocultas (user_id, message_id)
+                   SELECT $3::uuid, id FROM alvo
+                   ON CONFLICT DO NOTHING)
+               SELECT true FROM alvo""",
+            channel_id, message_id, usuario.id,
+        )
+    if not achou:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mensagem não encontrada.")
+
+
+@router.delete("/{channel_id}/messages/{message_id}/apagar-para-mim",
+               status_code=status.HTTP_204_NO_CONTENT)
+async def desfazer_apagar_para_mim(channel_id: str, message_id: str,
+                                   usuario: Usuario = Depends(usuario_atual)):
+    """O "Desfazer" do aviso. Só mexe na linha de quem pede (RLS)."""
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        await conn.fetchval(
+            "DELETE FROM public.mensagens_ocultas "
+            " WHERE user_id = $2::uuid AND message_id = $1::uuid RETURNING true",
+            message_id, usuario.id,
+        )
 
 
 @router.delete("/{channel_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
