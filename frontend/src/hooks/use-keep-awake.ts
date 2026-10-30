@@ -33,6 +33,8 @@ export interface EstadoAcordada {
 const VIDEO_SRC = "/manter-acordada.mp4";
 /** Retentativa do autoplay recusado e vigia do vídeo pausado, juntos. */
 const VIGIA_MS = 60_000;
+/** Quanto esperar o Wake Lock antes de desistir dele (ver `pedirLock`). */
+const ESPERA_WAKE_LOCK_MS = 5_000;
 
 interface WakeLockSentinelLike extends EventTarget { released: boolean; release(): Promise<void> }
 interface WakeLockLike { request(tipo: "screen"): Promise<WakeLockSentinelLike> }
@@ -100,7 +102,15 @@ export function useKeepAwake(ativo: boolean, reforcarComVideo = false): EstadoAc
       const wl = (navigator as Navigator & { wakeLock?: WakeLockLike }).wakeLock;
       if (!wl) return false;
       try {
-        const l = await wl.request("screen");
+        // ⚠️ Na LG webOS o `request` NÃO resolve nem rejeita — fica pendurado
+        // para sempre (relatado no fórum de desenvolvedores da LG, e foi o que
+        // aconteceu aqui em 30/10/2026). Sem o prazo, quem esperava por ele
+        // nunca ligava o vídeo.
+        const l = await Promise.race([
+          wl.request("screen"),
+          new Promise<never>((_, recusar) =>
+            setTimeout(() => recusar(new Error("sem resposta em 5 s")), ESPERA_WAKE_LOCK_MS)),
+        ]);
         if (!vivo) { void l.release(); return true; }
         lock = l;
         lockVivo = true;
@@ -120,8 +130,12 @@ export function useKeepAwake(ativo: boolean, reforcarComVideo = false): EstadoAc
     };
     document.addEventListener("visibilitychange", aoVoltar);
 
+    // ⚠️ Na webOS o vídeo liga JÁ, sem esperar o Wake Lock. Até 30/10/2026 ele
+    // só ligava depois da resposta do lock — que na LG nunca vem — e a TV
+    // apagou aos 30 min com a página "protegida".
+    if (reforcarComVideo) ligarVideo();
     void pedirLock().then((ok) => {
-      if (!ok || reforcarComVideo) ligarVideo();
+      if (!ok) ligarVideo();
       else publicar();
     });
 
