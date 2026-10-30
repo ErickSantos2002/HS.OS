@@ -46,6 +46,11 @@ _ESQUECE = timedelta(hours=2)
 # Conversa entre pessoas acesa, e janela de agrupamento do Fluxo.
 _JANELA = timedelta(minutes=10)
 
+# Ponto verde: o heartbeat do HS.OS (`use-presence`, a cada 60 s) bateu há
+# menos disto. É o `ONLINE_THRESHOLD_MS` de `frontend/src/lib/presence-status.ts`
+# — mude os dois juntos, senão a TV e a lista do chat discordam.
+_ONLINE = timedelta(minutes=3)
+
 _DOMINIO = "@healthsafetytech.com"
 
 SETORES = (
@@ -161,16 +166,27 @@ def nomes_curtos(perfis: list[dict]) -> dict[str, str]:
     return nomes
 
 
-def montar_pessoas(perfis: list[dict], presentes: set[str]) -> tuple[list[dict], list[dict]]:
-    """Os hexágonos e os setores, na ordem do anel. `presentes`: e-mails em
-    minúsculas de quem está no escritório virtual agora."""
+def esta_online(ultimo_sinal, agora: datetime) -> bool:
+    """Bateu o heartbeat dentro da janela. Sinal no "futuro" conta como agora:
+    é o relógio do banco um pouco à frente, não uma pessoa offline."""
+    if not isinstance(ultimo_sinal, datetime):
+        return False
+    return agora - ultimo_sinal < _ONLINE
+
+
+def montar_pessoas(perfis: list[dict], agora: datetime) -> tuple[list[dict], list[dict]]:
+    """Os hexágonos e os setores, na ordem do anel.
+
+    ⚠️ O ponto verde é estar **no HS.OS** (`last_seen_at`), não no
+    EscritorioHS: até 30/10/2026 era a presença do WorkAdventure, e quem usava
+    o sistema sem abrir o escritório virtual aparecia apagado na TV."""
     do_time = [p for p in perfis if e_do_time(p.get("email"))]
     curtos = nomes_curtos(do_time)
     pessoas = [{
         "id": p["id"],
         "nome": curtos[p["id"]],
         "setor": setor_de(p.get("departamento")),
-        "noEscritorio": (p.get("email") or "").strip().lower() in presentes,
+        "online": esta_online(p.get("last_seen_at"), agora),
         "status": status_publico(p.get("custom_status")),
     } for p in do_time]
     pessoas.sort(key=lambda x: (_ORDEM.index(x["setor"]), x["nome"].casefold()))

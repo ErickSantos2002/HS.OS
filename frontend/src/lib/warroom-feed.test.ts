@@ -18,7 +18,7 @@ describe("normalizar — a TV nunca cai por forma de resposta", () => {
       numeros: { entregas: 2, conversas: 9, tokens: 1, custo: 1 },
     });
     expect(f.setores).toEqual([{ nome: "Time", pessoas: ["p1"] }]);
-    expect(f.pessoas[0]).toMatchObject({ id: "p1", setor: "Time", noEscritorio: false, status: null });
+    expect(f.pessoas[0]).toMatchObject({ id: "p1", setor: "Time", online: false, status: null });
     expect(JSON.stringify(f)).not.toContain("segredo");
     expect(f.agentes[0].parceiroId).toBeNull();
     expect(f.numeros.entregas).toBe(2);

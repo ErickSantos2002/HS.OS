@@ -235,20 +235,41 @@ def test_setor_pela_tabela_e_comercial_pelo_prefixo():
 
 
 def test_montar_pessoas_ordena_por_setor_e_marca_presenca():
+    agora = datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc)
     perfis = [
         {"id": "a", "email": "ti@healthsafetytech.com", "full_name": "Erick Santos",
-         "departamento": "TI", "custom_status": "Em reunião"},
+         "departamento": "TI", "custom_status": "Em reunião",
+         "last_seen_at": agora - timedelta(minutes=10)},
         {"id": "b", "email": "np@healthsafetytech.com", "full_name": "Nicholson Pimentel",
-         "departamento": "DIRETORIA", "custom_status": None},
+         "departamento": "DIRETORIA", "custom_status": None,
+         "last_seen_at": agora - timedelta(seconds=30)},
         {"id": "c", "email": "teste.ceo@healthsafetytech.com", "full_name": "Teste CEO",
-         "departamento": None, "custom_status": None},
+         "departamento": None, "custom_status": None, "last_seen_at": agora},
     ]
-    pessoas, setores = w.montar_pessoas(perfis, {"np@healthsafetytech.com"})
+    pessoas, setores = w.montar_pessoas(perfis, agora)
     assert [p["id"] for p in pessoas] == ["b", "a"]
     assert pessoas[0] == {"id": "b", "nome": "Nicholson", "setor": "Diretoria",
-                          "noEscritorio": True, "status": None}
-    assert pessoas[1]["status"] == "reuniao" and pessoas[1]["noEscritorio"] is False
+                          "online": True, "status": None}
+    assert pessoas[1]["status"] == "reuniao" and pessoas[1]["online"] is False
     assert setores == [{"nome": "Diretoria", "pessoas": ["b"]}, {"nome": "TI", "pessoas": ["a"]}]
+
+
+def test_ponto_verde_e_quem_esta_no_hsos_nao_no_escritorio_virtual():
+    """Até 30/10/2026 o ponto verde da TV era "está no EscritorioHS" (o
+    WorkAdventure). Com a TV na parede, o Erick viu gente usando o HS.OS sem
+    ponto e leu como presença quebrada — a parede media a coisa errada. Hoje é
+    o `last_seen_at` do heartbeat do HS.OS, a mesma régua da lista do chat.
+
+    A janela de 3 min, e não os 60 s do heartbeat: aba em segundo plano tem o
+    timer estrangulado pelo navegador para ~1 por minuto, com folga para
+    atrasar. Janela igual ao intervalo faria o ponto piscar.
+    """
+    agora = datetime(2026, 10, 30, 12, 0, tzinfo=timezone.utc)
+    assert w.esta_online(agora - timedelta(seconds=170), agora) is True
+    assert w.esta_online(agora - timedelta(seconds=190), agora) is False
+    assert w.esta_online(None, agora) is False
+    # Relógio do banco um pouco à frente do nosso não pode apagar quem acabou de bater.
+    assert w.esta_online(agora + timedelta(seconds=2), agora) is True
 
 
 # ── Conversa entre pessoas: só que existe ────────────────────────────────────

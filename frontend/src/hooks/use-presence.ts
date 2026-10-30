@@ -4,14 +4,17 @@ import { useEffect } from "react";
 const HEARTBEAT_INTERVAL_MS = 60_000;
 
 /**
- * Heartbeat that pings `profiles.last_seen_at = now()` while the tab is visible.
- * Pauses automatically when the tab is hidden to avoid noisy writes.
+ * Heartbeat that pings `profiles.last_seen_at = now()` while the app is open.
+ *
+ * ⚠️ Bate também com a aba em segundo plano. Até 30/10/2026 o heartbeat parava
+ * quando a aba saía de vista, e quem trabalhava no Excel ou numa chamada com o
+ * HS.OS aberto atrás sumia da TV da War Room em dois minutos — "online"
+ * significava "olhando para a aba agora". Um UPDATE por pessoa por minuto não
+ * é ruído que valha esse engano. Ao voltar para a aba, bate na hora.
  */
 export function usePresence(userId: string | undefined) {
   useEffect(() => {
     if (!userId) return;
-
-    let timer: ReturnType<typeof setInterval> | null = null;
 
     const ping = async () => {
       try {
@@ -22,30 +25,17 @@ export function usePresence(userId: string | undefined) {
       }
     };
 
-    const start = () => {
-      if (timer) return;
-      void ping();
-      timer = setInterval(ping, HEARTBEAT_INTERVAL_MS);
-    };
-
-    const stop = () => {
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
-      }
-    };
-
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") start();
-      else stop();
+      if (document.visibilityState === "visible") void ping();
     };
 
-    if (document.visibilityState === "visible") start();
+    void ping();
+    const timer = setInterval(ping, HEARTBEAT_INTERVAL_MS);
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
-      stop();
+      clearInterval(timer);
     };
   }, [userId]);
 }
