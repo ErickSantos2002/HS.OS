@@ -95,6 +95,29 @@ describe("useKeepAwake", () => {
     expect(sentinela.release).toHaveBeenCalled();
   });
 
+  it("Wake Lock que nunca responde (o da LG) não impede o vídeo", async () => {
+    // Na webOS o `request` fica pendurado para sempre — 30/10/2026, a TV apagou
+    // com a página "protegida" porque o vídeo esperava por ele.
+    Object.defineProperty(navigator, "wakeLock", {
+      value: { request: vi.fn(() => new Promise(() => {})) }, configurable: true,
+    });
+    const naTv = renderHook(() => useKeepAwake(true, true));
+    await assentar();
+    expect(videos()).toHaveLength(1);
+    expect(naTv.result.current).toMatchObject({ metodo: "video", rodando: true });
+    naTv.unmount();
+
+    // Fora da webOS, o vídeo entra quando o prazo do lock vence.
+    vi.useFakeTimers();
+    const fora = renderHook(() => useKeepAwake(true));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(videos()).toHaveLength(0);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(videos()).toHaveLength(1);
+    fora.unmount();
+    vi.useRealTimers();
+  });
+
   it("na webOS reforça o Wake Lock com o vídeo", async () => {
     const sentinela = Object.assign(new EventTarget(), { released: false, release: vi.fn(async () => {}) });
     Object.defineProperty(navigator, "wakeLock", {
