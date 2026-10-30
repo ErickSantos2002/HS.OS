@@ -11,6 +11,8 @@ export interface Channel {
   type: "public" | "private" | "dm";
   created_by: string;
   created_at: string;
+  /** Canal de avisos: só os escolhidos e o administrador enviam. */
+  so_alguns_escrevem?: boolean;
 }
 
 export interface ChannelAttachment {
@@ -42,6 +44,8 @@ export interface ChannelMember {
   user_id: string;
   joined_at: string;
   member_type?: string;
+  /** Escolhido para escrever num canal de avisos. */
+  pode_escrever?: boolean;
 }
 
 let cachedChannels: Channel[] | null = null;
@@ -71,7 +75,8 @@ export function useChannels() {
     description: string,
     type: "public" | "private" | "dm",
     memberIds?: string[],
-    agentIds?: string[]
+    agentIds?: string[],
+    escrita?: { soAlgunsEscrevem: boolean; escritores: string[] },
   ): Promise<Channel | null> => {
     if (!user) return null;
     // Uma chamada só. Eram quatro inserts independentes, cada um podendo falhar
@@ -90,6 +95,8 @@ export function useChannels() {
         type,
         member_ids: memberIds ?? [],
         agent_ids: agentIds ?? [],
+        so_alguns_escrevem: escrita?.soAlgunsEscrevem ?? false,
+        escritores: escrita?.soAlgunsEscrevem ? escrita.escritores : [],
       },
     });
 

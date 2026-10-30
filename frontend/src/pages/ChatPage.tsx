@@ -2270,9 +2270,12 @@ export default function ChatPage() {
   }, [audioLevel, audioRecorder, user, effectiveAgentId, isAgentWorking, despacharAoAgente, setRealtimePending]);
 
   /* ── Channel create handler ── */
-  const handleCreateChannel = async (name: string, desc: string, type: "public" | "private" | "dm", agentIds?: string[], memberIds?: string[]) => {
+  const handleCreateChannel = async (
+    name: string, desc: string, type: "public" | "private" | "dm", agentIds?: string[], memberIds?: string[],
+    escrita?: { soAlgunsEscrevem: boolean; escritores: string[] },
+  ) => {
     try {
-      const ch = await createChannel(name, desc, type, memberIds, agentIds);
+      const ch = await createChannel(name, desc, type, memberIds, agentIds, escrita);
       if (ch) {
         setSelection({ type: "channel", channel: ch });
         setCreateOpen(false);

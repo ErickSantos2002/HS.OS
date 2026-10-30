@@ -10,6 +10,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Bot, Hash, Lock, MessageCircle, Loader2 } from "lucide-react";
+import { useAuthContext } from "@/contexts/auth-context";
+import QuemEscreve from "./QuemEscreve";
 
 function AgentIcon({ agentId, className }: { agentId: string; className?: string }) {
   return <Bot className={className ?? "h-4 w-4"} />;
@@ -18,7 +20,10 @@ function AgentIcon({ agentId, className }: { agentId: string; className?: string
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (name: string, desc: string, type: "public" | "private" | "dm", agentIds?: string[], memberIds?: string[]) => Promise<void>;
+  onCreate: (
+    name: string, desc: string, type: "public" | "private" | "dm", agentIds?: string[], memberIds?: string[],
+    escrita?: { soAlgunsEscrevem: boolean; escritores: string[] },
+  ) => Promise<void>;
 }
 
 export default function CreateChannelDialog({ open, onOpenChange, onCreate }: Props) {
@@ -28,6 +33,9 @@ export default function CreateChannelDialog({ open, onOpenChange, onCreate }: Pr
   const [agents, setAgents] = useState<string[]>([]);
   const [members, setMembers] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
+  const { role } = useAuthContext();
+  const [soAlguns, setSoAlguns] = useState(false);
+  const [escritores, setEscritores] = useState<string[]>([]);
   const { people: todasAsPessoas } = usePeople();
   // Conta desativada não entra em canal — o backend recusa; aqui ela nem aparece.
   // Em 30/10/2026 o "Geral" nasceu com duas pessoas desativadas dentro.
@@ -40,7 +48,13 @@ export default function CreateChannelDialog({ open, onOpenChange, onCreate }: Pr
   );
 
   const toggleAgent = (id: string) => setAgents((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-  const toggleMember = (id: string) => setMembers((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  const toggleMember = (id: string) => {
+    setMembers((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+    // Quem sai do canal sai também de quem escreve.
+    setEscritores((prev) => prev.filter((x) => x !== id));
+  };
+  const toggleEscritor = (id: string) =>
+    setEscritores((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
   const handleCreate = async () => {
     if (!name.trim() || creating) return;
@@ -52,12 +66,15 @@ export default function CreateChannelDialog({ open, onOpenChange, onCreate }: Pr
         type,
         agents.length > 0 ? agents : undefined,
         members.length > 0 ? members : undefined,
+        type !== "dm" && soAlguns ? { soAlgunsEscrevem: true, escritores } : undefined,
       );
       setName("");
       setDesc("");
       setType("public");
       setAgents([]);
       setMembers([]);
+      setSoAlguns(false);
+      setEscritores([]);
     } finally {
       setCreating(false);
     }
@@ -155,6 +172,19 @@ export default function CreateChannelDialog({ open, onOpenChange, onCreate }: Pr
                 })}
               </div>
             </div>
+          )}
+
+          {/* Canal de avisos — só o administrador configura */}
+          {role === "administrador" && type !== "dm" && (
+            <QuemEscreve
+              ativo={soAlguns}
+              onAtivo={setSoAlguns}
+              candidatos={people
+                .filter((p) => members.includes(p.id))
+                .map((p) => ({ id: p.id, nome: p.full_name || p.email, avatar_url: p.avatar_url }))}
+              escolhidos={escritores}
+              onAlternar={toggleEscritor}
+            />
           )}
 
           {/* Super agentes */}

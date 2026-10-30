@@ -408,6 +408,9 @@ interface ThreadPanelProps {
   recibos?: Record<string, string>;
   /** "Eu li esta thread" — o `marcarLido(threadId)` do `useRecibos`. */
   onLer?: (threadId: string) => void;
+  /** Canal de avisos: `false` troca a caixa de resposta por `avisoEscrita`. */
+  podeEscrever?: boolean;
+  avisoEscrita?: string;
 }
 
 export default function ThreadPanel({
@@ -423,6 +426,8 @@ export default function ThreadPanel({
   onToggleReaction,
   recibos = {},
   onLer,
+  podeEscrever,
+  avisoEscrita,
 }: ThreadPanelProps) {
   const isMobile = useIsMobile();
   const { bottomOffset } = useMobileChatViewport();
@@ -646,6 +651,12 @@ export default function ThreadPanel({
         )}
       </div>
 
+      {podeEscrever === false ? (
+        // Canal de avisos: quem só lê não responde em thread — "WhatsApp puro".
+        <div className="mobile-chat-composer border-t border-border/60 bg-background/95 px-4 py-4 text-center text-xs text-muted-foreground">
+          {avisoEscrita}
+        </div>
+      ) : (
       <div
         className="mobile-chat-composer border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm"
         style={isMobile ? { paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${Math.min(bottomOffset, 240)}px)` } : undefined}
@@ -799,6 +810,7 @@ export default function ThreadPanel({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 
