@@ -224,6 +224,11 @@ def montar_agentes(perfis: list, contexto: list, ultimas: dict,
             "contexto": (round(int(c.get("total_tokens") or 0) / janela, 4)
                          if janela > 0 else None),
             "parceiroId": quem if ativo and quem in do_time else None,
+            # Respondeu há menos de `_JANELA`: a linha fica, mais calma, igual à
+            # conversa entre pessoas. Separado de `parceiroId` de propósito —
+            # aquele é "esperando resposta", e acende partícula e rótulo.
+            "recenteCom": (quem if not ativo and quem in do_time
+                           and agora - ultima["created_at"] <= _JANELA else None),
         })
     return nos
 

@@ -178,9 +178,29 @@ def test_agente_ocioso_nao_aponta_ninguem():
     assert a["parceiroId"] is None
 
 
+def test_agente_que_respondeu_mantem_a_linha_por_dez_minutos():
+    """Até 30/10/2026 a linha pessoa–agente sumia no instante da resposta, e a
+    entre pessoas fica 10 min: a Nina respondeu o Nicholson em 45 s e a TV
+    mostrava "12:21 Nicholson conversou com Nina" no Fluxo sem nada no mapa.
+    Agora a ponta vem em `recenteCom` — não em `parceiroId`, que segue sendo
+    "esperando resposta" e é o que acende as partículas e o "conversando com"."""
+    a = w.montar_agentes([PERFIL], [], {"iris": _msg("agent", 4)}, AGORA, DO_TIME)[0]
+    assert a["estado"] == "ocioso" and a["parceiroId"] is None
+    assert a["recenteCom"] == "u-nich"
+    a = w.montar_agentes([PERFIL], [], {"iris": _msg("agent", 11)}, AGORA, DO_TIME)[0]
+    assert a["recenteCom"] is None
+
+
+def test_agente_trabalhando_nao_e_recente():
+    a = w.montar_agentes([PERFIL], [], {"iris": _msg("user", 2)}, AGORA, DO_TIME)[0]
+    assert a["recenteCom"] is None
+
+
 def test_conversa_com_conta_de_fora_do_time_nao_desenha_linha():
     a = w.montar_agentes([PERFIL], [], {"iris": _msg("user", 2, "u-teste")}, AGORA, DO_TIME)[0]
     assert a["estado"] == "pensando" and a["parceiroId"] is None
+    a = w.montar_agentes([PERFIL], [], {"iris": _msg("agent", 2, "u-teste")}, AGORA, DO_TIME)[0]
+    assert a["recenteCom"] is None
 
 
 # ── Status: só o que pode ir para a parede ───────────────────────────────────
