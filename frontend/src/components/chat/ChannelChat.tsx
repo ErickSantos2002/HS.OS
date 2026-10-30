@@ -4,6 +4,7 @@ import { Fragment, memo, useState, useRef, useEffect, useMemo, useCallback, useL
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useChannelMessages, useChannelMembers, Channel, ChannelMessage, ChannelAttachment } from "@/hooks/use-channels";
 import { usePeople } from "@/hooks/use-people";
+import { fraseDeQuemEscreve, podeEscreverNoCanal } from "@/lib/canal-avisos";
 import { useMessageReactions } from "@/hooks/use-message-reactions";
 import { usePersistentDraft } from "@/hooks/use-persistent-draft";
 import { useAuthContext } from "@/contexts/auth-context";
@@ -772,6 +773,23 @@ export default function ChannelChat({
     for (const p of people) map.set(p.id, { name: p.full_name || p.email || "?", avatar: p.avatar_url });
     return map;
   }, [people]);
+  // Canal de avisos (spec 2026-10-30): quem não escreve vê o aviso no lugar da
+  // caixa de texto, no canal e na thread. A trava é o banco; isto é a tela.
+  // Enquanto os membros carregam, o canal de avisos fica fechado — abrir e
+  // depois tirar a caixa de quem já começou a digitar seria pior.
+  const podeEscrever = podeEscreverNoCanal({
+    soAlgunsEscrevem: channel.so_alguns_escrevem,
+    souAdmin: role === "administrador",
+    meuPodeEscrever: members.find((m) => m.user_id === user?.id)?.pode_escrever,
+  });
+  const avisoEscrita = useMemo(
+    () => fraseDeQuemEscreve(
+      members.filter((m) => m.pode_escrever && peopleById.has(m.user_id))
+        .map((m) => peopleById.get(m.user_id)!.name)
+        .sort((a, b) => a.localeCompare(b, "pt-BR")),
+    ),
+    [members, peopleById],
+  );
   const userNameById = useMemo(() => {
     const map = new Map<string, string>();
     for (const [id, p] of peopleById) map.set(id, p.name);
@@ -1954,6 +1972,9 @@ export default function ChannelChat({
           </div>
         )}
         {/* Hint moved below the composer for a less cluttered top */}
+        {!podeEscrever ? (
+          <p className="py-2 text-center text-xs text-muted-foreground">{avisoEscrita}</p>
+        ) : (<>
 
 
 
@@ -2281,6 +2302,7 @@ export default function ChannelChat({
             )}
           </div>
         )}
+        </>)}
       </div>
 
 
@@ -2342,6 +2364,8 @@ export default function ChannelChat({
         onToggleReaction={(messageId, emoji) => user && toggleReaction(messageId, emoji, user.id)}
         recibos={recibos}
         onLer={marcarLido}
+        podeEscrever={podeEscrever}
+        avisoEscrita={avisoEscrita}
       />
       <DadosDaMensagem
         channelId={channel.id}

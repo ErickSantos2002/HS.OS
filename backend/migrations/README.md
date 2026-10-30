@@ -8,11 +8,12 @@ Schema do Postgres próprio, extraído do Supabase e validado em Postgres puro.
 |---|---|
 | `000_compat_supabase.sql` | Camada de compatibilidade. Escrito à mão. |
 | `001_initial_schema.sql` | Schema `public` completo. **Gerado** — não edite. |
-| `002` … `020` | Mudanças de schema, em ordem. |
+| `002` … `021` | Mudanças de schema, em ordem. |
 | `017_anexos.sql` | Tabela `anexos` (quem lê o anexo de conversa) + `doc_type` csv/md. ⚠️ Superusuário: `python3 ~/aplicar-hsos-017.py` |
 | `018_sso_tickets.sql` | Ticket de uso único do login com Microsoft. ⚠️ Superusuário: `python3 ~/aplicar-hsos-018.py` |
 | `019_resumo_em_audio.sql` | Preferência `profiles.resumo_em_audio` + vozes iniciais dos agentes. ⚠️ Superusuário: `python3 ~/aplicar-hsos-019.py` |
 | `020_recibos.sql` | Visto por mensagem: `recibos_mensagem` (trigger cria no `INSERT` de `channel_messages`, avisa o canal no `UPDATE`) + `agent_runs.pergunta_id`. ⚠️ Superusuário: `~/projetos/bancos/.venv/bin/python ~/aplicar-hsos-020.py` |
+| `021_canal_so_alguns_escrevem.sql` | Canal de avisos: `channels.so_alguns_escrevem`, `channel_members.pode_escrever`, `pode_escrever_no_canal()` na policy de INSERT de `channel_messages`. Aplicada em 30/10/2026. ⚠️ Superusuário: `~/projetos/bancos/.venv/bin/python ~/aplicar-hsos-021.py` |
 | ⚠️ `008_pessoas_talenths.sql` | **Não é deste banco** — ver abaixo. |
 | `_origem/` | Dump de origem + script de regeração + export do SQL editor |
 

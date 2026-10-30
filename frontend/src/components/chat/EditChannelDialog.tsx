@@ -1,7 +1,9 @@
 import { api } from "@/lib/api";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuthContext } from "@/contexts/auth-context";
-import { Channel } from "@/hooks/use-channels";
+import { Channel, useChannelMembers } from "@/hooks/use-channels";
+import { usePeople } from "@/hooks/use-people";
+import QuemEscreve from "./QuemEscreve";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -27,6 +29,31 @@ export default function EditChannelDialog({ channel, open, onClose, onUpdated, o
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // Canal de avisos: só o administrador mexe. A lista nasce do `pode_escrever`
+  // de cada membro e é mandada inteira ao salvar — quem não vier deixa de escrever.
+  const souAdmin = role === "administrador";
+  const membros = useChannelMembers(open && souAdmin ? channel.id : null);
+  const { people } = usePeople();
+  const [soAlguns, setSoAlguns] = useState(!!channel.so_alguns_escrevem);
+  const [escritores, setEscritores] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (escritores === null && membros.length > 0) {
+      setEscritores(membros.filter((m) => m.pode_escrever).map((m) => m.user_id));
+    }
+  }, [membros, escritores]);
+  const candidatos = useMemo(() => {
+    const nomes = new Map(people.map((p) => [p.id, p]));
+    return membros
+      .filter((m) => m.member_type === "human" && nomes.has(m.user_id))
+      .map((m) => {
+        const p = nomes.get(m.user_id)!;
+        return { id: m.user_id, nome: p.full_name || p.email, avatar_url: p.avatar_url };
+      })
+      .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+  }, [membros, people]);
+  const alternarEscritor = (id: string) =>
+    setEscritores((prev) => (prev ?? []).includes(id) ? (prev ?? []).filter((x) => x !== id) : [...(prev ?? []), id]);
+
   if (!canManage) return null;
 
   const handleSave = async () => {
@@ -40,6 +67,9 @@ export default function EditChannelDialog({ channel, open, onClose, onUpdated, o
           name: name.trim(),
           description: description.trim() || null,
           type: isPrivate ? "private" : "public",
+          ...(souAdmin && channel.type !== "dm"
+            ? { so_alguns_escrevem: soAlguns, ...(escritores !== null ? { escritores: soAlguns ? escritores : [] } : {}) }
+            : {}),
         },
       });
     } catch (e) {
@@ -47,7 +77,8 @@ export default function EditChannelDialog({ channel, open, onClose, onUpdated, o
     }
     setSaving(false);
     if (error) {
-      toast.error("Erro ao salvar canal");
+      // A recusa do backend diz o porquê (quem não é membro, quem não é admin).
+      toast.error(error instanceof Error ? error.message : "Erro ao salvar canal");
       console.error(error);
     } else {
       toast.success("Canal atualizado");
@@ -111,6 +142,16 @@ export default function EditChannelDialog({ channel, open, onClose, onUpdated, o
             <Label className="text-sm text-foreground">Canal privado</Label>
             <Switch checked={isPrivate} onCheckedChange={setIsPrivate} />
           </div>
+
+          {souAdmin && channel.type !== "dm" && (
+            <QuemEscreve
+              ativo={soAlguns}
+              onAtivo={setSoAlguns}
+              candidatos={candidatos}
+              escolhidos={escritores ?? []}
+              onAlternar={alternarEscritor}
+            />
+          )}
 
           {/* Salvar */}
           <button

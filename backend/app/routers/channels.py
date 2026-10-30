@@ -134,6 +134,13 @@ SQL_INSERIR_MEMBRO = """
 """
 
 
+SQL_INSERIR_MEMBRO_ESCRITOR = """
+    INSERT INTO public.channel_members (channel_id, user_id, member_type, pode_escrever)
+    VALUES ($1::uuid, $2, $3, $4)
+    ON CONFLICT DO NOTHING
+"""
+
+
 async def _primeiro_par_sem_acesso(
     conn, channel_id: str, user_ids: list[str], agent_ids: list[str]
 ) -> tuple[str, str] | None:
@@ -155,6 +162,57 @@ async def _primeiro_par_sem_acesso(
             )
     linha = await conn.fetchrow(SQL_PAR_SEM_ACESSO, channel_id, user_ids, agent_ids)
     return (linha["pessoa"], linha["agente"]) if linha else None
+
+
+def frase_de_quem_escreve(nomes: list[str]) -> str:
+    """O aviso no lugar da caixa de texto, e o `detail` da recusa — o mesmo
+    texto nos dois, para a pessoa não ler uma coisa na tela e outra no erro."""
+    if not nomes:
+        return "Só o administrador envia mensagens neste canal."
+    lista = nomes[0] if len(nomes) == 1 else ", ".join(nomes[:-1]) + " e " + nomes[-1]
+    return f"Só {lista} {'envia' if len(nomes) == 1 else 'enviam'} mensagens neste canal."
+
+
+async def _recusar_quem_nao_escreve(conn, channel_id: str, user_id: str) -> None:
+    """Canal de avisos: 403 com os nomes de quem escreve.
+
+    ⚠️ A trava de verdade é a policy de INSERT da 021 (`pode_escrever_no_canal`).
+    Isto existe para a recusa dizer QUEM escreve, e para cobrir as rotas que não
+    inserem mensagem mas agem como se escrevessem — acionar agente e notificar.
+    Fora de canal de avisos não decide nada: quem não é membro segue esbarrando
+    onde sempre esbarrou.
+    """
+    if await conn.fetchval("SELECT public.pode_escrever_no_canal($1::uuid, $2)",
+                           channel_id, user_id):
+        return
+    if not await conn.fetchval(
+            "SELECT so_alguns_escrevem FROM public.channels WHERE id = $1::uuid", channel_id):
+        return
+    linhas = await conn.fetch(
+        """SELECT COALESCE(NULLIF(p.full_name, ''), p.email) AS nome
+             FROM public.channel_members m JOIN public.profiles p ON p.id::text = m.user_id
+            WHERE m.channel_id = $1::uuid AND m.pode_escrever ORDER BY 1""",
+        channel_id,
+    )
+    raise HTTPException(status.HTTP_403_FORBIDDEN,
+                        frase_de_quem_escreve([l["nome"] for l in linhas]))
+
+
+def _conferir_escritores(so_alguns: bool, escritores: list[str], humanos: list[str],
+                         tipo: str, papel: str) -> None:
+    """As regras de configurar o canal de avisos, sem banco."""
+    if not so_alguns and not escritores:
+        return
+    if papel != "administrador":
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "Só o administrador escolhe quem envia mensagens num canal.")
+    if tipo == "dm":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Conversa direta não tem quem escreve e quem só lê.")
+    fora = [e for e in escritores if e not in set(humanos)]
+    if fora:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Quem envia mensagens precisa ser membro do canal.")
 
 
 async def _recusar_desativados(conn, user_ids: list[str]) -> None:
@@ -221,6 +279,8 @@ class CanalOut(BaseModel):
     name: str
     description: str | None = None
     type: str
+    # Canal de avisos: só os escolhidos (e o administrador) enviam.
+    so_alguns_escrevem: bool = False
     created_by: str
     created_at: str
 
@@ -234,6 +294,10 @@ class CanalIn(BaseModel):
     # `text` justamente para caber agent_id.
     member_ids: list[str] = []
     agent_ids: list[str] = []
+    # Canal de avisos (spec 2026-10-30). `escritores`: pessoas, entre os
+    # membros, que enviam além do administrador.
+    so_alguns_escrevem: bool = False
+    escritores: list[str] = []
 
 
 class MembroOut(BaseModel):
@@ -241,6 +305,7 @@ class MembroOut(BaseModel):
     user_id: str
     member_type: str
     joined_at: str
+    pode_escrever: bool = False
 
 
 class MensagemCanalOut(BaseModel):
@@ -301,7 +366,7 @@ async def listar(usuario: Usuario = Depends(usuario_atual)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """
-            SELECT id::text AS id, name, description, type::text AS type,
+            SELECT id::text AS id, name, description, type::text AS type, so_alguns_escrevem,
                    created_by::text AS created_by,
                    to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at
               FROM public.channels ORDER BY created_at
@@ -330,17 +395,23 @@ async def criar(dados: CanalIn, usuario: Usuario = Depends(exige_papel("administ
             f"type inválido. Use um de: {', '.join(sorted(_TIPOS))}.",
         )
 
+    humanos = [usuario.id] + [m for m in dados.member_ids if m != usuario.id]
+    _conferir_escritores(dados.so_alguns_escrevem, dados.escritores, humanos,
+                         dados.type, usuario.papel)
+    escritores = set(dados.escritores) if dados.so_alguns_escrevem else set()
+
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         async with conn.transaction():
             linha = await conn.fetchrow(
                 """
-                INSERT INTO public.channels (name, description, type, created_by)
-                VALUES ($1, $2, $3::public.channel_type, $4::uuid)
+                INSERT INTO public.channels (name, description, type, created_by, so_alguns_escrevem)
+                VALUES ($1, $2, $3::public.channel_type, $4::uuid, $5)
                 RETURNING id::text AS id, name, description, type::text AS type,
-                          created_by::text AS created_by,
+                          so_alguns_escrevem, created_by::text AS created_by,
                           to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at
                 """,
                 dados.name, dados.description or None, dados.type, usuario.id,
+                dados.so_alguns_escrevem,
             )
             canal_id = linha["id"]
 
@@ -355,9 +426,8 @@ async def criar(dados: CanalIn, usuario: Usuario = Depends(exige_papel("administ
                     status.HTTP_404_NOT_FOUND, f"Agente {desconhecidos[0]} não existe."
                 )
 
-            # O criador entra sempre e primeiro: sem ele o RLS esconde o canal
-            # do próprio autor.
-            humanos = [usuario.id] + [m for m in dados.member_ids if m != usuario.id]
+            # O criador entra sempre e primeiro (`humanos`, acima): sem ele o
+            # RLS esconde o canal do próprio autor.
             membros = [(u, "human") for u in humanos]
             membros += [(a, "agent") for a in agentes_norm]
 
@@ -384,7 +454,8 @@ async def criar(dados: CanalIn, usuario: Usuario = Depends(exige_papel("administ
             # rota (`find_or_create_dm`, por exemplo) não passa pelo Python.
             try:
                 for membro_id, tipo in membros:
-                    await conn.execute(SQL_INSERIR_MEMBRO, canal_id, membro_id, tipo)
+                    await conn.execute(SQL_INSERIR_MEMBRO_ESCRITOR, canal_id, membro_id, tipo,
+                                       membro_id in escritores)
             except asyncpg.PostgresError as erro:
                 traduzido = traduzir_hs001(erro)
                 if traduzido is not None:
@@ -398,6 +469,9 @@ class CanalEdicaoIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = None
     type: str
+    # Ausente = não mexe. Só o administrador manda estes dois.
+    so_alguns_escrevem: bool | None = None
+    escritores: list[str] | None = None
 
 
 @router.patch("/{channel_id}", response_model=CanalOut)
@@ -406,25 +480,44 @@ async def editar(
     dados: CanalEdicaoIn,
     usuario: Usuario = Depends(usuario_atual),
 ):
-    """Renomeia o canal e troca entre público e privado."""
+    """Renomeia o canal, troca entre público e privado e, para o administrador,
+    configura o canal de avisos (quem envia mensagens)."""
     if dados.type not in _TIPOS:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             f"type inválido. Use um de: {', '.join(sorted(_TIPOS))}.",
         )
+    mexe_escrita = dados.so_alguns_escrevem is not None or dados.escritores is not None
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        if mexe_escrita:
+            humanos = [r["user_id"] for r in await conn.fetch(
+                "SELECT user_id FROM public.channel_members "
+                " WHERE channel_id = $1::uuid AND member_type = 'human'", channel_id)]
+            if usuario.papel != "administrador":
+                raise HTTPException(status.HTTP_403_FORBIDDEN,
+                                    "Só o administrador escolhe quem envia mensagens num canal.")
+            _conferir_escritores(bool(dados.so_alguns_escrevem), dados.escritores or [],
+                                 humanos, dados.type, usuario.papel)
         linha = await conn.fetchrow(
             """
             UPDATE public.channels
-               SET name = $2, description = $3, type = $4::public.channel_type
+               SET name = $2, description = $3, type = $4::public.channel_type,
+                   so_alguns_escrevem = COALESCE($5, so_alguns_escrevem)
              WHERE id = $1::uuid
             RETURNING id::text AS id, name, description, type::text AS type,
-                      created_by::text AS created_by,
+                      so_alguns_escrevem, created_by::text AS created_by,
                       to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at
             """,
             channel_id, dados.name.strip(), (dados.description or "").strip() or None,
-            dados.type,
+            dados.type, dados.so_alguns_escrevem,
         )
+        if linha is not None and dados.escritores is not None:
+            # A lista é a configuração inteira: quem não veio deixa de escrever.
+            await conn.execute(
+                "UPDATE public.channel_members SET pode_escrever = (user_id = ANY($2::text[])) "
+                " WHERE channel_id = $1::uuid AND member_type = 'human'",
+                channel_id, dados.escritores,
+            )
     if linha is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Canal não encontrado.")
     return CanalOut(**dict(linha))
@@ -558,7 +651,7 @@ async def membros(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         linhas = await conn.fetch(
             """
-            SELECT channel_id::text AS channel_id, user_id, member_type,
+            SELECT channel_id::text AS channel_id, user_id, member_type, pode_escrever,
                    to_char(joined_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS joined_at
               FROM public.channel_members WHERE channel_id = $1::uuid
              ORDER BY joined_at
@@ -676,6 +769,7 @@ async def enviar(
 
     nome, avatar = dados.author_name, dados.author_avatar
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        await _recusar_quem_nao_escreve(conn, channel_id, usuario.id)
         if dados.author_type == "human" and (not nome or not avatar or "@" in (nome or "")):
             perfil = await conn.fetchrow(
                 "SELECT full_name, avatar_url FROM public.profiles WHERE id = $1::uuid", autor
@@ -1060,6 +1154,8 @@ async def acionar_agente(
         if not canal:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Canal não encontrado.")
 
+        # Chamar o agente é falar no canal — canal de avisos fecha para quem lê.
+        await _recusar_quem_nao_escreve(conn, channel_id, usuario.id)
         pode = await conn.fetchval(
             "SELECT public.pode_ver_agente($1::uuid, $2)", usuario.id, agente
         )
@@ -1138,6 +1234,9 @@ async def notificar(
     destinatários voltar pela rede antes.
     """
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        # ⚠️ `author_name` e o resumo vêm do corpo: sem isto, quem só lê o canal
+        # de avisos mandaria notificação a todos assinando como quem quisesse.
+        await _recusar_quem_nao_escreve(conn, channel_id, usuario.id)
         await conn.execute(
             """
             INSERT INTO public.notifications
