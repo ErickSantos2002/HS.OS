@@ -1330,6 +1330,9 @@ async def editar_mensagem(
     escrita como se espera.
     """
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        # Canal de avisos: quem deixou de escrever (ou escreveu antes de o canal
+        # virar de avisos) não reescreve o que já mandou. Apagar continua livre.
+        await _recusar_quem_nao_escreve(conn, channel_id, usuario.id)
         linha = await conn.fetchrow(
             f"""
             UPDATE public.channel_messages m SET
