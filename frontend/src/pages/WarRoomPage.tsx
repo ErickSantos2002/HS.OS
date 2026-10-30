@@ -367,6 +367,11 @@ export default function WarRoomPage() {
 
   // Quem está numa linha agora: ponta de agente ativo ou de um DM vivo.
   const comAgente = new Set(ativos.map((a) => a.parceiroId).filter(Boolean) as string[]);
+  // Agente que respondeu há menos de 10 min: a linha continua acesa, mais
+  // calma e sem partícula — igual à conversa entre pessoas, que fica 10 min.
+  const recentes = (feed?.agentes ?? []).filter((a) => a.estado === "ocioso" && a.recenteCom);
+  const comAgenteRecente = new Set(recentes.map((a) => a.recenteCom) as string[]);
+  const idsRecentes = new Set(recentes.map((a) => a.id));
   const emDm = new Set((feed?.conversasTime ?? []).flatMap((c) => [c.a, c.b]));
 
   /** Enquanto o agente processa, a partícula circula sem parar pelo caminho
@@ -517,19 +522,21 @@ export default function WarRoomPage() {
                 {(feed?.pessoas ?? []).map((p) => {
                   const pos = posPessoa.get(p.id); if (!pos) return null;
                   const falando = comAgente.has(p.id);
+                  const recente = !falando && comAgenteRecente.has(p.id);
                   return (
                     <path key={`l-${p.id}`} d={curva(pos, NUCLEO)} fill="none"
-                      className={falando ? "wr-linha wr-viva-h" : "wr-linha"}
-                      strokeWidth={falando ? 2 : 1.4} />
+                      className={falando ? "wr-linha wr-viva-h" : recente ? "wr-linha wr-viva-h wr-recente" : "wr-linha"}
+                      strokeWidth={falando || recente ? 2 : 1.4} />
                   );
                 })}
                 {(feed?.agentes ?? []).map((a) => {
                   const pos = posAgente.get(a.id); if (!pos) return null;
                   const ativo = a.estado !== "ocioso";
+                  const recente = idsRecentes.has(a.id);
                   return (
                     <path key={`la-${a.id}`} d={curva(NUCLEO, pos)} fill="none"
-                      className={ativo ? "wr-linha wr-viva" : "wr-linha"}
-                      strokeWidth={ativo ? 2 : 1.4} />
+                      className={ativo ? "wr-linha wr-viva" : recente ? "wr-linha wr-viva wr-recente" : "wr-linha"}
+                      strokeWidth={ativo || recente ? 2 : 1.4} />
                   );
                 })}
               </g>
@@ -575,7 +582,7 @@ export default function WarRoomPage() {
 
               {(feed?.pessoas ?? []).map((p, i) => {
                 const pos = posPessoa.get(p.id); if (!pos) return null;
-                const emConversa = comAgente.has(p.id) || emDm.has(p.id);
+                const emConversa = comAgente.has(p.id) || comAgenteRecente.has(p.id) || emDm.has(p.id);
                 const ponto = corDoPonto(p);
                 return (
                   <g key={p.id} transform={`translate(${pos.x} ${pos.y})`}>

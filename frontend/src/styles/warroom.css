@@ -335,6 +335,8 @@
 .wr-linha             { stroke: var(--wr-g-linha); }
 .wr-linha.wr-viva     { stroke: var(--wr-g-viva); }
 .wr-linha.wr-viva-h   { stroke: var(--wr-g-viva-h); }
+/* Conversa que acabou há menos de 10 min: a linha fica, mais calma. */
+.wr-linha.wr-recente  { stroke-opacity: 0.55; }
 .wr-trilho            { stroke: var(--wr-g-trilho); }
 .wr-corpo             { fill: var(--wr-g-corpo); }
 .wr-corpo-h           { fill: var(--wr-g-corpo-h); }

@@ -30,6 +30,8 @@ export interface Pessoa {
 export interface Agente {
   id: string; nome: string; papel: string; estado: Estado;
   desde: string | null; contexto: number | null; parceiroId: string | null;
+  /** Respondeu a esta pessoa há menos de 10 min — a linha fica, sem partícula. */
+  recenteCom: string | null;
 }
 export interface ConversaTime { a: string; b: string; ultima: string }
 export interface Evento { ts: string; tipo: "entrega" | "agente" | "time"; texto: string }
@@ -88,6 +90,7 @@ export function normalizar(bruto: unknown): Feed {
       .map((a): Agente => {
         const estado = texto(a.estado) as Estado;
         const parceiroId = texto(a.parceiroId);
+        const recenteCom = texto(a.recenteCom);
         return {
           id: texto(a.id),
           nome: texto(a.nome) || texto(a.id),
@@ -96,6 +99,7 @@ export function normalizar(bruto: unknown): Feed {
           desde: texto(a.desde) || null,
           contexto: numeroOuNulo(a.contexto),
           parceiroId: ids.has(parceiroId) ? parceiroId : null,
+          recenteCom: ids.has(recenteCom) ? recenteCom : null,
         };
       })
       .filter((a) => a.id),
@@ -127,5 +131,7 @@ export function horaMinuto(ms: number | string): string {
 /** "N conversas agora": pessoa falando com agente ativo, mais DM vivo entre
  *  pessoas. Agente trabalhando sem ninguém (cron, delegação) não é conversa. */
 export function contarConversas(f: Feed): number {
-  return f.agentes.filter((a) => a.estado !== "ocioso" && a.parceiroId).length + f.conversasTime.length;
+  const comAgente = f.agentes.filter(
+    (a) => (a.estado !== "ocioso" && a.parceiroId) || (a.estado === "ocioso" && a.recenteCom));
+  return comAgente.length + f.conversasTime.length;
 }

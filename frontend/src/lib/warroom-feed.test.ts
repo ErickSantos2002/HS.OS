@@ -82,4 +82,17 @@ describe("contarConversas — o \"N conversas agora\" do cabeçalho", () => {
     });
     expect(contarConversas(f)).toBe(2);
   });
+
+  it("agente que respondeu há pouco conta, como a conversa entre pessoas", () => {
+    const f = normalizar({
+      pessoas: [{ id: "p1", nome: "A" }],
+      agentes: [
+        { id: "nina", estado: "ocioso", recenteCom: "p1" },
+        { id: "iris", estado: "ocioso", recenteCom: "fantasma" },
+      ],
+    });
+    expect(f.agentes[0].recenteCom).toBe("p1");
+    expect(f.agentes[1].recenteCom).toBeNull();
+    expect(contarConversas(f)).toBe(1);
+  });
 });
