@@ -157,6 +157,29 @@ async def _primeiro_par_sem_acesso(
     return (linha["pessoa"], linha["agente"]) if linha else None
 
 
+async def _recusar_desativados(conn, user_ids: list[str]) -> None:
+    """Recusa, com nome, quem tem a conta desativada.
+
+    ⚠️ Em 30/10/2026 o canal "Geral" nasceu com a Cláudia e a Karolaine dentro,
+    as duas desativadas: o seletor lista todo perfil e nenhuma rota que grava
+    membro olhava o status. Olha `profiles.status`, que a desativação grava junto
+    com `auth.users.is_active` desde 20/10 — e que o `authenticated` enxerga.
+    """
+    if not user_ids:
+        return
+    linhas = await conn.fetch(
+        "SELECT COALESCE(NULLIF(full_name, ''), email) AS nome FROM public.profiles "
+        " WHERE id::text = ANY($1::text[]) AND status <> 'active' ORDER BY 1",
+        user_ids,
+    )
+    if linhas:
+        nomes = ", ".join(l["nome"] for l in linhas)
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Conta desativada não entra em canal: {nomes}.",
+        )
+
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/channels", tags=["channels"])
@@ -344,6 +367,7 @@ async def criar(dados: CanalIn, usuario: Usuario = Depends(exige_papel("administ
             # sem isto, quem esbarra na recusa lê "Alguém neste canal não tem
             # acesso ao agente X" (o trigger da 014, que só enxerga quem já
             # está inserido) em vez de saber quem é "alguém".
+            await _recusar_desativados(conn, humanos)
             par = await _primeiro_par_sem_acesso(conn, canal_id, humanos, agentes_norm)
             if par is not None:
                 pessoa, agente = par
@@ -1362,6 +1386,7 @@ async def adicionar_membros(
                 status.HTTP_404_NOT_FOUND, f"Agente {desconhecidos[0]} não existe."
             )
 
+        await _recusar_desativados(conn, dados.user_ids)
         par = await _primeiro_par_sem_acesso(conn, channel_id, dados.user_ids, agentes_norm)
         if par is not None:
             pessoa, agente = par
