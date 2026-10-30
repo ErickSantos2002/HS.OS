@@ -276,6 +276,46 @@ def test_gateway_na_frente_nao_paga_a_segunda_leitura():
     assert cli.chamadas == 1, "leu duas vezes sem precisar"
 
 
+# ── Reset diário NA HORA do envio — 30/10/2026 ───────────────────────────────
+#
+# O `_ultimo_seq` acima reconhece a renumeração quando ela já aconteceu ANTES do
+# envio. O reset diário do gateway (04:00 UTC) é preguiçoso: a sessão velha
+# continua legível até chegar a próxima mensagem, e é ESSA mensagem que dispara
+# o recomeço. O envio lê o topo da sessão velha (o `seq_antes` sai certo para
+# ela), a pergunta vira `seq=1` da nova, e o `/reply` procura acima do topo de
+# uma sessão que já não existe.
+#
+# Custo medido: 7 primeiras perguntas do dia perdidas entre 26 e 30/10 — 4 da
+# `nina`, e às 11:16 de 30/10 o CEO mandou "ola" para Bruce, Iris e Atlas, os
+# três responderam em segundos no gateway, nada chegou à tela e a TV da War
+# Room os mostrou "conversando com Nicholson" por mais de meia hora.
+
+
+def _hist(*seqs):
+    return [{"role": "assistant", "__openclaw": {"seq": s}} for s in seqs]
+
+
+def test_reply_reconhece_reset_que_aconteceu_no_proprio_envio():
+    """Números do `bruce` em 30/10: `seq_antes` 10, sessão nova com 1 e 2."""
+    assert c._corte_da_resposta(_hist(1, 2), 10) == 0
+
+
+def test_reply_na_mesma_sessao_mantem_o_corte():
+    assert c._corte_da_resposta(_hist(9, 10, 11, 12), 10) == 10
+    # Janela de 40 que alcança o começo de uma sessão curta: continua a mesma.
+    assert c._corte_da_resposta(_hist(1, 2, 3, 4), 2) == 2
+
+
+def test_reply_sem_texto_novo_nao_regrava_a_sessao_inteira():
+    """Topo IGUAL ao corte é run que não produziu nada na mesma sessão, não
+    reset: zerar o corte aqui gravaria a conversa toda como resposta."""
+    assert c._corte_da_resposta(_hist(1, 2, 3, 4), 4) == 4
+
+
+def test_reply_fatia_sem_o_comeco_nao_e_reset():
+    assert c._corte_da_resposta(_hist(30, 31), 40) == 40
+
+
 class ConnFalsa:
     """Registra o SQL e responde a busca por mensagem igual com `existente`."""
 

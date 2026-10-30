@@ -955,6 +955,27 @@ def _maior_seq(mensagens: list) -> int:
                default=0)
 
 
+def _corte_da_resposta(mensagens: list, seq_antes: int) -> int:
+    """O corte que o `/reply` usa: o `seq_antes` do envio, salvo se a sessão
+    recomeçou NO PRÓPRIO envio.
+
+    ⚠️ **O reset diário do gateway é preguiçoso.** A sessão velha continua
+    legível até chegar a próxima mensagem, e é ela que dispara o recomeço — o
+    `_ultimo_seq` lê o topo da velha e não tem como saber. A pergunta vira
+    `seq=1` da nova e procurar acima do `seq_antes` não acha nada. Entre 26 e
+    30/10/2026 isso engoliu 7 primeiras perguntas do dia, três do CEO de uma vez.
+
+    Mesmo critério do `_ultimo_seq`: com `seq=1` na janela o topo é o real, e
+    numa sessão que só cresce ele nunca fica **abaixo** do corte. Abaixo, e não
+    igual: topo igual é run que não escreveu nada na mesma sessão, e zerar ali
+    gravaria a conversa inteira como resposta.
+    """
+    seqs = [(m.get("__openclaw") or {}).get("seq") or 0 for m in mensagens]
+    if 1 in seqs and max(seqs) < seq_antes:
+        return 0
+    return seq_antes
+
+
 async def _piso_do_seq(chave: str, user_id: str) -> int:
     """O maior `seq` que já registramos para esta sessão, do nosso lado.
 
@@ -1575,7 +1596,11 @@ async def resposta(
             return RespostaOut(status="erro", detalhe=str(e))
 
         mensagens = hist.get("messages") or []
-        texto = _texto_da_resposta(mensagens, seq_antes)
+        corte = _corte_da_resposta(mensagens, seq_antes)
+        if corte != seq_antes:
+            logger.info("Sessão %s recomeçou no envio (corte %d → %d).",
+                        chave, seq_antes, corte)
+        texto = _texto_da_resposta(mensagens, corte)
         # O topo do que ACABAMOS de ler. É o piso do próximo envio — ver
         # `_piso_do_seq`. Sem guardá-lo, o corte fica esperando o
         # `chat.history` com `limit=5` acertar, e numa sessão longa ele não
