@@ -217,8 +217,11 @@ async def busca(
             """
             SELECT id::text AS id, channel_id::text AS channel_id, author_name, content,
                    to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS') || 'Z' AS created_at
-              FROM public.channel_messages
+              FROM public.channel_messages m
              WHERE content ILIKE $1 AND deleted_at IS NULL
+               -- "Apagar para mim" (022): o que a pessoa escondeu não volta pela busca.
+               AND NOT EXISTS (SELECT 1 FROM public.mensagens_ocultas o
+                                WHERE o.message_id = m.id AND o.user_id = auth.uid())
              ORDER BY created_at DESC LIMIT 12
             """,
             padrao,

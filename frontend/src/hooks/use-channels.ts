@@ -135,6 +135,13 @@ export async function prefetchChannelMessages(channelId: string): Promise<void> 
   }
 }
 
+/**
+ * "Apagar para mim" (30/10/2026) feito nesta sessão. O servidor já não devolve
+ * a mensagem, mas um `load()` que saiu antes do clique pode voltar com ela —
+ * e o `reconcileMessages` a reporia. Filtrar aqui fecha essa janela.
+ */
+const escondidasNestaSessao = new Set<string>();
+
 export function useChannelMessages(channelId: string | null) {
   const [messages, setMessages] = useState<ChannelMessage[]>(
     channelId ? (channelMessageCache[channelId] ?? []) : []
@@ -167,7 +174,7 @@ export function useChannelMessages(channelId: string | null) {
     const updateMessages = (fn: (prev: ChannelMessage[]) => ChannelMessage[]) => {
       if (cancelled) return;
       setMessages(prev => {
-        const next = fn(prev);
+        const next = fn(prev).filter((m) => !escondidasNestaSessao.has(m.id));
         channelMessageCache[channelId] = next;
         return next;
       });
@@ -378,7 +385,27 @@ export function useChannelMessages(channelId: string | null) {
     }
   }, []);
 
-  return { messages, loading, sendMessage, ensureMessageLoaded };
+  /** Tira da tela na hora; quem chama grava no servidor e, se falhar, `reexibir`. */
+  const esconder = useCallback((id: string) => {
+    escondidasNestaSessao.add(id);
+    setMessages((prev) => {
+      const next = prev.filter((m) => m.id !== id);
+      if (channelId) channelMessageCache[channelId] = next;
+      return next;
+    });
+  }, [channelId]);
+
+  /** O "Desfazer" — e o recuo quando o servidor recusa. */
+  const reexibir = useCallback((msg: ChannelMessage) => {
+    escondidasNestaSessao.delete(msg.id);
+    setMessages((prev) => {
+      const next = reconcileMessages(prev, [msg]);
+      if (channelId) channelMessageCache[channelId] = next;
+      return next;
+    });
+  }, [channelId]);
+
+  return { messages, loading, sendMessage, ensureMessageLoaded, esconder, reexibir };
 }
 
 export function useChannelMembers(channelId: string | null, refreshKey?: number) {
