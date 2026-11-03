@@ -6,7 +6,7 @@
 -- e precisa de duas colunas:
 --
 --   tela_perguntou_em  a última vez que o `/reply` foi chamado para o run. O
---                      coletor só pega run em que a tela não pergunta há 20 s —
+--                      coletor só pega run em que a tela não pergunta há 45 s —
 --                      com a tela esperando, ela mesma grava.
 --   coletando_em       reserva entre os 2 workers. Quem fizer o UPDATE com
 --                      `coletando_em IS NULL OR < now() - 30 s` leva o run.
@@ -31,7 +31,7 @@ CREATE INDEX IF NOT EXISTS agent_runs_pendentes_idx
 
 COMMENT ON COLUMN public.agent_runs.tela_perguntou_em IS
   'Última chamada do GET /reply para este run. O coletor de respostas só age '
-  'quando a tela não pergunta há 20 s.';
+  'quando a tela não pergunta há 45 s.';
 COMMENT ON COLUMN public.agent_runs.coletando_em IS
   'Reserva do coletor de respostas entre os workers; vale 30 s.';
 

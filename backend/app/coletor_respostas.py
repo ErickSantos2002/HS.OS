@@ -8,7 +8,8 @@ não há push (o push nasce do INSERT, `023`).
 
 A cada `COLETOR_RESPOSTAS_SEGUNDOS` (padrão 5; 0 desliga), cada worker reserva
 até 10 runs sem resposta, de menos de 30 min, em que a tela não pergunta há
-20 s, e chama **`colher_resposta`** — o mesmo miolo do `/reply`. Não há segunda
+45 s (cada `/reply` segura 20 s no `agent.wait`; com 20 s de limiar o coletor
+entraria no meio de toda espera longa), e chama **`colher_resposta`** — o mesmo miolo do `/reply`. Não há segunda
 leitura do `chat.history`: os defeitos catalogados dele (corte de 8.000, fatia
 velha, piso que vira teto, sessão limpa) moram numa cópia só. Grava, dispara o
 áudio e, se o contexto estourou, compacta e reenvia — tudo o que a tela faria
@@ -45,7 +46,7 @@ SQL_RESERVAR_RUNS = """
               AND redireciona_para IS NULL
               AND criado_em > now() - interval '30 minutes'
               AND criado_em < now() - interval '20 seconds'
-              AND (tela_perguntou_em IS NULL OR tela_perguntou_em < now() - interval '20 seconds')
+              AND (tela_perguntou_em IS NULL OR tela_perguntou_em < now() - interval '45 seconds')
               AND (coletando_em IS NULL OR coletando_em < now() - interval '30 seconds')
             ORDER BY criado_em
             LIMIT 10

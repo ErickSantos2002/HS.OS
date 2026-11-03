@@ -28,11 +28,12 @@ def test_selecao_so_olha_os_ultimos_30_minutos():
 
 
 def test_selecao_ignora_run_com_tela_esperando():
-    """Com a tela perguntando, ela mesma grava. O coletor só entra 20 s depois
-    da última pergunta — e 20 s depois do envio, para não disputar o primeiro
-    `/reply`, que chega meio segundo após o `/send`."""
+    """Com a tela perguntando, ela mesma grava. Cada `/reply` segura até 20 s no
+    `agent.wait` e só então a tela pergunta de novo — com limiar de 20 s o
+    coletor entraria no meio de toda espera longa. Por isso 45 s desde a última
+    pergunta, e 20 s desde o envio para não disputar o primeiro `/reply`."""
     sql = _sql()
-    assert "tela_perguntou_em IS NULL OR tela_perguntou_em < now() - interval '20 seconds'" in sql
+    assert "tela_perguntou_em IS NULL OR tela_perguntou_em < now() - interval '45 seconds'" in sql
     assert "criado_em < now() - interval '20 seconds'" in sql
 
 
