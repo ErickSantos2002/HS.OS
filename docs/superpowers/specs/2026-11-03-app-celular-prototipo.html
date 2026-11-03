@@ -1,0 +1,865 @@
+<title>HS.OS Celular</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: app de mensagens em pilha de telas (lista → conversa → thread), tela cheia no celular, moldura de celular no desktop. Fonte do sistema de propósito: no Android vira Roboto, no iPhone SF — é o que faz parecer app, não site. */
+:root{
+  --bg:#ffffff; --chat:#edf2f6; --surface:#f2f5f8; --surface-2:#e7edf2;
+  --fg:#0e1c26; --muted:#5b6e7d; --line:#e1e8ee;
+  --accent:#1885c8; --accent-soft:#e3f1fa; --on-accent:#ffffff;
+  --mine:#d3eafa; --theirs:#ffffff; --mention:#fff3cf; --mention-fg:#7a5600;
+  --overlay:rgba(8,20,30,.42); --shadow:0 1px .5px rgba(14,28,38,.13);
+  --frame:#d9e2e9; --ok:#1d9a5b; --danger:#c8372d;
+  --n1:#b8481f; --n2:#1d7a4f; --n3:#7a3fb0; --n4:#0f6ea8; --n5:#a1640b;
+  --font:-apple-system,BlinkMacSystemFont,"Roboto","Segoe UI","Helvetica Neue",Arial,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0c151c; --chat:#081016; --surface:#14202a; --surface-2:#1b2a35;
+  --fg:#e5edf3; --muted:#8ba0af; --line:#1d2b36;
+  --accent:#3ba4e4; --accent-soft:#12324a; --on-accent:#04121c;
+  --mine:#11486b; --theirs:#18252f; --mention:#4a3a0e; --mention-fg:#ffd977;
+  --overlay:rgba(0,0,0,.55); --shadow:0 1px .5px rgba(0,0,0,.4);
+  --frame:#05090c; --ok:#3cc283; --danger:#f0675d;
+  --n1:#f08a62; --n2:#4fd08f; --n3:#c39af0; --n4:#6cc0f2; --n5:#e9b45a;
+  color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0c151c; --chat:#081016; --surface:#14202a; --surface-2:#1b2a35;
+  --fg:#e5edf3; --muted:#8ba0af; --line:#1d2b36;
+  --accent:#3ba4e4; --accent-soft:#12324a; --on-accent:#04121c;
+  --mine:#11486b; --theirs:#18252f; --mention:#4a3a0e; --mention-fg:#ffd977;
+  --overlay:rgba(0,0,0,.55); --shadow:0 1px .5px rgba(0,0,0,.4);
+  --frame:#05090c; --ok:#3cc283; --danger:#f0675d;
+  --n1:#f08a62; --n2:#4fd08f; --n3:#c39af0; --n4:#6cc0f2; --n5:#e9b45a;
+  color-scheme:dark;}
+
+html,body{height:100%}
+body{background:var(--frame);color:var(--fg);font-family:var(--font);font-size:16px;-webkit-tap-highlight-color:transparent;overflow:hidden}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+svg.i{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.i.f{fill:currentColor;stroke:none}
+
+#app{position:relative;height:100%;max-width:440px;margin:0 auto;background:var(--bg);overflow:hidden}
+@media (min-width:600px){#app{height:calc(100% - 32px);margin-top:16px;border-radius:28px;box-shadow:0 20px 60px rgba(0,0,0,.25)}}
+
+.tela{position:absolute;inset:0;display:flex;flex-direction:column;background:var(--bg);transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .28s}
+.tela.entrando{transform:translateX(100%)}
+.tela.atras{transform:translateX(-22%);opacity:.6}
+@media (prefers-reduced-motion:reduce){.tela{transition:none}}
+
+/* ---------- topo ---------- */
+.topo{display:flex;align-items:center;gap:4px;min-height:60px;padding:6px 8px;background:var(--bg);flex:none}
+.topo h1{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0 0 0 10px;flex:1}
+.ib{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--fg)}
+.ib:active{background:var(--surface-2)}
+.topo-conv{background:var(--bg);border-bottom:1px solid var(--line)}
+.topo-conv .quem{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:4px;border-radius:12px;text-align:left}
+.topo-conv .quem:active{background:var(--surface)}
+.topo-conv .nome{font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topo-conv .sub{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topo-conv .sub.vivo{color:var(--accent);font-weight:500}
+
+.busca{margin:0 12px 6px;display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:22px;padding:0 14px;height:44px;color:var(--muted);flex:none}
+.busca input{flex:1;border:0;background:none;font:inherit;font-size:16px;color:var(--fg);outline:none;min-width:0}
+.chips{display:flex;gap:8px;padding:4px 12px 10px;overflow-x:auto;scrollbar-width:none;flex:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{height:34px;padding:0 14px;border-radius:17px;background:var(--surface);color:var(--muted);font-size:14px;font-weight:500;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
+
+/* ---------- avatares ---------- */
+.av{width:52px;height:52px;border-radius:50%;display:grid;place-items:center;font-weight:600;font-size:19px;color:#fff;flex:none;position:relative}
+.av.sm{width:40px;height:40px;font-size:16px}
+.av.xs{width:30px;height:30px;font-size:13px}
+.av.agente{border-radius:16px}
+.av.sm.agente{border-radius:13px}
+.av.xs.agente{border-radius:10px}
+.av .selo{position:absolute;right:-3px;bottom:-3px;width:20px;height:20px;border-radius:50%;background:var(--bg);display:grid;place-items:center;color:var(--accent)}
+.av.sm .selo{width:17px;height:17px}
+.av .selo svg{width:13px;height:13px}
+.av.canal{background:var(--surface-2)!important;color:var(--muted)}
+
+/* ---------- lista ---------- */
+.rolar{flex:1;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.item{display:flex;align-items:center;gap:14px;padding:10px 16px;width:100%;text-align:left}
+.item:active{background:var(--surface)}
+.item .meio{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:-12px}
+.item .l1,.item .l2{display:flex;align-items:center;gap:8px;min-width:0}
+.item .nome{font-size:17px;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .hora{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.item .hora.nova{color:var(--accent);font-weight:600}
+.item .prev{font-size:15px;color:var(--muted);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .prev.vivo{color:var(--accent);font-weight:500}
+.item .prev b{color:var(--fg);font-weight:500}
+.badge{min-width:22px;height:22px;padding:0 7px;border-radius:11px;background:var(--accent);color:var(--on-accent);font-size:12.5px;font-weight:700;display:grid;place-items:center;font-variant-numeric:tabular-nums}
+.badge.mudo{background:var(--muted)}
+.mini{width:17px;height:17px;color:var(--muted)}
+.vazio{padding:48px 32px;text-align:center;color:var(--muted);font-size:15px}
+
+.fab{position:absolute;right:16px;bottom:calc(84px + env(safe-area-inset-bottom,0px));width:58px;height:58px;border-radius:18px;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;box-shadow:0 6px 18px rgba(24,133,200,.38);z-index:5}
+.fab:active{transform:scale(.96)}
+
+.abas{display:flex;border-top:1px solid var(--line);background:var(--bg);padding-bottom:env(safe-area-inset-bottom,0px);flex:none}
+.aba{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0 10px;font-size:12.5px;font-weight:500;color:var(--muted);position:relative}
+.aba .pilula{width:64px;height:32px;border-radius:16px;display:grid;place-items:center;transition:background .2s}
+.aba[aria-current="page"]{color:var(--fg);font-weight:600}
+.aba[aria-current="page"] .pilula{background:var(--accent-soft);color:var(--accent)}
+.aba .ponto{position:absolute;top:6px;left:calc(50% + 12px);min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:var(--on-accent);font-size:11px;font-weight:700;display:grid;place-items:center;padding:0 5px}
+
+/* ---------- conversa ---------- */
+.fundo{flex:1;overflow-y:auto;overscroll-behavior:contain;background:var(--chat);padding:8px 10px 12px;display:flex;flex-direction:column;touch-action:pan-y}
+.dia{align-self:center;background:var(--surface);color:var(--muted);font-size:12.5px;font-weight:500;padding:5px 12px;border-radius:8px;margin:10px 0;box-shadow:var(--shadow)}
+.linha{display:flex;align-items:flex-end;gap:6px;margin-top:2px;position:relative}
+.linha.inicio{margin-top:10px}
+.linha.eu{justify-content:flex-end}
+.linha .vaga{width:30px;flex:none}
+.puxa{position:absolute;left:4px;top:50%;margin-top:-16px;width:32px;height:32px;border-radius:50%;background:var(--surface);display:grid;place-items:center;color:var(--muted);opacity:0}
+.bolha{position:relative;max-width:82%;background:var(--theirs);border-radius:12px;padding:7px 10px 6px;box-shadow:var(--shadow);font-size:16px;line-height:1.38;overflow-wrap:anywhere;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;transition:transform .18s}
+.linha.eu .bolha{background:var(--mine)}
+.linha.inicio:not(.eu) .bolha{border-top-left-radius:4px}
+.linha.inicio.eu .bolha{border-top-right-radius:4px}
+.bolha.pressionada{transform:scale(.97)}
+.bolha .autor{font-size:13.5px;font-weight:600;margin-bottom:2px}
+.bolha p{margin:0 0 6px}
+.bolha p:last-of-type{margin-bottom:0}
+.bolha ul{margin:4px 0 6px;padding-left:20px}
+.bolha li{margin:2px 0}
+.bolha .men{background:var(--mention);color:var(--mention-fg);border-radius:4px;padding:0 3px;font-weight:600}
+.rodape{float:right;display:inline-flex;align-items:center;gap:3px;margin:6px -2px -2px 10px;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;line-height:1}
+.rodape svg{width:16px;height:16px}
+.rodape .lido{color:var(--accent)}
+.cit{display:block;border-left:3px solid var(--accent);background:color-mix(in srgb,var(--surface-2) 70%,transparent);border-radius:6px;padding:5px 8px;margin:1px 0 6px;font-size:14px}
+.cit b{display:block;color:var(--accent);font-size:13px}
+.cit span{color:var(--muted);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.reacoes{display:flex;gap:4px;flex-wrap:wrap;margin:-4px 0 0 12px;position:relative;z-index:1}
+.linha.eu + .reacoes{justify-content:flex-end;margin-right:12px}
+.reac{display:inline-flex;align-items:center;gap:3px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:2px 7px;font-size:13px;box-shadow:var(--shadow)}
+.reac.minha{border-color:var(--accent);background:var(--accent-soft)}
+.thr{display:flex;align-items:center;gap:8px;margin:6px 0 2px 36px;padding:6px 10px;border-radius:10px;color:var(--accent);font-size:14px;font-weight:600;align-self:flex-start}
+.thr:active{background:var(--surface)}
+.thr .avs{display:flex}
+.thr .avs .av{border:2px solid var(--chat);margin-left:-6px}
+.thr .avs .av:first-child{margin-left:0}
+
+.audio{display:flex;align-items:center;gap:10px;margin-top:8px;padding:8px 10px 8px 6px;border-radius:12px;background:var(--surface);min-width:220px}
+.linha.eu .audio{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.audio .play{width:38px;height:38px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;flex:none}
+.audio .play svg{width:18px;height:18px}
+.audio .onda{flex:1;display:flex;align-items:center;gap:2px;height:28px}
+.audio .onda i{flex:1;background:var(--muted);opacity:.45;border-radius:2px;min-width:2px}
+.audio .onda i.ouvido{background:var(--accent);opacity:1}
+.audio .info{display:flex;flex-direction:column;gap:1px;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.arq{display:flex;align-items:center;gap:12px;margin:2px 0 4px;padding:10px;border-radius:10px;background:var(--surface);min-width:230px}
+.arq .tipo{width:40px;height:46px;border-radius:6px;display:grid;place-items:center;color:#fff;font-size:11px;font-weight:700;flex:none}
+.arq .n{flex:1;min-width:0;font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.arq .t{font-size:12.5px;color:var(--muted)}
+.arq .bx{width:36px;height:36px;border-radius:50%;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--muted)}
+.arq .bx svg{width:18px;height:18px}
+
+.pensando{display:inline-flex;gap:4px;align-items:center;padding:4px 2px}
+.pensando i{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:pulo 1.2s infinite}
+.pensando i:nth-child(2){animation-delay:.15s}.pensando i:nth-child(3){animation-delay:.3s}
+@keyframes pulo{0%,60%,100%{opacity:.3;transform:none}30%{opacity:1;transform:translateY(-3px)}}
+.pensando-txt{font-size:13px;color:var(--muted);margin-left:6px}
+
+/* ---------- composer ---------- */
+.compor{display:flex;align-items:flex-end;gap:6px;padding:6px 8px calc(8px + env(safe-area-inset-bottom,0px));background:var(--chat);flex:none}
+.campo{flex:1;min-width:0;background:var(--bg);border-radius:24px;display:flex;align-items:flex-end;box-shadow:var(--shadow);min-height:48px}
+.campo .ib{width:44px;height:48px;color:var(--muted);flex:none}
+.campo textarea{flex:1;min-width:0;border:0;background:none;resize:none;font:inherit;font-size:16px;line-height:22px;padding:13px 0;max-height:132px;color:var(--fg);outline:none}
+.campo textarea::placeholder{color:var(--muted)}
+.enviar{width:48px;height:48px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;flex:none;touch-action:none}
+.enviar:active{transform:scale(.95)}
+.enviar.gravando{transform:scale(1.25);background:var(--danger)}
+.resp-bar{display:flex;align-items:center;gap:10px;margin:0 8px;padding:8px 8px 8px 12px;background:var(--bg);border-radius:14px 14px 0 0;border-left:3px solid var(--accent);flex:none}
+.resp-bar .t{flex:1;min-width:0}
+.resp-bar b{display:block;color:var(--accent);font-size:13.5px}
+.resp-bar span{display:block;font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gravacao{flex:1;display:flex;align-items:center;gap:10px;height:48px;padding:0 16px;background:var(--bg);border-radius:24px;box-shadow:var(--shadow);font-size:15px;color:var(--muted)}
+.gravacao .rec{width:10px;height:10px;border-radius:50%;background:var(--danger);animation:pisca 1s infinite}
+.gravacao .tempo{color:var(--fg);font-variant-numeric:tabular-nums}
+@keyframes pisca{50%{opacity:.25}}
+
+/* ---------- folhas ---------- */
+.veu{position:absolute;inset:0;background:var(--overlay);z-index:40;opacity:0;transition:opacity .2s}
+.veu.on{opacity:1}
+.folha{position:absolute;left:0;right:0;bottom:0;z-index:41;background:var(--bg);border-radius:22px 22px 0 0;padding:8px 0 calc(10px + env(safe-area-inset-bottom,0px));transform:translateY(100%);transition:transform .26s cubic-bezier(.2,.8,.2,1);max-height:85%;overflow-y:auto}
+.folha.on{transform:none}
+.alca{width:40px;height:5px;border-radius:3px;background:var(--line);margin:4px auto 10px}
+.emojis{display:flex;justify-content:space-between;padding:4px 16px 12px;border-bottom:1px solid var(--line)}
+.emojis button{width:48px;height:48px;border-radius:50%;font-size:27px;display:grid;place-items:center;background:var(--surface)}
+.emojis button:active{transform:scale(1.15)}
+.acao{display:flex;align-items:center;gap:18px;width:100%;padding:0 22px;height:54px;font-size:16.5px;text-align:left}
+.acao:active{background:var(--surface)}
+.acao svg{color:var(--muted)}
+.acao.perigo,.acao.perigo svg{color:var(--danger)}
+.grade{display:grid;grid-template-columns:repeat(4,1fr);gap:18px 6px;padding:12px 14px 16px}
+.grade button{display:flex;flex-direction:column;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.grade .bola{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;color:#fff}
+.folha h3{margin:0;padding:4px 22px 10px;font-size:17px}
+.bolha.destaque{position:relative;z-index:42;transform:scale(1.02);box-shadow:0 8px 28px rgba(0,0,0,.25)}
+
+.menu{position:absolute;top:56px;right:8px;z-index:41;background:var(--bg);border-radius:14px;box-shadow:0 10px 32px rgba(0,0,0,.22);padding:6px 0;min-width:230px;transform-origin:top right;transform:scale(.9);opacity:0;transition:.16s}
+.menu.on{transform:none;opacity:1}
+.menu .acao{height:48px;font-size:16px;gap:14px;padding:0 16px}
+
+.toast{position:absolute;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translate(-50%,12px);background:var(--fg);color:var(--bg);font-size:14px;padding:10px 16px;border-radius:12px;opacity:0;transition:.2s;z-index:60;pointer-events:none;max-width:86%;text-align:center}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- Eu ---------- */
+.perfil{display:flex;align-items:center;gap:16px;padding:16px 20px 20px}
+.perfil .av{width:72px;height:72px;font-size:26px}
+.perfil b{font-size:20px;display:block}
+.perfil span{color:var(--muted);font-size:14.5px}
+.grupo{padding:6px 0;border-top:8px solid var(--surface)}
+.grupo h4{margin:10px 20px 4px;font-size:13px;font-weight:600;color:var(--accent);letter-spacing:.02em}
+.op{display:flex;align-items:center;gap:18px;padding:0 20px;min-height:60px;width:100%;text-align:left}
+.op:active{background:var(--surface)}
+.op svg{color:var(--muted)}
+.op .tx{flex:1;min-width:0;padding:10px 0}
+.op .tx b{display:block;font-weight:500;font-size:16px}
+.op .tx span{display:block;font-size:13.5px;color:var(--muted);margin-top:2px}
+.chave{width:46px;height:28px;border-radius:14px;background:var(--surface-2);position:relative;flex:none;transition:background .2s}
+.chave::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+.chave.on{background:var(--accent)}
+.chave.on::after{transform:translateX(18px)}
+.seg{display:flex;background:var(--surface);border-radius:12px;padding:3px;gap:2px}
+.seg button{flex:1;height:34px;border-radius:9px;font-size:14px;color:var(--muted);padding:0 10px}
+.seg button[aria-pressed="true"]{background:var(--bg);color:var(--fg);font-weight:600;box-shadow:var(--shadow)}
+.aviso-proto{margin:16px 20px 24px;padding:12px 14px;border-radius:12px;background:var(--accent-soft);color:var(--fg);font-size:14px;line-height:1.45}
+.ativ .meio{border:0;margin:0;padding:0}
+.ativ .prev{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+</style>
+
+<div id="app" aria-live="polite"></div>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------------- ícones ---------------- */
+const P = {
+  voltar:'<path d="M19 12H5M12 19l-7-7 7-7"/>',
+  busca:'<circle cx="11" cy="11" r="7.5"/><path d="m20.5 20.5-4.2-4.2"/>',
+  nova:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+  mais:'<circle cx="12" cy="5" r="1.4" class="p"/><circle cx="12" cy="12" r="1.4"/><circle cx="12" cy="19" r="1.4"/>',
+  mic:'<rect x="9" y="2.5" width="6" height="12" rx="3"/><path d="M19 10.5v1a7 7 0 0 1-14 0v-1M12 18.5v3"/>',
+  enviar:'<path d="M21.5 2.5 10.5 13.5M21.5 2.5l-7 19-4-8.5-8.5-4Z"/>',
+  clip:'<path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5"/>',
+  emoji:'<circle cx="12" cy="12" r="9.5"/><path d="M8 14.5s1.5 2 4 2 4-2 4-2M9 9.5h.01M15 9.5h.01"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  checks:'<path d="M17 6.5 7 16.5l-4.5-4.5M22 8.5l-8 8-1.5-1.5"/>',
+  relogio:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  play:'<path d="M7 4.5v15l13-7.5Z"/>',
+  pausa:'<path d="M7 4.5h3.5v15H7zM13.5 4.5H17v15h-3.5z"/>',
+  arquivo:'<path d="M14 2.5H6.5a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V8Z"/><path d="M14 2.5V8h5.5"/>',
+  camera:'<path d="M14.5 4h-5L7.5 7H4.5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h15a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3Z"/><circle cx="12" cy="13" r="3.2"/>',
+  galeria:'<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.5-3.5a2 2 0 0 0-2.8 0L5.5 21"/>',
+  sino:'<path d="M6 8.5a6 6 0 0 1 12 0c0 7 3 8.5 3 8.5H3s3-1.5 3-8.5"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
+  sinoOff:'<path d="M8.7 3.6A6 6 0 0 1 18 8.5c0 2.3.3 4 .8 5.3M17 17H3s3-1.5 3-8.5c0-.6.1-1.1.2-1.6"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0M2 2l20 20"/>',
+  responder:'<path d="M9 16.5 4 11.5l5-5"/><path d="M20 18.5v-2a5 5 0 0 0-5-5H4"/>',
+  copiar:'<rect x="8.5" y="8.5" width="13" height="13" rx="2.5"/><path d="M15.5 8.5V5a2.5 2.5 0 0 0-2.5-2.5H5A2.5 2.5 0 0 0 2.5 5v8A2.5 2.5 0 0 0 5 15.5h3.5"/>',
+  lixo:'<path d="M3 6h18M19 6v13.5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8.5 6V4a1.5 1.5 0 0 1 1.5-1.5h4A1.5 1.5 0 0 1 15.5 4v2"/>',
+  thread:'<path d="M14.5 9a2 2 0 0 1-2 2h-6l-4 4V4.5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2Z"/><path d="M18 9h1.5a2 2 0 0 1 2 2v10.5l-4-4h-6a2 2 0 0 1-2-2v-1"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  conversas:'<path d="M7.9 20A9 9 0 1 0 4 16.1L2.5 21.5Z"/>',
+  arroba:'<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>',
+  eu:'<circle cx="12" cy="8" r="4.5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+  brilho:'<path d="M12 2.5l2.2 6.3 6.3 2.2-6.3 2.2L12 19.5l-2.2-6.3L3.5 11l6.3-2.2Z"/>',
+  baixar:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  hash:'<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>',
+  historico:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7.5V12l3.5 2"/>',
+  celular:'<rect x="5.5" y="2" width="13" height="20" rx="3"/><path d="M11 18h2"/>',
+  seta:'<path d="m9 18 6-6-6-6"/>',
+  voz:'<path d="M3 10v4M7.5 6.5v11M12 3v18M16.5 7.5v9M21 10v4"/>',
+  sair:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
+  pessoas:'<circle cx="9" cy="8" r="4"/><path d="M17 11a3.5 3.5 0 1 0 0-7M2.5 21a6.5 6.5 0 0 1 13 0M18 14.5a5.5 5.5 0 0 1 3.5 6.5"/>',
+  docs:'<path d="M4 19.5V5a2.5 2.5 0 0 1 2.5-2.5H20v15H6.5A2.5 2.5 0 0 0 4 20a2 2 0 0 0 2 2h14"/>',
+  nao_lida:'<circle cx="18.5" cy="5.5" r="3"/><path d="M20.5 11v6.5a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2H13"/>'
+};
+const ic = (n, extra = "") => `<svg class="i ${extra}" viewBox="0 0 24 24" aria-hidden="true">${P[n]}</svg>`;
+const icF = (n) => `<svg class="i f" viewBox="0 0 24 24" aria-hidden="true">${P[n]}</svg>`;
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------------- dados de exemplo ---------------- */
+const CORES = { nina:"#1885c8", iris:"#0f8f84", atlas:"#5a54c7", flow:"#c2721a", bruce:"#b84a6a",
+  marina:"#7c5cc4", rafael:"#2f8a52", camila:"#c0533a", diego:"#3a6fb0" };
+const NOMECOR = { "Marina Costa":"--n3", "Rafael Lima":"--n2", "Camila Rocha":"--n1", "Diego Alves":"--n4", "Nina":"--n4", "Flow":"--n5" };
+
+const conversas = [
+  { id:"nina", tipo:"agente", nome:"Nina", papel:"Orquestradora", cor:CORES.nina, hora:"09:41", naoLidas:1,
+    prev:"Em outubro de 2025 foram R$ 398.204,10…" },
+  { id:"geral", tipo:"canal", nome:"geral", papel:"8 participantes", hora:"09:20", naoLidas:4,
+    prev:"<b>Rafael:</b> @Erick o laudo da Sabesp saiu" },
+  { id:"marina", tipo:"pessoa", nome:"Marina Costa", papel:"RH", cor:CORES.marina, hora:"09:12", naoLidas:0,
+    prev:"Combinado, mando a planilha do ponto à tarde", eu:true, lido:true },
+  { id:"iris", tipo:"agente", nome:"Iris", papel:"Faturamento", cor:CORES.iris, hora:"08:57", naoLidas:0,
+    prev:"Faturamento líquido do trimestre: R$ 1.284.330,57" },
+  { id:"operacao", tipo:"canal", nome:"operacao", papel:"5 participantes", hora:"ontem", naoLidas:12, silenciado:true,
+    prev:"<b>Flow:</b> 3 calibrações vencem esta semana" },
+  { id:"atlas", tipo:"agente", nome:"Atlas", papel:"Vendas", cor:CORES.atlas, hora:"ontem", naoLidas:0,
+    prev:"Relatório de vendedores.xlsx" },
+  { id:"rafael", tipo:"pessoa", nome:"Rafael Lima", papel:"Laboratório", cor:CORES.rafael, hora:"seg", naoLidas:0,
+    prev:"👍", eu:false },
+  { id:"flow", tipo:"agente", nome:"Flow", papel:"Operação", cor:CORES.flow, hora:"seg", naoLidas:0,
+    prev:"Briefing de operação de segunda está pronto" },
+  { id:"bruce", tipo:"agente", nome:"Bruce", papel:"Pessoas", cor:CORES.bruce, hora:"28/10", naoLidas:0,
+    prev:"Fechamento de ponto de outubro conferido" }
+];
+
+let seq = 100;
+const ondas = (n, s) => Array.from({length:n}, (_, k) => 20 + Math.round(70 * Math.abs(Math.sin(k * 1.7 + s) * Math.cos(k * .37 + s))));
+const mensagens = {
+  nina: [
+    { dia:"Hoje" },
+    { id:1, de:"eu", t:"<p>Qual foi o faturamento de outubro?</p>", h:"09:30", st:"lido" },
+    { id:2, de:"Nina", t:"<p>O faturamento líquido de outubro foi de <b>R$ 441.712,80</b>, 12% acima de setembro.</p><p>Os três produtos que mais venderam:</p><ul><li><b>Phoebus</b> — 38 unidades</li><li><b>Iblow</b> — 21 unidades</li><li><b>Alcolizer</b> — 17 unidades</li></ul>", h:"09:31", audio:{dur:"0:21", w:ondas(34,1)}, reac:{"👍":1}, minha:"👍" },
+    { id:3, de:"eu", t:"<p>E comparado ao mesmo mês do ano passado?</p>", h:"09:40", st:"lido" },
+    { id:4, de:"Nina", t:"<p>Em outubro de 2025 foram R$ 398.204,10 — crescimento de <b>10,9%</b> ano contra ano.</p>", h:"09:41", audio:{dur:"0:09", w:ondas(34,4)} }
+  ],
+  geral: [
+    { dia:"Ontem" },
+    { id:10, de:"Camila Rocha", t:"<p>Pessoal, a reunião de resultados mudou para quinta às 10h.</p>", h:"17:02", reac:{"👍":5,"🙏":1} },
+    { dia:"Hoje" },
+    { id:11, de:"Marina Costa", t:"<p>Bom dia! Alguém já conferiu o relatório de calibração desta semana?</p>", h:"09:00" },
+    { id:12, de:"Marina Costa", t:"<p>Preciso fechar até as 11h.</p>", h:"09:00" },
+    { id:13, de:"eu", t:"<p>Conferi sim, está na pasta de Documentos. Vou mandar o link aqui em seguida.</p>", h:"09:10", st:"lido" },
+    { id:14, de:"Nina", agente:true, t:"<p>Resumo da semana:</p><ul><li><b>42</b> calibrações concluídas</li><li><b>3</b> pendentes de laudo</li><li>Nenhum atraso crítico</li></ul>", h:"09:15", respostas:{n:3, quem:["Rafael Lima","Marina Costa"]} },
+    { id:15, de:"Rafael Lima", t:'<p><span class="men">@Erick</span> o laudo da Sabesp saiu, segue o PDF.</p>', h:"09:20" },
+    { id:16, de:"Rafael Lima", arq:{n:"Laudo Sabesp 0458-2026.pdf", t:"PDF · 1,2 MB", cor:"#d0453a", tipo:"PDF"}, h:"09:20" }
+  ],
+  marina: [
+    { dia:"Hoje" },
+    { id:20, de:"Marina Costa", t:"<p>Erick, consegue ver com o Bruce o fechamento do ponto de outubro?</p>", h:"09:05" },
+    { id:21, de:"eu", t:"<p>Combinado, mando a planilha do ponto à tarde</p>", h:"09:12", st:"lido" }
+  ],
+  iris: [
+    { dia:"Hoje" },
+    { id:30, de:"Iris", t:"<p>Bom dia! Briefing de faturamento:</p><p>Faturamento líquido do trimestre: <b>R$ 1.284.330,57</b> — faltam R$ 215.669,43 para a meta.</p>", h:"08:57", audio:{dur:"0:16", w:ondas(34,7)} }
+  ],
+  operacao: [{ dia:"Ontem" },{ id:40, de:"Flow", agente:true, t:"<p>3 calibrações vencem esta semana: Sabesp (2) e CPTM (1).</p>", h:"18:30" }],
+  atlas: [{ dia:"Ontem" },{ id:50, de:"Atlas", arq:{n:"Relatório de vendedores.xlsx", t:"Planilha · 84 KB", cor:"#1d7a4f", tipo:"XLS"}, h:"16:44" }],
+  rafael: [{ dia:"Segunda" },{ id:60, de:"eu", t:"<p>Valeu pelo laudo da CPTM!</p>", h:"15:10", st:"lido" },{ id:61, de:"Rafael Lima", t:"<p>👍</p>", h:"15:12" }],
+  flow: [{ dia:"Segunda" },{ id:70, de:"Flow", t:"<p>Briefing de operação de segunda está pronto.</p>", h:"07:31" }],
+  bruce: [{ dia:"28/10" },{ id:80, de:"Bruce", t:"<p>Fechamento de ponto de outubro conferido. Nenhuma marcação pendente.</p>", h:"16:02" }]
+};
+const threads = {
+  14: [
+    { dia:"Hoje" },
+    { id:90, de:"Rafael Lima", t:"<p>Os 3 pendentes são da Sabesp, já estou finalizando.</p>", h:"09:17" },
+    { id:91, de:"Marina Costa", t:"<p>Ótimo, obrigada!</p>", h:"09:18" },
+    { id:92, de:"Rafael Lima", t:"<p>Um já saiu, mandei no canal.</p>", h:"09:20" }
+  ]
+};
+const respostasNina = [
+  "<p>Fechado. Os 3 laudos pendentes são da <b>Sabesp</b>, todos com previsão para hoje. Pedi ao Flow para confirmar com o laboratório.</p>",
+  "<p>A Iris confirmou: o trimestre está em <b>R$ 1.284.330,57</b>. Faltam R$ 215.669,43 para a meta.</p>",
+  "<p>Pronto. Montei a planilha e salvei em Documentos.</p>"
+];
+const atividade = [
+  { conv:"geral", av:"rafael", nome:"Rafael Lima", txt:'mencionou você em <b>#geral</b>: “@Erick o laudo da Sabesp saiu, segue o PDF.”', h:"09:20", nova:true },
+  { conv:"geral", av:"marina", nome:"Marina Costa", txt:"respondeu na thread <b>Resumo da semana</b> em #geral", h:"09:18", nova:true },
+  { conv:"atlas", av:"atlas", nome:"Atlas", agente:true, txt:"terminou o que você pediu: <b>Relatório de vendedores.xlsx</b>", h:"ontem" },
+  { conv:"geral", av:"camila", nome:"Camila Rocha", txt:'mencionou <b>@todos</b> em #geral: “a reunião de resultados mudou para quinta às 10h”', h:"ontem" }
+];
+
+/* ---------------- estado ---------------- */
+const app = document.getElementById("app");
+const estado = { filtro:"pessoa", aba:"conversas", busca:"", pilha:[], resp:null, tema:"sistema",
+  notif:true, audio:true, idxNina:0, tocando:null };
+
+const cv = (id) => conversas.find(c => c.id === id);
+function avatar(c, tam = "") {
+  if (c.tipo === "canal") return `<div class="av canal ${tam}">${ic("hash")}</div>`;
+  const ag = c.tipo === "agente";
+  return `<div class="av ${tam} ${ag ? "agente" : ""}" style="background:${c.cor}">${esc(c.nome[0])}${ag ? `<span class="selo">${icF("brilho")}</span>` : ""}</div>`;
+}
+const avDe = (nome) => {
+  const c = conversas.find(x => x.nome === nome);
+  if (c) return avatar(c, "xs");
+  const k = nome.split(" ")[0].toLowerCase();
+  return `<div class="av xs" style="background:${CORES[k] || "#5b6e7d"}">${esc(nome[0])}</div>`;
+};
+
+/* ---------------- toast ---------------- */
+let tt;
+function toast(msg) {
+  let t = app.querySelector(".toast");
+  if (!t) { t = document.createElement("div"); t.className = "toast"; app.appendChild(t); }
+  t.textContent = msg; t.classList.add("on");
+  clearTimeout(tt); tt = setTimeout(() => t.classList.remove("on"), 2200);
+}
+
+/* ---------------- navegação em pilha ---------------- */
+function abrirTela(html, montar) {
+  const anterior = app.querySelector(".tela:not(.saindo):last-of-type");
+  const t = document.createElement("section");
+  t.className = "tela entrando"; t.innerHTML = html;
+  app.appendChild(t);
+  estado.pilha.push({ el:t, montar });
+  montar && montar(t);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    t.classList.remove("entrando"); anterior && anterior.classList.add("atras");
+  }));
+  return t;
+}
+function voltar() {
+  if (estado.pilha.length <= 1) return;
+  const { el } = estado.pilha.pop();
+  el.classList.add("entrando", "saindo");
+  const topo = estado.pilha[estado.pilha.length - 1].el;
+  topo.classList.remove("atras");
+  setTimeout(() => el.remove(), 300);
+  estado.resp = null;
+  if (topo.dataset.raiz) renderInicio(topo);
+}
+
+/* ---------------- início (abas) ---------------- */
+function totalAtividade() { return atividade.filter(a => a.nova).length; }
+function renderInicio(t) {
+  t.dataset.raiz = "1";
+  const aba = estado.aba;
+  let corpo = "";
+  if (aba === "conversas") corpo = telaLista();
+  if (aba === "atividade") corpo = telaAtividade();
+  if (aba === "eu") corpo = telaEu();
+  t.innerHTML = corpo + `
+    <nav class="abas" aria-label="Navegação">
+      ${abaBtn("conversas","conversas","Conversas", conversas.filter(c=>c.naoLidas&&!c.silenciado).length)}
+      ${abaBtn("atividade","arroba","Atividade", totalAtividade())}
+      ${abaBtn("eu","eu","Eu", 0)}
+    </nav>`;
+  ligarInicio(t);
+}
+const abaBtn = (id, icone, rot, n) =>
+  `<button class="aba" data-aba="${id}" ${estado.aba === id ? 'aria-current="page"' : ""}>
+     <span class="pilula">${ic(icone)}</span>${rot}${n ? `<span class="ponto">${n}</span>` : ""}</button>`;
+
+function telaLista() {
+  return `
+    <header class="topo"><h1>HS.OS</h1>
+      <button class="ib" data-acao="camera-rapida" aria-label="Câmera">${ic("camera")}</button>
+      <button class="ib" data-acao="mais-lista" aria-label="Mais">${ic("mais")}</button></header>
+    <label class="busca">${ic("busca")}<input id="busca" type="search" placeholder="Buscar conversas e mensagens" value="${esc(estado.busca)}" autocomplete="off"></label>
+    <div class="chips" role="group" aria-label="Filtro">
+      ${[["pessoa","Pessoas"],["agente","Agentes"],["canal","Canais"]].map(([k,r]) =>
+        `<button class="chip" data-filtro="${k}" aria-pressed="${estado.filtro===k}">${r}</button>`).join("")}
+    </div>
+    <div class="rolar" id="lista">${itensLista()}</div>`;
+}
+function itensLista() {
+  const q = estado.busca.trim().toLowerCase();
+  const lst = conversas.filter(c =>
+    c.tipo === estado.filtro &&
+    (!q || c.nome.toLowerCase().includes(q) || c.prev.toLowerCase().includes(q)));
+  if (!lst.length) return `<div class="vazio">Nenhuma conversa ${q ? `com “${esc(q)}”` : "aqui"}.</div>`;
+  return lst.map(c => {
+    const vivo = c.estado === "pensando";
+    const prev = vivo ? `<span class="prev vivo">pensando…</span>`
+      : `<span class="prev">${c.eu ? `<span style="color:${c.lido ? "var(--accent)" : "var(--muted)"};display:inline-flex;vertical-align:-3px;margin-right:2px">${ic("checks","mini")}</span>` : ""}${c.prev}</span>`;
+    return `<button class="item" data-abrir="${c.id}">
+      ${avatar(c)}
+      <span class="meio">
+        <span class="l1"><span class="nome">${c.tipo === "canal" ? "#" : ""}${esc(c.nome)}</span>
+          <span class="hora ${c.naoLidas && !c.silenciado ? "nova" : ""}">${c.hora}</span></span>
+        <span class="l2">${prev}
+          ${c.silenciado ? ic("sinoOff","mini") : ""}
+          ${c.naoLidas ? `<span class="badge ${c.silenciado ? "mudo" : ""}">${c.naoLidas}</span>` : ""}</span>
+      </span></button>`;
+  }).join("");
+}
+function telaAtividade() {
+  return `<header class="topo"><h1>Atividade</h1></header>
+    <div class="chips"><button class="chip" aria-pressed="true">Tudo</button><button class="chip" aria-pressed="false">Menções</button><button class="chip" aria-pressed="false">Threads</button><button class="chip" aria-pressed="false">Agentes</button></div>
+    <div class="rolar">${atividade.map(a => {
+      const c = cv(a.av) || { tipo:"pessoa", nome:a.nome, cor:CORES[a.av] };
+      return `<button class="item ativ" data-abrir="${a.conv}">${avatar(c, "sm")}
+        <span class="meio"><span class="l1"><span class="nome" style="font-size:15.5px">${esc(a.nome)}</span><span class="hora ${a.nova ? "nova" : ""}">${a.h}</span></span>
+        <span class="prev" style="color:var(--fg);font-size:14.5px">${a.txt}</span></span></button>`;
+    }).join("")}</div>`;
+}
+function telaEu() {
+  return `<header class="topo"><h1>Eu</h1></header>
+    <div class="rolar">
+      <div class="perfil"><div class="av" style="background:#1885c8">E</div><div><b>Erick Santos</b><span>Administrador · TI</span></div></div>
+      <div class="grupo"><h4>Notificações</h4>
+        <button class="op" data-chave="notif">${ic("sino")}<span class="tx"><b>Notificações neste celular</b><span>Mensagens, menções e respostas de agentes</span></span><span class="chave ${estado.notif ? "on" : ""}"></span></button>
+        <button class="op" data-chave="audio">${ic("voz")}<span class="tx"><b>Resumo em áudio</b><span>O agente fala um resumo embaixo de cada resposta</span></span><span class="chave ${estado.audio ? "on" : ""}"></span></button>
+        <button class="op" data-acao="silenciados">${ic("sinoOff")}<span class="tx"><b>Conversas silenciadas</b><span>${conversas.filter(c=>c.silenciado).map(c=>"#"+c.nome).join(", ") || "Nenhuma"}</span></span>${ic("seta")}</button>
+      </div>
+      <div class="grupo"><h4>Aparência</h4>
+        <div class="op"><span class="tx"><b>Tema</b></span>
+          <div class="seg" role="group" aria-label="Tema">${[["sistema","Sistema"],["light","Claro"],["dark","Escuro"]].map(([k,r]) =>
+            `<button data-tema="${k}" aria-pressed="${estado.tema===k}">${r}</button>`).join("")}</div></div>
+      </div>
+      <div class="grupo"><h4>App</h4>
+        <div class="op">${ic("celular")}<span class="tx"><b>Instalado neste celular</b><span>Abre pelo ícone, em tela cheia</span></span><span style="color:var(--ok)">${ic("check")}</span></div>
+        <button class="op" data-acao="docs">${ic("docs")}<span class="tx"><b>Documentos</b><span>Arquivos gerados pelos agentes</span></span>${ic("seta")}</button>
+        <button class="op" data-acao="sair" style="color:var(--danger)"><span style="color:var(--danger)">${ic("sair")}</span><span class="tx"><b>Sair</b><span>Este celular para de receber notificações</span></span></button>
+      </div>
+      <p class="aviso-proto"><b>Protótipo.</b> Conversas, pessoas e números são exemplos para avaliar o visual e o jeito de usar. Nada aqui fala com o HS.OS de verdade.</p>
+    </div>`;
+}
+
+function ligarInicio(t) {
+  t.querySelectorAll("[data-aba]").forEach(b => b.onclick = () => { estado.aba = b.dataset.aba; renderInicio(t); });
+  t.querySelectorAll("[data-filtro]").forEach(b => b.onclick = () => { estado.filtro = b.dataset.filtro; renderInicio(t); });
+  const busca = t.querySelector("#busca");
+  if (busca) busca.oninput = () => { estado.busca = busca.value; t.querySelector("#lista").innerHTML = itensLista(); ligarItens(t); };
+  ligarItens(t);
+  t.querySelectorAll("[data-chave]").forEach(b => b.onclick = () => {
+    const k = b.dataset.chave; estado[k] = !estado[k]; b.querySelector(".chave").classList.toggle("on", estado[k]);
+    toast(k === "notif" ? (estado[k] ? "Notificações ligadas neste celular" : "Notificações desligadas neste celular") : (estado[k] ? "Resumo em áudio ligado" : "Resumo em áudio desligado"));
+  });
+  t.querySelectorAll("[data-tema]").forEach(b => b.onclick = () => {
+    estado.tema = b.dataset.tema;
+    if (estado.tema === "sistema") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", estado.tema);
+    renderInicio(t);
+  });
+  t.querySelectorAll("[data-acao]").forEach(b => b.onclick = () => acaoGenerica(b.dataset.acao, t));
+}
+function ligarItens(t) {
+  t.querySelectorAll("[data-abrir]").forEach(b => b.onclick = () => abrirConversa(b.dataset.abrir));
+}
+function acaoGenerica(a, t) {
+  const msgs = { "camera-rapida":"A câmera abre e a foto vai para a conversa que você escolher",
+    "mais-lista":"Marcar tudo como lido · Novo canal · Configurações",
+    silenciados:"Lista das conversas silenciadas, com opção de reativar",
+    docs:"Abre Documentos", sair:"No app de verdade, isto sai da conta" };
+  if (a === "nova") return abrirNova();
+  toast(msgs[a] || "No protótipo isso é só ilustrativo");
+}
+
+/* ---------------- nova conversa ---------------- */
+function abrirNova() {
+  const grupos = [["Agentes","agente"],["Pessoas","pessoa"]];
+  abrirTela(`
+    <header class="topo topo-conv"><button class="ib" data-voltar aria-label="Voltar">${ic("voltar")}</button>
+      <div class="quem" style="pointer-events:none"><div><div class="nome">Nova conversa</div><div class="sub">${conversas.filter(c=>c.tipo!=="canal").length} contatos</div></div></div>
+      <button class="ib" aria-label="Buscar">${ic("busca")}</button></header>
+    <div class="rolar">
+      <button class="item"><div class="av sm canal" style="background:var(--accent)!important;color:var(--on-accent)">${ic("pessoas")}</div><span class="meio"><span class="nome">Novo canal</span></span></button>
+      ${grupos.map(([r,tp]) => `<h4 style="margin:16px 20px 6px;font-size:13px;color:var(--accent)">${r}</h4>` +
+        conversas.filter(c=>c.tipo===tp).map(c => `<button class="item" data-abrir="${c.id}">${avatar(c,"sm")}<span class="meio"><span class="nome">${esc(c.nome)}</span><span class="prev">${esc(c.papel)}</span></span></button>`).join("")).join("")}
+    </div>`, (t) => {
+      t.querySelector("[data-voltar]").onclick = voltar;
+      t.querySelectorAll("[data-abrir]").forEach(b => b.onclick = () => { voltar(); setTimeout(() => abrirConversa(b.dataset.abrir), 120); });
+    });
+}
+
+/* ---------------- conversa ---------------- */
+function linhasMsg(lista, c, emThread) {
+  let out = "", ant = null;
+  for (const m of lista) {
+    if (m.dia) { out += `<div class="dia">${m.dia}</div>`; ant = null; continue; }
+    const eu = m.de === "eu";
+    const inicio = !ant || ant.de !== m.de;
+    const grupo = c.tipo === "canal" && !eu;
+    const ehAgente = m.agente || (c.tipo === "agente" && !eu);
+    out += `<div class="linha ${eu ? "eu" : ""} ${inicio ? "inicio" : ""}" data-id="${m.id}">
+      <span class="puxa">${ic("responder")}</span>
+      ${grupo ? (inicio ? avDe(m.de) : `<span class="vaga"></span>`) : ""}
+      <div class="bolha" data-msg="${m.id}">
+        ${grupo && inicio ? `<div class="autor" style="color:var(${NOMECOR[m.de] || "--n4"})">${esc(m.de)}${ehAgente ? " ✦" : ""}</div>` : ""}
+        ${m.cit ? `<span class="cit"><b>${esc(m.cit.de)}</b><span>${esc(m.cit.t)}</span></span>` : ""}
+        ${m.arq ? `<div class="arq"><div class="tipo" style="background:${m.arq.cor}">${m.arq.tipo}</div><div style="flex:1;min-width:0"><div class="n">${esc(m.arq.n)}</div><div class="t">${m.arq.t}</div></div><button class="bx" aria-label="Baixar" data-baixar>${ic("baixar")}</button></div>` : ""}
+        ${m.pensando ? `<span class="pensando"><i></i><i></i><i></i></span><span class="pensando-txt">${esc(c.nome)} está pensando…</span>` : (m.t || "")}
+        ${m.audio && estado.audio ? `<div class="audio" data-audio="${m.id}"><button class="play" aria-label="Ouvir resumo">${icF("play")}</button>
+            <div class="onda">${m.audio.w.map(v => `<i style="height:${v}%"></i>`).join("")}</div>
+            <div class="info"><span>${m.audio.dur}</span><span>resumo</span></div></div>` : ""}
+        ${m.pensando ? "" : `<span class="rodape">${m.editada ? "editada · " : ""}${m.h}${eu ? `<span class="${m.st === "lido" ? "lido" : ""}">${ic(m.st === "enviando" ? "relogio" : m.st === "enviada" ? "check" : "checks")}</span>` : ""}</span>`}
+      </div></div>`;
+    if (m.reac && Object.keys(m.reac).length) out += `<div class="reacoes" style="${eu ? "justify-content:flex-end;margin-right:12px" : grupo ? "margin-left:48px" : ""}">${Object.entries(m.reac).map(([e,n]) => `<span class="reac ${m.minha === e ? "minha" : ""}">${e}${n > 1 ? ` ${n}` : ""}</span>`).join("")}</div>`;
+    if (m.respostas && !emThread) out += `<button class="thr" data-thread="${m.id}"><span class="avs">${m.respostas.quem.map(avDe).join("")}</span>${m.respostas.n} respostas · ver thread</button>`;
+    ant = m;
+  }
+  return out;
+}
+
+function abrirConversa(id, threadDe) {
+  const c = cv(id);
+  if (!threadDe) { c.naoLidas = 0; atividade.forEach(a => { if (a.conv === id) a.nova = false; }); }
+  const lista = threadDe ? threads[threadDe] : mensagens[id];
+  const pai = threadDe ? mensagens[id].find(m => m.id === threadDe) : null;
+  const sub = threadDe ? `#${c.nome}` : c.tipo === "agente" ? (c.estado === "pensando" ? "pensando…" : `Agente · ${c.papel}`) : c.tipo === "canal" ? c.papel : "online";
+  const t = abrirTela(`
+    <header class="topo topo-conv">
+      <button class="ib" data-voltar aria-label="Voltar">${ic("voltar")}</button>
+      <button class="quem" data-info>${threadDe ? "" : avatar(c, "sm")}
+        <span style="min-width:0"><div class="nome">${threadDe ? "Thread" : (c.tipo === "canal" ? "#" : "") + esc(c.nome)}</div>
+        <div class="sub ${c.estado === "pensando" ? "vivo" : ""}" data-sub>${sub}</div></span></button>
+      ${threadDe ? "" : `<button class="ib" data-menu aria-label="Mais opções">${ic("mais")}</button>`}
+    </header>
+    <div class="fundo" data-fundo>
+      ${pai ? `<div style="padding:4px 0 10px;border-bottom:1px solid var(--line);margin-bottom:6px">${linhasMsg([pai], c, true)}</div>` : ""}
+      ${linhasMsg(lista, c, !!threadDe)}
+    </div>
+    <div data-respbar></div>
+    <div class="compor" data-compor>
+      <div class="campo">
+        <button class="ib" data-emoji aria-label="Emoji">${ic("emoji")}</button>
+        <textarea rows="1" data-texto placeholder="${threadDe ? "Responder na thread" : c.tipo === "agente" ? `Mensagem para ${esc(c.nome)}` : "Mensagem"}" aria-label="Mensagem"></textarea>
+        <button class="ib" data-anexo aria-label="Anexar">${ic("clip")}</button>
+      </div>
+      <button class="enviar" data-enviar aria-label="Segure para gravar áudio">${ic("mic")}</button>
+    </div>`, (t) => ligarConversa(t, c, lista, threadDe));
+  return t;
+}
+
+function rolarFim(t, suave) { const f = t.querySelector("[data-fundo]"); f.scrollTo({ top: f.scrollHeight, behavior: suave ? "smooth" : "auto" }); }
+
+function ligarConversa(t, c, lista, threadDe) {
+  const fundo = t.querySelector("[data-fundo]");
+  const txt = t.querySelector("[data-texto]");
+  const btn = t.querySelector("[data-enviar]");
+  const redesenhar = () => {
+    const pai = threadDe ? mensagens[c.id].find(m => m.id === threadDe) : null;
+    fundo.innerHTML = (pai ? `<div style="padding:4px 0 10px;border-bottom:1px solid var(--line);margin-bottom:6px">${linhasMsg([pai], c, true)}</div>` : "") + linhasMsg(lista, c, !!threadDe);
+    ligarMensagens();
+  };
+  t.querySelector("[data-voltar]").onclick = voltar;
+  setTimeout(() => rolarFim(t), 0);
+
+  // campo cresce com o texto; o botão vira "enviar" quando há texto (igual WhatsApp)
+  txt.oninput = () => {
+    txt.style.height = "auto"; txt.style.height = Math.min(txt.scrollHeight, 132) + "px";
+    const tem = txt.value.trim().length > 0;
+    btn.innerHTML = ic(tem ? "enviar" : "mic");
+    btn.setAttribute("aria-label", tem ? "Enviar" : "Segure para gravar áudio");
+  };
+  t.querySelector("[data-emoji]").onclick = () => abrirFolhaEmoji(t, (e) => { txt.value += e; txt.oninput(); });
+  t.querySelector("[data-anexo]").onclick = () => abrirAnexos(t, c, lista, redesenhar);
+  const menu = t.querySelector("[data-menu]");
+  if (menu) menu.onclick = () => abrirMenu(t, c);
+  t.querySelector("[data-info]").onclick = () => !threadDe && toast(c.tipo === "agente" ? `${c.nome} · ${c.papel}. Aqui abririam modelo, contexto e arquivos.` : "Aqui abririam participantes, arquivos e silenciar.");
+
+  // enviar / gravar áudio segurando
+  let gravando = null, iniGrav = 0, cancelou = false, x0 = 0;
+  const compor = t.querySelector("[data-compor]");
+  const campo = compor.querySelector(".campo");
+  btn.addEventListener("pointerdown", (e) => {
+    if (txt.value.trim()) return;
+    e.preventDefault(); btn.setPointerCapture(e.pointerId);
+    cancelou = false; x0 = e.clientX; iniGrav = Date.now();
+    btn.classList.add("gravando");
+    const g = document.createElement("div"); g.className = "gravacao";
+    g.innerHTML = `<span class="rec"></span><span class="tempo">0:00</span><span style="flex:1;text-align:right">‹ deslize para cancelar</span>`;
+    campo.hidden = true; compor.insertBefore(g, btn);
+    gravando = setInterval(() => { const s = Math.floor((Date.now() - iniGrav) / 1000); g.querySelector(".tempo").textContent = `0:${String(s).padStart(2,"0")}`; }, 250);
+  });
+  btn.addEventListener("pointermove", (e) => {
+    if (!gravando) return;
+    if (x0 - e.clientX > 90 && !cancelou) { cancelou = true; navigator.vibrate?.(20); fimGravacao(); toast("Áudio descartado"); }
+  });
+  const fimGravacao = () => {
+    if (!gravando) return;
+    clearInterval(gravando); gravando = null;
+    btn.classList.remove("gravando");
+    compor.querySelector(".gravacao")?.remove(); campo.hidden = false;
+    const s = Math.max(1, Math.round((Date.now() - iniGrav) / 1000));
+    if (!cancelou) {
+      if (s < 1.2 && Date.now() - iniGrav < 600) { toast("Segure o microfone para gravar"); return; }
+      enviar({ audioEu: s });
+    }
+  };
+  btn.addEventListener("pointerup", fimGravacao);
+  btn.addEventListener("pointercancel", () => { cancelou = true; fimGravacao(); });
+  btn.addEventListener("click", () => { if (txt.value.trim()) enviar({}); });
+
+  function enviar({ audioEu }) {
+    const h = new Date().toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" });
+    const m = { id: ++seq, de:"eu", h, st:"enviando" };
+    if (audioEu) { m.t = ""; m.audio = { dur:`0:${String(audioEu).padStart(2,"0")}`, w:ondas(30, seq) }; }
+    else m.t = `<p>${esc(txt.value.trim()).replace(/\n/g, "<br>").replace(/@(\w+)/g, '<span class="men">@$1</span>')}</p>`;
+    if (estado.resp) { m.cit = { de: estado.resp.de === "eu" ? "Você" : estado.resp.de, t: estado.resp.txt }; limparResp(t); }
+    lista.push(m);
+    txt.value = ""; txt.oninput();
+    redesenhar(); rolarFim(t, true);
+    if (!threadDe) { c.prev = audioEu ? "🎤 Áudio" : stripTags(m.t); c.hora = h; c.eu = true; c.lido = false; }
+    setTimeout(() => { m.st = "enviada"; redesenhar(); }, 450);
+    setTimeout(() => { m.st = "lido"; if (!threadDe) c.lido = true; redesenhar(); }, 1100);
+    if (c.tipo === "agente" && !threadDe) respostaDoAgente();
+  }
+  function respostaDoAgente() {
+    const p = { id: ++seq, de:c.nome, pensando:true };
+    setTimeout(() => {
+      lista.push(p); c.estado = "pensando";
+      const sub = t.querySelector("[data-sub]"); sub.textContent = "pensando…"; sub.classList.add("vivo");
+      redesenhar(); rolarFim(t, true);
+    }, 900);
+    setTimeout(() => {
+      const i = lista.indexOf(p);
+      const r = { id:p.id, de:c.nome, t:respostasNina[estado.idxNina++ % respostasNina.length],
+        h:new Date().toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" }), audio:{ dur:"0:12", w:ondas(34, seq) } };
+      lista.splice(i, 1, r); c.estado = null;
+      c.prev = stripTags(r.t); c.hora = r.h; c.eu = false;
+      const sub = t.querySelector("[data-sub]"); sub.textContent = `Agente · ${c.papel}`; sub.classList.remove("vivo");
+      redesenhar(); rolarFim(t, true);
+      navigator.vibrate?.(15);
+    }, 3600);
+  }
+
+  // segurar = ações · deslizar para a direita = responder
+  function ligarMensagens() {
+    fundo.querySelectorAll(".bolha").forEach(b => {
+      const id = +b.dataset.msg;
+      const msg = lista.find(m => m.id === id) || mensagens[c.id].find(m => m.id === id);
+      if (!msg || msg.pensando) return;
+      let timer = null, x = 0, y = 0, dx = 0, arrastando = false, disparou = false;
+      const linha = b.closest(".linha"), puxa = linha.querySelector(".puxa");
+      b.addEventListener("pointerdown", (e) => {
+        if (e.target.closest("button")) return;
+        x = e.clientX; y = e.clientY; dx = 0; arrastando = false; disparou = false;
+        b.classList.add("pressionada");
+        timer = setTimeout(() => { disparou = true; b.classList.remove("pressionada"); navigator.vibrate?.(12); abrirAcoes(t, c, msg, b, redesenhar, lista, threadDe); }, 450);
+      });
+      b.addEventListener("pointermove", (e) => {
+        if (timer === null && !arrastando) return;
+        const mx = e.clientX - x, my = e.clientY - y;
+        if (!arrastando && (Math.abs(my) > 10 || Math.abs(mx) > 10)) {
+          clearTimeout(timer); timer = null; b.classList.remove("pressionada");
+          if (mx > 10 && Math.abs(mx) > Math.abs(my)) { arrastando = true; try { b.setPointerCapture(e.pointerId); } catch {} }
+        }
+        if (arrastando) {
+          dx = Math.max(0, Math.min(mx, 90));
+          b.style.transition = "none"; b.style.transform = `translateX(${dx}px)`;
+          puxa.style.opacity = Math.min(1, dx / 60);
+        }
+      });
+      const fim = () => {
+        clearTimeout(timer); timer = null; b.classList.remove("pressionada");
+        if (arrastando) {
+          b.style.transition = ""; b.style.transform = ""; puxa.style.opacity = 0;
+          if (dx > 60) { navigator.vibrate?.(10); definirResp(t, msg); }
+          arrastando = false;
+        }
+      };
+      b.addEventListener("pointerup", fim); b.addEventListener("pointercancel", fim); b.addEventListener("pointerleave", () => { if (!arrastando) fim(); });
+      b.addEventListener("contextmenu", (e) => { e.preventDefault(); if (!disparou) abrirAcoes(t, c, msg, b, redesenhar, lista, threadDe); });
+    });
+    fundo.querySelectorAll("[data-thread]").forEach(b => b.onclick = () => abrirConversa(c.id, +b.dataset.thread));
+    fundo.querySelectorAll("[data-baixar]").forEach(b => b.onclick = () => toast("Baixando… abre no visualizador do celular"));
+    fundo.querySelectorAll("[data-audio]").forEach(a => {
+      const play = a.querySelector(".play"), barras = [...a.querySelectorAll(".onda i")];
+      play.onclick = () => {
+        if (estado.tocando) { clearInterval(estado.tocando.iv); estado.tocando.play.innerHTML = icF("play"); estado.tocando.barras.forEach(i => i.classList.remove("ouvido")); if (estado.tocando.play === play) { estado.tocando = null; return; } }
+        let k = 0; play.innerHTML = icF("pausa");
+        const iv = setInterval(() => { if (k < barras.length) barras[k++].classList.add("ouvido"); else { clearInterval(iv); play.innerHTML = icF("play"); estado.tocando = null; } }, 140);
+        estado.tocando = { iv, play, barras };
+      };
+    });
+  }
+  ligarMensagens();
+}
+const stripTags = (h) => { const d = document.createElement("div"); d.innerHTML = h; return d.textContent.trim(); };
+
+function definirResp(t, msg) {
+  estado.resp = { de: msg.de, txt: msg.t ? stripTags(msg.t) : msg.arq ? "📎 " + msg.arq.n : "🎤 Áudio" };
+  const bar = t.querySelector("[data-respbar]");
+  bar.innerHTML = `<div class="resp-bar"><div class="t"><b>${msg.de === "eu" ? "Você" : esc(msg.de)}</b><span>${esc(estado.resp.txt)}</span></div><button class="ib" aria-label="Cancelar resposta">${ic("x")}</button></div>`;
+  bar.querySelector("button").onclick = () => limparResp(t);
+  t.querySelector("[data-texto]").focus();
+}
+function limparResp(t) { estado.resp = null; t.querySelector("[data-respbar]").innerHTML = ""; }
+
+/* ---------------- folhas ---------------- */
+function folha(t, html, aoFechar) {
+  const veu = document.createElement("div"); veu.className = "veu";
+  const f = document.createElement("div"); f.className = "folha"; f.setAttribute("role", "dialog");
+  f.innerHTML = `<div class="alca"></div>` + html;
+  t.append(veu, f);
+  requestAnimationFrame(() => { veu.classList.add("on"); f.classList.add("on"); });
+  const fechar = () => { veu.classList.remove("on"); f.classList.remove("on"); aoFechar && aoFechar(); setTimeout(() => { veu.remove(); f.remove(); }, 260); };
+  veu.onclick = fechar;
+  // arrastar a alça para baixo fecha
+  let y0 = null;
+  f.addEventListener("pointerdown", (e) => { if (f.scrollTop <= 0) y0 = e.clientY; });
+  f.addEventListener("pointermove", (e) => { if (y0 === null) return; const d = e.clientY - y0; if (d > 0) { f.style.transition = "none"; f.style.transform = `translateY(${d}px)`; } });
+  f.addEventListener("pointerup", (e) => { if (y0 === null) return; const d = e.clientY - y0; f.style.transition = ""; f.style.transform = ""; y0 = null; if (d > 90) fechar(); });
+  return { f, fechar };
+}
+
+function abrirAcoes(t, c, msg, bolha, redesenhar, lista, threadDe) {
+  bolha.classList.add("destaque");
+  const eu = msg.de === "eu";
+  const acoes = [["responder","Responder","responder"]];
+  if (c.tipo === "canal" && !threadDe) acoes.push(["thread","Responder em thread","thread"]);
+  if (msg.t) acoes.push(["copiar","Copiar","copiar"]);
+  if (msg.audio && !eu) acoes.push(["ouvir","Ouvir resumo","voz"]);
+  if (eu && msg.t) acoes.push(["editar","Editar","nova"]);
+  if (c.tipo === "canal" && !eu) acoes.push(["naolida","Marcar como não lida","nao_lida"]);
+  acoes.push(["apagar","Apagar para mim","lixo"]);
+  const { f, fechar } = folha(t, `
+    ${c.tipo !== "agente" || eu ? `<div class="emojis">${["👍","❤️","😂","😮","🙏"].map(e => `<button data-e="${e}" aria-label="Reagir ${e}">${e}</button>`).join("")}<button data-e="+" aria-label="Mais emojis" style="font-size:22px;color:var(--muted)">${ic("emoji")}</button></div>` : ""}
+    ${acoes.map(([k, r, i]) => `<button class="acao ${k === "apagar" ? "perigo" : ""}" data-a="${k}">${ic(i)}${r}</button>`).join("")}`,
+    () => bolha.classList.remove("destaque"));
+  f.querySelectorAll("[data-e]").forEach(b => b.onclick = () => {
+    if (b.dataset.e === "+") { fechar(); return abrirFolhaEmoji(t, (e) => reagir(e)); }
+    reagir(b.dataset.e); fechar();
+  });
+  function reagir(e) {
+    msg.reac = msg.reac || {};
+    if (msg.minha === e) { msg.reac[e]--; if (!msg.reac[e]) delete msg.reac[e]; msg.minha = null; }
+    else { if (msg.minha) { msg.reac[msg.minha]--; if (!msg.reac[msg.minha]) delete msg.reac[msg.minha]; } msg.reac[e] = (msg.reac[e] || 0) + 1; msg.minha = e; }
+    redesenhar();
+  }
+  f.querySelectorAll("[data-a]").forEach(b => b.onclick = () => {
+    const a = b.dataset.a; fechar();
+    if (a === "responder") definirResp(t, msg);
+    if (a === "thread") { if (!threads[msg.id]) threads[msg.id] = [{ dia:"Hoje" }]; msg.respostas = msg.respostas || { n:0, quem:[] }; abrirConversa(c.id, msg.id); }
+    if (a === "copiar") { navigator.clipboard?.writeText(stripTags(msg.t)).catch(() => {}); toast("Mensagem copiada"); }
+    if (a === "ouvir") { const p = t.querySelector(`[data-audio="${msg.id}"] .play`); p && p.click(); }
+    if (a === "editar") { const txt = t.querySelector("[data-texto]"); txt.value = stripTags(msg.t); txt.oninput(); txt.focus(); toast("Editando a mensagem"); }
+    if (a === "naolida") { c.naoLidas = Math.max(1, c.naoLidas); toast("Marcada como não lida"); }
+    if (a === "apagar") { const i = lista.indexOf(msg); if (i >= 0) lista.splice(i, 1); redesenhar(); toast("Apagada só para você"); }
+  });
+}
+
+function abrirFolhaEmoji(t, escolher) {
+  const em = "😀 😁 😂 🤣 😊 😍 😘 😎 🤔 😮 😢 😡 👍 👎 👏 🙌 🙏 💪 👀 🎉 ✅ ❌ ⚠️ 🔥 💯 📎 📊 📈 🧪 🛠️ ☕ 🚀".split(" ");
+  const { f, fechar } = folha(t, `<h3>Emojis</h3><div style="display:grid;grid-template-columns:repeat(8,1fr);gap:4px;padding:0 12px 8px">${em.map(e => `<button data-e="${e}" style="height:46px;font-size:27px;border-radius:10px">${e}</button>`).join("")}</div>`);
+  f.querySelectorAll("[data-e]").forEach(b => b.onclick = () => { escolher(b.dataset.e); fechar(); });
+}
+
+function abrirAnexos(t, c, lista, redesenhar) {
+  const itens = [["doc","Documento","arquivo","#6b5bd2"],["cam","Câmera","camera","#d0453a"],["gal","Galeria","galeria","#2f8fd8"],["hs","Documentos HS","docs","#1885c8"]];
+  const { f, fechar } = folha(t, `<h3>Enviar</h3><div class="grade">${itens.map(([k,r,i,cor]) => `<button data-k="${k}"><span class="bola" style="background:${cor}">${ic(i)}</span>${r}</button>`).join("")}</div>`);
+  f.querySelectorAll("[data-k]").forEach(b => b.onclick = () => {
+    fechar();
+    if (b.dataset.k === "doc" || b.dataset.k === "hs") {
+      lista.push({ id: ++seq, de:"eu", arq:{ n:"Proposta Comercial CPTM.pdf", t:"PDF · 640 KB", cor:"#d0453a", tipo:"PDF" }, h:new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}), st:"lido" });
+      redesenhar(); rolarFim(t, true);
+    } else toast(b.dataset.k === "cam" ? "Abre a câmera do celular" : "Abre a galeria de fotos");
+  });
+}
+
+function abrirMenu(t, c) {
+  const veu = document.createElement("div"); veu.className = "veu"; veu.style.background = "transparent";
+  const m = document.createElement("div"); m.className = "menu"; m.setAttribute("role", "menu");
+  const op = c.tipo === "agente"
+    ? [["arquivo","Arquivos da conversa"],["historico","Conversas anteriores"],["brilho","Modelo e contexto"],["nova","Nova conversa"]]
+    : [["pessoas", c.tipo === "canal" ? "Participantes" : "Ver perfil"],["arquivo","Arquivos"],[c.silenciado ? "sino" : "sinoOff", c.silenciado ? "Reativar notificações" : "Silenciar"],["busca","Buscar na conversa"]];
+  m.innerHTML = op.map(([i, r]) => `<button class="acao" role="menuitem" data-r="${r}">${ic(i)}${r}</button>`).join("");
+  t.append(veu, m);
+  requestAnimationFrame(() => m.classList.add("on"));
+  const fechar = () => { m.classList.remove("on"); setTimeout(() => { m.remove(); veu.remove(); }, 160); };
+  veu.onclick = fechar;
+  m.querySelectorAll("[data-r]").forEach(b => b.onclick = () => {
+    fechar(); const r = b.dataset.r;
+    if (r === "Silenciar" || r === "Reativar notificações") { c.silenciado = !c.silenciado; toast(c.silenciado ? "Silenciado: sem notificação, a não ser que mencionem você" : "Notificações reativadas"); }
+    else if (r === "Nova conversa") toast("Nova conversa: a anterior continua em Conversas anteriores");
+    else toast(`${r}: abre como tela própria, em tela cheia`);
+  });
+}
+
+/* ---------------- início ---------------- */
+const raiz = document.createElement("section");
+raiz.className = "tela";
+app.appendChild(raiz);
+estado.pilha.push({ el:raiz });
+renderInicio(raiz);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { const v = app.querySelector(".veu"); if (v) v.click(); else voltar(); } });
+setTimeout(() => toast("Protótipo com dados de exemplo"), 400);
+})();
+</script>
