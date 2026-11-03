@@ -24,6 +24,7 @@ import ConnectorsTab from "@/components/settings/ConnectorsTab";
 import EmpresaTab from "@/components/settings/EmpresaTab";
 import { Switch } from "@/components/ui/switch";
 import PreferenciaResumoEmAudio from "@/components/settings/PreferenciaResumoEmAudio";
+import { InstalarApp } from "@/components/InstalarApp";
 import MissionControlDossierPage from "@/pages/MissionControlDossierPage";
 import UsersPage from "@/pages/UsersPage";
 import DocumentationPage from "@/pages/DocumentationPage";
@@ -598,6 +599,9 @@ export default function SettingsPage() {
               </div>
 
               <PreferenciaResumoEmAudio />
+
+              {/* Entrada fixa do convite para instalar; some quando já é app. */}
+              <InstalarApp variante="entrada" />
 
               <h3 className="text-sm font-display font-semibold text-foreground flex items-center gap-2">
                 <User className="h-4 w-4 text-primary" /> Foto de Perfil
