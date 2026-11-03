@@ -11,6 +11,7 @@ import { Plus } from "lucide-react";
 import {
   Drawer,
   DrawerContent,
+  DrawerNested,
   DrawerDescription,
   DrawerHeader,
   DrawerTitle,
@@ -26,9 +27,13 @@ interface Props {
   acoes: AcaoDaMensagem[];
   /** Sem ele (conversa com agente) a linha de reações não aparece. */
   aoReagir?: (emoji: string) => void;
+  /** Dentro do Drawer da thread: vira NestedRoot, senão os dois disputam o
+   *  arrasto e o fundo escala errado. */
+  aninhada?: boolean;
 }
 
-export default function AcoesDaMensagemNoToque({ aberto, aoMudar, acoes, aoReagir }: Props) {
+export default function AcoesDaMensagemNoToque({ aberto, aoMudar, acoes, aoReagir, aninhada = false }: Props) {
+  const Raiz = aninhada ? DrawerNested : Drawer;
   const [todosEmojis, setTodosEmojis] = useState(false);
 
   const mudar = (v: boolean) => {
@@ -43,7 +48,7 @@ export default function AcoesDaMensagemNoToque({ aberto, aoMudar, acoes, aoReagi
   };
 
   return (
-    <Drawer open={aberto} onOpenChange={mudar}>
+    <Raiz open={aberto} onOpenChange={mudar}>
       <DrawerContent
         className="max-h-[85dvh] pb-[max(env(safe-area-inset-bottom,0px),12px)]"
         // Ao fechar, o Radix devolve o foco a quem tinha antes — o composer —
@@ -109,6 +114,6 @@ export default function AcoesDaMensagemNoToque({ aberto, aoMudar, acoes, aoReagi
           )
         )}
       </DrawerContent>
-    </Drawer>
+    </Raiz>
   );
 }

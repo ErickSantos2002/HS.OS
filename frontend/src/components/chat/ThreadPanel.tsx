@@ -26,7 +26,7 @@ import { MarkdownMessageContent, PlainMessageContent } from "@/components/chat/M
 import DateDivider from "@/components/chat/DateDivider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerNested, DrawerTitle } from "@/components/ui/drawer";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import { Textarea } from "@/components/ui/textarea";
@@ -265,6 +265,7 @@ function ThreadMessageCard({
             },
           })}
           aoReagir={onToggleReaction}
+          aninhada
         />
       )}
       <div className="flex items-start gap-3">
@@ -621,6 +622,21 @@ export default function ThreadPanel({
 
   const body = (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      {/* No celular o body vive dentro do Drawer da thread: o seletor de emoji
+          é um Drawer aninhado e precisa estar nesta árvore. */}
+      {isMobile && (
+        <DrawerNested open={emojiNoCelular} onOpenChange={setEmojiNoCelular}>
+          <DrawerContent className="max-h-[85dvh] pb-[env(safe-area-inset-bottom,0px)]">
+            <DrawerHeader className="sr-only">
+              <DrawerTitle>Inserir emoji</DrawerTitle>
+              <DrawerDescription>Escolha para colocar na resposta.</DrawerDescription>
+            </DrawerHeader>
+            <div className="p-2">
+              <EmojiPickerLargo onSelect={inserirEmoji} />
+            </div>
+          </DrawerContent>
+        </DrawerNested>
+      )}
       <div className="border-b border-border/60 px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -857,19 +873,7 @@ export default function ThreadPanel({
 
   const overlays = (
     <>
-      {isMobile && (
-        <Drawer open={emojiNoCelular} onOpenChange={setEmojiNoCelular}>
-          <DrawerContent className="max-h-[85dvh] pb-[env(safe-area-inset-bottom,0px)]">
-            <DrawerHeader className="sr-only">
-              <DrawerTitle>Inserir emoji</DrawerTitle>
-              <DrawerDescription>Escolha para colocar na resposta.</DrawerDescription>
-            </DrawerHeader>
-            <div className="p-2">
-              <EmojiPickerLargo onSelect={inserirEmoji} />
-            </div>
-          </DrawerContent>
-        </Drawer>
-      )}
+
       <ImageLightbox
         open={!!lightboxImage}
         src={lightboxImage?.src ?? null}

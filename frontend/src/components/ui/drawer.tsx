@@ -8,6 +8,13 @@ const Drawer = ({ shouldScaleBackground = true, ...props }: React.ComponentProps
 );
 Drawer.displayName = "Drawer";
 
+/** Drawer aberto de dentro de outro Drawer (ex.: ações da mensagem dentro da
+ *  thread no celular). Precisa estar na árvore React do Drawer de fora. */
+const DrawerNested = ({ shouldScaleBackground = true, ...props }: React.ComponentProps<typeof DrawerPrimitive.NestedRoot>) => (
+  <DrawerPrimitive.NestedRoot shouldScaleBackground={shouldScaleBackground} {...props} />
+);
+DrawerNested.displayName = "DrawerNested";
+
 const DrawerTrigger = DrawerPrimitive.Trigger;
 
 const DrawerPortal = DrawerPrimitive.Portal;
@@ -75,6 +82,7 @@ DrawerDescription.displayName = DrawerPrimitive.Description.displayName;
 
 export {
   Drawer,
+  DrawerNested,
   DrawerPortal,
   DrawerOverlay,
   DrawerTrigger,
