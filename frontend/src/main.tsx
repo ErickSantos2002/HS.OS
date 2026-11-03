@@ -3,6 +3,11 @@ import { registerSW } from "virtual:pwa-register";
 import { toast } from "sonner";
 import App from "./App.tsx";
 import "./index.css";
+import { iniciarCapturaDeInstalacao } from "./lib/instalacao-app";
+
+// O `beforeinstallprompt` chega uma vez e cedo — escutar antes do React montar
+// é o que garante que o botão "Instalar o app" exista quando a tela abrir.
+iniciarCapturaDeInstalacao();
 // A config do gateway (`exige_papel("administrador")`) era pedida aqui para
 // qualquer sessão com token — não tinha como ler o papel antes do React
 // montar. Isso trocava um 401 (sem token, resolvido antes) por um 403 em
