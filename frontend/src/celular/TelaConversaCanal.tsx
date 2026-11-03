@@ -91,7 +91,8 @@ export function TelaConversaCanal({
   useEffect(() => { void joinChannel(canalId); }, [canalId]);
 
   const mapaDm = useMapaDmDoAgente();
-  useConversaAtivaNasNotificacoes({ agentId: null, canalId: ativa || painel ? canalId : null, agentDmChannelMap: mapaDm });
+  // A thread por cima também é "esta conversa": quem informa é a `TelaThread`.
+  useConversaAtivaNasNotificacoes({ agentId: null, canalId, agentDmChannelMap: mapaDm, ativa });
 
   const { messages, sendMessage, esconder, reexibir } = useChannelMessages(canalId);
   const [versaoMembros, setVersaoMembros] = useState(0);

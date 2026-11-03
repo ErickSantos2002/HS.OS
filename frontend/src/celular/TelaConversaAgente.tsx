@@ -58,7 +58,7 @@ export function TelaConversaAgente({
   const agente = agents.find((a) => a.id === agentId);
   const nome = agente?.name ?? agentId;
   const mapaDm = useMapaDmDoAgente();
-  useConversaAtivaNasNotificacoes({ agentId: ativa || painel ? agentId : null, canalId: null, agentDmChannelMap: mapaDm });
+  useConversaAtivaNasNotificacoes({ agentId, canalId: null, agentDmChannelMap: mapaDm, ativa });
 
   const conversa = useConversaAgente(agentId);
   const { mensagens, temMais, loadingMore, isAgentWorking, streamingText } = conversa;
