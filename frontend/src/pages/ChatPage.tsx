@@ -1,4 +1,3 @@
-import { conteudoDeVoz } from "@/lib/mensagem-de-voz";
 import { assinar } from "@/lib/realtime";
 import React, { Fragment, useState, useRef, useEffect, useCallback, useMemo, useLayoutEffect } from "react";
 import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
@@ -29,39 +28,23 @@ import { formatFileSize } from "@/lib/file-upload";
 import { Bot, FileText, File as FileIcon, Copy, Check } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
-  loadPersistedHistory,
-  loadOlderMessages,
   appendToConversations,
-  clearConversationHistory,
   loadLastMessagesPerAgent,
-  getCachedHistory,
   prefetchAgentHistory,
-  appendMessageToHistoryCache,
   conversationRowToMessage,
   removeMessageFromHistoryCache,
-  replaceMessageInHistoryCache,
   loadConversationArtifacts,
   loadArtifactTitles,
   saveArtifactTitle,
 } from "@/lib/chat-persistence";
 import {
   sendMessageInBackground,
-  isAgentPending,
-  getPendingAgentIds,
-  setActiveAgentId,
   stopAgentResponse,
-  wasAgentResponseStopped,
   hasUnreadAgentMessage,
   getUnreadAgentIds,
-  clearUnreadAgent,
   pruneUnreadAgents,
   resumePendingBackgroundTasks,
-  CHAT_UPDATE_EVENT,
-  CHAT_PENDING_EVENT,
-  CHAT_STREAM_EVENT,
   AGENT_UNREAD_EVENT,
-  type ChatUpdateDetail,
-  type ChatStreamDetail,
 } from "@/lib/chat-sender";
 import {
   Send, User, Loader2, WifiOff,
@@ -129,6 +112,8 @@ import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import MenuDaMensagem, { type AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
 import { acoesDaMensagemDoAgente } from "@/lib/acoes-da-mensagem";
 import { naoLidasDoAgente } from "@/lib/nao-lidas-do-agente";
+import { useConversaAgente } from "@/hooks/use-conversa-agente";
+import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
 import AcoesDaMensagemNoToque from "@/components/chat/AcoesDaMensagemNoToque";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { useToqueLongo } from "@/hooks/use-toque-longo";
@@ -700,7 +685,7 @@ export default function ChatPage() {
   const { presenca: presencaEscritorio, estaNoEscritorio } = useEscritorioPresenca();
   const { user, profile, role } = useAuthContext();
   const { peers: dmPeers, peerIdToChannelId } = useDmPeers(channels, user?.id);
-  const { unreadByChannel, unreadByAgentOnly, markAllAsReadForChannel, markAllAsReadForAgent, setActiveChannel, setActiveAgent } = useNotificationsContext();
+  const { unreadByChannel, unreadByAgentOnly } = useNotificationsContext();
   const isMobile = useIsMobile();
   const { bottomOffset, isKeyboardOpen } = useMobileChatViewport();
   // Celular: a faixa de contexto/modelo fica recolhida e abre pelo ⋮ ou pelo
@@ -832,8 +817,6 @@ export default function ChatPage() {
     }
   }, [agentParam, channelParam, location.pathname, navigate]);
 
-  const [messagesByAgent, setMessagesByAgent] = useState<Record<string, ChatMessage[]>>({});
-  const [hasMoreByAgent, setHasMoreByAgent] = useState<Record<string, boolean>>({});
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const [ttsPlaying, setTtsPlaying] = useState<string | null>(null);
   const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
@@ -978,95 +961,21 @@ export default function ChatPage() {
     return () => window.removeEventListener("navigate-to-agent", handler);
   }, []);
 
-  // Track active agent for notification suppression
+  // Conversa aberta → notificações (marcar lido, sem badge/som/push dela).
+  // Em `use-conversa-ativa.ts` desde 03/11/2026; o app do celular usa o mesmo.
+  const agenteSelecionado = selection?.type === "agent" ? selection.id : null;
+  useConversaAtivaNasNotificacoes({
+    agentId: agenteSelecionado,
+    canalId: selection?.type === "channel" ? selection.channel.id : null,
+    agentDmChannelMap,
+  });
+  // Trocar de agente fecha o artefato aberto. Comparar com o anterior evita
+  // fechar num re-render qualquer.
   const prevAgentRef = useRef<string | null>(null);
-  // BUG 3 fix: keep agentDmChannelMap in a ref so this effect doesn't re-run
-  // (and clean up via setActiveAgentId(null)) every time the map updates.
-  const agentDmChannelMapRef = useRef(agentDmChannelMap);
-  agentDmChannelMapRef.current = agentDmChannelMap;
-
   useEffect(() => {
-    const currentAgentId = selection?.type === "agent" ? selection.id : null;
-
-    // Always update prevAgentRef first to prevent artifact panel from closing on re-render
-    const agentActuallyChanged = prevAgentRef.current !== currentAgentId;
-    prevAgentRef.current = currentAgentId;
-
-    if (currentAgentId) {
-      setActiveAgentId(currentAgentId);
-      clearUnreadAgent(currentAgentId);
-      if (agentActuallyChanged) {
-        setActiveArtifact(null);
-      }
-      // Defensive sweep: clears ghost notifications from channel-broadcast
-      // even when agentDmChannelMap doesn't yet know the channel UUID.
-      void markAllAsReadForAgent(currentAgentId);
-      const dmChId = getAgentIdAliases(currentAgentId)
-        .map((alias) => agentDmChannelMapRef.current[alias])
-        .find(Boolean);
-      if (dmChId) {
-        markAllAsReadForChannel(dmChId);
-        // NOTE: setActiveChannel is handled by the unified effect below
-        // Re-sweep after 2s to catch late-arriving DB notifications (race condition)
-        const sweepTimer = setTimeout(() => {
-          markAllAsReadForChannel(dmChId);
-          void markAllAsReadForAgent(currentAgentId);
-        }, 2000);
-        return () => clearTimeout(sweepTimer);
-      }
-    } else {
-      if (agentActuallyChanged) {
-        setActiveArtifact(null);
-      }
-      setActiveAgentId(null);
-    }
-    return () => {
-      setActiveAgentId(null);
-    };
-  }, [selection?.type === "agent" ? (selection as any).id : null]);
-
-  // Unified active channel tracking for notifications — prevents race conditions
-  // between the agent effect and the channel effect
-  const activeNotificationChannelId = useMemo(() => {
-    if (selection?.type === "channel") return selection.channel.id;
-    if (selection?.type === "agent") {
-      return getAgentIdAliases(selection.id)
-        .map((alias) => agentDmChannelMap[alias])
-        .find(Boolean) ?? null;
-    }
-    return null;
-  }, [selection?.type === "channel" ? (selection as any).channel.id : null, selection?.type === "agent" ? (selection as any).id : null, agentDmChannelMap]);
-
-  useEffect(() => {
-    if (activeNotificationChannelId) {
-      setActiveChannel(activeNotificationChannelId);
-      markAllAsReadForChannel(activeNotificationChannelId);
-    } else {
-      setActiveChannel(null);
-    }
-    // O agente ativo vai junto: notificação órfã (sem canal) que chegar
-    // enquanto o chat desse agente está aberto é lida na hora, não vira badge.
-    setActiveAgent(selection?.type === "agent" ? selection.id : null);
-    return () => { setActiveChannel(null); setActiveAgent(null); };
-  }, [activeNotificationChannelId, selection?.type === "agent" ? (selection as any).id : null]);
-
-  // When the tab/window becomes visible or focused again, re-sweep the active
-  // channel so notifications that arrived while the app was in background
-  // (but with this chat already open) are cleared without needing to switch chats.
-  useEffect(() => {
-    if (!activeNotificationChannelId) return;
-    const sweep = () => {
-      if (document.visibilityState === "visible") {
-        markAllAsReadForChannel(activeNotificationChannelId);
-      }
-    };
-    document.addEventListener("visibilitychange", sweep);
-    window.addEventListener("focus", sweep);
-    return () => {
-      document.removeEventListener("visibilitychange", sweep);
-      window.removeEventListener("focus", sweep);
-    };
-  }, [activeNotificationChannelId, markAllAsReadForChannel]);
+    if (prevAgentRef.current !== agenteSelecionado) setActiveArtifact(null);
+    prevAgentRef.current = agenteSelecionado;
+  }, [agenteSelecionado]);
 
   // Re-render sidebar when unread state changes
   const [, forceUnread] = useState(0);
@@ -1106,6 +1015,32 @@ export default function ChatPage() {
   const effectiveAgentId = selection?.type === "agent" ? selection.id : "";
   const effectiveAgentIdRef = useRef(effectiveAgentId);
   effectiveAgentIdRef.current = effectiveAgentId;
+
+  // Histórico, envio, espera e tempo real da conversa com agente — em
+  // `use-conversa-agente.ts` desde 03/11/2026, para o app do celular usar o
+  // mesmo. Os nomes abaixo são os que viviam aqui.
+  const {
+    messagesByAgent, setMessagesByAgent, messagesByAgentRef, hasMoreByAgent,
+    loadingMore, isAgentWorking, bgPending, realtimePendingByAgent, pendingAgentIds, streamingText, setStreamingText, showReconnecting,
+    setRealtimePending, updateAgentHistory, upsertAgentMessage, appendAgentMessage,
+    handleLoadMore: carregarAnteriores, handleConfirmClearConversation: novaConversa,
+    handleStopAgentResponse, handleRetry, despacharAoAgente, enviarVoz,
+  } = useConversaAgente(effectiveAgentId, {
+    aoGravarPergunta: (agentId, gravada) => setLastMessages((prev) => ({
+      ...prev,
+      [agentId]: {
+        content: (gravada.content ?? "").length > 120 ? `${gravada.content.slice(0, 120)}…` : (gravada.content ?? ""),
+        created_at: gravada.timestamp,
+      },
+    })),
+    aoSincronizar: () => {
+      if (!user?.id) return;
+      const agentIds = agentIdsKey ? agentIdsKey.split(",") : [];
+      if (agentIds.length > 0) {
+        void loadLastMessagesPerAgent(user.id, agentIds).then((map) => setLastMessages(map));
+      }
+    },
+  });
   const agentDraftKey = effectiveAgentId ? `agent:${effectiveAgentId}` : null;
   const { value: draftValue, setValue: setDraftValue, clear: clearInputDraft } = usePersistentDraft(agentDraftKey);
   const inputLocalRef = useRef("");
@@ -1329,59 +1264,6 @@ export default function ChatPage() {
     await api(`/conversations/mensagem/${messageId}`, { method: "DELETE" })
       .catch(() => { /* a mensagem já saiu da tela */ });
   }, [effectiveAgentId, user?.id]);
-  const [realtimePendingByAgent, setRealtimePendingByAgent] = useState<Record<string, boolean>>({});
-  const [realtimeStatus, setRealtimeStatus] = useState<"connected" | "reconnecting">("connected");
-  // Debounced flag: only true after the socket stays down for >5s, so brief
-  // SUBSCRIBED/CLOSED blips don't make the badge flash every second.
-  const [showReconnecting, setShowReconnecting] = useState(false);
-  useEffect(() => {
-    if (realtimeStatus === "connected") {
-      setShowReconnecting(false);
-      return;
-    }
-    const t = window.setTimeout(() => setShowReconnecting(true), 5000);
-    return () => window.clearTimeout(t);
-  }, [realtimeStatus]);
-  const [pendingAgentIds, setPendingAgentIds] = useState<Set<string>>(() => new Set(getPendingAgentIds()));
-  useEffect(() => {
-    const handler = () => setPendingAgentIds(new Set(getPendingAgentIds()));
-    window.addEventListener(CHAT_PENDING_EVENT, handler);
-    return () => window.removeEventListener(CHAT_PENDING_EVENT, handler);
-  }, []);
-
-  const setRealtimePending = useCallback((agentId: string, pending: boolean) => {
-    setRealtimePendingByAgent((prev) => {
-      const current = Boolean(prev[agentId]);
-      if (current === pending) return prev;
-
-      if (pending) return { ...prev, [agentId]: true };
-
-      if (!(agentId in prev)) return prev;
-      const next = { ...prev };
-      delete next[agentId];
-      return next;
-    });
-  }, []);
-
-  const syncRealtimePendingFromMessages = useCallback((agentId: string, messages: ChatMessage[]) => {
-    // Only clear "pending" if the most recent message is an agent reply (i.e. the
-    // user's last turn has been answered). Otherwise we may be in a long-running
-    // task whose response has not yet been persisted — keep the indicator on.
-    let lastUserIdx = -1;
-    let lastAgentIdx = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const role = messages[i]?.role;
-      if (lastAgentIdx === -1 && role === "agent") lastAgentIdx = i;
-      if (lastUserIdx === -1 && role === "user") lastUserIdx = i;
-      if (lastUserIdx !== -1 && lastAgentIdx !== -1) break;
-    }
-    const answered = lastAgentIdx > lastUserIdx;
-    const stillPendingLocal = isAgentPending(agentId);
-    if (answered && !stillPendingLocal) {
-      setRealtimePending(agentId, false);
-    }
-  }, [setRealtimePending]);
-
   // Listen for nav-reset to go back to list view (mobile) — no longer needed with URL nav
   // BottomNav now navigates to /chat directly
 
@@ -1521,38 +1403,6 @@ export default function ChatPage() {
     agentShouldAutoScrollRef.current = true;
   }, [effectiveAgentId]);
 
-  // Load persisted history — cache-first with background revalidation
-  useEffect(() => {
-    if (!effectiveAgentId || !user?.id) return;
-
-    // Instant hydration from cache
-    const cached = getCachedHistory(user.id, effectiveAgentId);
-    if (cached) {
-      setMessagesByAgent((prev) => ({ ...prev, [effectiveAgentId]: cached.messages }));
-      setHasMoreByAgent((prev) => ({ ...prev, [effectiveAgentId]: cached.hasMore }));
-      syncRealtimePendingFromMessages(effectiveAgentId, cached.messages);
-    }
-
-    // Background revalidation
-    let cancelled = false;
-    void (async () => {
-      const result = await loadPersistedHistory(user.id, effectiveAgentId);
-      if (cancelled) return;
-      setMessagesByAgent((prev) => {
-        const existing = prev[effectiveAgentId] ?? [];
-        const byId = new Map(existing.map(m => [m.id, m]));
-        for (const m of result.messages) byId.set(m.id, m);
-        const merged = [...byId.values()].sort(
-          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        );
-        return { ...prev, [effectiveAgentId]: merged };
-      });
-      setHasMoreByAgent((prev) => ({ ...prev, [effectiveAgentId]: result.hasMore }));
-      syncRealtimePendingFromMessages(effectiveAgentId, result.messages);
-    })();
-    return () => { cancelled = true; };
-  }, [effectiveAgentId, syncRealtimePendingFromMessages, user?.id]);
-
   // Prefetch histories for sidebar items on mount
   useEffect(() => {
     if (!agentIdsKey || !user?.id) return;
@@ -1563,8 +1413,14 @@ export default function ChatPage() {
   }, [agentIdsKey, user?.id]);
 
   // Load older messages
-  const [loadingMore, setLoadingMore] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const handleLoadMore = useCallback(() => carregarAnteriores(messagesContainerRef.current), [carregarAnteriores]);
+  const handleConfirmClearConversation = useCallback(async () => {
+    if (!effectiveAgentId || !user?.id) return;
+    setArtifactMessages([]);
+    setClearConfirmOpen(false);
+    await novaConversa();
+  }, [effectiveAgentId, user?.id, novaConversa]);
 
   const clearMessageSelectionLock = useCallback(() => {
     const container = messagesContainerRef.current;
@@ -1612,74 +1468,6 @@ export default function ChatPage() {
     return () => document.removeEventListener("selectionchange", handleSelectionChange);
   }, [clearMessageSelectionLock, inputRef]);
 
-  const handleLoadMore = useCallback(async () => {
-    if (!effectiveAgentId || loadingMore || !user?.id) return;
-    const currentMsgs = messagesByAgent[effectiveAgentId] ?? [];
-    if (currentMsgs.length === 0) return;
-    const oldestTimestamp = currentMsgs[0].timestamp;
-    setLoadingMore(true);
-    try {
-      const container = messagesContainerRef.current;
-      const prevScrollHeight = container?.scrollHeight ?? 0;
-      const result = await loadOlderMessages(user.id, effectiveAgentId, oldestTimestamp);
-      setMessagesByAgent((prev) => ({ ...prev, [effectiveAgentId]: [...result.messages, ...(prev[effectiveAgentId] ?? [])] }));
-      setHasMoreByAgent((prev) => ({ ...prev, [effectiveAgentId]: result.hasMore }));
-      requestAnimationFrame(() => { if (container) container.scrollTop = container.scrollHeight - prevScrollHeight; });
-    } finally { setLoadingMore(false); }
-  }, [effectiveAgentId, loadingMore, messagesByAgent, user?.id]);
-
-  const updateAgentHistory = useCallback(
-    (agentId: string, updater: (current: ChatMessage[]) => ChatMessage[]) => {
-      setMessagesByAgent((prev) => ({ ...prev, [agentId]: updater(prev[agentId] ?? []) }));
-    }, []
-  );
-
-  const upsertAgentMessage = useCallback(
-    (agentId: string, message: ChatMessage, replaceMessageId?: string) => {
-      updateAgentHistory(agentId, (current) => {
-        const nextBase = replaceMessageId
-          ? current.filter((item) => item.id !== replaceMessageId && item.id !== message.id)
-          : current.filter((item) => item.id !== message.id);
-
-        return [...nextBase, message].sort(
-          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-        );
-      });
-    },
-    [updateAgentHistory]
-  );
-
-  const appendAgentMessage = useCallback(
-    (agentId: string, message: ChatMessage) => upsertAgentMessage(agentId, message),
-    [upsertAgentMessage]
-  );
-
-  const handleConfirmClearConversation = useCallback(async () => {
-    if (!effectiveAgentId || !user?.id) return;
-    setMessagesByAgent((prev) => ({ ...prev, [effectiveAgentId]: [] }));
-    setArtifactMessages([]);
-    setClearConfirmOpen(false);
-    try {
-      const r = await clearConversationHistory(user.id, effectiveAgentId);
-      // ⚠️ O aviso distingue os dois casos. Se a sessão do gateway não caiu, o
-      // agente continua lembrando da conversa mesmo com a tela vazia — e dizer
-      // "pronto!" nessa hora é o que transformaria isso em mistério depois.
-      if (r.sessao_zerada) {
-        toast.success("Nova conversa iniciada", {
-          description: `O agente começa do zero. ${r.mensagens_arquivadas} mensagem(ns) continuam guardadas para consulta.`,
-        });
-      } else {
-        toast.warning("Tela limpa, mas o agente ainda lembra", {
-          description: r.detalhe ?? "Não foi possível encerrar a sessão no gateway.",
-        });
-      }
-    } catch (e) {
-      toast.error("Não consegui iniciar uma nova conversa", {
-        description: e instanceof Error ? e.message : String(e),
-      });
-    }
-  }, [effectiveAgentId, user?.id]);
-
   /* ── Copy entire conversation ── */
   const [conversationCopied, setConversationCopied] = useState(false);
   const handleCopyConversation = useCallback(async () => {
@@ -1707,10 +1495,6 @@ export default function ChatPage() {
   }, [agentMessages, selectedAgent?.name]);
 
   /* ── Background sender ── */
-  const [bgPending, setBgPending] = useState(false);
-  const [streamingText, setStreamingText] = useState("");
-  const isAgentWorking = effectiveAgentId ? bgPending || Boolean(realtimePendingByAgent[effectiveAgentId]) : false;
-
   // When the task ends, fold trailing activities into the last agent message
   // so a single AAC renders for the turn (no duplicate above + below).
   const { finalActivitiesByMessageId, finalTrailingActivities } = useMemo(() => {
@@ -1724,25 +1508,6 @@ export default function ChatPage() {
     }
     return { finalActivitiesByMessageId: activitiesByMessageId, finalTrailingActivities: trailingActivities };
   }, [isAgentWorking, activitiesByMessageId, trailingActivities, lastAgentMessageId]);
-
-  const handleStopAgentResponse = useCallback(() => {
-    if (!effectiveAgentId) return;
-    setRealtimePending(effectiveAgentId, false);
-    setStreamingText("");
-    stopAgentResponse(effectiveAgentId);
-  }, [effectiveAgentId, setRealtimePending]);
-
-  // Use ref to read messagesByAgent inside handleRetry without recreating the callback
-  const messagesByAgentRef = useRef(messagesByAgent);
-  messagesByAgentRef.current = messagesByAgent;
-
-  const handleRetry = useCallback((errorMsgId: string) => {
-    if (!effectiveAgentId || isAgentWorking) return;
-    const currentMsgs = messagesByAgentRef.current[effectiveAgentId] ?? [];
-    const withoutError = currentMsgs.filter((m) => m.id !== errorMsgId);
-    setMessagesByAgent((prev) => ({ ...prev, [effectiveAgentId]: withoutError }));
-    sendMessageInBackground(effectiveAgentId, withoutError);
-  }, [effectiveAgentId, isAgentWorking]);
 
   /* ── Auto-feed file_op results back to the agent ── */
   useEffect(() => {
@@ -1812,212 +1577,6 @@ export default function ChatPage() {
   }, [fsConnected, effectiveAgentId, user?.id, appendAgentMessage, upsertAgentMessage]);
 
 
-  useEffect(() => {
-    const findStreamPlaceholderId = (agentId: string, message: ChatMessage): string | undefined => {
-      if (message.role !== "agent") return undefined;
-      if (message.id.startsWith("stream-")) return undefined;
-      const existing = messagesByAgentRef.current[agentId] ?? [];
-      const incomingTs = new Date(message.timestamp).getTime();
-      // Widened to 16 minutes to cover extended-poll background replies
-      const placeholder = existing.find(
-        (m) =>
-          m.role === "agent" &&
-          typeof m.id === "string" &&
-          m.id.startsWith("stream-") &&
-          Math.abs(new Date(m.timestamp).getTime() - incomingTs) < 16 * 60_000
-      );
-      return placeholder?.id;
-    };
-
-
-    const onUpdate = (e: Event) => {
-      const { agentId, message } = (e as CustomEvent<ChatUpdateDetail>).detail;
-      if (user?.id) appendMessageToHistoryCache(user.id, agentId, message);
-      setRealtimePending(agentId, message.role === "user");
-      const replaceId = findStreamPlaceholderId(agentId, message);
-      upsertAgentMessage(agentId, message, replaceId);
-      if (agentId === effectiveAgentId) setStreamingText("");
-    };
-    const onPending = () => {
-      const pending = effectiveAgentId ? isAgentPending(effectiveAgentId) : false;
-      setBgPending(pending);
-      if (!effectiveAgentId || !pending) {
-        setStreamingText("");
-      }
-      if (effectiveAgentId && !isAgentPending(effectiveAgentId)) {
-        setRealtimePending(effectiveAgentId, false);
-      }
-      if (effectiveAgentId && wasAgentResponseStopped(effectiveAgentId) && !isAgentPending(effectiveAgentId)) {
-        setRealtimePending(effectiveAgentId, false);
-      }
-    };
-    let streamRafId: number | null = null;
-    let latestPartial = "";
-    const onStream = (e: Event) => {
-      const { agentId, partialText } = (e as CustomEvent<ChatStreamDetail>).detail;
-      if (agentId !== effectiveAgentId || hasActiveTextSelection()) return;
-      latestPartial = partialText;
-      if (streamRafId === null) {
-        streamRafId = requestAnimationFrame(() => {
-          streamRafId = null;
-          setStreamingText(latestPartial);
-        });
-      }
-    };
-    window.addEventListener(CHAT_UPDATE_EVENT, onUpdate);
-    window.addEventListener(CHAT_PENDING_EVENT, onPending);
-    window.addEventListener(CHAT_STREAM_EVENT, onStream);
-    onPending();
-    return () => {
-      window.removeEventListener(CHAT_UPDATE_EVENT, onUpdate);
-      window.removeEventListener(CHAT_PENDING_EVENT, onPending);
-      window.removeEventListener(CHAT_STREAM_EVENT, onStream);
-      if (streamRafId !== null) cancelAnimationFrame(streamRafId);
-    };
-  }, [effectiveAgentId, setRealtimePending, upsertAgentMessage, user?.id]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const syncConversationRequest = () => {
-      if (document.visibilityState !== "visible") return;
-
-      if (effectiveAgentId) {
-        void (async () => {
-          const result = await loadPersistedHistory(user.id, effectiveAgentId);
-          // Protect: don't replace existing history with empty revalidation
-          if (result.messages.length === 0) {
-            setMessagesByAgent((prev) => {
-              const existing = prev[effectiveAgentId];
-              if (existing?.length) return prev; // keep existing
-              return { ...prev, [effectiveAgentId]: [] };
-            });
-            return;
-          }
-          setMessagesByAgent((prev) => {
-            const existing = prev[effectiveAgentId] ?? [];
-            const byId = new Map(existing.map(m => [m.id, m]));
-            for (const m of result.messages) byId.set(m.id, m);
-            const merged = [...byId.values()].sort(
-              (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-            );
-            return { ...prev, [effectiveAgentId]: merged };
-          });
-          setHasMoreByAgent((prev) => ({ ...prev, [effectiveAgentId]: result.hasMore }));
-          syncRealtimePendingFromMessages(effectiveAgentId, result.messages);
-        })();
-      }
-
-      const agentIds = agentIdsKey ? agentIdsKey.split(",") : [];
-      if (agentIds.length > 0) {
-        void loadLastMessagesPerAgent(user.id, agentIds).then((map) => setLastMessages(map));
-      }
-    };
-
-    // Tópico da pessoa: o backend roteia `conversations` por `user_id`, então
-    // chega só o que é dela — era o que o `filter: user_id=eq.…` fazia.
-    //
-    // ⚠️ **O evento dispara a reconciliação, não substitui a mensagem.** Ele não
-    // carrega a linha (ver `docs/PLANO-REALTIME.md`), e o `syncConversationRequest`
-    // já existia como rede de segurança para o bug "gravado no banco e nunca
-    // renderizado". Ele passa a ser o caminho principal, o que é uma
-    // simplificação real: antes havia dois caminhos para a mesma mensagem
-    // aparecer — o payload do realtime e a reconciliação — e eles podiam
-    // divergir. Agora há um.
-    //
-    // A reconexão e a espera crescente saíram daqui: vivem no `lib/realtime.ts`,
-    // que mantém **uma** conexão para a aba inteira. O controle por hook
-    // duplicava isso e era a origem do laço CLOSED → retry.
-    const cancelarRealtime = assinar(`usuario:${user.id}`, (_tipo, dados) => {
-      if ((dados as { tabela?: string })?.tabela !== "conversations") return;
-      syncConversationRequest();
-    });
-    setRealtimeStatus("connected");
-
-    window.addEventListener("visibilitychange", syncConversationRequest);
-    window.addEventListener("focus", syncConversationRequest);
-
-    return () => {
-      window.removeEventListener("visibilitychange", syncConversationRequest);
-      window.removeEventListener("focus", syncConversationRequest);
-      cancelarRealtime();
-    };
-  }, [agentIdsKey, effectiveAgentId, setRealtimePending, syncRealtimePendingFromMessages, upsertAgentMessage, user?.id]);
-
-  // Active reconciliation: while an agent reply is expected (pending) or the chat
-  // is open, poll persisted history and merge any new agent messages that the
-  // realtime subscription may have missed. Safety net against the "saved in DB
-  // but never rendered" bug.
-  useEffect(() => {
-    if (!effectiveAgentId || !user?.id) return;
-    const agentId = effectiveAgentId;
-    const userId = user.id;
-    let cancelled = false;
-
-    const reconcile = async () => {
-      if (cancelled) return;
-      if (document.visibilityState !== "visible") return;
-      try {
-        const result = await loadPersistedHistory(userId, agentId);
-        if (cancelled) return;
-        let appliedAny = false;
-        setMessagesByAgent((prev) => {
-          const existing = prev[agentId] ?? [];
-          const byId = new Map(existing.map((m) => [m.id, m]));
-          let changed = false;
-          for (const m of result.messages) {
-            if (!byId.has(m.id)) changed = true;
-            byId.set(m.id, m);
-          }
-          if (!changed) return prev;
-          appliedAny = true;
-          const merged = [...byId.values()].sort(
-            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-          );
-          return { ...prev, [agentId]: merged };
-        });
-        if (appliedAny) {
-          setHasMoreByAgent((prev) => ({ ...prev, [agentId]: result.hasMore }));
-        }
-        syncRealtimePendingFromMessages(agentId, result.messages);
-      } catch {
-        // swallow — next tick will retry
-      }
-    };
-
-    // Fast cadence while we are waiting for a reply; slower safety-net otherwise.
-    const fastMs = 3500;
-    const slowMs = 20000;
-    const tick = () => {
-      const pending =
-        isAgentPending(agentId) ||
-        Boolean(realtimePendingByAgent[agentId]) ||
-        pendingAgentIds.has(agentId);
-      void reconcile();
-      return pending ? fastMs : slowMs;
-    };
-
-    let timer: number | null = null;
-    const schedule = () => {
-      const delay = tick();
-      timer = window.setTimeout(schedule, delay);
-    };
-    timer = window.setTimeout(schedule, 1500);
-
-    return () => {
-      cancelled = true;
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, [
-    effectiveAgentId,
-    user?.id,
-    realtimePendingByAgent,
-    pendingAgentIds,
-    syncRealtimePendingFromMessages,
-  ]);
-
-
-
   // Auto-scroll during agent work — also listen for activity updates
   const [activityTick, setActivityTick] = useState(0);
   useEffect(() => {
@@ -2040,34 +1599,6 @@ export default function ChatPage() {
 
   /* ── Send (agent DM) ── */
   const [uploading, setUploading] = useState(false);
-
-  /** Mostra, grava e dispara o agente. Comum ao texto digitado e à voz. */
-  const despacharAoAgente = useCallback(async (sendingAgentId: string, userMsg: ChatMessage): Promise<boolean> => {
-    appendAgentMessage(sendingAgentId, userMsg);
-    let gravada: ChatMessage;
-    try {
-      const persistedMessage = await appendToConversations(user!.id, sendingAgentId, userMsg);
-      gravada = persistedMessage;
-      replaceMessageInHistoryCache(user!.id, sendingAgentId, userMsg.id, persistedMessage);
-      upsertAgentMessage(sendingAgentId, persistedMessage, userMsg.id);
-      setLastMessages((prev) => ({
-        ...prev,
-        [sendingAgentId]: {
-          content: (persistedMessage.content ?? "").length > 120 ? `${persistedMessage.content.slice(0, 120)}…` : (persistedMessage.content ?? ""),
-          created_at: persistedMessage.timestamp,
-        },
-      }));
-    } catch {
-      removeMessageFromHistoryCache(user!.id, sendingAgentId, userMsg.id);
-      updateAgentHistory(sendingAgentId, (c) => c.filter((m) => m.id !== userMsg.id));
-      toast.error("Não consegui salvar essa mensagem no histórico. Tente novamente.");
-      return false;
-    }
-    // Vai a mensagem GRAVADA, não a otimista: é o id dela que liga o run à
-    // pergunta para o visto (spec 2026-10-14).
-    sendMessageInBackground(sendingAgentId, [...(messagesByAgent[sendingAgentId] ?? []), gravada]);
-    return true;
-  }, [messagesByAgent, appendAgentMessage, updateAgentHistory, upsertAgentMessage, user, setLastMessages]);
 
   const handleSend = useCallback(async () => {
     let input = inputLocalRef.current;
@@ -2283,33 +1814,10 @@ export default function ChatPage() {
         toast.error("Não foi possível capturar o áudio.");
         return;
       }
-      const ext = getAudioFileExtension(blob.type);
-      const formData = new FormData();
-      formData.append("arquivo", blob, `audio.${ext}`);
-      let transcricao: string | undefined;
-      try {
-        transcricao = (await api<{ text: string }>("/ia/transcrever", { method: "POST", body: formData })).text;
-      } catch {
-        // Sem transcrição não há o que mandar: o agente não ouve áudio.
-        toast.error("Não consegui transcrever o áudio, então ele não foi enviado. Tente de novo ou digite.");
-        return;
-      }
-      const conteudo = conteudoDeVoz(transcricao);
-      if (!conteudo) {
-        toast.info("Nenhuma fala detectada no áudio — nada foi enviado.");
-        return;
-      }
-      if (isAgentWorking) {
-        setRealtimePending(sendingAgentId, false);
-        setStreamingText("");
-        stopAgentResponse(sendingAgentId);
-      }
-      agentShouldAutoScrollRef.current = true;
-      turnStartByAgentRef.current[sendingAgentId] = Date.now();
-      setTurnStartTick((t) => t + 1);
-      await despacharAoAgente(sendingAgentId, {
-        id: `m${Date.now()}`, agentId: sendingAgentId, role: "user",
-        content: conteudo, timestamp: new Date().toISOString(), channel: "web",
+      await enviarVoz(blob, () => {
+        agentShouldAutoScrollRef.current = true;
+        turnStartByAgentRef.current[sendingAgentId] = Date.now();
+        setTurnStartTick((t) => t + 1);
       });
     } catch (err) {
       console.error("Audio send error:", err);
@@ -2317,7 +1825,7 @@ export default function ChatPage() {
     } finally {
       audioRecorder.setIsProcessing(false);
     }
-  }, [audioLevel, audioRecorder, user, effectiveAgentId, isAgentWorking, despacharAoAgente, setRealtimePending]);
+  }, [audioLevel, audioRecorder, user, effectiveAgentId, enviarVoz]);
 
   /* ── Channel create handler ── */
   const handleCreateChannel = async (
