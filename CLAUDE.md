@@ -557,6 +557,39 @@ sobe e loga `push desligado: VAPID ausente`.
 `channel_members.silenciado` (`025`) corta push, som e notificação local; o
 sininho e as não lidas continuam.
 
+### Celular: interface própria — `frontend/src/celular/` (03/11/2026)
+
+Spec `docs/superpowers/specs/2026-11-03-app-celular-design.md`; o protótipo
+aprovado (`…-app-celular-prototipo.html`) é a fonte da verdade visual. Em tela
+< 768px, `/` e `/chat` renderizam o `AppCelular` **fora do `AppLayout`**
+(`CascaDoApp`); o resto das rotas segue como está. A Frente C (ramos
+`isMobile` dentro de `ChatPage`/`ChannelChat`/`ThreadPanel`) **saiu**.
+
+- ⚠️ **A pilha de telas é a URL** (`celular/pilha.ts`, testado): `aba`,
+  `agent`/`channel`, `thread`, `painel`. O voltar do Android desempilha; link
+  de push aberto sem histórico volta por `urlDoPai`, não sai do app. Folha e ⋮
+  põem uma entrada no histórico com a mesma URL para o voltar fechá-los.
+- ⚠️ **Lógica compartilhada, não copiada.** O que o celular precisava e
+  morava dentro do desktop foi MOVIDO: `use-conversa-agente.ts` (histórico,
+  envio, espera, voz, nova conversa), `use-conversa-ativa.ts` (marcar lido),
+  `lib/envio-no-canal.ts` (gravar + avisar + acordar o agente),
+  `lib/acoes-da-mensagem.ts` (as ações da seta do desktop e da folha do
+  celular), `lib/notificacoes-do-aparelho.ts`. Mexeu numa regra, mexe ali.
+- Painéis do ⋮ são o conteúdo do desktop embutido (`PainelEmbutido`), não
+  cópia. Prévia da lista: `GET /channels/previas` (`app/previas.py`); as não
+  lidas continuam sendo as do sininho.
+- Responder citando (deslizar a bolha) vai no texto, `> **Autor:** trecho`
+  (`celular/citacao.ts`) — sem coluna nova; no desktop aparece como citação.
+  Aviso e agente recebem só o texto novo (`textoNovo`), não a citação.
+- ⚠️ **Segurança: nada se envia a partir da query string.** `?prefill=` é no
+  máximo rascunho; `?autosend=1` não existe mais (um link forjado fazia a
+  vítima postar). A resposta rápida do push com o app fechado vai pelo Cache
+  Storage: o SW guarda o texto sob `crypto.randomUUID()` e a URL leva só
+  `?resposta=<id>`; `consumirResposta` (`lib/resposta-rapida.ts`) confere
+  canal/thread, 5 min de validade e uso único antes de enviar.
+- `useConversaAtivaNasNotificacoes` recebe `ativa`: tela inativa não mexe no
+  estado global, e quem zera é só o dono (duas telas convivem na animação).
+
 ### Feature flags — sobrou uma, e ela vem ligada
 
 ⚠️ **Revisadas em 31/08/2026, e o que estava escrito aqui não batia com o

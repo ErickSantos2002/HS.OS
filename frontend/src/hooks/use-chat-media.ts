@@ -19,26 +19,41 @@ function getSpeechRecognition(): SpeechRecognitionType | null {
 
 export function useChatMedia() {
   /* ── Staged attachments (pending send) ── */
-  const [staged, setStaged] = useState<MediaAttachment[]>([]);
+  const [staged, setStagedState] = useState<MediaAttachment[]>([]);
+  // ⚠️ **O anexo existe antes do próximo render.** Colar mais de 10 mil
+  // caracteres e enviar acontecem no mesmo toque: `stagePastedText` virava
+  // anexo de forma assíncrona e o `finalizeStaged` daquela renderização lia o
+  // `staged` antigo — a mensagem saía VAZIA (texto limpo, anexo nenhum).
+  // A lista vive num ref atualizado na hora, e o `finalizeStaged` espera o
+  // processamento que estiver em curso antes de ler.
+  const stagedRef = useRef<MediaAttachment[]>([]);
+  const emProcessamento = useRef(new Set<Promise<unknown>>());
+  const setStaged = useCallback((fn: (prev: MediaAttachment[]) => MediaAttachment[]) => {
+    stagedRef.current = fn(stagedRef.current);
+    setStagedState(stagedRef.current);
+  }, []);
+  const acompanhar = useCallback(<T,>(p: Promise<T>): Promise<T> => {
+    emProcessamento.current.add(p);
+    void p.finally(() => emProcessamento.current.delete(p)).catch(() => undefined);
+    return p;
+  }, []);
   const MAX_IMAGE_DIMENSION = 1800;
   const SCREENSHOT_NAME_RE = /(screenshot|screen[_ -]?shot|captura[_ -]?de[_ -]?tela)/i;
   const MAX_ATTACHMENTS = 10;
 
   const addStaged = useCallback((att: MediaAttachment) => {
-    setStaged((prev) => {
-      if (prev.length >= MAX_ATTACHMENTS) {
-        toast.error(`Limite de ${MAX_ATTACHMENTS} anexos atingido.`);
-        return prev;
-      }
-      return [...prev, att];
-    });
-  }, []);
+    if (stagedRef.current.length >= MAX_ATTACHMENTS) {
+      toast.error(`Limite de ${MAX_ATTACHMENTS} anexos atingido.`);
+      return;
+    }
+    setStaged((prev) => [...prev, att]);
+  }, [setStaged]);
 
   const removeStaged = useCallback((index: number) => {
     setStaged((prev) => prev.filter((_, i) => i !== index));
-  }, []);
+  }, [setStaged]);
 
-  const clearStaged = useCallback(() => setStaged([]), []);
+  const clearStaged = useCallback(() => setStaged(() => []), [setStaged]);
 
   /* ── Preserve image detail for screenshots and UI references ── */
   const compressImage = useCallback(
@@ -142,13 +157,13 @@ export function useChatMedia() {
     const name = `Texto colado ${stamp}.txt`;
     try {
       const file = new File([text], name, { type: "text/plain" });
-      void processFile(file);
+      void acompanhar(processFile(file));
       return true;
     } catch (err) {
       console.warn("[use-chat-media] stagePastedText failed:", err);
       return false;
     }
-  }, [processFile]);
+  }, [processFile, acompanhar]);
 
   /* ── Extract text locally from a raw File ── */
   const extractTextLocally = useCallback(async (file: File): Promise<string> => {
@@ -189,8 +204,10 @@ export function useChatMedia() {
 
   /* ── Upload staged files to storage and return finalized attachments ── */
   const finalizeStaged = useCallback(async (destino: DestinoAnexo): Promise<MediaAttachment[]> => {
+    // O texto colado agora mesmo ainda pode estar virando anexo.
+    await Promise.allSettled([...emProcessamento.current]);
     const finalized: MediaAttachment[] = [];
-    for (const att of staged) {
+    for (const att of stagedRef.current) {
       if (att.type === "file") {
         const raw = (att as any)._rawFile as File | undefined;
         if (raw) {
@@ -232,14 +249,17 @@ export function useChatMedia() {
       }
     }
     return finalized;
-  }, [staged]);
+  }, []);
 
   /* ── File picker (all types) ── */
-  const openFilePicker = useCallback((accept: string) => {
+  const openFilePicker = useCallback((accept: string, camera = false) => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = accept;
-    input.multiple = true;
+    input.multiple = !camera;
+    // Câmera do celular (app do celular, 03/11/2026): abre direto a câmera
+    // traseira em vez da galeria.
+    if (camera) input.setAttribute("capture", "environment");
     // iOS Safari requires the input to be in the DOM
     input.style.position = "fixed";
     input.style.opacity = "0";
@@ -270,6 +290,7 @@ export function useChatMedia() {
 
   /* ── Image picker ── */
   const pickImage = useCallback(() => openFilePicker("image/*"), [openFilePicker]);
+  const pickCamera = useCallback(() => openFilePicker("image/*", true), [openFilePicker]);
 
   /* ── Handle paste / drop → image + documents ── */
   const handlePasteOrDrop = useCallback(
@@ -442,6 +463,7 @@ export function useChatMedia() {
     removeStaged,
     clearStaged,
     pickImage,
+    pickCamera,
     pickFile,
     handlePasteOrDrop,
     stagePastedText,

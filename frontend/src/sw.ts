@@ -6,7 +6,7 @@ import {
 } from "workbox-precaching";
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import { LISTA_NEGADA } from "./lib/navegacao-do-app";
-import { clienteDaResposta } from "./lib/resposta-rapida";
+import { CACHE_RESPOSTA, clienteDaResposta, guardarResposta } from "./lib/resposta-rapida";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -249,13 +249,22 @@ self.addEventListener("notificationclick", (event) => {
             });
             await alvo.focus().catch(() => undefined);
           } else if (self.clients.openWindow) {
-            // O `prefill`+`autosend` do `ChannelChat` posta na raiz do canal.
-            // Resposta de thread sem aba aberta abre a thread em vez de
-            // postar no lugar errado (o texto digitado se perde).
+            // Sem aba aberta o SW não tem o token: guarda o texto no Cache
+            // Storage sob um id aleatório e abre o app com SÓ o id. ⚠️ Nunca o
+            // texto na URL com envio automático — um link forjado faria quem
+            // o abrisse postar (ver `lib/resposta-rapida.ts`).
+            const id = crypto.randomUUID();
+            await guardarResposta(await caches.open(CACHE_RESPOSTA), id, {
+              texto: replyText,
+              channel_id: data.channel_id,
+              thread_id: data.thread_id ?? null,
+              criado_em: Date.now(),
+            });
             await self.clients.openWindow(
-              data.thread_id
-                ? data.url ?? urlDoCanal(data.channel_id)
-                : urlDoCanal(data.channel_id, { prefill: replyText, autosend: "1", focus: "composer" }),
+              urlDoCanal(data.channel_id, {
+                ...(data.thread_id ? { thread: data.thread_id } : {}),
+                resposta: id, focus: "composer",
+              }),
             );
           }
         } else {

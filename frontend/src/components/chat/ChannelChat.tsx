@@ -1,35 +1,33 @@
 import { threadDepoisDeApagar } from "@/lib/eventos-de-canal";
 import { api } from "@/lib/api";
 import { Fragment, memo, useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from "react";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { useChannelMessages, useChannelMembers, Channel, ChannelMessage, ChannelAttachment } from "@/hooks/use-channels";
 import { usePeople } from "@/hooks/use-people";
 import { fraseDeQuemEscreve, podeEscreverNoCanal } from "@/lib/canal-avisos";
 import { useMessageReactions } from "@/hooks/use-message-reactions";
 import { usePersistentDraft } from "@/hooks/use-persistent-draft";
 import { useAuthContext } from "@/contexts/auth-context";
-import { startChannelAgentReplies, getAgentDisplayName } from "@/lib/channel-agents";
+import { getAgentDisplayName } from "@/lib/channel-agents";
 import { getPendingAgentsForChannel, subscribeToChannelAgentPending } from "@/lib/channel-agent-pending";
 import { useAgentAvatar } from "@/hooks/use-agent-avatar";
 import { normalizeAgentId } from "@/lib/active-agents";
 import { useChatMedia } from "@/hooks/use-chat-media";
-import { getAudioFileExtension, useAudioRecorder } from "@/hooks/use-audio-recorder";
+import { useAudioRecorder } from "@/hooks/use-audio-recorder";
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import { uploadFileToStorage, formatFileSize, isImageFile } from "@/lib/file-upload";
 import FileAttachmentCard from "./FileAttachmentCard";
 import AudioDaMensagem from "./AudioDaMensagem";
 import MenuDaMensagem, { type AcaoDaMensagem } from "./MenuDaMensagem";
-import AcoesDaMensagemNoToque from "./AcoesDaMensagemNoToque";
-import EmojiPickerLargo from "./EmojiPickerLargo";
-import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
-import { doProprioElemento, useToqueLongo } from "@/hooks/use-toque-longo";
-import { temOQueAbrir } from "@/lib/acoes-do-toque";
+import { acoesDaMensagemDoCanal } from "@/lib/acoes-da-mensagem";
+import { abrirCacheDeRespostas, consumirResposta } from "@/lib/resposta-rapida";
+import {
+  anexosDoCanal, apagarNoCanal, apagarParaMimNoCanal, editarNoCanal, enviarAudioNoCanal, publicarAudioNaThread,
+  publicarNaThread, publicarNoCanal, type ContextoDeEnvio,
+} from "@/lib/envio-no-canal";
 import VistoDaMensagem from "./VistoDaMensagem";
 import DadosDaMensagem from "./DadosDaMensagem";
 import { estadoNoCanal, type EstadoDoVisto } from "@/lib/vistos";
-import { copyToClipboard } from "@/lib/clipboard";
 import { useResumoEmAudio } from "@/hooks/use-resumo-em-audio";
-import { enviarAudioDoCanal } from "@/lib/audio-de-mensagem";
 import CollapsibleTranscription from "./CollapsibleTranscription";
 import { useTypingIndicator, formatTypingLabel } from "@/hooks/use-typing-indicator";
 import { useNotificationsContext } from "@/components/NotificationsProvider";
@@ -38,7 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, Copy, Info, EyeOff, MoreVertical, Bell, BellOff } from "lucide-react";
+import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Type } from "lucide-react";
 import { useCanaisSilenciados } from "@/hooks/use-canais-silenciados";
 import { format } from "date-fns";
 import ChannelMembersPanel from "./ChannelMembersPanel";
@@ -48,16 +46,9 @@ import EditChannelDialog from "./EditChannelDialog";
 import { BotaoSilenciarCanal } from "./SilenciarCanal";
 import MentionPopup, { MentionOption } from "./MentionPopup";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  PopoverClose,
 } from "@/components/ui/popover";
 import EmojiPickerReact, { Theme as EmojiTheme } from "emoji-picker-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -233,7 +224,6 @@ export const MessageBubble = memo(function MessageBubble({
   onDadosDaMensagem,
   onApagarParaMim,
   continuacao = false,
-  toque = false,
 }: {
   msg: ChannelMessage;
   currentUserId: string;
@@ -260,9 +250,6 @@ export const MessageBubble = memo(function MessageBubble({
   onApagarParaMim?: () => void;
   /** Segue a mensagem anterior do mesmo autor: sai sem foto e sem nome. */
   continuacao?: boolean;
-  /** Celular: segurar abre a folha de ações; seta e "reagir" de hover saem
-   *  (spec 2026-11-03, Frente C3). No desktop fica `false` e nada muda. */
-  toque?: boolean;
 }) {
   const isAgent = msg.author_type === "agent";
   const agentIdForAvatar = isAgent ? normalizeAgentId(msg.author_id || "") : "";
@@ -283,10 +270,6 @@ export const MessageBubble = memo(function MessageBubble({
   const [longPressTimer, setLongPressTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [folhaAberta, setFolhaAberta] = useState(false);
-  const [folhaMontada, setFolhaMontada] = useState(false);
-  // Celular: o horário de quem segue a sequência aparece ao tocar, não no hover.
-  const [mostrarHora, setMostrarHora] = useState(false);
   const closeEmojiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleTouchStart = useCallback(() => {
@@ -399,32 +382,16 @@ export const MessageBubble = memo(function MessageBubble({
     );
   };
 
-  const acoesDoMenu: AcaoDaMensagem[] = msg.id.startsWith("optimistic-") || isDeleted ? [] : [
-    { rotulo: "Responder em thread", icone: MessageSquare, aoEscolher: () => { onReply(); setShowMobileMenu(false); } },
-    ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => {
-      void copyToClipboard(msg.content).then((ok) => (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar")));
-    } }] : []),
-    { rotulo: "Marcar como não lida", icone: BellDot, aoEscolher: () => {
-      void Promise.resolve(onMarkUnread()).then(
-        (ok) => (ok ? toast.success("Marcada como não lida") : toast.error("Não foi possível marcar como não lida")),
-        () => toast.error("Não foi possível marcar como não lida"));
-    } },
-    ...(isOwn ? [
-      ...(onDadosDaMensagem ? [{ rotulo: "Dados da mensagem", icone: Info, aoEscolher: () => { onDadosDaMensagem(); setShowMobileMenu(false); } }] : []),
-      { rotulo: "Editar", icone: Pencil, aoEscolher: () => { onEdit(); setShowMobileMenu(false); } },
-      { rotulo: "Apagar", icone: Trash2, perigo: true, aoEscolher: () => { onDelete(); setShowMobileMenu(false); } },
-    ] : []),
-    // Em qualquer mensagem, inclusive a minha — como no WhatsApp. O autor não
-    // fica sabendo; o "Apagar" de cima é que some para todos.
-    ...(onApagarParaMim ? [{ rotulo: "Apagar para mim", icone: EyeOff, aoEscolher: () => { onApagarParaMim(); setShowMobileMenu(false); } }] : []),
-  ];
-  // A folha do toque usa ESTE array — o mesmo do `MenuDaMensagem` acima.
-  const podeReagir = !msg.id.startsWith("optimistic-") && !isDeleted;
-  const toqueLongo = useToqueLongo(() => {
-    if (!temOQueAbrir(acoesDoMenu, podeReagir)) return;
-    setFolhaMontada(true);
-    setFolhaAberta(true);
-  }, toque);
+  const acoesDoMenu: AcaoDaMensagem[] = acoesDaMensagemDoCanal(msg, {
+    souAutor: isOwn,
+    aoResponderThread: onReply,
+    aoMarcarNaoLida: onMarkUnread,
+    aoEditar: onEdit,
+    aoApagar: onDelete,
+    aoDados: onDadosDaMensagem,
+    aoApagarParaMim: onApagarParaMim,
+    depois: () => setShowMobileMenu(false),
+  });
 
 
   // ⚠️ Fora do ramo de "não apagada" de propósito. Em 13/10/2026 uma resposta
@@ -469,31 +436,23 @@ export const MessageBubble = memo(function MessageBubble({
   return (
     <div
       ref={wrapperRef}
-      className={`flex ${toque ? "gap-2" : "gap-3"} group relative px-3 ${continuacao ? "py-0.5" : "py-1.5"} -mx-3 transition-colors ${isOwn ? "flex-row-reverse" : ""} ${threadHasUnread ? "bg-primary/[0.06] border-l-4 border-primary rounded-r-md" : isMarkedUnread ? "bg-primary/[0.04] border-l-2 border-primary/50" : ""}`}
-      {...(toque
-        ? { ...toqueLongo.handlers, onClick: (e: React.MouseEvent) => { if (continuacao && doProprioElemento(e)) setMostrarHora((v) => !v); } }
-        : { onTouchStart: handleTouchStart, onTouchEnd: handleTouchEnd, onTouchCancel: handleTouchEnd })}
+      className={`flex gap-3 group relative px-3 ${continuacao ? "py-0.5" : "py-1.5"} -mx-3 transition-colors ${isOwn ? "flex-row-reverse" : ""} ${threadHasUnread ? "bg-primary/[0.06] border-l-4 border-primary rounded-r-md" : isMarkedUnread ? "bg-primary/[0.04] border-l-2 border-primary/50" : ""}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
-      {toque && folhaMontada && (
-        <AcoesDaMensagemNoToque
-          aberto={folhaAberta}
-          aoMudar={setFolhaAberta}
-          acoes={acoesDoMenu}
-          aoReagir={podeReagir ? onToggleReaction : undefined}
-        />
-      )}
       {continuacao ? (
         // Sem foto, o espaço fica para alinhar com a primeira da sequência; o
         // horário de quem não sou eu aparece aqui ao passar o mouse.
-        <div className={`${toque ? "w-8" : "w-9"} shrink-0 flex items-start justify-center pt-2.5`}>
+        <div className={`w-9 shrink-0 flex items-start justify-center pt-2.5`}>
           {!isOwn && (
-            <span className={`${toque && mostrarHora ? "inline" : "hidden group-hover:inline"} text-[10px] leading-none text-muted-foreground`}>
+            <span className={`hidden group-hover:inline text-[10px] leading-none text-muted-foreground`}>
               {format(new Date(msg.created_at), "HH:mm")}
             </span>
           )}
         </div>
       ) : (
-      <div className={`${toque ? "h-8 w-8" : "h-9 w-9"} shrink-0 mt-0.5 overflow-hidden ring-2 ring-border/30 ${isAgent ? "rounded-md" : "rounded-full"}`}>
+      <div className={`h-9 w-9 shrink-0 mt-0.5 overflow-hidden ring-2 ring-border/30 ${isAgent ? "rounded-md" : "rounded-full"}`}>
         {isAgent ? (
           agentAvatar ? (
             <img src={agentAvatar} alt="" className="h-9 w-9 object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
@@ -569,7 +528,7 @@ export const MessageBubble = memo(function MessageBubble({
             {indicadorDeRespostas}
           </>
         ) : (
-          <div className={`relative ${toque ? "max-w-[85%]" : "max-w-[70%]"} flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
+          <div className={`relative max-w-[70%] flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
             {mentionsEveryone && (
               <div className="mt-1.5 mb-2 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-primary/20">
                 <Users className="h-3 w-3" />
@@ -583,7 +542,7 @@ export const MessageBubble = memo(function MessageBubble({
               </div>
             )}
             {temTexto && (
-            <div ref={bubbleRef} className={`relative mt-1 inline-block w-fit max-w-full ${toque ? "" : "pr-7"} text-left ${bubbleClass}`}>
+            <div ref={bubbleRef} className={`relative mt-1 inline-block w-fit max-w-full pr-7 text-left ${bubbleClass}`}>
               {(() => {
                 // Strip @todos prefix from rendered text when the "Aviso para todos" badge is already shown
                 const displayContent = mentionsEveryone
@@ -594,8 +553,8 @@ export const MessageBubble = memo(function MessageBubble({
                 return <MarkdownMessageContent text={displayContent} highlightMentions={hasMention} className="text-sm text-foreground/90" />;
               })()}
 
-              {!toque && renderReagir()}
-              {!toque && <MenuDaMensagem acoes={acoesDoMenu} className={showMobileMenu ? "opacity-100" : undefined} />}
+              {renderReagir()}
+              <MenuDaMensagem acoes={acoesDoMenu} className={showMobileMenu ? "opacity-100" : undefined} />
             </div>
             )}
 
@@ -627,7 +586,7 @@ export const MessageBubble = memo(function MessageBubble({
                     }
                   </AnexoResolvido>
                 ))}
-                {!temTexto && !toque && (
+                {!temTexto && (
                   <>
                     {renderReagir()}
                     <MenuDaMensagem acoes={acoesDoMenu} className={showMobileMenu ? "opacity-100" : undefined} />
@@ -796,9 +755,7 @@ export default function ChannelChat({
   const { user, profile, role } = useAuthContext();
   const { markMessageAsUnread } = useNotificationsContext();
   const currentUserName = (profile?.full_name && profile.full_name.trim()) || user?.email?.split("@")[0] || "Alguém";
-  const isMobile = useIsMobile();
   const { bottomOffset, isKeyboardOpen } = useMobileChatViewport();
-  const [seletorNoCelular, setSeletorNoCelular] = useState<"emoji" | "gif" | null>(null);
   const { messages, loading: msgsLoading, sendMessage, ensureMessageLoaded, esconder, reexibir } = useChannelMessages(channel.id);
   const threadCounts = useThreadCounts(channel.id);
   const { ligado: resumoLigado } = useResumoEmAudio();
@@ -1002,11 +959,10 @@ export default function ChannelChat({
 
   // Auto-focus input when channel changes
   useEffect(() => {
-    if (isMobile) return;
     setTimeout(() => {
       inputRef.current?.focus();
     }, 50);
-  }, [channel.id, isMobile]);
+  }, [channel.id]);
 
   // Hydrate local draft mirror when the channel changes. The RichComposer itself
   // is remounted (via key) per-channel and picks up `draftValue` as initialMarkdown.
@@ -1402,14 +1358,12 @@ export default function ChannelChat({
     if (newCount > 0) setUnreadBelowCount(newCount);
   }, [messages.length]);
 
-  const triggerAgents = useCallback((text: string) => {
-    startChannelAgentReplies({
-      channelId: channel.id,
-      channelType: channel.type,
-      agentMembers,
-      messageText: text,
-    });
-  }, [agentMembers, channel.id, channel.type]);
+  // O envio mora em `lib/envio-no-canal.ts` desde 03/11/2026 — o app do
+  // celular passa pelo mesmo caminho (gravar, avisar, acordar o agente).
+  const ctxEnvio = useMemo<ContextoDeEnvio | null>(
+    () => (user ? { canal: channel, user, profile, sendMessage, agentMembers } : null),
+    [channel, user, profile, sendMessage, agentMembers],
+  );
 
   const handleSend = async () => {
     const currentInput = inputLocalRef.current;
@@ -1441,13 +1395,7 @@ export default function ChannelChat({
         setUploadingFiles(true);
         try {
           const finalized = await channelMedia.finalizeStaged({ contexto: "canal", channelId: channel.id });
-          attachments = finalized.map((f) => ({
-            id: f.id,
-            name: f.name ?? "arquivo",
-            url: f.id ? "" : (f.url || f.base64),
-            size: f.size ?? 0,
-            mimeType: f.mimeType,
-          }));
+          attachments = anexosDoCanal(finalized);
           channelMedia.clearStaged();
         } catch (err) {
           console.error("File upload error:", err);
@@ -1461,39 +1409,34 @@ export default function ChannelChat({
         setUploadingFiles(false);
       }
 
-      const nonImageAttachments = attachments ? attachments.filter(a => !a.mimeType?.startsWith("image/")) : [];
-      const displayContent = msg || (nonImageAttachments.length > 0 ? `📎 ${nonImageAttachments.map(a => a.name).join(", ")}` : "");
-      const displayName = (profile?.full_name && profile.full_name.trim()) || user.email?.split("@")[0] || "Usuário";
-      const avatarUrl = profile?.avatar_url || null;
-      await sendMessage(channel.id, user.id, displayName, displayContent, "human", avatarUrl, null, attachments);
-
-      await notifyChannelRecipients({
-        channelId: channel.id,
-        senderUserId: user.id,
-        authorName: displayName,
-        contentPreview: displayContent.slice(0, 100),
-        contentText: displayContent,
-        forceNotifyAll: channel.type === "dm",
-      });
-
-      triggerAgents(displayContent);
+      if (ctxEnvio) await publicarNoCanal(ctxEnvio, msg, attachments);
     } finally {
       sendingRef.current = false;
     }
   };
 
-  // Notification action hooks: ?focus=composer, ?prefill=<text>, ?autosend=1
-  // Triggered when the user clicks "Responder" on a desktop push notification
-  // (focus only) or when Android sends inline text via SW openWindow fallback.
+  // Pedidos do push pela URL: `?focus=composer` (Responder no desktop),
+  // `?prefill=<texto>` (só RASCUNHO) e `?resposta=<id>` (Android, app fechado).
+  //
+  // ⚠️ **Segurança (03/11/2026): nada se envia a partir da query string.**
+  // Havia `?autosend=1`, e qualquer um podia mandar um link
+  // `/chat?channel=X&prefill=…&autosend=1` e fazer a vítima postar em nome
+  // dela. Agora só envia o texto que o service worker guardou no Cache
+  // Storage sob `resposta=<id>`, conferido por `consumirResposta` (canal,
+  // validade de 5 min, uso único). Ver `lib/resposta-rapida.ts`.
   const handledNotifActionRef = useRef<string | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const wantsFocus = params.get("focus") === "composer";
     const prefill = params.get("prefill");
-    const autosend = params.get("autosend") === "1";
-    if (!wantsFocus && !prefill) return;
+    const respostaId = params.get("resposta");
+    if (!wantsFocus && !prefill && !respostaId) return;
+    // Resposta rápida a uma THREAD: o desktop não abre thread pela URL, e
+    // postar aqui mandaria a resposta para a raiz do canal. Quem trata é o
+    // app do celular (`TelaThread`), onde esse campo de texto existe.
+    if (params.get("thread")) return;
 
-    const signature = `${channel.id}|${prefill ?? ""}|${autosend ? "1" : "0"}|${wantsFocus ? "1" : "0"}`;
+    const signature = `${channel.id}|${prefill ?? ""}|${respostaId ?? ""}|${wantsFocus ? "1" : "0"}`;
     if (handledNotifActionRef.current === signature) return;
     handledNotifActionRef.current = signature;
 
@@ -1502,6 +1445,7 @@ export default function ChannelChat({
       p.delete("focus");
       p.delete("prefill");
       p.delete("autosend");
+      p.delete("resposta");
       const s = p.toString();
       const newUrl = `${location.pathname}${s ? `?${s}` : ""}${location.hash}`;
       window.history.replaceState({}, "", newUrl);
@@ -1518,10 +1462,16 @@ export default function ChannelChat({
       }
       inputRef.current?.focus();
       cleanUrl();
-      if (autosend && prefill && prefill.trim()) {
-        // Allow the composer state to settle, then send.
-        setTimeout(() => { void handleSend(); }, 120);
-      }
+      if (!respostaId) return;
+      const cache = await abrirCacheDeRespostas();
+      const texto = cache ? await consumirResposta(cache, respostaId, { canal: channel.id, thread: null }) : null;
+      if (!texto) return;
+      inputLocalRef.current = texto;
+      setDraftValue(texto);
+      inputRef.current?.setMarkdown(texto);
+      setHasComposerText(true);
+      // Allow the composer state to settle, then send.
+      setTimeout(() => { void handleSend(); }, 120);
     };
     void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1606,92 +1556,41 @@ export default function ChannelChat({
 
   const handleEditSave = async (msgId: string, newContent: string) => {
     setEditingId(null);
-    // O `edited_at` é do servidor, e a rota confere que a mensagem é de quem
-    // está editando — antes bastava saber o id.
-    await api(`/channels/${channel.id}/messages/${msgId}`, {
-      method: "PATCH",
-      body: { content: newContent },
-    }).catch(() => { /* a tela já saiu do modo de edição */ });
+    await editarNoCanal(channel.id, msgId, newContent);
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteConfirmId) return;
     const id = deleteConfirmId;
     setDeleteConfirmId(null);
-    try {
-      await api(`/channels/${channel.id}/messages/${id}`, { method: "DELETE" });
-    } catch (erro) {
-      // Antes o erro era engolido: a pessoa clicava em apagar e nada acontecia.
-      toast.error(erro instanceof Error ? erro.message : "Não consegui apagar a mensagem.");
-      return;
-    }
+    if (!(await apagarNoCanal(channel.id, id))) return;
     setActiveThreadMessage((aberta) => threadDepoisDeApagar(aberta, id));
   };
 
-  /** "Apagar para mim" (30/10/2026): some daqui na hora, o servidor grava, e o
-   *  aviso oferece desfazer. O autor e os outros membros não percebem nada. */
+  /** "Apagar para mim" (30/10/2026) — ver `apagarParaMimNoCanal`. */
   const apagarParaMim = useCallback(async (msg: ChannelMessage) => {
-    const rota = `/channels/${channel.id}/messages/${msg.id}/apagar-para-mim`;
-    esconder(msg.id);
-    setActiveThreadMessage((aberta) => threadDepoisDeApagar(aberta, msg.id));
-    try {
-      await api(rota, { method: "POST" });
-    } catch (erro) {
-      reexibir(msg);
-      toast.error(erro instanceof Error ? erro.message : "Não consegui apagar a mensagem para você.");
-      return;
-    }
-    toast("Mensagem apagada para você", {
-      duration: 6000,
-      action: {
-        label: "Desfazer",
-        onClick: () => {
-          void api(rota, { method: "DELETE" }).then(
-            () => reexibir(msg),
-            () => toast.error("Não consegui desfazer."),
-          );
-        },
-      },
+    await apagarParaMimNoCanal(channel.id, msg, {
+      esconder,
+      reexibir,
+      aoApagar: (id) => setActiveThreadMessage((aberta) => threadDepoisDeApagar(aberta, id)),
     });
   }, [channel.id, esconder, reexibir]);
 
   const handleSendThreadReply = useCallback(async (content: string, rootMessageId: string, attachments?: ChannelAttachment[] | null) => {
-    if (!user) return;
+    if (!ctxEnvio) return;
     if (sendingRef.current) return;
     sendingRef.current = true;
     try {
-      const replyDisplayName = (profile?.full_name && profile.full_name.trim()) || user.email?.split("@")[0] || "Usuário";
-      const replyAvatarUrl = profile?.avatar_url || null;
-      await sendMessage(channel.id, user.id, replyDisplayName, content, "human", replyAvatarUrl, null, attachments ?? null, rootMessageId);
-      await notifyChannelRecipients({
-        channelId: channel.id,
-        senderUserId: user.id,
-        authorName: `${replyDisplayName} (em conversa)`,
-        contentPreview: `💬 ${content.slice(0, 100)}`,
-        contentText: content,
-        forceNotifyAll: true,
-        threadRootId: rootMessageId,
-      });
+      await publicarNaThread(ctxEnvio, content, rootMessageId, attachments);
     } finally {
       sendingRef.current = false;
     }
-  }, [channel.id, profile?.avatar_url, profile?.full_name, sendMessage, user]);
+  }, [ctxEnvio]);
 
   const handleSendThreadAudio = useCallback(async (audioUrl: string, transcription: string, rootMessageId: string) => {
-    if (!user) return;
-    const displayName = (profile?.full_name && profile.full_name.trim()) || user.email?.split("@")[0] || "Usuário";
-    const avatarUrl = profile?.avatar_url || null;
-    await sendMessage(channel.id, user.id, displayName, transcription, "human", avatarUrl, audioUrl, null, rootMessageId);
-    await notifyChannelRecipients({
-      channelId: channel.id,
-      senderUserId: user.id,
-      authorName: `${displayName} (em conversa)`,
-      contentPreview: `🎤 ${transcription.slice(0, 100)}`,
-      contentText: transcription,
-      forceNotifyAll: true,
-      threadRootId: rootMessageId,
-    });
-  }, [channel.id, profile?.avatar_url, profile?.full_name, sendMessage, user]);
+    if (!ctxEnvio) return;
+    await publicarAudioNaThread(ctxEnvio, audioUrl, transcription, rootMessageId);
+  }, [ctxEnvio]);
 
   const handleAudioStop = async () => {
     if (!user) return;
@@ -1704,40 +1603,9 @@ export default function ChannelChat({
         return;
       }
 
-      const ext = getAudioFileExtension(blob.type);
       // Anexo privado do canal desde 13/10/2026 — antes ia para o bucket
       // público `audio-messages`, que qualquer um com o link ouvia.
-      let audioUrl: string;
-      try {
-        audioUrl = await enviarAudioDoCanal(channel.id, blob);
-      } catch (uploadErr) {
-        console.error("Upload error:", uploadErr);
-        toast.error("Falha ao enviar o áudio.");
-        recorder.setIsProcessing(false);
-        return;
-      }
-      const formData = new FormData();
-      // ⚠️ O campo chama `arquivo` (a rota é nossa agora, não a edge).
-      formData.append("arquivo", blob, `audio.${ext}`);
-      const { data: transcribeData, error: transcribeErr } = await api<{ text: string }>(
-        "/ia/transcrever", { method: "POST", body: formData },
-      ).then((d) => ({ data: d, error: null as Error | null }),
-             (e: Error) => ({ data: null, error: e }));
-      const transcription = transcribeErr ? "Transcrição indisponível" : (transcribeData?.text || "Mensagem de áudio");
-      const audioDisplayName = (profile?.full_name && profile.full_name.trim()) || user.email?.split("@")[0] || "Usuário";
-      const audioAvatarUrl = profile?.avatar_url || null;
-      await sendMessage(channel.id, user.id, audioDisplayName, transcription, "human", audioAvatarUrl, audioUrl);
-
-      await notifyChannelRecipients({
-        channelId: channel.id,
-        senderUserId: user.id,
-        authorName: audioDisplayName,
-        contentPreview: `🎤 ${transcription.slice(0, 100)}`,
-        contentText: transcription,
-        forceNotifyAll: channel.type === "dm",
-      });
-
-      triggerAgents(transcription);
+      if (ctxEnvio) await enviarAudioNoCanal(ctxEnvio, blob);
     } catch (err) {
       console.error("Audio send error:", err);
       toast.error("Falha ao processar o áudio.");
@@ -1774,72 +1642,6 @@ export default function ChannelChat({
         </div>
       )}
 
-      {/* Celular: cabeçalho enxuto (spec 2026-11-03, Frente C2). O do HS.OS
-          some com a conversa aberta, então este respeita o notch. */}
-      {isMobile ? (
-      <div className="aurora-glow pt-[env(safe-area-inset-top,0px)] border-b border-border/40 shrink-0">
-        <div className="h-14 flex items-center justify-between gap-1 pl-1 pr-1">
-          <div className="flex min-w-0 flex-1 items-center gap-1">
-            {onBack && (
-              <button onClick={onBack} aria-label="Voltar para as conversas" className="h-11 w-11 shrink-0 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground active:bg-secondary/50 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setMembersOpen(true)}
-              aria-label={`${displayName} — ver participantes`}
-              className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 pr-1 text-left active:bg-secondary/40"
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/12 text-primary shrink-0">
-                <ChannelIcon type={channel.type} />
-              </span>
-              <span className="min-w-0 flex-1 leading-tight">
-                <span className="block truncate text-[15px] font-semibold text-foreground">{displayName}</span>
-                {pendingAgentIds.length > 0 ? (
-                  <span className="block truncate text-[11px] text-primary animate-pulse">
-                    {pendingAgentIds.map((a) => getAgentDisplayName(a)).join(", ")} digitando...
-                  </span>
-                ) : (
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    {isDm && humanPeerId && statusByUserId.get(humanPeerId)
-                      ? `${statusByUserId.get(humanPeerId)!.emoji} ${statusByUserId.get(humanPeerId)!.label}`
-                      : `${members.length} ${members.length === 1 ? "participante" : "participantes"}`}
-                  </span>
-                )}
-              </span>
-            </button>
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" aria-label="Mais opções do canal" className="h-11 w-11 shrink-0 flex items-center justify-center rounded-full text-muted-foreground active:bg-secondary/50">
-                <MoreVertical className="h-5 w-5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60">
-              <DropdownMenuItem className="min-h-[44px] gap-3" onSelect={() => setFilesOpen(true)}>
-                <Paperclip className="h-4 w-4" /> Arquivos
-              </DropdownMenuItem>
-              <DropdownMenuItem className="min-h-[44px] gap-3" onSelect={() => setMembersOpen(true)}>
-                <Users className="h-4 w-4" /> {isDm ? "Participantes" : "Membros"}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="min-h-[44px] gap-3"
-                onSelect={() => alternarSilencio(channel.id, !canalSilenciado)}
-              >
-                {canalSilenciado ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
-                {canalSilenciado ? "Reativar notificações" : "Silenciar"}
-              </DropdownMenuItem>
-              {canEdit && (
-                <DropdownMenuItem className="min-h-[44px] gap-3" onSelect={() => setEditOpen(true)}>
-                  <Pencil className="h-4 w-4" /> Editar canal
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-      ) : (
       <div className="aurora-glow border-b border-border/40 flex items-center justify-between gap-2 px-3 py-2 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           {onBack && (
@@ -1931,7 +1733,6 @@ export default function ChannelChat({
           </button>
         </div>
       </div>
-      )}
 
       {/* DM peer status banner */}
       {isDm && humanPeerId && (() => {
@@ -2034,7 +1835,6 @@ export default function ChannelChat({
                       onDadosDaMensagem={() => setDadosDaMensagemId(msg.id)}
                       onApagarParaMim={() => { void apagarParaMim(msg); }}
                       continuacao={continuacao}
-                      toque={isMobile}
                     />
                   )}
                 </div>
@@ -2079,7 +1879,7 @@ export default function ChannelChat({
               lastSeenMessageCountRef.current = messages.length;
             }
           }}
-          className={`absolute left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full border border-border/60 bg-background/95 px-3 py-2 text-muted-foreground shadow-lg backdrop-blur-sm transition-all hover:bg-secondary hover:text-foreground hover:shadow-xl ${isMobile ? "bottom-24" : "bottom-28"}`}
+          className={`absolute left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full border border-border/60 bg-background/95 px-3 py-2 text-muted-foreground shadow-lg backdrop-blur-sm transition-all hover:bg-secondary hover:text-foreground hover:shadow-xl bottom-28`}
           title="Ir para mensagens recentes"
         >
           {unreadBelowCount > 0 && (
@@ -2093,15 +1893,7 @@ export default function ChannelChat({
 
 
       <div
-        className={`mobile-chat-composer relative shrink-0 border-t border-border/40 ${isMobile ? "px-2 pt-2 bg-background" : "p-3 bg-background/95 backdrop-blur-sm"}`}
-        style={isMobile ? {
-          // Sem BottomNav na conversa (spec 2026-11-03, C1): só a barra de gestos.
-          paddingBottom: isKeyboardOpen
-            ? "8px"
-            : "calc(max(env(safe-area-inset-bottom, 0px), 8px) + 4px)",
-          transform: "translateZ(0)",
-          willChange: "padding-bottom",
-        } : undefined}
+        className="mobile-chat-composer relative shrink-0 border-t border-border/40 p-3 bg-background/95 backdrop-blur-sm"
       >
         {typingLabel && pendingAgentIds.length === 0 && (
           <div className="pointer-events-none absolute -top-7 left-4 flex items-center gap-2 rounded-full bg-background/90 px-3 py-1 text-xs italic text-muted-foreground shadow-sm backdrop-blur-sm border border-border/40">
@@ -2168,110 +1960,23 @@ export default function ChannelChat({
         ) : (
           <div className="flex flex-col gap-1">
             {/* Compact input row: field grows as the user types. */}
-            <div className={`glass-input flex gap-1.5 px-2 ${isMobile ? "py-1.5" : "py-2"} items-center`}>
-              {/* Mobile: single "+" popover holds attach, emoji and formatting */}
-              {isMobile ? (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      className="shrink-0 h-11 w-11 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/40 active:bg-secondary/60 transition-colors"
-                      title="Mais opções"
-                      aria-label="Mais opções"
-                    >
-                      <Plus className="h-5 w-5" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="p-2 w-[280px] max-w-[calc(100vw-16px)]" align="start" side="top">
-                    <div className="space-y-2">
-                      {/* Primary actions */}
-                      <div className="grid grid-cols-3 gap-1.5">
-                        <PopoverClose asChild>
-                          <button
-                            type="button"
-                            onClick={channelMedia.pickFile}
-                            className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg text-xs text-foreground hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
-                          >
-                            <Paperclip className="h-4 w-4 text-muted-foreground" />
-                            <span>Anexar</span>
-                          </button>
-                        </PopoverClose>
-                        {/* Emoji e GIF abrem numa folha de largura total: o
-                            popover de 320/380px não cabia em 360px
-                            (spec 2026-11-03, Frente C6). */}
-                        <PopoverClose asChild>
-                          <button
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => setSeletorNoCelular("emoji")}
-                            className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg text-xs text-foreground hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
-                          >
-                            <Smile className="h-4 w-4 text-muted-foreground" />
-                            <span>Emoji</span>
-                          </button>
-                        </PopoverClose>
-                        <PopoverClose asChild>
-                          <button
-                            type="button"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => setSeletorNoCelular("gif")}
-                            className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg text-xs text-foreground hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
-                          >
-                            <span className="text-[10px] font-bold tracking-wider text-muted-foreground border border-current rounded px-1 py-0.5 leading-none">GIF</span>
-                            <span>GIF</span>
-                          </button>
-                        </PopoverClose>
-                      </div>
-                      {/* Formatting */}
-                      <div>
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground px-2 pb-1">Formatação</p>
-                        <div className="grid grid-cols-6 gap-0.5">
-                          {([
-                            { icon: Bold, format: "bold" as RichFormat, title: "Negrito" },
-                            { icon: Italic, format: "italic" as RichFormat, title: "Itálico" },
-                            { icon: Strikethrough, format: "strikethrough" as RichFormat, title: "Riscado" },
-                            { icon: List, format: "ul" as RichFormat, title: "Lista" },
-                            { icon: ListOrdered, format: "ol" as RichFormat, title: "Lista numerada" },
-                            { icon: Code, format: "code" as RichFormat, title: "Código" },
-                          ]).map(({ icon: Icon, format, title }) => (
-                            <button
-                              key={format}
-                              type="button"
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                inputRef.current?.applyFormat(format);
-                              }}
-                              className="h-10 w-full flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
-                              title={title}
-                              aria-label={title}
-                            >
-                              <Icon className="h-[18px] w-[18px]" />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              ) : (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      className="shrink-0 p-1.5 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
-                      title="Inserir emoji"
-                      aria-label="Inserir emoji"
-                    >
-                      <Smile className="h-4 w-4" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="p-0 border-0 bg-transparent shadow-none w-auto" align="start" side="top">
-                    <EmojiPicker onSelect={(emoji) => inputRef.current?.insertText(emoji)} />
-                  </PopoverContent>
-                </Popover>
-              )}
+            <div className="glass-input flex gap-1.5 px-2 py-2 items-center">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    className="shrink-0 p-1.5 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+                    title="Inserir emoji"
+                    aria-label="Inserir emoji"
+                  >
+                    <Smile className="h-4 w-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="p-0 border-0 bg-transparent shadow-none w-auto" align="start" side="top">
+                  <EmojiPicker onSelect={(emoji) => inputRef.current?.insertText(emoji)} />
+                </PopoverContent>
+              </Popover>
               <RichComposer
                 key={channel.id}
                 ref={inputRef}
@@ -2315,12 +2020,6 @@ export default function ChannelChat({
                   // Shift+Enter inserts a newline on desktop. Inside <li>, let the
                   // browser handle natural list continuation.
                   if (e.key === "Enter" && !e.shiftKey) {
-                    if (isMobile) {
-                      // On mobile, Enter inserts a newline instead of sending
-                      e.preventDefault();
-                      inputRef.current?.insertText("\n");
-                      return;
-                    }
                     if (inputRef.current?.isInsideList()) return;
                     e.preventDefault();
                     void handleSend();
@@ -2330,101 +2029,78 @@ export default function ChannelChat({
                 disabled={isBusy}
                 className="flex-1 text-sm py-1"
               />
-              {/* Right action: send when there's text or staged files; mic otherwise (mobile only) */}
-              {isMobile && !hasComposerText && channelMedia.staged.length === 0 ? (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await recorder.start();
-                    } catch (e) {
-                      console.error("Audio start failed:", e);
-                    }
-                  }}
-                  disabled={isBusy}
-                  className="shrink-0 h-11 w-11 flex items-center justify-center rounded-full bg-primary/15 text-primary hover:bg-primary/25 active:bg-primary/35 transition-colors disabled:opacity-40"
-                  title="Gravar áudio"
-                  aria-label="Gravar áudio"
-                >
-                  <Mic className="h-5 w-5" />
-                </button>
-              ) : (
-                <button
-                  onClick={handleSend}
-                  disabled={(!inputLocalRef.current.trim() && channelMedia.staged.length === 0) || isBusy}
-                  className={`btn-send-gradient shrink-0${isMobile ? " !h-11 !w-11" : ""}`}
-                  aria-label="Enviar mensagem"
-                >
-                  <Send className="h-4 w-4" />
-                </button>
-              )}
+              <button
+                onClick={handleSend}
+                disabled={(!inputLocalRef.current.trim() && channelMedia.staged.length === 0) || isBusy}
+                className="btn-send-gradient shrink-0"
+                aria-label="Enviar mensagem"
+              >
+                <Send className="h-4 w-4" />
+              </button>
             </div>
 
-            {/* Desktop-only toolbar: attach + formatting + record */}
-            {!isMobile && (
-              <div className="flex items-center gap-0.5 px-2">
-                <button
-                  onClick={channelMedia.pickFile}
-                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
-                  title="Anexar arquivo"
-                >
-                  <Paperclip className="h-3.5 w-3.5" />
-                </button>
-                
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
-                      title="Enviar GIF"
-                    >
-                      <span className="text-[10px] font-bold tracking-wider border border-current rounded px-1 py-px leading-none">GIF</span>
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="p-0 overflow-hidden w-auto" align="start" side="top">
-                    <GifPicker onSelect={(gif) => { void handleSendGif(gif); }} />
-                  </PopoverContent>
-                </Popover>
-                <span className="mx-1 h-4 w-px bg-border/60" />
-                {([
-                  { icon: Bold, format: "bold" as RichFormat, title: "Negrito (Ctrl+B)" },
-                  { icon: Italic, format: "italic" as RichFormat, title: "Itálico (Ctrl+I)" },
-                  { icon: Strikethrough, format: "strikethrough" as RichFormat, title: "Riscado" },
-                  { icon: List, format: "ul" as RichFormat, title: "Lista" },
-                  { icon: ListOrdered, format: "ol" as RichFormat, title: "Lista numerada" },
-                  { icon: Code, format: "code" as RichFormat, title: "Código" },
-                ]).map(({ icon: Icon, format, title }) => (
+            <div className="flex items-center gap-0.5 px-2">
+              <button
+                onClick={channelMedia.pickFile}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+                title="Anexar arquivo"
+              >
+                <Paperclip className="h-3.5 w-3.5" />
+              </button>
+              
+              <Popover>
+                <PopoverTrigger asChild>
                   <button
-                    key={format}
                     type="button"
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      inputRef.current?.applyFormat(format);
-                    }}
+                    onMouseDown={(e) => e.preventDefault()}
                     className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
-                    title={title}
+                    title="Enviar GIF"
                   >
-                    <Icon className="h-3.5 w-3.5" />
+                    <span className="text-[10px] font-bold tracking-wider border border-current rounded px-1 py-px leading-none">GIF</span>
                   </button>
-                ))}
-                <span className="mx-1 h-4 w-px bg-border/60" />
+                </PopoverTrigger>
+                <PopoverContent className="p-0 overflow-hidden w-auto" align="start" side="top">
+                  <GifPicker onSelect={(gif) => { void handleSendGif(gif); }} />
+                </PopoverContent>
+              </Popover>
+              <span className="mx-1 h-4 w-px bg-border/60" />
+              {([
+                { icon: Bold, format: "bold" as RichFormat, title: "Negrito (Ctrl+B)" },
+                { icon: Italic, format: "italic" as RichFormat, title: "Itálico (Ctrl+I)" },
+                { icon: Strikethrough, format: "strikethrough" as RichFormat, title: "Riscado" },
+                { icon: List, format: "ul" as RichFormat, title: "Lista" },
+                { icon: ListOrdered, format: "ol" as RichFormat, title: "Lista numerada" },
+                { icon: Code, format: "code" as RichFormat, title: "Código" },
+              ]).map(({ icon: Icon, format, title }) => (
                 <button
-                  onClick={async () => {
-                    try {
-                      await recorder.start();
-                    } catch (e) {
-                      console.error("Audio start failed:", e);
-                    }
+                  key={format}
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    inputRef.current?.applyFormat(format);
                   }}
-                  disabled={isBusy}
                   className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
-                  title="Gravar áudio"
+                  title={title}
                 >
-                  <Mic className="h-3.5 w-3.5" />
+                  <Icon className="h-3.5 w-3.5" />
                 </button>
-              </div>
-            )}
+              ))}
+              <span className="mx-1 h-4 w-px bg-border/60" />
+              <button
+                onClick={async () => {
+                  try {
+                    await recorder.start();
+                  } catch (e) {
+                    console.error("Audio start failed:", e);
+                  }
+                }}
+                disabled={isBusy}
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+                title="Gravar áudio"
+              >
+                <Mic className="h-3.5 w-3.5" />
+              </button>
+            </div>
 
             {/* @mention hint below everything */}
             {agentMembers.length > 0 && (
@@ -2458,27 +2134,6 @@ export default function ChannelChat({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {isMobile && (
-        <Drawer open={seletorNoCelular !== null} onOpenChange={(v) => { if (!v) setSeletorNoCelular(null); }}>
-          <DrawerContent className="max-h-[85dvh] pb-[env(safe-area-inset-bottom,0px)]">
-            <DrawerHeader className="sr-only">
-              <DrawerTitle>{seletorNoCelular === "gif" ? "Enviar GIF" : "Inserir emoji"}</DrawerTitle>
-              <DrawerDescription>Escolha para colocar na mensagem.</DrawerDescription>
-            </DrawerHeader>
-            <div className="px-2 pt-2 pb-2">
-              {seletorNoCelular === "gif" ? (
-                <GifPicker
-                  className="w-full h-[60dvh] rounded-lg overflow-hidden"
-                  onSelect={(gif) => { setSeletorNoCelular(null); void handleSendGif(gif); }}
-                />
-              ) : seletorNoCelular === "emoji" ? (
-                <EmojiPickerLargo onSelect={(emoji) => inputRef.current?.insertText(emoji)} />
-              ) : null}
-            </div>
-          </DrawerContent>
-        </Drawer>
-      )}
 
       {/* Members Panel */}
       <ChannelMembersPanel

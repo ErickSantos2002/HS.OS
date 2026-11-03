@@ -25,6 +25,7 @@ from app import voz_entrega
 from app.database import sessao
 from app.dependencies import Usuario, exige_papel, normalizar_agent_id, usuario_atual
 from app.gateway import config as cfg
+from app.previas import texto_da_previa
 from app.recibos import eh_uuid
 from app.gateway.client import (ErroGateway, chave_de_sessao, obter_cliente,
                                 obter_cliente_de_espera)
@@ -676,6 +677,66 @@ async def silenciados(usuario: Usuario = Depends(usuario_atual)):
             usuario.id,
         )
     return [l["channel_id"] for l in linhas]
+
+
+class PreviaOut(BaseModel):
+    channel_id: str
+    texto: str
+    autor_id: str
+    autor_nome: str
+    autor_tipo: str
+    created_at: str
+
+
+# Uma linha por canal de que sou membro: a última mensagem de nível de cima
+# que EU ainda vejo. ⚠️ `LATERAL ... LIMIT 1` por canal, não `DISTINCT ON`
+# sobre a tabela: o `DISTINCT ON` ordenava TODAS as mensagens dos meus canais
+# para ficar com uma de cada. O LATERAL para na primeira de cada canal —
+# barato com o índice `channel_messages (channel_id, created_at DESC) WHERE
+# thread_id IS NULL` (sugerido, ainda não criado).
+SQL_PREVIAS = f"""
+    SELECT eu.channel_id::text AS channel_id, m.author_id, m.author_name,
+           m.author_type::text AS author_type, m.content, m.audio_url,
+           m.attachments, m.deleted_at IS NOT NULL AS apagada,
+           to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at
+      FROM public.channel_members eu
+      JOIN LATERAL (
+            SELECT m.* FROM public.channel_messages m
+             WHERE m.channel_id = eu.channel_id
+               AND m.thread_id IS NULL
+               AND {_VISIVEL_PARA_MIM}
+             ORDER BY m.created_at DESC
+             LIMIT 1
+           ) m ON true
+     WHERE eu.user_id = $1
+"""
+
+
+@router.get("/previas", response_model=list[PreviaOut])
+async def previas(usuario: Usuario = Depends(usuario_atual)):
+    """A última mensagem de cada conversa minha, para a lista do celular.
+
+    ⚠️ **Antes de `/{channel_id}/…`.** Ver `app/previas.py` para o texto (sem
+    markdown, 120 caracteres) e para o porquê de as não lidas não virem daqui.
+    "Apagar para mim" vale aqui também: a prévia não pode mostrar o que a
+    pessoa tirou da conversa.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        linhas = await conn.fetch(SQL_PREVIAS, usuario.id)
+    saida = []
+    for l in linhas:
+        anexos = l["attachments"]
+        if isinstance(anexos, str):
+            anexos = json.loads(anexos)
+        saida.append(PreviaOut(
+            channel_id=l["channel_id"],
+            texto=texto_da_previa(l["content"], anexos, l["audio_url"], l["apagada"], l["author_type"]),
+            autor_id=l["author_id"],
+            autor_nome=l["author_name"] or "",
+            autor_tipo=l["author_type"],
+            created_at=l["created_at"],
+        ))
+    return saida
 
 
 @router.put("/{channel_id}/silenciar", status_code=status.HTTP_204_NO_CONTENT)
