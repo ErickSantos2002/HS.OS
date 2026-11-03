@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from app.auth.router import router as auth_router
 from app.config import settings
 from app.erros import instalar_tratamento_de_erros
+from app import push_envio
 from app.escuta_banco import escutar
 from app.escritorio.log_sem_query import instalar as instalar_log_sem_query
 from app.escritorio.presenca import vigiar as vigiar_escritorio
@@ -62,6 +63,9 @@ from app.routers.ws import router as ws_router, sinalizar_desligamento
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+
+    # Sem VAPID o push fica desligado — e o log diz isso uma vez, aqui.
+    push_envio.ligado()
 
     # A escuta do banco é o que substitui o `postgres_changes`. Roda numa
     # conexão dedicada, fora do pool, e reconecta sozinha — ver
