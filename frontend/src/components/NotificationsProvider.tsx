@@ -8,6 +8,7 @@ import { NotificationsPermissionBanner } from "@/components/NotificationsPermiss
 import { isEnabled as isBrowserNotifEnabled } from "@/lib/browser-notifications";
 import { useCanaisSilenciados } from "@/hooks/use-canais-silenciados";
 import { definirMeuNome } from "@/lib/canais-silenciados";
+import { corpoDaRespostaRapida } from "@/lib/resposta-rapida";
 
 interface NotificationsContextValue {
   notifications: Notification[];
@@ -91,7 +92,13 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
     const onSwMessage = async (event: MessageEvent) => {
       const data = event.data as
-        | { type?: string; notificationId?: string | null; channelId?: string | null; text?: string }
+        | {
+            type?: string;
+            notificationId?: string | null;
+            channelId?: string | null;
+            threadId?: string | null;
+            text?: string;
+          }
         | undefined;
       if (!data?.type) return;
 
@@ -115,12 +122,10 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
             (profile?.full_name?.trim()) || user.email?.split("@")[0] || "Usuário";
           await api(`/channels/${data.channelId}/messages`, {
             method: "POST",
-            body: {
-              author_type: "human",
-              author_name: displayName,
-              content: data.text,
-              author_avatar: profile?.avatar_url || null,
-            },
+            body: corpoDaRespostaRapida(
+              { channelId: data.channelId, threadId: data.threadId, text: data.text },
+              { nome: displayName, avatar: profile?.avatar_url || null },
+            ),
           });
           await notifs.markAllAsReadForChannel(data.channelId);
         } catch (e) {

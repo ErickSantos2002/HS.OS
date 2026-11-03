@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
+import { clienteDaResposta } from "./lib/resposta-rapida";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -37,6 +38,9 @@ interface PayloadPush {
   // Só em mensagem de canal/DM. Sem ele as ações "Responder" e "Marcar como
   // lida" não aparecem: na conversa com agente não há o que marcar.
   channel_id?: string;
+  // Só em resposta de thread: a resposta rápida vai para a thread, não para a
+  // raiz do canal.
+  thread_id?: string;
 }
 
 const swNav = self as unknown as {
@@ -159,6 +163,7 @@ self.addEventListener("push", (event) => {
         data: {
           url: payload.url ?? "/chat",
           channel_id: payload.channel_id,
+          thread_id: payload.thread_id,
           conversa: payload.conversa,
         },
         // `type: "text"` abre o campo de resposta no Chrome do Android; no
@@ -189,7 +194,11 @@ self.addEventListener("push", (event) => {
 // --- Clique na notificação / ações ---
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const data = (event.notification.data ?? {}) as { url?: string; channel_id?: string };
+  const data = (event.notification.data ?? {}) as {
+    url?: string;
+    channel_id?: string;
+    thread_id?: string;
+  };
   const action = event.action;
   // Preenchido quando a pessoa digita no campo da notificação (só Android).
   const replyText = (event as NotificationEvent & { reply?: string }).reply?.trim();
@@ -214,15 +223,25 @@ self.addEventListener("notificationclick", (event) => {
       // ---- Responder ----
       if (action === "reply" && data.channel_id) {
         if (replyText) {
-          const abertas = await janelas();
-          if (abertas.length > 0) {
-            for (const c of abertas) {
-              c.postMessage({ type: "quick-reply", channelId: data.channel_id, text: replyText });
-            }
-            await abertas[0].focus().catch(() => undefined);
+          // ⚠️ Uma aba só: cada aba que recebe posta, e com o PWA e o
+          // navegador abertos a resposta saía duas vezes.
+          const alvo = clienteDaResposta(await janelas());
+          if (alvo) {
+            alvo.postMessage({
+              type: "quick-reply",
+              channelId: data.channel_id,
+              threadId: data.thread_id ?? null,
+              text: replyText,
+            });
+            await alvo.focus().catch(() => undefined);
           } else if (self.clients.openWindow) {
+            // O `prefill`+`autosend` do `ChannelChat` posta na raiz do canal.
+            // Resposta de thread sem aba aberta abre a thread em vez de
+            // postar no lugar errado (o texto digitado se perde).
             await self.clients.openWindow(
-              urlDoCanal(data.channel_id, { prefill: replyText, autosend: "1", focus: "composer" }),
+              data.thread_id
+                ? data.url ?? urlDoCanal(data.channel_id)
+                : urlDoCanal(data.channel_id, { prefill: replyText, autosend: "1", focus: "composer" }),
             );
           }
         } else {

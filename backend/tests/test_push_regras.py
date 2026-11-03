@@ -141,6 +141,10 @@ def test_payload_de_dm_e_de_canal():
     assert canal["title"] == "Bia em #geral"
     assert canal["url"] == "/chat?channel=c2&thread=t9"
     assert canal["tag"] == "thread:t9" and canal["conversa"] == "canal:c2"
+    # A resposta rápida da notificação precisa do `thread_id`: sem ele a
+    # resposta a uma thread caía na raiz do canal, fora da conversa.
+    assert canal["thread_id"] == "t9"
+    assert "thread_id" not in dm
 
 
 def test_payload_de_agente_nao_tem_canal():

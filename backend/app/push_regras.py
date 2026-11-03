@@ -203,7 +203,7 @@ def payload_canal(*, canal_id: str, canal_nome: str, tipo: str, autor: str,
                   thread_id: str | None) -> dict:
     titulo = autor if tipo == "dm" or not canal_nome else f"{autor} em #{canal_nome}"
     url = f"/chat?channel={canal_id}" + (f"&thread={thread_id}" if thread_id else "")
-    return {
+    payload = {
         "title": titulo,
         "body": previa(conteudo, anexos, audio),
         "url": url,
@@ -211,6 +211,11 @@ def payload_canal(*, canal_id: str, canal_nome: str, tipo: str, autor: str,
         "conversa": f"canal:{canal_id}",
         "channel_id": canal_id,
     }
+    # A resposta rápida da notificação usa isto: sem ele, responder a uma
+    # thread pela notificação postava na raiz do canal.
+    if thread_id:
+        payload["thread_id"] = thread_id
+    return payload
 
 
 def payload_agente(*, agent_id: str, agente_nome: str, conteudo: str,
