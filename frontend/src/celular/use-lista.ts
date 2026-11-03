@@ -140,6 +140,7 @@ export function useListaDoCelular() {
         autor: p.autor_nome,
       };
     };
+    void silenciadosVersao; // `estaSilenciado` lê estado de módulo: a versão é que muda
     const lista: ItemCelular[] = [];
     for (const a of agents) {
       const ult = ultimasDoAgente[a.id];

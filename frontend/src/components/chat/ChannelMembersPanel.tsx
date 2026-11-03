@@ -10,7 +10,8 @@ import { toast } from "@/hooks/use-toast";
 import { X, UserPlus, Search, Bot, User, Trash2 } from "lucide-react";
 import { UserStatusBadge } from "@/components/UserStatusBadge";
 import { formatStatusAge } from "@/lib/user-status";
-import PainelDoChat, { usePainelEmbutido } from "@/components/chat/PainelDoChat";
+import PainelDoChat from "@/components/chat/PainelDoChat";
+import { usePainelEmbutido } from "@/components/chat/painel-embutido";
 
 interface MemberInfo {
   user_id: string;

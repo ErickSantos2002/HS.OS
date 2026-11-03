@@ -15,7 +15,7 @@ import { ContextWindowIndicator } from "@/components/chat/ContextWindowIndicator
 import ConversasAnteriores from "@/components/chat/ConversasAnteriores";
 import { StreamingMarkdownContent } from "@/components/chat/MessageContent";
 import { ModelSelector } from "@/components/chat/ModelSelector";
-import { PainelEmbutido } from "@/components/chat/PainelDoChat";
+import { PainelEmbutido } from "@/components/chat/painel-embutido";
 import LiveArtifactViewer from "@/components/LiveArtifactViewer";
 import { useAgents } from "@/hooks/use-agents";
 import { useChatMedia } from "@/hooks/use-chat-media";
@@ -36,7 +36,8 @@ import { Composer } from "./Composer";
 import { FolhaDeAcoes, FolhaDeAnexo, FolhaDeEmoji } from "./Folhas";
 import { Ampliada, MidiaDoAgente } from "./Midia";
 import type { Painel, Tela } from "./pilha";
-import { Avatar, Folha, MenuSuspenso, horaCurta, mesmoDia, rotuloDoDia } from "./ui";
+import { Avatar, Folha, MenuSuspenso } from "./ui";
+import { horaCurta, mesmoDia, rotuloDoDia } from "./formato";
 import { useMapaDmDoAgente } from "./use-lista";
 import { useNavigate } from "react-router-dom";
 

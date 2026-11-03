@@ -33,7 +33,8 @@ import { montarResposta, separarCitacao, trechoParaCitar, type Citacao } from ".
 import { Composer } from "./Composer";
 import { FolhaDeAcoes, FolhaDeEmoji } from "./Folhas";
 import { Ampliada, MidiaDoCanal } from "./Midia";
-import { Avatar, corDoNome, horaCurta, mesmoDia, rotuloDoDia } from "./ui";
+import { Avatar } from "./ui";
+import { corDoNome, horaCurta, mesmoDia, rotuloDoDia } from "./formato";
 
 export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: string; raizId: string; ativa: boolean; aoVoltar: () => void }) {
   const { user, profile, role } = useAuthContext();

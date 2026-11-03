@@ -52,6 +52,14 @@ export function Composer({
   const recorder = useAudioRecorder();
   const gravacao = useRef({ x0: 0, inicio: 0, ativa: false, cancelada: false, soltou: false, iniciou: false });
   const [gravando, setGravando] = useState(false);
+  // Tela muito estreita (ou fonte grande do Android): "Mensagem para Nina"
+  // quebraria em duas linhas dentro do campo.
+  const [estreito, setEstreito] = useState(() => typeof window !== "undefined" && window.innerWidth < 340);
+  useEffect(() => {
+    const aoMudar = () => setEstreito(window.innerWidth < 340);
+    window.addEventListener("resize", aoMudar);
+    return () => window.removeEventListener("resize", aoMudar);
+  }, []);
   const temConteudo = valor.trim().length > 0 || anexos.length > 0;
   const modo: "enviar" | "parar" | "gravar" = temConteudo || !aoGravar ? (temConteudo || !aoParar ? "enviar" : "parar") : aoParar ? "parar" : "gravar";
 
@@ -164,7 +172,7 @@ export function Composer({
               rows={1}
               value={valor}
               onChange={(e) => aoMudar(e.target.value)}
-              placeholder={recorder.isProcessing ? "Enviando o áudio…" : placeholder}
+              placeholder={recorder.isProcessing ? "Enviando o áudio…" : estreito ? "Mensagem" : placeholder}
               aria-label="Mensagem"
               enterKeyHint="enter"
               style={aoAbrirEmoji ? undefined : { paddingLeft: 16 }}

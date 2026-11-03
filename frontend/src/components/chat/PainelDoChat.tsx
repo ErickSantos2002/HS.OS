@@ -7,19 +7,9 @@
  * (`PainelEmbutido`). Assim o celular mostra o mesmo conteúdo do desktop sem
  * uma segunda cópia do painel.
  */
-import { createContext, useContext, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-const PainelEmbutidoContext = createContext(false);
-
-/** Embrulha um painel do chat para ele virar conteúdo de tela cheia. */
-export function PainelEmbutido({ children }: { children: ReactNode }) {
-  return <PainelEmbutidoContext.Provider value>{children}</PainelEmbutidoContext.Provider>;
-}
-
-/** O painel está numa tela do celular? Os alvos de toque crescem para 44px. */
-export function usePainelEmbutido(): boolean {
-  return useContext(PainelEmbutidoContext);
-}
+import { usePainelEmbutido } from "@/components/chat/painel-embutido";
 
 interface Props {
   aberto: boolean;

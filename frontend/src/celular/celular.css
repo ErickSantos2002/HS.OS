@@ -169,8 +169,8 @@
 .cel-linha.eu .cel-audio { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .cel-audio .cel-play { width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; flex: none; }
 .cel-audio .cel-play svg { width: 18px; height: 18px; }
-.cel-audio .cel-onda { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; height: 28px; }
-.cel-audio .cel-onda i { flex: 1; background: var(--muted); opacity: .45; border-radius: 2px; min-width: 2px; }
+.cel-audio .cel-onda { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; height: 28px; overflow: hidden; }
+.cel-audio .cel-onda i { flex: 1 1 0; background: var(--muted); opacity: .45; border-radius: 2px; min-width: 1px; }
 .cel-audio .cel-onda i.ouvido { background: var(--accent); opacity: 1; }
 .cel-audio .cel-info { display: flex; flex-direction: column; gap: 1px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; align-items: flex-end; }
 .cel-audio .cel-info button { color: var(--accent); font-weight: 600; font-size: 11.5px; }

@@ -7,7 +7,8 @@ import { format, isThisWeek, isThisMonth, isToday, isYesterday, isValid, startOf
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
-import PainelDoChat, { usePainelEmbutido } from "@/components/chat/PainelDoChat";
+import PainelDoChat from "@/components/chat/PainelDoChat";
+import { usePainelEmbutido } from "@/components/chat/painel-embutido";
 import { arquivosDoCanal, type ArquivoDoCanal } from "@/lib/arquivos-do-canal";
 
 interface Props {

@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import ChannelFilesPanel from "@/components/chat/ChannelFilesPanel";
 import ChannelMembersPanel from "@/components/chat/ChannelMembersPanel";
 import { MarkdownMessageContent } from "@/components/chat/MessageContent";
-import { PainelEmbutido } from "@/components/chat/PainelDoChat";
+import { PainelEmbutido } from "@/components/chat/painel-embutido";
 import { useNotificationsContext } from "@/components/NotificationsProvider";
 import { useAuthContext } from "@/contexts/auth-context";
 import { useCanaisSilenciados } from "@/hooks/use-canais-silenciados";
@@ -51,7 +51,8 @@ import { Composer } from "./Composer";
 import { FolhaDeAcoes, FolhaDeAnexo, FolhaDeEmoji } from "./Folhas";
 import { Ampliada, MidiaDoCanal } from "./Midia";
 import type { Painel, Tela } from "./pilha";
-import { Avatar, Folha, MenuSuspenso, corDoNome, horaCurta, mesmoDia, rotuloDoDia } from "./ui";
+import { Avatar, Folha, MenuSuspenso } from "./ui";
+import { corDoNome, horaCurta, mesmoDia, rotuloDoDia } from "./formato";
 import { useMapaDmDoAgente } from "./use-lista";
 
 /** Até onde o canal agrupa bolhas do mesmo autor (5 min, como no desktop). */
@@ -85,7 +86,9 @@ export function TelaConversaCanal({
     toast.error("Essa conversa não está mais disponível.");
     aoVoltar();
   }, [canalId, recarregadoPara, canal, aoVoltar]);
-  useEffect(() => { void joinChannel(canalId); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [canalId]);
+  // Entrar no canal ao abrir, como o `ChatPage` (o PUT é idempotente).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void joinChannel(canalId); }, [canalId]);
 
   const mapaDm = useMapaDmDoAgente();
   useConversaAtivaNasNotificacoes({ agentId: null, canalId: ativa || painel ? canalId : null, agentDmChannelMap: mapaDm });

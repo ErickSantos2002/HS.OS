@@ -97,17 +97,26 @@ export default function AppCelular() {
   const painelDoTopo = telas.at(-1)?.tipo === "painel" ? (telas.at(-1) as { painel: Painel }).painel : null;
 
   // Saída animada: a tela que sai da pilha fica 280 ms deslizando para a direita.
+  // ⚠️ Depende da CHAVE da pilha, não do array (que é novo a cada render), e o
+  // timer não é cancelado por um render qualquer — senão a tela que saiu
+  // ficava no DOM para sempre, por cima das outras.
+  const chaveDaPilha = visiveis.map(chaveDa).join("|");
   const anteriores = useRef<Tela[]>(visiveis);
   const [saindo, setSaindo] = useState<Tela[]>([]);
+  const timers = useRef<number[]>([]);
+  useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
   useEffect(() => {
     const agora = new Set(visiveis.map(chaveDa));
     const sairam = anteriores.current.filter((t) => !agora.has(chaveDa(t)) && t.tipo !== "inicio");
     anteriores.current = visiveis;
+    // Voltou para uma tela que ainda estava saindo: ela deixa de sair.
+    setSaindo((s) => s.filter((t) => !agora.has(chaveDa(t))));
     if (sairam.length === 0) return;
     setSaindo((s) => [...s, ...sairam]);
-    const timer = window.setTimeout(() => setSaindo((s) => s.filter((t) => !sairam.includes(t))), DURACAO_SAIDA_MS);
-    return () => window.clearTimeout(timer);
-  }, [visiveis]);
+    const chaves = new Set(sairam.map(chaveDa));
+    timers.current.push(window.setTimeout(() => setSaindo((s) => s.filter((t) => !chaves.has(chaveDa(t)))), DURACAO_SAIDA_MS));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveDaPilha]);
 
   const topo = visiveis.length - 1;
   const render = (t: Tela, i: number, sai: boolean) => {

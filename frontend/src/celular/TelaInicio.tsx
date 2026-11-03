@@ -15,7 +15,7 @@ import { useNotificationsContext } from "@/components/NotificationsProvider";
 import { useAuthContext } from "@/contexts/auth-context";
 import { useAgents } from "@/hooks/use-agents";
 import { useResumoEmAudio } from "@/hooks/use-resumo-em-audio";
-import { findOrCreateDm } from "@/hooks/use-people";
+import { findOrCreateDm, usePeople } from "@/hooks/use-people";
 import { getPermission, isEnabled } from "@/lib/browser-notifications";
 import { desligarNotificacoesDoAparelho, ligarNotificacoesDoAparelho } from "@/lib/notificacoes-do-aparelho";
 import { classificarAtividade, nomeDoAutor, textoDaAtividade, type TipoAtividade } from "./atividade";
@@ -150,6 +150,7 @@ function Atividade({ aoAbrir }: { aoAbrir: (t: Tela) => void }) {
   const { notifications, markAsRead } = useNotificationsContext();
   const { profile } = useAuthContext();
   const { agents } = useAgents();
+  const { people } = usePeople();
   const [filtro, setFiltro] = useState<TipoAtividade | "tudo">("tudo");
   const agora = new Date();
   const itens = useMemo(() => notifications
@@ -171,6 +172,7 @@ function Atividade({ aoAbrir }: { aoAbrir: (t: Tela) => void }) {
         {itens.map(({ n, tipo }) => {
           const nome = nomeDoAutor(n);
           const agente = n.agent_id ? agents.find((a) => a.id === n.agent_id) : null;
+          const pessoa = agente ? null : people.find((p) => p.full_name === nome);
           const frase = tipo === "agente" ? "respondeu" : tipo === "thread" ? "respondeu numa thread" : "mencionou você";
           return (
             <button
@@ -183,7 +185,7 @@ function Atividade({ aoAbrir }: { aoAbrir: (t: Tela) => void }) {
                 else if (n.channel_id) aoAbrir({ tipo: "canal", id: n.channel_id });
               }}
             >
-              <Avatar tipo={n.agent_id ? "agente" : "pessoa"} nome={agente?.name ?? nome} chave={n.agent_id ?? nome} tam="sm" />
+              <Avatar tipo={n.agent_id ? "agente" : "pessoa"} nome={agente?.name ?? nome} chave={n.agent_id ?? pessoa?.id ?? nome} foto={pessoa?.avatar_url} tam="sm" />
               <span className="cel-meio">
                 <span className="cel-l1">
                   <span className="cel-nome" style={{ fontSize: 15.5 }}>{agente?.name ?? nome}</span>
