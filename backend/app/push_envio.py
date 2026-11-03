@@ -34,6 +34,10 @@ logger = logging.getLogger(__name__)
 
 _avisado = False
 
+# Um dia na fila do serviço de push com o aparelho desligado; 10 s por envio.
+_TTL_S = 86_400
+_TIMEOUT_S = 10
+
 SQL_RESERVAR = """
     INSERT INTO public.push_enviados (mensagem_id, user_id)
     SELECT $1::uuid, u FROM unnest($2::uuid[]) AS u
@@ -162,6 +166,12 @@ async def enviar_para(user_id: str, payload: dict) -> dict:
                     data=corpo,
                     vapid_private_key=privada,
                     vapid_claims={"sub": assunto},
+                    # ⚠️ Os padrões do pywebpush são `ttl=0` (FCM e Apple
+                    # descartam se o aparelho estiver dormindo — o caso de uso
+                    # inteiro) e sem timeout (thread presa para sempre).
+                    ttl=_TTL_S,
+                    timeout=_TIMEOUT_S,
+                    headers={"Urgency": "high"},
                 )
                 resultado["enviados"] += 1
             except WebPushException as e:

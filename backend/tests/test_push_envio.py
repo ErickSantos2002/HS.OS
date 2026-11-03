@@ -77,6 +77,26 @@ def test_envio_roda_fora_do_laco_de_eventos(monkeypatch):
     assert threads and threads[0] != laco
 
 
+def test_push_sobrevive_ao_aparelho_dormindo_e_nao_prende_a_thread(monkeypatch):
+    """Os padrões do pywebpush são `ttl=0` e sem timeout. Com TTL zero o FCM e a
+    Apple descartam o push se o aparelho estiver dormindo — justamente o caso
+    de uso (app fechado, celular no bolso). Sem timeout, um serviço de push que
+    não responde prende a thread para sempre."""
+    argumentos = {}
+
+    def falso(**kw):
+        argumentos.update(kw)
+
+    conn = Conn({"FROM public.push_subscriptions": [
+        {"id": "s1", "endpoint": FCM + "1", "p256dh": "k", "auth": "a"}]})
+    monkeypatch.setattr(p, "webpush", falso)
+    monkeypatch.setattr(p, "sessao", _sessao_com(conn))
+    asyncio.run(p.enviar_para(UID, {"title": "t"}))
+    assert argumentos["ttl"] == 86400
+    assert argumentos["timeout"] == 10
+    assert argumentos["headers"] == {"Urgency": "high"}
+
+
 def test_inscricao_morta_e_removida_e_erro_comum_nao_derruba(monkeypatch):
     """404/410 = aparelho desinstalado: insistir geraria erro a cada mensagem,
     para sempre. Outro erro só loga — push é acessório."""
