@@ -35,8 +35,8 @@
 
 **Interfaces — Produces:** `texto_da_previa(content: str|None, attachments: list|None, audio_url: str|None, apagada: bool) -> str` (sem markdown, espaço único, ≤ 120 caracteres com `…`; só anexo → `📎 <nome>`; só áudio → `🎤 Áudio`; apagada → `Mensagem apagada`). Rota devolve `list[{channel_id, texto, autor_id, autor_nome, autor_tipo, created_at}]`, a última mensagem de nível de cima (`thread_id IS NULL`) **visível para mim** (`_VISIVEL_PARA_MIM`) de cada canal de que sou membro (`DISTINCT ON`). Não lidas não vêm daqui: o front usa as do sininho, que são a fonte única hoje.
 
-- [ ] Testes: markdown (`**R$ 1**`, `- item`, `` `x` ``, links `[a](b)`) vira texto; 121+ caracteres corta em 120 com `…`; anexo/áudio/apagada; a rota usa `_VISIVEL_PARA_MIM` e `thread_id IS NULL` (inspect, padrão do `test_apagar_para_mim`); com conexão falsa, a rota mapeia as linhas.
-- [ ] `cd backend && python -m pytest tests -q` verde. Commit.
+- [x] Testes: markdown (`**R$ 1**`, `- item`, `` `x` ``, links `[a](b)`) vira texto; 121+ caracteres corta em 120 com `…`; anexo/áudio/apagada; a rota usa `_VISIVEL_PARA_MIM` e `thread_id IS NULL` (inspect, padrão do `test_apagar_para_mim`); com conexão falsa, a rota mapeia as linhas.
+- [x] `cd backend && python -m pytest tests -q` verde. Commit.
 
 ### Task 2: Extrair do desktop o que o celular precisa (sem mudar o desktop)
 
@@ -51,15 +51,15 @@
 - `useConversaAgente(agentId, { aoGravarPergunta?, aoSincronizar? })` → `{ mensagens, temMais, carregandoMais, trabalhando, textoParcial, reconectando, messagesByAgent, setMessagesByAgent, messagesByAgentRef, appendAgentMessage, upsertAgentMessage, updateAgentHistory, despachar, pararResposta, tentarDeNovo, carregarAnteriores(container?), novaConversa, enviarVoz(blob) }` — estado e efeitos movidos do `ChatPage` (histórico com cache, eventos do `chat-sender`, `usuario:<id>` + visibilidade, reconciliação 3,5s/20s).
 - `useConversaAtivaNasNotificacoes({ agentId, canalId })` — os três efeitos de "conversa ativa" do `ChatPage` (setActiveAgentId, marcar lidas com varredura de 2s, setActiveChannel/Agent, varredura no foco).
 
-- [ ] TDD dos puros (`acoes-da-mensagem.test.ts`, `nao-lidas-do-agente.test.ts`).
-- [ ] Mover o código; `ChatPage`/`ChannelChat` passam a chamar as funções. `npm run test` (testes existentes do `ChannelChat` ficam verdes), `npm run build`. Commit.
+- [x] TDD dos puros (`acoes-da-mensagem.test.ts`, `nao-lidas-do-agente.test.ts`).
+- [x] Mover o código; `ChatPage`/`ChannelChat` passam a chamar as funções. `npm run test` (testes existentes do `ChannelChat` ficam verdes), `npm run build`. Commit.
 
 ### Task 3: Remover o mobile da Frente C de `ChatPage`/`ChannelChat`
 
 **Files:** Modify `ChatPage.tsx`, `ChannelChat.tsx`, `ThreadPanel.tsx`, `AppLayout.tsx`, `ChannelFilesPanel.tsx`, `ChannelMembersPanel.tsx`, `PainelDoChat.tsx`, `ContextWindowIndicator.tsx`; testes da Frente C que testavam só o celular desses componentes.
 
-- [ ] Cada `isMobile ? A : B` dentro do chat fica `B` (o ramo desktop, intacto). Some: tela cheia condicional, ⋮ do celular, folhas de toque, `MobileAgentChips`, layout `if (isMobile)` da lista. Ficam: `toque-longo`, `acoes-do-toque`, `previa-da-mensagem`, `use-mobile-chat-viewport` (usados pelo app novo). `AppLayout` perde `conversaEmTelaCheia` (o celular não passa mais por ele no chat).
-- [ ] `npm run test`, `npm run build`, `npm run lint`. Commit.
+- [x] Cada `isMobile ? A : B` dentro do chat fica `B` (o ramo desktop, intacto). Some: tela cheia condicional, ⋮ do celular, folhas de toque, `MobileAgentChips`, layout `if (isMobile)` da lista. Ficam: `toque-longo`, `acoes-do-toque`, `previa-da-mensagem`, `use-mobile-chat-viewport` (usados pelo app novo). `AppLayout` perde `conversaEmTelaCheia` (o celular não passa mais por ele no chat).
+- [x] `npm run test`, `npm run build`, `npm run lint`. Commit.
 
 ### Task 4: Pilha ↔ URL e a casca do app
 
@@ -71,16 +71,16 @@
 - `urlDaPilha(telas: Tela[]): string`, `urlDoPai(search): string`.
 - `usaAppCelular(isMobile: boolean, pathname: string): boolean` → `/` ou `/chat`.
 - Abrir tela = `navigate(url)` (push). Voltar = `navigate(-1)` se há histórico dentro do app (`history.state.idx > 0`), senão `navigate(urlDoPai, {replace:true})`.
-- [ ] Testes: lista → agente → painel → voltar; canal+thread; `?channel=` de DM de agente vira `agente`; `aba=eu`; `urlDoPai` de thread é o canal, de canal é `/chat`, de painel é a conversa.
-- [ ] Commit.
+- [x] Testes: lista → agente → painel → voltar; canal+thread; `?channel=` de DM de agente vira `agente`; `aba=eu`; `urlDoPai` de thread é o canal, de canal é `/chat`, de painel é a conversa.
+- [x] Commit.
 
 ### Task 5: Lista (Conversas)
 
 **Files:** Create `celular/lista.ts` (+ test), `celular/use-lista.ts`, `celular/TelaInicio.tsx`, `celular/ListaDeConversas.tsx`.
 
 **Interfaces:** `montarLista(entrada, filtro: "pessoa"|"agente"|"canal", busca): ItemDaListaCelular[]` com `{chave, tipo, nome, subtitulo, previa, minha, lida, hora(ms), naoLidas, silenciado, pensando, alvo}`; ordem = última mensagem (desc), quem nunca conversou no fim em ordem alfabética; busca casa nome **e** prévia (`casaBusca`). `horaDaLista(ms, agora)`: hoje `HH:MM`, ontem `ontem`, semana `seg`…, senão `dd/mm`.
-- [ ] Testes de ordem, filtro, busca na prévia, pessoa sem DM, silenciado, pensando, `horaDaLista`.
-- [ ] Topo "HS.OS", busca 44px, chips Pessoas·Agentes·Canais (abre em Pessoas), itens como o protótipo, abas Conversas·Atividade·Eu com contadores. Commit.
+- [x] Testes de ordem, filtro, busca na prévia, pessoa sem DM, silenciado, pensando, `horaDaLista`.
+- [x] Topo "HS.OS", busca 44px, chips Pessoas·Agentes·Canais (abre em Pessoas), itens como o protótipo, abas Conversas·Atividade·Eu com contadores. Commit.
 
 ### Task 6: Conversa (agente, DM, canal) + thread
 
@@ -91,7 +91,7 @@
 - Composer: emoji · textarea que cresce até 132px (16px) · clipe; botão mic/enviar; segurar grava, deslizar 90px à esquerda cancela, soltar envia (canal: `enviarAudioNoCanal`; agente: `enviarVoz`). Barra da resposta acima.
 - Gestos: segurar 450ms abre folha (reações rápidas + ações da Task 2); deslizar à direita > 60px responde (canal: citação `> autor: trecho`; agente: citação no rascunho).
 - Thread: tela cheia, mãe no topo, `useThreadMessages`, envio por `enviarNoCanal({threadRaiz})`.
-- [ ] Testes: `ondasDe(seed, n)` determinístico e dentro de 20..90; `decidirGesto` (toque curto, segurar, deslizar, rolagem cancela). Commit.
+- [x] Testes: `ondasDe(seed, n)` determinístico e dentro de 20..90; `decidirGesto` (toque curto, segurar, deslizar, rolagem cancela). Commit.
 
 ### Task 7: Folhas, ⋮ e painéis em tela cheia
 
@@ -99,17 +99,35 @@
 - Anexar: grade Documento · Câmera · Galeria · Documentos HS → `useChatMedia` (`pickFile`, input `capture`, `accept=image/*`; Documentos HS → `/files`).
 - ⋮ agente: Arquivos da conversa, Conversas anteriores, Modelo e contexto, Nova conversa (confirmação do desktop). ⋮ canal/DM: Participantes/Ver perfil, Arquivos, Silenciar/Reativar (`useCanaisSilenciados`), Buscar na conversa.
 - Cada item empilha uma tela cheia que reutiliza o conteúdo do desktop (`ChannelFilesPanel` embutido, `ConversasAnteriores`, `ContextWindowIndicator`+`ModelSelector`, membros, busca local na conversa).
-- [ ] Commit.
+- [x] Commit.
 
 ### Task 8: Atividade e Eu
 
 **Files:** Create `celular/atividade.ts` (+ test), `TelaAtividade.tsx`, `TelaEu.tsx`.
 - `classificarAtividade(n: Notification, meuNome): "mencao"|"thread"|"agente"|null` — `agent_id` → agente; `author_name` com "(em conversa)" ou prévia com 💬 → thread; `@<meu nome>`/`@todos` → menção; resto `null` (não entra). Tocar abre a conversa certa.
 - Eu: perfil, notificações neste celular (o liga/desliga de push que já existe), resumo em áudio (`useResumoEmAudio`), silenciadas, tema Sistema/Claro/Escuro (`next-themes`), Instalar app (`InstalarApp`), Documentos, Sair (`signOut`).
-- [ ] Testes de `classificarAtividade`. Commit.
+- [x] Testes de `classificarAtividade`. Commit.
 
 ### Task 9: Verificação
 
-- [ ] `npm run build && npm run test && npm run lint` (lint sem erro novo frente à `main`); `python -m pytest tests -q`.
-- [ ] Screenshots 360×740, 390×844, 412×915, claro/escuro, e com `html{font-size:130%}`, em `docs/fotos_doc/app-celular/celular/`; conferir sem scroll horizontal (`scrollWidth <= innerWidth`).
-- [ ] Desktop 1280 depois, diff por pixel contra `desktop-antes`.
+- [x] `npm run build && npm run test && npm run lint` (lint sem erro novo frente à `main`); `python -m pytest tests -q`.
+- [x] Screenshots 360×740, 390×844, 412×915, claro/escuro, e com `html{font-size:130%}`, em `docs/fotos_doc/app-celular/celular/`; conferir sem scroll horizontal (`scrollWidth <= innerWidth`).
+- [x] Desktop 1280 depois, diff por pixel contra `desktop-antes`.
+
+## Desvios do protótipo (registrados na execução)
+
+- **Topo da lista sem câmera e sem ⋮.** No protótipo os dois só mostravam um
+  aviso ("ilustrativo"); não há ação real por trás. Configurações e Documentos
+  ficaram no Eu.
+- **Botão redondo vira "parar"** quando o agente está respondendo e o campo
+  está vazio — o "parar de verdade" (`hsos_flag_real_stop`) do desktop não
+  tinha outro lugar no celular.
+- **"Documentos HS" no anexar abre a Base de Conhecimento.** Não existe
+  seletor de documento do HS para anexar; criar um seria regra nova.
+- **Sem lista de menção (@) no composer do canal.** Digitar `@nina` funciona
+  (o agente é acordado pela mesma regra), mas sem o popup de sugestões.
+- **Atividade some com o que foi lido.** A fonte é a do sininho, que tira da
+  lista as notificações do canal aberto.
+- **Painéis do ⋮ usam o visual do desktop** (embutidos), não um redesenho.
+- **Responder citando** vai no texto (`> **Autor:** trecho`): não há coluna de
+  resposta no banco.
