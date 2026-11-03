@@ -7,6 +7,7 @@ import { Hash, Sparkles } from "lucide-react";
 
 import { useResolvedAgentAvatar } from "@/hooks/use-agent-avatar";
 import { corDoAvatar } from "./formato";
+import { controleDeFolhas } from "./historico-da-folha";
 
 
 /**
@@ -24,13 +25,19 @@ function useFecharComVoltar(aberto: boolean, aoFechar: () => void) {
   useEffect(() => {
     if (!aberto) return;
     const marca = Date.now() + Math.random();
-    window.history.pushState({ ...(window.history.state ?? {}), celFolha: marca }, "");
+    const controle = controleDeFolhas();
+    controle.abrir(marca);
     let peloVoltar = false;
-    const aoPop = () => { peloVoltar = true; aoFecharRef.current(); };
+    const aoPop = () => {
+      // Só o voltar que tirou A NOSSA entrada fecha esta folha.
+      if ((window.history.state as { celFolha?: number } | null)?.celFolha === marca) return;
+      peloVoltar = true;
+      aoFecharRef.current();
+    };
     window.addEventListener("popstate", aoPop);
     return () => {
       window.removeEventListener("popstate", aoPop);
-      if (!peloVoltar && (window.history.state as { celFolha?: number } | null)?.celFolha === marca) window.history.back();
+      controle.fechar(marca, peloVoltar);
     };
   }, [aberto]);
 }
