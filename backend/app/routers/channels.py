@@ -689,20 +689,26 @@ class PreviaOut(BaseModel):
 
 
 # Uma linha por canal de que sou membro: a última mensagem de nível de cima
-# que EU ainda vejo. `DISTINCT ON` + `ORDER BY created_at DESC` é a forma do
-# Postgres de dizer "a mais recente de cada grupo" sem subconsulta por canal.
+# que EU ainda vejo. ⚠️ `LATERAL ... LIMIT 1` por canal, não `DISTINCT ON`
+# sobre a tabela: o `DISTINCT ON` ordenava TODAS as mensagens dos meus canais
+# para ficar com uma de cada. O LATERAL para na primeira de cada canal —
+# barato com o índice `channel_messages (channel_id, created_at DESC) WHERE
+# thread_id IS NULL` (sugerido, ainda não criado).
 SQL_PREVIAS = f"""
-    SELECT DISTINCT ON (m.channel_id)
-           m.channel_id::text AS channel_id, m.author_id, m.author_name,
+    SELECT eu.channel_id::text AS channel_id, m.author_id, m.author_name,
            m.author_type::text AS author_type, m.content, m.audio_url,
            m.attachments, m.deleted_at IS NOT NULL AS apagada,
            to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at
-      FROM public.channel_messages m
-     WHERE m.thread_id IS NULL
-       AND {_VISIVEL_PARA_MIM}
-       AND EXISTS (SELECT 1 FROM public.channel_members eu
-                    WHERE eu.channel_id = m.channel_id AND eu.user_id = $1)
-     ORDER BY m.channel_id, m.created_at DESC
+      FROM public.channel_members eu
+      JOIN LATERAL (
+            SELECT m.* FROM public.channel_messages m
+             WHERE m.channel_id = eu.channel_id
+               AND m.thread_id IS NULL
+               AND {_VISIVEL_PARA_MIM}
+             ORDER BY m.created_at DESC
+             LIMIT 1
+           ) m ON true
+     WHERE eu.user_id = $1
 """
 
 

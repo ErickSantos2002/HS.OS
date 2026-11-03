@@ -56,6 +56,19 @@ def test_previa_respeita_apagar_para_mim_e_ignora_thread():
     assert "eu.user_id = $1" in c.SQL_PREVIAS
 
 
+def test_previa_busca_uma_mensagem_por_canal_e_nao_ordena_a_tabela():
+    """`DISTINCT ON` sobre todas as mensagens dos meus canais ordenava tudo
+    para ficar com uma de cada; o LATERAL para na primeira de cada canal."""
+    sql = " ".join(c.SQL_PREVIAS.split())
+    assert "JOIN LATERAL" in sql
+    assert "ORDER BY m.created_at DESC LIMIT 1" in sql
+    assert "DISTINCT ON" not in sql
+    # O filtro "apagar para mim" fica DENTRO do LATERAL: senão a prévia seria
+    # a mensagem escondida (e o canal sumiria da lista em vez de mostrar a anterior).
+    dentro = sql.split("JOIN LATERAL", 1)[1].split(") m ON true", 1)[0]
+    assert c._VISIVEL_PARA_MIM in dentro
+
+
 class Conexao:
     def __init__(self, linhas):
         self.linhas = linhas
