@@ -47,6 +47,7 @@ import { getAudioFileExtension, useAudioRecorder } from "@/hooks/use-audio-recor
 import { toast } from "sonner";
 import type { AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
 import AcoesDaMensagemNoToque from "@/components/chat/AcoesDaMensagemNoToque";
+import EmojiPickerLargo from "@/components/chat/EmojiPickerLargo";
 import { useToqueLongo } from "@/hooks/use-toque-longo";
 import { acoesDoToque } from "@/lib/acoes-do-toque";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -597,6 +598,25 @@ export default function ThreadPanel({
     setDeleteConfirmId(null);
   };
 
+  const [emojiNoCelular, setEmojiNoCelular] = useState(false);
+  const inserirEmoji = (emoji: string) => {
+                    const ta = inputRef.current;
+                    if (!ta) {
+                      setInput((prev) => prev + emoji);
+                      return;
+                    }
+                    const start = ta.selectionStart ?? ta.value.length;
+                    const end = ta.selectionEnd ?? ta.value.length;
+                    const next = ta.value.slice(0, start) + emoji + ta.value.slice(end);
+                    setInput(next);
+                    requestAnimationFrame(() => {
+                      ta.focus();
+                      const pos = start + emoji.length;
+                      ta.setSelectionRange(pos, pos);
+                      resizeComposerTextarea(ta);
+                    });
+                  };
+
   if (!rootMessage) return null;
 
   const body = (
@@ -706,7 +726,8 @@ export default function ThreadPanel({
                 )}
                 <button
                   onClick={() => threadMedia.removeStaged(i)}
-                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  className={`absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center ${isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100"} transition-opacity`}
+                  aria-label="Remover anexo"
                   type="button"
                 >
                   <X className="h-3 w-3" />
@@ -747,6 +768,17 @@ export default function ThreadPanel({
             >
               <Paperclip className="h-4 w-4" />
             </button>
+            {isMobile ? (
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setEmojiNoCelular(true)}
+                className="shrink-0 h-11 w-11 flex items-center justify-center rounded-md text-muted-foreground"
+                aria-label="Inserir emoji"
+              >
+                <Smile className="h-5 w-5" />
+              </button>
+            ) : (
             <Popover>
               <PopoverTrigger asChild>
                 <button
@@ -759,27 +791,10 @@ export default function ThreadPanel({
                 </button>
               </PopoverTrigger>
               <PopoverContent className="p-0 border-0 bg-transparent shadow-none w-auto" align="start" side="top">
-                <EmojiPicker
-                  onSelect={(emoji) => {
-                    const ta = inputRef.current;
-                    if (!ta) {
-                      setInput((prev) => prev + emoji);
-                      return;
-                    }
-                    const start = ta.selectionStart ?? ta.value.length;
-                    const end = ta.selectionEnd ?? ta.value.length;
-                    const next = ta.value.slice(0, start) + emoji + ta.value.slice(end);
-                    setInput(next);
-                    requestAnimationFrame(() => {
-                      ta.focus();
-                      const pos = start + emoji.length;
-                      ta.setSelectionRange(pos, pos);
-                      resizeComposerTextarea(ta);
-                    });
-                  }}
-                />
+                <EmojiPicker onSelect={inserirEmoji} />
               </PopoverContent>
             </Popover>
+            )}
             <Textarea
               ref={inputRef}
               value={input}
@@ -800,7 +815,9 @@ export default function ThreadPanel({
                 }
               }}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
+                // Celular: Enter quebra linha e o botão envia, como no
+                // composer do canal e no do agente (spec 2026-11-03, C8).
+                if (event.key === "Enter" && !event.shiftKey && !isMobile) {
                   event.preventDefault();
                   void handleSend();
                 }
@@ -837,6 +854,19 @@ export default function ThreadPanel({
 
   const overlays = (
     <>
+      {isMobile && (
+        <Drawer open={emojiNoCelular} onOpenChange={setEmojiNoCelular}>
+          <DrawerContent className="max-h-[85dvh] pb-[env(safe-area-inset-bottom,0px)]">
+            <DrawerHeader className="sr-only">
+              <DrawerTitle>Inserir emoji</DrawerTitle>
+              <DrawerDescription>Escolha para colocar na resposta.</DrawerDescription>
+            </DrawerHeader>
+            <div className="p-2">
+              <EmojiPickerLargo onSelect={inserirEmoji} />
+            </div>
+          </DrawerContent>
+        </Drawer>
+      )}
       <ImageLightbox
         open={!!lightboxImage}
         src={lightboxImage?.src ?? null}
@@ -875,7 +905,7 @@ export default function ThreadPanel({
     return (
       <>
         <Drawer open={open} onOpenChange={onOpenChange}>
-          <DrawerContent className="flex h-[88vh] max-h-[88vh] flex-col p-0">
+          <DrawerContent className="flex h-[88dvh] max-h-[88dvh] flex-col p-0">
             <DrawerHeader className="sr-only">
               <DrawerTitle>Conversa</DrawerTitle>
               <DrawerDescription>Respostas vinculadas à mensagem selecionada.</DrawerDescription>

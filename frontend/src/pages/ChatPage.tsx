@@ -128,6 +128,7 @@ import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import MenuDaMensagem, { type AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
 import AcoesDaMensagemNoToque from "@/components/chat/AcoesDaMensagemNoToque";
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { useToqueLongo } from "@/hooks/use-toque-longo";
 import { copyToClipboard, hasActiveTextSelection } from "@/lib/clipboard";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
@@ -300,12 +301,12 @@ export function MediaBubble({ attachment, onImageClick, onErroImagem, urlAgora }
       <div className="relative group rounded-md overflow-hidden max-w-[240px] mt-1">
         <img src={src} onError={onErroImagem} alt={attachment.name ?? "image"} className="rounded-md max-h-48 object-cover cursor-pointer" onClick={async () => onImageClick(await srcAgora())} />
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center gap-2 pointer-events-none">
-          <button onClick={async () => onImageClick(await srcAgora())} className="pointer-events-auto h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={async () => onImageClick(await srcAgora())} className="pointer-events-auto h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity toque-visivel">
             <ZoomIn className="h-4 w-4" />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); srcAgora().then((u) => handleDownload(u, attachment.name || "image.png")); }}
-            className="pointer-events-auto h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            className="pointer-events-auto h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity toque-visivel"
             title="Download"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
@@ -372,7 +373,7 @@ function StagedPreview({ items, onRemove }: { items: MediaAttachment[]; onRemove
               <span className="text-[8px] text-muted-foreground truncate max-w-[56px]">{att.name ?? "file"}</span>
             </div>
           )}
-          <button onClick={() => onRemove(i)} className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={() => onRemove(i)} className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity toque-visivel">
             <X className="h-3 w-3" />
           </button>
         </div>
@@ -3085,16 +3086,27 @@ export default function ChatPage() {
             ) : selection?.type === "agent" ? (
               <>
                 {renderAgentChat()}
-                {activeArtifact && (
-                  <div className="h-[50vh] border-t border-border">
-                    <ArtifactPanel type={activeArtifact.type} code={activeArtifact.code} onClose={() => setActiveArtifact(null)} />
-                  </div>
-                )}
-                {activeLiveArtifactId && (
-                  <div className="h-[50vh] border-t border-border">
-                    <LiveArtifactViewer artifactId={activeLiveArtifactId} onClose={() => setActiveLiveArtifactId(null)} />
-                  </div>
-                )}
+                {/* Artefato numa folha de baixo, por cima da conversa — antes era
+                    uma faixa de 50vh empilhada embaixo do composer
+                    (spec 2026-11-03, Frente C5). */}
+                <Drawer
+                  open={!!activeArtifact || !!activeLiveArtifactId}
+                  onOpenChange={(aberto) => { if (!aberto) { setActiveArtifact(null); setActiveLiveArtifactId(null); } }}
+                >
+                  <DrawerContent className="h-[85dvh] max-h-[85dvh] flex flex-col p-0 pb-[env(safe-area-inset-bottom,0px)]">
+                    <DrawerHeader className="sr-only">
+                      <DrawerTitle>Artefato</DrawerTitle>
+                      <DrawerDescription>Artefato desta conversa.</DrawerDescription>
+                    </DrawerHeader>
+                    <div className="min-h-0 flex-1 overflow-hidden" data-vaul-no-drag>
+                      {activeArtifact ? (
+                        <ArtifactPanel type={activeArtifact.type} code={activeArtifact.code} onClose={() => setActiveArtifact(null)} />
+                      ) : activeLiveArtifactId ? (
+                        <LiveArtifactViewer artifactId={activeLiveArtifactId} onClose={() => setActiveLiveArtifactId(null)} />
+                      ) : null}
+                    </div>
+                  </DrawerContent>
+                </Drawer>
               </>
             ) : null}
           </>
@@ -3104,7 +3116,7 @@ export default function ChatPage() {
         {dialogoNovaConversa}
         <Dialog open={!!lightboxSrc} onOpenChange={() => setLightboxSrc(null)}>
           <DialogContent className="max-w-3xl p-2 bg-transparent border-none shadow-none">
-            {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80vh] object-contain" />}
+            {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80dvh] object-contain" />}
           </DialogContent>
         </Dialog>
       </div>
@@ -3303,7 +3315,7 @@ export default function ChatPage() {
         {dialogoNovaConversa}
       <Dialog open={!!lightboxSrc} onOpenChange={() => setLightboxSrc(null)}>
         <DialogContent className="max-w-3xl p-2 bg-transparent border-none shadow-none">
-          {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80vh] object-contain" />}
+          {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80dvh] object-contain" />}
         </DialogContent>
       </Dialog>
     </div>

@@ -45,14 +45,19 @@ export function useMobileChatViewport() {
 
     scheduleUpdate();
     viewport.addEventListener("resize", scheduleUpdate);
-    // Intentionally NOT listening to visualViewport "scroll" — on iOS that fires
-    // continuously while the user scrolls content, which previously made the
-    // chat container shake as offsets bounced around by a few pixels.
+    // `scroll` do visualViewport: no iOS, abrir o teclado às vezes só ROLA a
+    // viewport visual (offsetTop muda, height não), e sem ouvir isso o
+    // composer ficava coberto (spec 2026-11-03, Frente C7). O tremor que fez
+    // tirá-lo antes (deltas de poucos px durante a rolagem) é o que o
+    // NOISE_THRESHOLD_PX acima já filtra: só muda se cruzar o limiar do
+    // teclado ou andar mais de 24px.
+    viewport.addEventListener("scroll", scheduleUpdate);
     window.addEventListener("orientationchange", scheduleUpdate);
 
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
       viewport.removeEventListener("resize", scheduleUpdate);
+      viewport.removeEventListener("scroll", scheduleUpdate);
       window.removeEventListener("orientationchange", scheduleUpdate);
     };
   }, [isMobile]);

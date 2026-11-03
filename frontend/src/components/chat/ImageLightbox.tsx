@@ -15,7 +15,7 @@ export default function ImageLightbox({ open, src, alt, onOpenChange }: ImageLig
           <img
             src={src}
             alt={alt ?? "Visualização ampliada"}
-            className="max-h-[85vh] w-full rounded-xl object-contain"
+            className="max-h-[85dvh] w-full rounded-xl object-contain"
           />
         ) : null}
       </DialogContent>

@@ -20,6 +20,8 @@ import FileAttachmentCard from "./FileAttachmentCard";
 import AudioDaMensagem from "./AudioDaMensagem";
 import MenuDaMensagem, { type AcaoDaMensagem } from "./MenuDaMensagem";
 import AcoesDaMensagemNoToque from "./AcoesDaMensagemNoToque";
+import EmojiPickerLargo from "./EmojiPickerLargo";
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { useToqueLongo } from "@/hooks/use-toque-longo";
 import { temOQueAbrir } from "@/lib/acoes-do-toque";
 import VistoDaMensagem from "./VistoDaMensagem";
@@ -795,6 +797,7 @@ export default function ChannelChat({
   const currentUserName = (profile?.full_name && profile.full_name.trim()) || user?.email?.split("@")[0] || "Alguém";
   const isMobile = useIsMobile();
   const { bottomOffset, isKeyboardOpen } = useMobileChatViewport();
+  const [seletorNoCelular, setSeletorNoCelular] = useState<"emoji" | "gif" | null>(null);
   const { messages, loading: msgsLoading, sendMessage, ensureMessageLoaded, esconder, reexibir } = useChannelMessages(channel.id);
   const threadCounts = useThreadCounts(channel.id);
   const { ligado: resumoLigado } = useResumoEmAudio();
@@ -1745,7 +1748,9 @@ export default function ChannelChat({
   return (
     <div
       className={`relative flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden ${dragOver ? "ring-2 ring-primary ring-inset" : ""}`}
-      style={isMobile && isKeyboardOpen ? { paddingBottom: `${bottomOffset}px` } : undefined}
+      // Teclado: quem compensa é o contêiner do ChatPage, único lugar que
+      // renderiza este componente. Aplicar aqui também empurrava o composer
+      // duas vezes a altura do teclado (spec 2026-11-03, Frente C7).
 
       onDragOver={(e) => {
         e.preventDefault();
@@ -2125,7 +2130,7 @@ export default function ChannelChat({
                     </div>
                   </div>
                 )}
-                <button onClick={() => channelMedia.removeStaged(i)} className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => channelMedia.removeStaged(i)} className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity toque-visivel">
                   <X className="h-3 w-3" />
                 </button>
               </div>
@@ -2182,36 +2187,31 @@ export default function ChannelChat({
                             <span>Anexar</span>
                           </button>
                         </PopoverClose>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              onMouseDown={(e) => e.preventDefault()}
-                              className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg text-xs text-foreground hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
-                            >
-                              <Smile className="h-4 w-4 text-muted-foreground" />
-                              <span>Emoji</span>
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="p-0 border-0 bg-transparent shadow-none w-auto" align="start" side="top">
-                            <EmojiPicker onSelect={(emoji) => inputRef.current?.insertText(emoji)} />
-                          </PopoverContent>
-                        </Popover>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              onMouseDown={(e) => e.preventDefault()}
-                              className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg text-xs text-foreground hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
-                            >
-                              <span className="text-[10px] font-bold tracking-wider text-muted-foreground border border-current rounded px-1 py-0.5 leading-none">GIF</span>
-                              <span>GIF</span>
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="p-0 overflow-hidden w-auto" align="start" side="top">
-                            <GifPicker onSelect={(gif) => { void handleSendGif(gif); }} />
-                          </PopoverContent>
-                        </Popover>
+                        {/* Emoji e GIF abrem numa folha de largura total: o
+                            popover de 320/380px não cabia em 360px
+                            (spec 2026-11-03, Frente C6). */}
+                        <PopoverClose asChild>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setSeletorNoCelular("emoji")}
+                            className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg text-xs text-foreground hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
+                          >
+                            <Smile className="h-4 w-4 text-muted-foreground" />
+                            <span>Emoji</span>
+                          </button>
+                        </PopoverClose>
+                        <PopoverClose asChild>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setSeletorNoCelular("gif")}
+                            className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg text-xs text-foreground hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
+                          >
+                            <span className="text-[10px] font-bold tracking-wider text-muted-foreground border border-current rounded px-1 py-0.5 leading-none">GIF</span>
+                            <span>GIF</span>
+                          </button>
+                        </PopoverClose>
                       </div>
                       {/* Formatting */}
                       <div>
@@ -2447,6 +2447,27 @@ export default function ChannelChat({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {isMobile && (
+        <Drawer open={seletorNoCelular !== null} onOpenChange={(v) => { if (!v) setSeletorNoCelular(null); }}>
+          <DrawerContent className="max-h-[85dvh] pb-[env(safe-area-inset-bottom,0px)]">
+            <DrawerHeader className="sr-only">
+              <DrawerTitle>{seletorNoCelular === "gif" ? "Enviar GIF" : "Inserir emoji"}</DrawerTitle>
+              <DrawerDescription>Escolha para colocar na mensagem.</DrawerDescription>
+            </DrawerHeader>
+            <div className="px-2 pt-2 pb-2">
+              {seletorNoCelular === "gif" ? (
+                <GifPicker
+                  className="w-full h-[60dvh] rounded-lg overflow-hidden"
+                  onSelect={(gif) => { setSeletorNoCelular(null); void handleSendGif(gif); }}
+                />
+              ) : seletorNoCelular === "emoji" ? (
+                <EmojiPickerLargo onSelect={(emoji) => inputRef.current?.insertText(emoji)} />
+              ) : null}
+            </div>
+          </DrawerContent>
+        </Drawer>
+      )}
 
       {/* Members Panel */}
       <ChannelMembersPanel

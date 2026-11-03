@@ -10,6 +10,8 @@ import { toast } from "@/hooks/use-toast";
 import { X, UserPlus, Search, Bot, User, Trash2 } from "lucide-react";
 import { UserStatusBadge } from "@/components/UserStatusBadge";
 import { formatStatusAge } from "@/lib/user-status";
+import PainelDoChat from "@/components/chat/PainelDoChat";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface MemberInfo {
   user_id: string;
@@ -33,6 +35,7 @@ interface Props {
 
 export default function ChannelMembersPanel({ channelId, channelCreatedBy, isDm = false, open, onClose, onMembersChanged }: Props) {
   const { user, role } = useAuthContext();
+  const isMobile = useIsMobile();
   const [members, setMembers] = useState<MemberInfo[]>([]);
   const [showInvite, setShowInvite] = useState(false);
   const [search, setSearch] = useState("");
@@ -146,15 +149,8 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, isDm 
     (u) => u.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  if (!open) return null;
-
   return (
-    <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 z-40" onClick={onClose} />
-
-      {/* Panel */}
-      <div className="absolute right-0 top-0 bottom-0 z-50 flex w-72 flex-col overflow-hidden rounded-l-2xl border-l border-border/40 bg-card/95 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-right-5 duration-200">
+    <PainelDoChat aberto={open} aoFechar={onClose} titulo={isDm ? "Participantes" : "Membros do canal"} largura="w-72">
         <div className="aurora-glow h-14 border-b border-border/30 flex items-center justify-between px-4 shrink-0">
           <h3 className="font-display font-bold text-sm text-foreground relative z-10">{isDm ? "Participantes" : "Membros do canal"}</h3>
           <button onClick={onClose} className="h-7 w-7 rounded-xl bg-secondary/50 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-all relative z-10">
@@ -252,7 +248,8 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, isDm 
                 {canManage && m.user_id !== user?.id && (
                   <button
                     disabled={removingMemberId === m.user_id}
-                    className="h-5 w-5 flex items-center justify-center opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive shrink-0 transition-opacity"
+                    className={`${isMobile ? "h-11 w-11 opacity-100" : "h-5 w-5 opacity-0 group-hover:opacity-100"} flex items-center justify-center text-destructive hover:text-destructive shrink-0 transition-opacity`}
+                    aria-label={`Remover ${m.display_name}`}
                     onClick={() => removeMember(m.user_id)}
                   >
                     <Trash2 className="h-3 w-3" />
@@ -262,7 +259,6 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, isDm 
             ))}
           </div>
         </ScrollArea>
-      </div>
-    </>
+    </PainelDoChat>
   );
 }

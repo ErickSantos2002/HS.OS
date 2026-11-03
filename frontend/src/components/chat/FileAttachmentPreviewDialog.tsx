@@ -69,7 +69,7 @@ export default function FileAttachmentPreviewDialog({ attachment, open, onOpenCh
         return <PdfAttachmentPreview attachment={attachment} open={open} />;
       case "audio":
         return (
-          <div className="flex h-[40vh] items-center justify-center rounded-xl border border-border bg-muted/30 p-6">
+          <div className="flex h-[40dvh] items-center justify-center rounded-xl border border-border bg-muted/30 p-6">
             <audio controls preload="metadata" className="w-full max-w-2xl">
               <source src={attachment.url} type={attachment.mimeType} />
             </audio>
@@ -78,13 +78,13 @@ export default function FileAttachmentPreviewDialog({ attachment, open, onOpenCh
       case "video":
         return (
           <div className="overflow-hidden rounded-xl border border-border bg-black/90">
-            <video controls preload="metadata" className="max-h-[68vh] w-full" src={attachment.url} />
+            <video controls preload="metadata" className="max-h-[68dvh] w-full" src={attachment.url} />
           </div>
         );
       case "text":
         if (isLoadingText) {
           return (
-            <div className="flex h-[50vh] items-center justify-center gap-2 rounded-xl border border-border bg-muted/20 text-sm text-muted-foreground">
+            <div className="flex h-[50dvh] items-center justify-center gap-2 rounded-xl border border-border bg-muted/20 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               Carregando pré-visualização...
             </div>
@@ -93,20 +93,20 @@ export default function FileAttachmentPreviewDialog({ attachment, open, onOpenCh
 
         if (textError) {
           return (
-            <div className="flex h-[50vh] items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-6 text-center text-sm text-muted-foreground">
+            <div className="flex h-[50dvh] items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-6 text-center text-sm text-muted-foreground">
               {textError}
             </div>
           );
         }
 
         return (
-          <ScrollArea className="h-[68vh] rounded-xl border border-border bg-muted/20">
+          <ScrollArea className="h-[68dvh] rounded-xl border border-border bg-muted/20">
             <pre className="whitespace-pre-wrap break-words p-4 text-sm leading-6 text-foreground">{textContent}</pre>
           </ScrollArea>
         );
       case "office":
         return (
-          <div className="flex h-[50vh] flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-muted/20 px-6 text-center">
+          <div className="flex h-[50dvh] flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-muted/20 px-6 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <FileText className="h-7 w-7" />
             </div>
@@ -120,7 +120,7 @@ export default function FileAttachmentPreviewDialog({ attachment, open, onOpenCh
         );
       default:
         return (
-          <div className="flex h-[50vh] flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-muted/20 px-6 text-center">
+          <div className="flex h-[50dvh] flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-muted/20 px-6 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground">
               <FileText className="h-7 w-7" />
             </div>
@@ -138,7 +138,7 @@ export default function FileAttachmentPreviewDialog({ attachment, open, onOpenCh
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[92vh] max-w-5xl gap-0 overflow-hidden p-0"
+        className="max-h-[92dvh] max-w-5xl gap-0 overflow-hidden p-0"
         onOpenAutoFocus={(event) => event.preventDefault()}
         onCloseAutoFocus={(event) => event.preventDefault()}
       >

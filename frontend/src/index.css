@@ -714,6 +714,14 @@
     user-select: none !important;
   }
 
+  /* Celular: o que só aparecia no hover fica sempre à vista — botões da
+     imagem, remover anexo do composer (spec 2026-11-03, Frente C4). */
+  @media (max-width: 767px) {
+    .toque-visivel {
+      opacity: 1 !important;
+    }
+  }
+
   /* Celular, segurando a mensagem (spec 2026-11-03, Frente C3): a seleção
      nativa e o menu do iOS ficariam por cima da folha de ações. O "Copiar"
      da folha cobre a necessidade. Vence o `!important` de cima por
