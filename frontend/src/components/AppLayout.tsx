@@ -6,7 +6,8 @@ import { GlobalSearch } from "@/components/GlobalSearch";
 import { NotificationsProvider } from "@/components/NotificationsProvider";
 import { BottomNav } from "@/components/BottomNav";
 import { CompanyOnboardingBanner } from "@/components/CompanyOnboardingBanner";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { ConversaAbertaContext } from "@/hooks/use-conversa-aberta";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuthContext } from "@/contexts/auth-context";
 import { usePresence } from "@/hooks/use-presence";
@@ -41,7 +42,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isChatRoute = location.pathname.startsWith("/chat");
   // Conversa aberta no celular: some o cabeçalho e a barra de baixo, e o
   // cabeçalho da conversa assume o topo (spec 2026-11-03, Frente C1).
-  const telaCheia = conversaEmTelaCheia(location.pathname, location.search, isMobile);
+  const [conversaSelecionada, setConversaSelecionada] = useState(false);
+  const telaCheia = conversaEmTelaCheia(location.pathname, isMobile, conversaSelecionada);
 
   const handleSignOut = async () => {
     await signOut();
@@ -111,7 +113,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
             <main className={`flex-1 min-h-0 ${isChatRoute ? "overflow-hidden" : "overflow-auto"} ${isMobile && !isChatRoute ? "mobile-bottom-offset" : ""} ${isMobile && isChatRoute ? "mobile-chat-bottom" : ""}`}>
               {!isChatRoute && <CompanyOnboardingBanner />}
-              {children}
+              <ConversaAbertaContext.Provider value={setConversaSelecionada}>
+                {children}
+              </ConversaAbertaContext.Provider>
             </main>
           </div>
 

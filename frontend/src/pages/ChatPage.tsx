@@ -131,6 +131,8 @@ import AcoesDaMensagemNoToque from "@/components/chat/AcoesDaMensagemNoToque";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { useToqueLongo } from "@/hooks/use-toque-longo";
 import { semMarkdown } from "@/lib/previa-da-mensagem";
+import { canalNaoResolve } from "@/lib/tela-cheia";
+import { useInformarConversaAberta } from "@/hooks/use-conversa-aberta";
 import { copyToClipboard, hasActiveTextSelection } from "@/lib/clipboard";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 import { NoEscritorioAgora } from "@/components/escritorio/NoEscritorioAgora";
@@ -739,12 +741,15 @@ export default function ChatPage() {
 
   // If channel param exists but not in channels list yet, trigger a refetch — once per channelId
   const refetchedForChannelRef = useRef<Set<string>>(new Set());
+  // Para qual `?channel=` o recarregamento já terminou — só então dá para
+  // afirmar que o canal não existe (ver `canalNaoResolve`).
+  const [recarregadoPara, setRecarregadoPara] = useState<string | null>(null);
   useEffect(() => {
     if (!channelParam || channelsLoading) return;
     if (channels.find((c) => c.id === channelParam)) return;
     if (refetchedForChannelRef.current.has(channelParam)) return;
     refetchedForChannelRef.current.add(channelParam);
-    refetchChannels();
+    void Promise.resolve(refetchChannels()).finally(() => setRecarregadoPara(channelParam));
   }, [channelParam, channels, channelsLoading, refetchChannels]);
 
   // ⚠️ **DM que outra pessoa acabou de criar não está na lista carregada.**
@@ -801,6 +806,19 @@ export default function ChatPage() {
     }
     return null;
   }, [agentIdFromChannelParam, channelParam, channels, resolvedAgentParam]);
+
+  // Celular: só a conversa selecionada de fato esconde o cabeçalho e a
+  // BottomNav (spec 2026-11-03, C1).
+  useInformarConversaAberta(isMobile && !!selection);
+
+  // ⚠️ `?channel=` que não resolve nem depois de recarregar (push de canal do
+  // qual a pessoa saiu, canal apagado, link antigo) volta para a lista, em vez
+  // de deixar a tela num limbo com a URL de conversa.
+  useEffect(() => {
+    if (!canalNaoResolve({ channelParam, recarregadoPara, encontrado: !!selection })) return;
+    toast.error("Essa conversa não está mais disponível.");
+    navigate("/chat", { replace: true });
+  }, [channelParam, recarregadoPara, selection, navigate]);
 
   useEffect(() => {
     if (!channelParam || !agentIdFromChannelParam || agentParam) return;
