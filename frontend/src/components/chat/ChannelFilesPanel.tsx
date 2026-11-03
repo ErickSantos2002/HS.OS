@@ -7,8 +7,7 @@ import { format, isThisWeek, isThisMonth, isToday, isYesterday, isValid, startOf
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
-import PainelDoChat from "@/components/chat/PainelDoChat";
-import { useIsMobile } from "@/hooks/use-mobile";
+import PainelDoChat, { usePainelEmbutido } from "@/components/chat/PainelDoChat";
 import { arquivosDoCanal, type ArquivoDoCanal } from "@/lib/arquivos-do-canal";
 
 interface Props {
@@ -25,7 +24,7 @@ type FileItem = ArquivoDoCanal;
 type Filter = "all" | "image" | "doc";
 
 export default function ChannelFilesPanel({ endpoint, open, onClose }: Props) {
-  const isMobile = useIsMobile();
+  const noCelular = usePainelEmbutido();
   const [items, setItems] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -119,7 +118,7 @@ export default function ChannelFilesPanel({ endpoint, open, onClose }: Props) {
           </div>
         </div>
 
-        <ScrollArea className={`flex-1${isMobile ? " [&>[data-radix-scroll-area-viewport]>div]:!block" : ""}`}>
+        <ScrollArea className={`flex-1${noCelular ? " [&>[data-radix-scroll-area-viewport]>div]:!block" : ""}`}>
           <div className="p-3 space-y-4">
             {loading ? (
               <div className="flex items-center justify-center py-10 text-muted-foreground">
@@ -164,7 +163,7 @@ interface FileRowProps {
 
 function FileRow({ file, url, renovar, urlAgora }: FileRowProps) {
   // Celular: sem hover, o baixar fica sempre à vista (spec 2026-11-03, C4).
-  const isMobile = useIsMobile();
+  const noCelular = usePainelEmbutido();
   const isImage = file.mimeType.startsWith("image/");
   const Icon = isImage ? ImageIcon : FileText;
   const date = new Date(file.created_at);
@@ -214,7 +213,7 @@ function FileRow({ file, url, renovar, urlAgora }: FileRowProps) {
             toast.error(err?.message || "Não foi possível baixar.");
           }
         }}
-        className={`${isMobile ? "h-11 w-11 opacity-100" : "h-7 w-7 opacity-0 group-hover:opacity-100"} flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all shrink-0`}
+        className={`${noCelular ? "h-11 w-11 opacity-100" : "h-7 w-7 opacity-0 group-hover:opacity-100"} flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all shrink-0`}
         aria-label={`Baixar ${file.name}`}
       >
         <Download className="h-3.5 w-3.5" />

@@ -25,7 +25,7 @@ const mensagens = [
 function montar() {
   return render(
     <MemoryRouter>
-      <AgentMessageList messages={mensagens} isMobile={false} isAgentWorking={false} ttsPlaying={null}
+      <AgentMessageList messages={mensagens} isAgentWorking={false} ttsPlaying={null}
         effectiveAgentId="nina" agentName="Nina" userAvatarUrl={null} userName="Ana"
         onSetLightboxSrc={() => {}} onSetActiveArtifact={() => {}} onOpenLiveArtifact={() => {}}
         onRetry={() => {}} onTtsToggle={() => {}} activitiesByMessageId={{}} trailingActivities={[]} />

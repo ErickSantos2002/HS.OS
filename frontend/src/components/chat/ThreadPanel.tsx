@@ -9,8 +9,6 @@ import EmojiPickerReact, { Theme as EmojiTheme } from "emoji-picker-react";
 import type { ChannelMessage, ChannelAttachment } from "@/hooks/use-channels";
 import { useThreadMessages } from "@/hooks/use-channel-threads";
 import { useChatMedia } from "@/hooks/use-chat-media";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { useMobileChatViewport } from "@/hooks/use-mobile-chat-viewport";
 import { usePersistentDraft } from "@/hooks/use-persistent-draft";
 import { resetComposerTextarea, resizeComposerTextarea } from "@/lib/chat-composer";
 import { formatFileSize } from "@/lib/file-upload";
@@ -26,7 +24,6 @@ import { MarkdownMessageContent, PlainMessageContent } from "@/components/chat/M
 import DateDivider from "@/components/chat/DateDivider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerNested, DrawerTitle } from "@/components/ui/drawer";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import { Textarea } from "@/components/ui/textarea";
@@ -46,11 +43,6 @@ import type { Reaction } from "@/hooks/use-message-reactions";
 import { getAudioFileExtension, useAudioRecorder } from "@/hooks/use-audio-recorder";
 import { toast } from "sonner";
 import type { AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
-import AcoesDaMensagemNoToque from "@/components/chat/AcoesDaMensagemNoToque";
-import EmojiPickerLargo from "@/components/chat/EmojiPickerLargo";
-import { useToqueLongo } from "@/hooks/use-toque-longo";
-import { acoesDoToque } from "@/lib/acoes-do-toque";
-import { copyToClipboard } from "@/lib/clipboard";
 
 function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
   const { resolvedTheme } = useTheme();
@@ -194,11 +186,8 @@ function ThreadMessageCard({
   onImageClick,
   onAttachmentPreview,
   visto,
-  toque = false,
 }: {
   message: ChannelMessage;
-  /** Celular: segurar abre a folha de ações (spec 2026-11-03, Frente C3). */
-  toque?: boolean;
   compact?: boolean;
   currentUserId: string;
   reactions: Reaction[];
@@ -226,8 +215,6 @@ function ThreadMessageCard({
     ...(isOwn && onEdit ? [{ rotulo: "Editar", icone: Pencil, aoEscolher: onEdit }] : []),
     ...(isOwn && onDelete ? [{ rotulo: "Apagar", icone: Trash2, perigo: true, aoEscolher: onDelete }] : []),
   ];
-  const [folhaAberta, setFolhaAberta] = useState(false);
-  const toqueLongo = useToqueLongo(() => setFolhaAberta(true), toque && showActions);
 
   const handleTouchStart = useCallback(() => {
     longPressTimer.current = setTimeout(() => setShowMobileMenu(true), 500);
@@ -248,25 +235,10 @@ function ThreadMessageCard({
             ? "border-[hsl(var(--agent-accent)/0.55)] bg-[hsl(var(--agent-accent)/0.06)] shadow-[0_0_28px_-12px_hsl(var(--agent-accent)/0.55)]"
             : "border-border/60 bg-card/70"
       }`}
-      {...(toque
-        ? toqueLongo.handlers
-        : { onTouchStart: handleTouchStart, onTouchEnd: handleTouchEnd, onTouchCancel: handleTouchEnd })}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
-      {toque && showActions && (
-        <AcoesDaMensagemNoToque
-          aberto={folhaAberta}
-          aoMudar={setFolhaAberta}
-          acoes={acoesDoToque(acoesDaResposta, {
-            texto: message.content ?? "",
-            copiar: () => {
-              void copyToClipboard(message.content).then((ok) =>
-                (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar")));
-            },
-          })}
-          aoReagir={onToggleReaction}
-          aninhada
-        />
-      )}
       <div className="flex items-start gap-3">
         <div className={`h-9 w-9 shrink-0 overflow-hidden ring-2 ${isOwn ? "ring-primary-foreground/20" : "ring-border/30"} ${isAgent ? "rounded-md" : "rounded-full"}`}>
           {isAgent ? (
@@ -355,7 +327,7 @@ function ThreadMessageCard({
         </div>
       </div>
 
-      {showActions && !toque && (
+      {showActions && (
         <div
           className={`absolute -top-3 ${isOwn ? "left-2" : "right-2"} ${
             showMobileMenu || emojiOpen ? "flex" : "hidden group-hover:flex"
@@ -450,8 +422,6 @@ export default function ThreadPanel({
   podeEscrever,
   avisoEscrita,
 }: ThreadPanelProps) {
-  const isMobile = useIsMobile();
-  const { bottomOffset } = useMobileChatViewport();
   const threadDraftKey = open && rootMessage ? `thread:${channelId}:${rootMessage.id}` : null;
   const { value: input, setValue: setInput, clear: clearInputDraft } = usePersistentDraft(threadDraftKey);
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null);
@@ -598,7 +568,6 @@ export default function ThreadPanel({
     setDeleteConfirmId(null);
   };
 
-  const [emojiNoCelular, setEmojiNoCelular] = useState(false);
   const inserirEmoji = (emoji: string) => {
                     const ta = inputRef.current;
                     if (!ta) {
@@ -621,32 +590,12 @@ export default function ThreadPanel({
 
   const body = (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-      {/* No celular o body vive dentro do Drawer da thread: o seletor de emoji
-          é um Drawer aninhado e precisa estar nesta árvore. */}
-      {isMobile && (
-        <DrawerNested open={emojiNoCelular} onOpenChange={setEmojiNoCelular}>
-          <DrawerContent className="max-h-[85dvh] pb-[env(safe-area-inset-bottom,0px)]">
-            <DrawerHeader className="sr-only">
-              <DrawerTitle>Inserir emoji</DrawerTitle>
-              <DrawerDescription>Escolha para colocar na resposta.</DrawerDescription>
-            </DrawerHeader>
-            <div className="p-2">
-              <EmojiPickerLargo onSelect={inserirEmoji} />
-            </div>
-          </DrawerContent>
-        </DrawerNested>
-      )}
       <div className="border-b border-border/60 px-4 py-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Conversa</p>
             <h3 className="text-base font-semibold text-foreground">#{channelName}</h3>
           </div>
-          {isMobile && (
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onOpenChange(false)}>
-              <X className="h-4 w-4" />
-            </Button>
-          )}
         </div>
       </div>
 
@@ -698,7 +647,6 @@ export default function ThreadPanel({
                     onDelete={() => setDeleteConfirmId(message.id)}
                     onImageClick={(src, alt) => setLightboxImage({ src, alt })}
                     onAttachmentPreview={setPreviewAttachment}
-                    toque={isMobile}
                   />
                 )}
               </Fragment>
@@ -715,7 +663,6 @@ export default function ThreadPanel({
       ) : (
       <div
         className="mobile-chat-composer border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-sm"
-        style={isMobile ? { paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${Math.min(bottomOffset, 240)}px)` } : undefined}
         onDragOver={(e) => {
           e.preventDefault();
         }}
@@ -741,7 +688,7 @@ export default function ThreadPanel({
                 )}
                 <button
                   onClick={() => threadMedia.removeStaged(i)}
-                  className={`absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center ${isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100"} transition-opacity`}
+                  className={`absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity`}
                   aria-label="Remover anexo"
                   type="button"
                 >
@@ -774,27 +721,16 @@ export default function ThreadPanel({
             </span>
           </div>
         ) : (
-          <div className={`glass-input flex gap-2 px-3 py-1.5 ${isMobile ? "items-end" : "items-center"}`}>
+          <div className="glass-input flex gap-2 px-3 py-1.5 items-center">
             <button
               type="button"
               onClick={threadMedia.pickFile}
-              className={`shrink-0 ${isMobile ? "h-11 w-11 flex items-center justify-center" : "p-1.5"} rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors`}
+              className={`shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors`}
               aria-label="Anexar arquivo"
               title="Anexar arquivo"
             >
               <Paperclip className="h-4 w-4" />
             </button>
-            {isMobile ? (
-              <button
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setEmojiNoCelular(true)}
-                className="shrink-0 h-11 w-11 flex items-center justify-center rounded-md text-muted-foreground"
-                aria-label="Inserir emoji"
-              >
-                <Smile className="h-5 w-5" />
-              </button>
-            ) : (
             <Popover>
               <PopoverTrigger asChild>
                 <button
@@ -810,7 +746,6 @@ export default function ThreadPanel({
                 <EmojiPicker onSelect={inserirEmoji} />
               </PopoverContent>
             </Popover>
-            )}
             <Textarea
               ref={inputRef}
               value={input}
@@ -833,20 +768,20 @@ export default function ThreadPanel({
               onKeyDown={(event) => {
                 // Celular: Enter quebra linha e o botão envia, como no
                 // composer do canal e no do agente (spec 2026-11-03, C8).
-                if (event.key === "Enter" && !event.shiftKey && !isMobile) {
+                if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
                   void handleSend();
                 }
               }}
               rows={1}
-              placeholder={isMobile ? "Responder" : "Responder na conversa..."}
+              placeholder="Responder na conversa..."
               className="min-h-[40px] max-h-[88px] flex-1 resize-none border-0 bg-transparent px-0 py-2 text-sm leading-6 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             {onSendAudioReply && !input.trim() && threadMedia.staged.length === 0 ? (
               <button
                 type="button"
                 onClick={() => void recorder.start()}
-                className={`shrink-0 ${isMobile ? "h-11 w-11 flex items-center justify-center" : "p-1.5"} rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors`}
+                className={`shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors`}
                 aria-label="Gravar áudio"
                 title="Gravar áudio"
               >
@@ -856,7 +791,7 @@ export default function ThreadPanel({
               <button
                 onClick={() => void handleSend()}
                 disabled={(!input.trim() && threadMedia.staged.length === 0) || uploadingFiles}
-                className={`btn-send-gradient shrink-0 disabled:opacity-40${isMobile ? " !h-11 !w-11" : ""}`}
+                className="btn-send-gradient shrink-0 disabled:opacity-40"
                 aria-label="Enviar resposta"
                 type="button"
               >
@@ -906,23 +841,6 @@ export default function ThreadPanel({
       </AlertDialog>
     </>
   );
-
-  if (isMobile) {
-    return (
-      <>
-        <Drawer open={open} onOpenChange={onOpenChange}>
-          <DrawerContent className="flex h-[88dvh] max-h-[88dvh] flex-col p-0">
-            <DrawerHeader className="sr-only">
-              <DrawerTitle>Conversa</DrawerTitle>
-              <DrawerDescription>Respostas vinculadas à mensagem selecionada.</DrawerDescription>
-            </DrawerHeader>
-            <div className="min-h-0 flex-1 overflow-hidden">{body}</div>
-          </DrawerContent>
-        </Drawer>
-        {overlays}
-      </>
-    );
-  }
 
   return (
     <>

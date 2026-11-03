@@ -1,15 +1,25 @@
 /**
  * Moldura dos painéis laterais do chat (Arquivos, Membros).
  *
- * Desktop: exatamente o que os dois painéis desenhavam antes — um backdrop
- * invisível e uma coluna `absolute` à direita, dentro da conversa. Celular:
- * `Sheet` de tela cheia, acima de tudo. A coluna `absolute` ficava atrás da
- * BottomNav (`z-50`) e não cabia em 360px (spec 2026-11-03, Frente C5).
+ * Desktop: um backdrop invisível e uma coluna `absolute` à direita, dentro da
+ * conversa. App do celular (spec 2026-11-03, app próprio): o painel é uma TELA
+ * empilhada, e quem dá a moldura é ela — aqui o conteúdo só ocupa o espaço
+ * (`PainelEmbutido`). Assim o celular mostra o mesmo conteúdo do desktop sem
+ * uma segunda cópia do painel.
  */
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
-import { useIsMobile } from "@/hooks/use-mobile";
+const PainelEmbutidoContext = createContext(false);
+
+/** Embrulha um painel do chat para ele virar conteúdo de tela cheia. */
+export function PainelEmbutido({ children }: { children: ReactNode }) {
+  return <PainelEmbutidoContext.Provider value>{children}</PainelEmbutidoContext.Provider>;
+}
+
+/** O painel está numa tela do celular? Os alvos de toque crescem para 44px. */
+export function usePainelEmbutido(): boolean {
+  return useContext(PainelEmbutidoContext);
+}
 
 interface Props {
   aberto: boolean;
@@ -21,21 +31,13 @@ interface Props {
 }
 
 export default function PainelDoChat({ aberto, aoFechar, titulo, largura, children }: Props) {
-  const isMobile = useIsMobile();
+  const embutido = usePainelEmbutido();
 
-  if (isMobile) {
+  if (embutido) {
     return (
-      <Sheet open={aberto} onOpenChange={(v) => { if (!v) aoFechar(); }}>
-        {/* O X embutido do Sheet sai: o painel já tem o seu, no cabeçalho. */}
-        <SheetContent
-          side="right"
-          className="flex w-full flex-col gap-0 overflow-hidden border-l-0 bg-card p-0 pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] sm:max-w-full [&>button:last-child]:hidden"
-        >
-          <SheetTitle className="sr-only">{titulo}</SheetTitle>
-          <SheetDescription className="sr-only">{titulo}</SheetDescription>
-          {children}
-        </SheetContent>
-      </Sheet>
+      <section aria-label={titulo} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {children}
+      </section>
     );
   }
 

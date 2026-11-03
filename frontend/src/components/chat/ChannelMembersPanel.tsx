@@ -10,8 +10,7 @@ import { toast } from "@/hooks/use-toast";
 import { X, UserPlus, Search, Bot, User, Trash2 } from "lucide-react";
 import { UserStatusBadge } from "@/components/UserStatusBadge";
 import { formatStatusAge } from "@/lib/user-status";
-import PainelDoChat from "@/components/chat/PainelDoChat";
-import { useIsMobile } from "@/hooks/use-mobile";
+import PainelDoChat, { usePainelEmbutido } from "@/components/chat/PainelDoChat";
 
 interface MemberInfo {
   user_id: string;
@@ -35,7 +34,7 @@ interface Props {
 
 export default function ChannelMembersPanel({ channelId, channelCreatedBy, isDm = false, open, onClose, onMembersChanged }: Props) {
   const { user, role } = useAuthContext();
-  const isMobile = useIsMobile();
+  const noCelular = usePainelEmbutido();
   const [members, setMembers] = useState<MemberInfo[]>([]);
   const [showInvite, setShowInvite] = useState(false);
   const [search, setSearch] = useState("");
@@ -181,7 +180,7 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, isDm 
                 autoFocus
               />
             </div>
-            <ScrollArea className={`max-h-40${isMobile ? " [&>[data-radix-scroll-area-viewport]>div]:!block" : ""}`}>
+            <ScrollArea className={`max-h-40${noCelular ? " [&>[data-radix-scroll-area-viewport]>div]:!block" : ""}`}>
               {filtered.length === 0 ? (
                 <p className="text-xs text-muted-foreground p-2">Nenhum resultado</p>
               ) : (
@@ -213,7 +212,7 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, isDm 
 
         {/* Celular: o Radix põe o conteúdo num `display: table` que cresce com
             o nome mais longo e empurra o selo para fora da tela. */}
-        <ScrollArea className={`flex-1${isMobile ? " [&>[data-radix-scroll-area-viewport]>div]:!block" : ""}`}>
+        <ScrollArea className={`flex-1${noCelular ? " [&>[data-radix-scroll-area-viewport]>div]:!block" : ""}`}>
           <div className="p-3 space-y-1">
             {members.map((m) => (
               <div key={m.user_id} className="flex items-center gap-2 px-2 py-1.5 rounded-xl group hover:bg-primary/5 transition-colors">
@@ -250,7 +249,7 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, isDm 
                 {canManage && m.user_id !== user?.id && (
                   <button
                     disabled={removingMemberId === m.user_id}
-                    className={`${isMobile ? "h-11 w-11 opacity-100" : "h-5 w-5 opacity-0 group-hover:opacity-100"} flex items-center justify-center text-destructive hover:text-destructive shrink-0 transition-opacity`}
+                    className={`${noCelular ? "h-11 w-11 opacity-100" : "h-5 w-5 opacity-0 group-hover:opacity-100"} flex items-center justify-center text-destructive hover:text-destructive shrink-0 transition-opacity`}
                     aria-label={`Remover ${m.display_name}`}
                     onClick={() => removeMember(m.user_id)}
                   >

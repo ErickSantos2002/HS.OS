@@ -26,7 +26,6 @@ import ChannelFilesPanel from "@/components/chat/ChannelFilesPanel";
 import { acrescentarCitacao, semPedidoDaBusca } from "@/lib/conversas-anteriores";
 import { formatFileSize } from "@/lib/file-upload";
 import { Bot, FileText, File as FileIcon, Copy, Check } from "lucide-react";
-import { useIsMobile } from "@/hooks/use-mobile";
 import {
   appendToConversations,
   loadLastMessagesPerAgent,
@@ -40,7 +39,6 @@ import {
 import {
   sendMessageInBackground,
   stopAgentResponse,
-  hasUnreadAgentMessage,
   getUnreadAgentIds,
   pruneUnreadAgents,
   resumePendingBackgroundTasks,
@@ -51,15 +49,7 @@ import {
   Mic, Paperclip, Image as ImageIcon,
   X, ZoomIn, Info, Volume2, Square,
   RefreshCw, Hash, Lock, MessageCircle, Plus, RotateCcw, History, Search,
-  MoreVertical, Gauge,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { usePendingAgentTask } from "@/hooks/use-pending-agent-task";
 import { playNotificationSound } from "@/lib/notification-sound";
 import { IconeSilenciado } from "@/components/chat/SilenciarCanal";
@@ -109,17 +99,12 @@ import { shouldShowDateDivider } from "@/lib/chat-date-groups";
 import { resetComposerTextarea, resizeComposerTextarea } from "@/lib/chat-composer";
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
-import MenuDaMensagem, { type AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
+import MenuDaMensagem from "@/components/chat/MenuDaMensagem";
 import { acoesDaMensagemDoAgente } from "@/lib/acoes-da-mensagem";
 import { naoLidasDoAgente } from "@/lib/nao-lidas-do-agente";
 import { useConversaAgente } from "@/hooks/use-conversa-agente";
 import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
-import AcoesDaMensagemNoToque from "@/components/chat/AcoesDaMensagemNoToque";
-import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
-import { useToqueLongo } from "@/hooks/use-toque-longo";
-import { semMarkdown } from "@/lib/previa-da-mensagem";
 import { canalNaoResolve } from "@/lib/tela-cheia";
-import { useInformarConversaAberta } from "@/hooks/use-conversa-aberta";
 import { copyToClipboard, hasActiveTextSelection } from "@/lib/clipboard";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 import { NoEscritorioAgora } from "@/components/escritorio/NoEscritorioAgora";
@@ -383,12 +368,10 @@ const agentMessageActionClassName = "inline-flex h-6 w-6 items-center justify-ce
 const StreamingIndicator = React.memo(function StreamingIndicator({
   streamingText,
   isAgentWorking,
-  isMobile,
   agentId,
 }: {
   streamingText: string;
   isAgentWorking: boolean;
-  isMobile: boolean;
   agentId: string;
 }) {
   const activityCardVisible = useAgentActivityVisible(agentId);
@@ -408,7 +391,7 @@ const StreamingIndicator = React.memo(function StreamingIndicator({
         ) : streamingText === "[retrying]" ? (
           <div className="typing-pill text-muted-foreground"><RefreshCw className="h-3.5 w-3.5 animate-spin" /><span className="text-xs">Tentando novamente...</span></div>
         ) : streamingText ? (
-          <div className={`min-w-0 ${isMobile ? "max-w-[85%]" : "max-w-[70%]"} bg-card/60 backdrop-blur-md border border-border/20 rounded-2xl px-3.5 py-2.5 text-sm text-foreground shadow-sm`}>
+          <div className={`min-w-0 max-w-[70%] bg-card/60 backdrop-blur-md border border-border/20 rounded-2xl px-3.5 py-2.5 text-sm text-foreground shadow-sm`}>
             <div className="min-w-0 text-inherit">
               <StreamingMarkdownContent text={streamingText} className="text-inherit" />
               <span className="inline-block w-[2px] h-[1em] bg-foreground ml-0.5 animate-pulse align-text-bottom" />
@@ -429,7 +412,6 @@ const StreamingIndicator = React.memo(function StreamingIndicator({
 
 interface AgentMessageListProps {
   messages: ChatMessage[];
-  isMobile: boolean;
   isAgentWorking: boolean;
   ttsPlaying: string | null;
   effectiveAgentId: string;
@@ -449,7 +431,6 @@ interface AgentMessageListProps {
 
 export const AgentMessageList = React.memo(function AgentMessageList({
   messages,
-  isMobile,
   isAgentWorking,
   ttsPlaying,
   effectiveAgentId,
@@ -464,13 +445,6 @@ export const AgentMessageList = React.memo(function AgentMessageList({
   activitiesByMessageId,
   trailingActivities,
 }: AgentMessageListProps) {
-  // Celular: uma folha só para a lista inteira; o toque guarda de quem é num
-  // ref — estado aqui re-renderizava a lista toda a cada dedo encostado.
-  const [folha, setFolha] = useState<{ aberta: boolean; acoes: AcaoDaMensagem[] }>({ aberta: false, acoes: [] });
-  const acoesDoAlvoRef = useRef<AcaoDaMensagem[]>([]);
-  const toqueLongo = useToqueLongo(() => {
-    if (acoesDoAlvoRef.current.length > 0) setFolha({ aberta: true, acoes: acoesDoAlvoRef.current });
-  }, isMobile);
   const lastAgentIndex = (() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "agent") return i;
@@ -499,22 +473,10 @@ export const AgentMessageList = React.memo(function AgentMessageList({
             {showDateDivider && <DateDivider date={msg.timestamp} />}
             <div
               data-message-id={msg.id}
-              className={`flex ${isMobile ? "gap-2" : "gap-3"} group relative px-3 py-1.5 -mx-3 ${isOwn ? "flex-row-reverse" : ""}`}
-              {...toqueLongo.handlers}
-              {...(isMobile ? {
-                onTouchStart: (e: React.TouchEvent) => {
-                  acoesDoAlvoRef.current = acoes;
-                  toqueLongo.handlers.onTouchStart?.(e);
-                },
-                // Botão direito numa janela estreita também precisa saber de quem é.
-                onContextMenu: (e: React.MouseEvent) => {
-                  acoesDoAlvoRef.current = acoes;
-                  toqueLongo.handlers.onContextMenu?.(e);
-                },
-              } : {})}
+              className={`flex gap-3 group relative px-3 py-1.5 -mx-3 ${isOwn ? "flex-row-reverse" : ""}`}
             >
               {/* Avatar */}
-              <div className={`${isMobile ? "h-8 w-8" : "h-9 w-9"} shrink-0 mt-0.5 overflow-hidden ring-2 ring-border/30 ${isAgent ? "rounded-md" : "rounded-full"}`}>
+              <div className={`h-9 w-9 shrink-0 mt-0.5 overflow-hidden ring-2 ring-border/30 ${isAgent ? "rounded-md" : "rounded-full"}`}>
                 {isAgent ? (
                   <AgentChatAvatar sizeClass="h-9 w-9" ringClass="" agentId={effectiveAgentId} />
                 ) : userAvatarUrl ? (
@@ -553,7 +515,7 @@ export const AgentMessageList = React.memo(function AgentMessageList({
 
                 <div className={`relative w-full flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
                   <div
-                    className={`relative mt-1 inline-block ${isMobile ? "max-w-[85%]" : "max-w-[70%] pr-7"} text-left ${isOwn ? "w-max" : "w-fit"} ${bubbleClass}`}
+                    className={`relative mt-1 inline-block max-w-[70%] pr-7 text-left ${isOwn ? "w-max" : "w-fit"} ${bubbleClass}`}
                   >
                     <div className="chat-message-content-selectable break-words" data-message-select-scope={msg.id}>
                       {msg.content && (
@@ -580,7 +542,7 @@ export const AgentMessageList = React.memo(function AgentMessageList({
                     {/* Estilo WhatsApp (13/10/2026): uma seta no canto abre as
                         ações. Saíram a barra do hover e o "copiar" solto embaixo
                         da resposta. "Ouvir" segue pausado — ver EM-CONSTRUCAO. */}
-                    {!isMobile && <MenuDaMensagem acoes={acoes} />}
+                    <MenuDaMensagem acoes={acoes} />
                   </div>
 
                   {/* Own timestamp below bubble */}
@@ -610,13 +572,6 @@ export const AgentMessageList = React.memo(function AgentMessageList({
           </Fragment>
         );
       })}
-      {isMobile && (
-        <AcoesDaMensagemNoToque
-          aberto={folha.aberta}
-          aoMudar={(aberta) => setFolha((f) => ({ ...f, aberta }))}
-          acoes={folha.acoes}
-        />
-      )}
     </>
   );
 });
@@ -627,53 +582,6 @@ export const AgentMessageList = React.memo(function AgentMessageList({
 type Selection =
   | { type: "agent"; id: string }
   | { type: "channel"; channel: Channel };
-
-/* ── Mobile Agent Chips ──────────────────────────────── */
-
-function MobileAgentChips({
-  agents,
-  selectedId,
-  onSelect,
-}: {
-  agents: { id: string; name: string; status: string }[];
-  selectedId: string;
-  onSelect: (id: string) => void;
-}) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  return (
-    <div ref={scrollRef} className="chips-scroll py-2">
-      {agents.map((agent) => {
-        const active = agent.id === selectedId;
-        const hasUnread = hasUnreadAgentMessage(agent.id);
-        return (
-          <button
-            key={agent.id}
-            onClick={() => onSelect(agent.id)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-full shrink-0 transition-all touch-target ${
-              active
-                ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
-                : "glass-card text-foreground"
-            }`}
-          >
-              <div className="relative h-7 w-7 shrink-0">
-                <AgentChatAvatar sizeClass="h-7 w-7" ringClass="ring-2 ring-border/40" agentId={agent.id} />
-              <div className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 ${active ? "border-primary" : "border-card"} ${
-                agent.status === "active" ? "bg-success" : agent.status === "recent" ? "bg-warning" : "bg-muted-foreground"
-              }`} />
-            </div>
-            <span className={`text-sm whitespace-nowrap ${active ? "font-bold" : hasUnread ? "font-bold" : "font-medium"}`}>
-              {agent.name}
-            </span>
-            {hasUnread && !active && (
-              <span className="flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold shrink-0">1</span>
-            )}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 /* ── Main Page ────────────────────────────────────────── */
 
@@ -686,11 +594,7 @@ export default function ChatPage() {
   const { user, profile, role } = useAuthContext();
   const { peers: dmPeers, peerIdToChannelId } = useDmPeers(channels, user?.id);
   const { unreadByChannel, unreadByAgentOnly } = useNotificationsContext();
-  const isMobile = useIsMobile();
   const { bottomOffset, isKeyboardOpen } = useMobileChatViewport();
-  // Celular: a faixa de contexto/modelo fica recolhida e abre pelo ⋮ ou pelo
-  // nome do agente (spec 2026-11-03, Frente C2).
-  const [contextoAberto, setContextoAberto] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -777,10 +681,6 @@ export default function ChatPage() {
     }
     return null;
   }, [agentIdFromChannelParam, channelParam, channels, resolvedAgentParam]);
-
-  // Celular: só a conversa selecionada de fato esconde o cabeçalho e a
-  // BottomNav (spec 2026-11-03, C1).
-  useInformarConversaAberta(isMobile && !!selection);
 
   // ⚠️ `?channel=` que não resolve nem depois de recarregar (push de canal do
   // qual a pessoa saiu, canal apagado, link antigo) volta para a lista, em vez
@@ -876,7 +776,6 @@ export default function ChatPage() {
     if (hasExplicitSelectionParam) { restoreAttemptedRef.current = true; return; }
     if (location.pathname !== "/chat") return;
     if (channelsLoading) return;
-    if (isMobile) { restoreAttemptedRef.current = true; return; }
     try {
       const saved = localStorage.getItem("mc_last_chat");
       if (!saved) { restoreAttemptedRef.current = true; return; }
@@ -893,7 +792,7 @@ export default function ChatPage() {
     } catch {
       restoreAttemptedRef.current = true;
     }
-  }, [hasExplicitSelectionParam, location.pathname, channelsLoading, navigate, isMobile]);
+  }, [hasExplicitSelectionParam, location.pathname, channelsLoading, navigate]);
   // Esc fecha a conversa e deixa o painel vazio, igual ao WhatsApp Web — pedido
   // do Erick e de um colaborador, 29/10/2026. Sem isso não havia como ficar sem
   // conversa aberta, e a que estava na tela ia marcando como lido tudo que
@@ -904,7 +803,7 @@ export default function ChatPage() {
   // lista de menção (os três dão `preventDefault`) e campo com texto digitado
   // ficam com ele. Composer vazio e focado fecha — é o caso comum.
   useEffect(() => {
-    if (isMobile || !selection) return;
+    if (!selection) return;
     const aoTeclar = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
       if (document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')) return;
@@ -919,7 +818,7 @@ export default function ChatPage() {
     };
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
-  }, [isMobile, selection, navigate]);
+  }, [selection, navigate]);
 
   const [activeArtifact, setActiveArtifact] = useState<{ type: ArtifactType; code: string } | null>(null);
   const [activeLiveArtifactId, setActiveLiveArtifactId] = useState<string | null>(null);
@@ -1284,7 +1183,7 @@ export default function ChatPage() {
 
   // Auto-focus input when switching conversations
   useEffect(() => {
-    if (isMobile || !selection) return;
+    if (!selection) return;
     if (!document.hasFocus()) return;
     const frame = requestAnimationFrame(() => {
       if (document.activeElement?.tagName !== "TEXTAREA") {
@@ -1292,7 +1191,7 @@ export default function ChatPage() {
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [selection?.type === "agent" ? (selection as any).id : selection?.type === "channel" ? (selection as any).channel?.id : null, isMobile]);
+  }, [selection?.type === "agent" ? (selection as any).id : selection?.type === "channel" ? (selection as any).channel?.id : null]);
 
   const isNearBottom = useCallback((element: HTMLDivElement | null) => {
     if (!element) return true;
@@ -1715,16 +1614,6 @@ export default function ChatPage() {
     }
 
     if (e.key === "Enter" && !e.shiftKey) {
-      if (isMobile) {
-        // On mobile, Enter inserts a newline instead of sending (WhatsApp behavior)
-        e.preventDefault();
-        const nextValue = val.slice(0, pos) + "\n" + val.slice(pos);
-        inputLocalRef.current = nextValue;
-        syncToDraft(nextValue);
-        resizeComposerTextarea(ta);
-        window.requestAnimationFrame(() => inputRef.current?.setSelectionRange(pos + 1, pos + 1));
-        return;
-      }
       if (indentMatch) {
         e.preventDefault();
         const indent = indentMatch[1];
@@ -1748,7 +1637,7 @@ export default function ChatPage() {
       e.preventDefault();
       handleSend();
     }
-  }, [markUserTyping, syncToDraft, handleSend, isMobile]);
+  }, [markUserTyping, syncToDraft, handleSend]);
 
 
   const [dragOver, setDragOver] = useState(false);
@@ -2053,129 +1942,55 @@ export default function ChatPage() {
 
       <div className="overflow-hidden flex flex-col flex-1 min-h-0 min-w-0">
         {/* Header - compact on desktop */}
-        {!isMobile && (
-          <div className="aurora-glow border-b border-border/40 flex items-center justify-between gap-3 px-4 py-2.5 shrink-0">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <AgentChatAvatar sizeClass="h-8 w-8 shrink-0" ringClass={`ring-2 ring-border/50 ${isAgentWorking ? "agent-working-pulse" : ""}`.trim()} agentId={effectiveAgentId} />
-              <div className="min-w-0">
-                <span className="block truncate text-sm font-display font-bold text-foreground">{selectedAgent?.name ?? "Selecione um agente"}</span>
-                {isAgentWorking && <p className="agent-working-fade truncate text-[11px] leading-tight text-primary">digitando...</p>}
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {showReconnecting && (
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-500"
-                  title="Reconectando ao servidor em tempo real"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                  reconectando...
-                </span>
-              )}
-              <FolderBadge />
-              {conversationArtifacts.length > 0 && (
-                <ArtifactsList artifacts={conversationArtifacts} onSelect={(a) => { setActiveArtifact(a); setActiveLiveArtifactId(null); }} onOpenLive={(id) => { setActiveLiveArtifactId(id); setActiveArtifact(null); }} onDelete={handleDeleteArtifact} onRename={handleRenameArtifact} />
-              )}
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono text-muted-foreground border border-border/40 bg-secondary/30">{selectedAgent?.model ?? "—"}</span>
-              <button onClick={handleCopyConversation} disabled={agentMessages.length === 0} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors disabled:opacity-40" title="Copiar conversa">
-                {conversationCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              </button>
-               {/* ⚠️ **Não desabilitar enquanto o agente trabalha.** Era assim, e é
-                    justamente quando mais se precisa: agente preso num contexto
-                    velho ou numa execução que não volta é o motivo número um
-                    para começar outra conversa. Com o botão cinza, clicar não
-                    fazia nada e não explicava por quê. */}
-              <button onClick={() => setAnterioresAberto(true)} disabled={!effectiveAgentId} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors disabled:opacity-40" title="Ver conversas anteriores com este agente — só leitura">
-                <History className="h-3 w-3" />
-                <span>Conversas anteriores</span>
-              </button>
-              <button onClick={() => setArquivosAberto(true)} disabled={!effectiveAgentId} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors disabled:opacity-40" title="Arquivos trocados com este agente, inclusive em conversas anteriores">
-                <Paperclip className="h-3 w-3" />
-                <span>Arquivos</span>
-              </button>
-               <button onClick={() => setClearConfirmOpen(true)} disabled={!effectiveAgentId} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-40" title="Começar uma nova conversa — o agente esquece o contexto, as mensagens ficam guardadas">
-                {/* Lixeira vermelha era promessa errada: isto não apaga nada,
-                    encerra a sessão e começa outra. Ver POST /conversations/{id}/limpar. */}
-                <RotateCcw className="h-3 w-3" />
-                <span>Nova conversa</span>
-              </button>
+        <div className="aurora-glow border-b border-border/40 flex items-center justify-between gap-3 px-4 py-2.5 shrink-0">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <AgentChatAvatar sizeClass="h-8 w-8 shrink-0" ringClass={`ring-2 ring-border/50 ${isAgentWorking ? "agent-working-pulse" : ""}`.trim()} agentId={effectiveAgentId} />
+            <div className="min-w-0">
+              <span className="block truncate text-sm font-display font-bold text-foreground">{selectedAgent?.name ?? "Selecione um agente"}</span>
+              {isAgentWorking && <p className="agent-working-fade truncate text-[11px] leading-tight text-primary">digitando...</p>}
             </div>
           </div>
-        )}
-
-        {/* Celular: cabeçalho enxuto (spec 2026-11-03, Frente C2). Com a
-            conversa aberta o cabeçalho do HS.OS some (`AppLayout`), então este
-            assume o topo e respeita o notch. Os ícones soltos foram para o ⋮. */}
-        {isMobile && (
-          <div className="pt-[env(safe-area-inset-top,0px)] border-b border-border/30 bg-gradient-to-r from-primary/8 via-card/80 to-accent/8 backdrop-blur-xl shrink-0">
-          <div className="pl-1 pr-1 h-14 flex items-center justify-between gap-1">
-            <div className="flex min-w-0 flex-1 items-center gap-1">
-              <button onClick={() => navigate("/chat")} aria-label="Voltar para as conversas" className="h-11 w-11 shrink-0 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground active:bg-secondary/50 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => setContextoAberto((v) => !v)}
-                aria-expanded={contextoAberto}
-                aria-label={`${selectedAgent?.name ?? "Agente"} — contexto e modelo`}
-                className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 pr-1 text-left active:bg-secondary/40"
+          <div className="flex shrink-0 items-center gap-2">
+            {showReconnecting && (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-500"
+                title="Reconectando ao servidor em tempo real"
               >
-                <AgentChatAvatar sizeClass="h-9 w-9 shrink-0" ringClass={`ring-2 ring-border/50 ${isAgentWorking ? "agent-working-pulse" : ""}`.trim()} agentId={effectiveAgentId} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-display font-bold text-foreground">{selectedAgent?.name ?? "Agente"}</span>
-                  {isAgentWorking
-                    ? <span className="agent-working-fade block truncate text-[11px] text-primary">digitando...</span>
-                    : <span className="block truncate text-[11px] text-muted-foreground">{selectedAgent?.model ?? "agente"}</span>}
-                </span>
-              </button>
-            </div>
-            <div className="flex shrink-0 items-center gap-0.5">
-              {showReconnecting && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-500"
-                  title="Reconectando"
-                  aria-label="Reconectando"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                </span>
-              )}
-              {/* Artefatos: o próprio ArtifactsList é o botão e a lista; ele só
-                  aparece quando a conversa tem algum. */}
-              {conversationArtifacts.length > 0 && (
-                <ArtifactsList artifacts={conversationArtifacts} onSelect={(a) => { setActiveArtifact(a); setActiveLiveArtifactId(null); }} onOpenLive={(id) => { setActiveLiveArtifactId(id); setActiveArtifact(null); }} onDelete={handleDeleteArtifact} onRename={handleRenameArtifact} />
-              )}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" aria-label="Mais opções da conversa" className="h-11 w-11 flex items-center justify-center rounded-full text-muted-foreground active:bg-secondary/50">
-                    <MoreVertical className="h-5 w-5" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-60">
-                  <DropdownMenuItem className="min-h-[44px] gap-3" disabled={!effectiveAgentId} onSelect={() => setArquivosAberto(true)}>
-                    <Paperclip className="h-4 w-4" /> Arquivos
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="min-h-[44px] gap-3" disabled={!effectiveAgentId} onSelect={() => setAnterioresAberto(true)}>
-                    <History className="h-4 w-4" /> Conversas anteriores
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="min-h-[44px] gap-3" disabled={agentMessages.length === 0} onSelect={() => { void handleCopyConversation(); }}>
-                    <Copy className="h-4 w-4" /> Copiar conversa
-                  </DropdownMenuItem>
-                  <DropdownMenuItem className="min-h-[44px] gap-3" disabled={!effectiveAgentId} onSelect={() => setContextoAberto((v) => !v)}>
-                    <Gauge className="h-4 w-4" /> {contextoAberto ? "Esconder contexto e modelo" : "Contexto e modelo"}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  {/* Não desabilitar com o agente trabalhando — ver o botão do desktop. */}
-                  <DropdownMenuItem className="min-h-[44px] gap-3" disabled={!effectiveAgentId} onSelect={() => setClearConfirmOpen(true)}>
-                    <RotateCcw className="h-4 w-4" /> Nova conversa
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                reconectando...
+              </span>
+            )}
+            <FolderBadge />
+            {conversationArtifacts.length > 0 && (
+              <ArtifactsList artifacts={conversationArtifacts} onSelect={(a) => { setActiveArtifact(a); setActiveLiveArtifactId(null); }} onOpenLive={(id) => { setActiveLiveArtifactId(id); setActiveArtifact(null); }} onDelete={handleDeleteArtifact} onRename={handleRenameArtifact} />
+            )}
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono text-muted-foreground border border-border/40 bg-secondary/30">{selectedAgent?.model ?? "—"}</span>
+            <button onClick={handleCopyConversation} disabled={agentMessages.length === 0} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors disabled:opacity-40" title="Copiar conversa">
+              {conversationCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+            </button>
+             {/* ⚠️ **Não desabilitar enquanto o agente trabalha.** Era assim, e é
+                  justamente quando mais se precisa: agente preso num contexto
+                  velho ou numa execução que não volta é o motivo número um
+                  para começar outra conversa. Com o botão cinza, clicar não
+                  fazia nada e não explicava por quê. */}
+            <button onClick={() => setAnterioresAberto(true)} disabled={!effectiveAgentId} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors disabled:opacity-40" title="Ver conversas anteriores com este agente — só leitura">
+              <History className="h-3 w-3" />
+              <span>Conversas anteriores</span>
+            </button>
+            <button onClick={() => setArquivosAberto(true)} disabled={!effectiveAgentId} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors disabled:opacity-40" title="Arquivos trocados com este agente, inclusive em conversas anteriores">
+              <Paperclip className="h-3 w-3" />
+              <span>Arquivos</span>
+            </button>
+             <button onClick={() => setClearConfirmOpen(true)} disabled={!effectiveAgentId} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-40" title="Começar uma nova conversa — o agente esquece o contexto, as mensagens ficam guardadas">
+              {/* Lixeira vermelha era promessa errada: isto não apaga nada,
+                  encerra a sessão e começa outra. Ver POST /conversations/{id}/limpar. */}
+              <RotateCcw className="h-3 w-3" />
+              <span>Nova conversa</span>
+            </button>
           </div>
-          </div>
-        )}
+        </div>
 
-        {effectiveAgentId && (!isMobile || contextoAberto) && (
+        {effectiveAgentId && (
           <ContextWindowIndicator
             agentId={effectiveAgentId}
             actions={<ModelSelector agentId={toCanonicalAgentId(effectiveAgentId)} />}
@@ -2225,7 +2040,6 @@ export default function ChatPage() {
           )}
           <AgentMessageList
             messages={agentMessages}
-            isMobile={isMobile}
             isAgentWorking={isAgentWorking}
             ttsPlaying={ttsPlaying}
             effectiveAgentId={effectiveAgentId}
@@ -2249,22 +2063,16 @@ export default function ChatPage() {
               initialCollapsed
             />
           )}
-          <StreamingIndicator streamingText={streamingText} isAgentWorking={isAgentWorking} isMobile={isMobile} agentId={effectiveAgentId} />
+          <StreamingIndicator streamingText={streamingText} isAgentWorking={isAgentWorking} agentId={effectiveAgentId} />
           <div ref={chatEndRef} />
         </div>
 
         {/* Input area */}
         <div
-          className={`mobile-chat-composer border-t border-border/30 bg-card/70 backdrop-blur-xl ${isMobile ? "px-2 pt-2" : "p-3 md:p-4"}`}
-          style={isMobile ? {
-            // Sem BottomNav na conversa (C1): só a barra de gestos do aparelho.
-            paddingBottom: isKeyboardOpen
-              ? "8px"
-              : "calc(max(env(safe-area-inset-bottom, 0px), 8px) + 4px)",
-          } : undefined}
+          className={`mobile-chat-composer border-t border-border/30 bg-card/70 backdrop-blur-xl p-3 md:p-4`}
         >
           <StagedPreview items={media.staged} onRemove={media.removeStaged} />
-          <div className={`glass-input flex gap-2 px-3 py-1.5 ${isMobile ? "items-end" : "items-center"}`}>
+          <div className={`glass-input flex gap-2 px-3 py-1.5 items-center`}>
             {/* Left tools */}
             <div className="flex h-8 items-center gap-0.5 shrink-0">
               <button onClick={media.pickFile} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors touch-target rounded-full hover:bg-secondary/30" title="Anexar arquivo">
@@ -2272,7 +2080,7 @@ export default function ChatPage() {
               </button>
               {/* Pasta local usa a File System Access API, que não existe no
                   navegador do celular — o botão só ocuparia espaço ali. */}
-              {!isMobile && <FolderButton iconClassName="h-4 w-4" />}
+              <FolderButton iconClassName="h-4 w-4" />
             </div>
 
             {/* Center: textarea */}
@@ -2285,7 +2093,7 @@ export default function ChatPage() {
                   onClick={handleTextareaClick}
                   onKeyDown={handleTextareaKeyDown}
                   onPaste={handlePaste}
-                  placeholder={isAgentWorking ? "Agente trabalhando..." : isMobile ? "Mensagem" : "Pergunte qualquer coisa..."}
+                  placeholder={isAgentWorking ? "Agente trabalhando..." : "Pergunte qualquer coisa..."}
                   rows={1}
                   className="w-full bg-transparent text-sm leading-5 text-foreground placeholder:text-muted-foreground/40 focus:outline-none resize-none overflow-y-auto overflow-x-hidden break-words [overflow-wrap:anywhere] py-1.5"
                   style={{ minHeight: "32px" }}
@@ -2295,13 +2103,13 @@ export default function ChatPage() {
 
             {/* Right: mic + send */}
             <div className="flex items-center gap-1.5 shrink-0">
-                  <button onClick={async () => { try { const s = await audioRecorder.start(); if (s) audioLevel.start(s); } catch (e) { console.error("Audio start failed:", e); } }} className={`flex ${isMobile ? "h-11 w-11" : "h-10 w-10"} items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors`} title="Falar para transcrever" aria-label="Falar para transcrever">
+                  <button onClick={async () => { try { const s = await audioRecorder.start(); if (s) audioLevel.start(s); } catch (e) { console.error("Audio start failed:", e); } }} className={`flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors`} title="Falar para transcrever" aria-label="Falar para transcrever">
                     <Mic className="h-4 w-4" />
                   </button>
                   <button
                     onClick={isAgentWorking && !inputLocalRef.current.trim() && media.staged.length === 0 ? handleStopAgentResponse : handleSend}
                     disabled={!effectiveAgentId || uploading || (!inputLocalRef.current.trim() && media.staged.length === 0 && !isAgentWorking)}
-                    className={`btn-send-gradient flex ${isMobile ? "h-11 w-11" : "h-10 w-10"} items-center justify-center`}
+                    className={`btn-send-gradient flex h-10 w-10 items-center justify-center`}
                     title={isAgentWorking && !inputLocalRef.current.trim() && media.staged.length === 0 ? "Interromper resposta" : "Enviar mensagem"}
                   >
                     {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : isAgentWorking && !inputLocalRef.current.trim() && media.staged.length === 0 ? <Square className="h-4 w-4" /> : <Send className="h-4 w-4" />}
@@ -2388,7 +2196,7 @@ export default function ChatPage() {
   const abasDaLateral = (
     <Tabs value={abaAtual} onValueChange={(v) => setSidebarTab(v as "dms" | "agentes" | "channels")} className="w-full">
       <TabsList className="w-full bg-transparent border-b border-border/30 rounded-none p-0 h-auto justify-start gap-6">
-        <TabsTrigger value="dms" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5${isMobile ? " min-h-[44px] text-sm" : ""}`}>
+        <TabsTrigger value="dms" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5`}>
           DMs
           {pessoasNaoLidas > 0 && (
             <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
@@ -2397,7 +2205,7 @@ export default function ChatPage() {
           )}
         </TabsTrigger>
         {temAgentes && (
-          <TabsTrigger value="agentes" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5${isMobile ? " min-h-[44px] text-sm" : ""}`}>
+          <TabsTrigger value="agentes" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5`}>
             Agentes
             {agentesNaoLidas > 0 && (
             <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
@@ -2406,7 +2214,7 @@ export default function ChatPage() {
           )}
           </TabsTrigger>
         )}
-        <TabsTrigger value="channels" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5${isMobile ? " min-h-[44px] text-sm" : ""}`}>
+        <TabsTrigger value="channels" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5`}>
           Canais
           {channelUnreadCount > 0 && (
             <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
@@ -2439,216 +2247,6 @@ export default function ChatPage() {
   const semResultadoBusca = abaAtual === "dms" && buscaPessoa.trim() && listaDaAba.length === 0 && (
     <p className="px-2 py-6 text-center text-xs text-muted-foreground">Ninguém com esse nome ou setor.</p>
   );
-
-  if (isMobile) {
-    const showList = !selection;
-
-    return (
-      <div
-        className="flex flex-col h-full min-h-0 min-w-0 overflow-hidden"
-        style={isKeyboardOpen ? { paddingBottom: `${bottomOffset}px` } : undefined}
-      >
-
-        {showList ? (
-          /* ── Mobile List View (Slack-like sidebar) ── */
-          <div className="flex flex-col flex-1 min-h-0">
-            <div className="border-b border-border/30 shrink-0 px-3 pt-3 pb-2 bg-gradient-to-b from-primary/5 to-transparent">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-lg font-display font-bold text-foreground">Chat</h2>
-                {abaAtual === "channels" && role === "administrador" && (
-                  <button onClick={() => setCreateOpen(true)} className="h-8 w-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors touch-target" title="Criar canal">
-                    <Plus className="h-5 w-5" />
-                  </button>
-                )}
-              </div>
-              {abasDaLateral}
-            </div>
-
-
-            {/* `!block`: sem ele o Radix monta o conteúdo em `display: table`,
-                que cresce com a prévia mais longa e empurra horário e contador
-                para fora da tela — o mesmo ajuste que a lateral do desktop tem. */}
-            <ScrollArea className="flex-1 [&>[data-radix-scroll-area-viewport]>div]:!block">
-              <div className="px-3 py-2 pb-20 w-full min-w-0">
-                <InstalarApp variante="cartao" />
-                {abaAtual === "channels" ? (
-                  <>
-                    {publicChannels.length > 0 && (
-                      <div className="mb-3">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-display px-2 mb-1">Públicos</p>
-                        {publicChannels.map((ch) => (
-                          <ChannelSidebarItem key={ch.id} channel={ch} active={false} onClick={() => setSelection({ type: "channel", channel: ch })} unreadCount={unreadByChannel[ch.id] || 0} />
-                        ))}
-                      </div>
-                    )}
-                    {privateChannels.length > 0 && (
-                      <div className="mb-3">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-display px-2 mb-1">Privados</p>
-                        {privateChannels.map((ch) => (
-                          <ChannelSidebarItem key={ch.id} channel={ch} active={false} onClick={() => setSelection({ type: "channel", channel: ch })} unreadCount={unreadByChannel[ch.id] || 0} />
-                        ))}
-                      </div>
-                    )}
-                    {channelsLoading && channels.length === 0 && (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                  {abaAtual === "dms" && <NoEscritorioAgora presenca={presencaEscritorio} />}
-                  {abaAtual === "dms" && campoBuscaPessoa}
-                  {semResultadoBusca}
-                  <div className="mb-2 divide-y divide-border/40">
-                  {loading && agents.length === 0 && (
-                    <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-primary" /></div>
-                  )}
-                  {error && (
-                    <div className="p-2 text-xs text-destructive flex items-center gap-1"><WifiOff className="h-3 w-3" /> {error}</div>
-                  )}
-                  {listaDaAba.map((item) => {
-                    if (item.kind === "agent") {
-                      const agent = item.agent;
-                      const unread = item.naoLidas;
-                      const hasUnread = unread > 0;
-                      const lastMsg = lastMessages[agent.id];
-                      return (
-                        <button key={`agent-${agent.id}`} onClick={() => setSelection({ type: "agent", id: agent.id })}
-                          className="w-full text-left px-2 py-3 transition-colors duration-150 hover:bg-secondary/40 active:bg-secondary/60 touch-target">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="relative h-12 w-12 shrink-0">
-                              <AgentListAvatar sizeClass="h-12 w-12 rounded-full" agentId={agent.id} />
-                              <div className="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center border-2 border-background">
-                                <Bot className="h-3 w-3" />
-                              </div>
-                            </div>
-                            <div className="min-w-0 flex-1 overflow-hidden">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className={`text-[15px] truncate ${hasUnread ? "font-bold text-foreground" : "font-semibold text-foreground"}`}>{agent.name}</span>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  {lastMsg && (
-                                    <span className={`text-[11px] ${hasUnread ? "text-primary font-semibold" : "text-muted-foreground"}`}>{getRelativeTime(lastMsg.created_at)}</span>
-                                  )}
-                                  {hasUnread && (
-                                    <span className="flex items-center justify-center h-[18px] min-w-[22px] px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
-                                      {unread > 99 ? "99+" : unread}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              {/* Prévia da última mensagem: já vem de
-                                  /conversations/ultimas/por-agente (spec C9). As DMs
-                                  não têm prévia na API e ficam só com o horário. */}
-                              {lastMsg?.content && (
-                                <p className={`mt-0.5 truncate text-[13px] ${hasUnread ? "text-foreground/90" : "text-muted-foreground"}`}>
-                                  {semMarkdown(lastMsg.content)}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    } else {
-                      const person = item.person;
-                      const existingChannelId = peerIdToChannelId[person.id];
-                      const unread = item.naoLidas;
-                      const existingChannel = existingChannelId ? channels.find((c) => c.id === existingChannelId) : null;
-                      const hasUnread = unread > 0;
-                      const lastAct = existingChannelId ? dmLastActivity[existingChannelId] : null;
-                      const isHumanTyping = existingChannelId ? (typingByDmChannel[existingChannelId]?.length ?? 0) > 0 : false;
-                      return (
-                        <button key={`person-${person.id}`} onClick={() => { if (existingChannel) setSelection({ type: "channel", channel: existingChannel }); else handleOpenPersonDm(person); }}
-                          disabled={openingDm === person.id}
-                          className="w-full text-left px-2 py-3 transition-colors duration-150 hover:bg-secondary/40 active:bg-secondary/60 touch-target disabled:opacity-50">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="relative h-12 w-12 shrink-0">
-                              <div className="h-12 w-12 rounded-full bg-secondary flex items-center justify-center overflow-hidden ring-1 ring-border/50">
-                                {person.avatar_url ? <img src={person.avatar_url} alt="" className="h-full w-full object-cover" /> : <span className="text-sm font-bold text-foreground">{(person.full_name || person.email).charAt(0).toUpperCase()}</span>}
-                              </div>
-                              <div className="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full bg-secondary text-foreground flex items-center justify-center border-2 border-background">
-                                <User className="h-3 w-3" />
-                              </div>
-                            </div>
-                            <div className="min-w-0 flex-1 overflow-hidden">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-1 min-w-0">
-                                  <span className={`text-[15px] truncate ${hasUnread ? "font-bold text-foreground" : "font-semibold text-foreground"}`}>{person.full_name || person.email}</span>
-                                  {estaNoEscritorio(person.email) && (
-                                    <span title="No escritório" aria-label="No escritório" className="text-sm leading-none shrink-0">🏢</span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  {isHumanTyping ? (
-                                    <SidebarTypingDots />
-                                  ) : lastAct && (
-                                    <span className={`text-[11px] ${hasUnread ? "text-primary font-semibold" : "text-muted-foreground"}`}>{getRelativeTime(lastAct)}</span>
-                                  )}
-                                  {openingDm === person.id && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-                                  {hasUnread && (
-                                    <span className="flex items-center justify-center h-[18px] min-w-[22px] px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
-                                      {unread > 99 ? "99+" : unread}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    }
-                  })}
-                </div>
-                  </>
-                )}
-
-              </div>
-            </ScrollArea>
-          </div>
-        ) : (
-          /* ── Mobile Chat View (fullscreen with back) ── */
-          <>
-            {selection?.type === "channel" ? (
-              <ChannelChat channel={selection.channel} onChannelUpdated={refetchChannels} onChannelDeleted={() => { navigate("/chat"); refetchChannels(); }} onBack={() => navigate("/chat")} dmPeerName={selection.channel.type === "dm" ? dmPeers[selection.channel.id]?.peerName : undefined} />
-            ) : selection?.type === "agent" ? (
-              <>
-                {renderAgentChat()}
-                {/* Artefato numa folha de baixo, por cima da conversa — antes era
-                    uma faixa de 50vh empilhada embaixo do composer
-                    (spec 2026-11-03, Frente C5). */}
-                <Drawer
-                  open={!!activeArtifact || !!activeLiveArtifactId}
-                  onOpenChange={(aberto) => { if (!aberto) { setActiveArtifact(null); setActiveLiveArtifactId(null); } }}
-                >
-                  <DrawerContent className="h-[85dvh] max-h-[85dvh] flex flex-col p-0 pb-[env(safe-area-inset-bottom,0px)]">
-                    <DrawerHeader className="sr-only">
-                      <DrawerTitle>Artefato</DrawerTitle>
-                      <DrawerDescription>Artefato desta conversa.</DrawerDescription>
-                    </DrawerHeader>
-                    <div className="min-h-0 flex-1 overflow-hidden" data-vaul-no-drag>
-                      {activeArtifact ? (
-                        <ArtifactPanel type={activeArtifact.type} code={activeArtifact.code} onClose={() => setActiveArtifact(null)} />
-                      ) : activeLiveArtifactId ? (
-                        <LiveArtifactViewer artifactId={activeLiveArtifactId} onClose={() => setActiveLiveArtifactId(null)} />
-                      ) : null}
-                    </div>
-                  </DrawerContent>
-                </Drawer>
-              </>
-            ) : null}
-          </>
-        )}
-
-        <CreateChannelDialog open={createOpen} onOpenChange={setCreateOpen} onCreate={handleCreateChannel} />
-        {dialogoNovaConversa}
-        <Dialog open={!!lightboxSrc} onOpenChange={() => setLightboxSrc(null)}>
-          <DialogContent className="max-w-3xl p-2 bg-transparent border-none shadow-none">
-            {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80dvh] object-contain" />}
-          </DialogContent>
-        </Dialog>
-      </div>
-    );
-  }
 
   /* ── DESKTOP LAYOUT ── */
   return (
