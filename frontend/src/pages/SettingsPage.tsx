@@ -2,6 +2,7 @@ import { api } from "@/lib/api";
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { enviarArquivo, urlPublica } from "@/lib/storage";
 import { useSearchParams } from "react-router-dom";
+import { desligarNotificacoesDoAparelho, ligarNotificacoesDoAparelho } from "@/lib/notificacoes-do-aparelho";
 import { useTheme } from "next-themes";
 import {
   getGatewayConfig,
@@ -33,7 +34,6 @@ import { AvatarCropDialog } from "@/components/AvatarCropDialog";
 import {
   isSupported as isBrowserNotifSupported,
   isEnabled as isBrowserNotifEnabled,
-  setEnabled as setBrowserNotifEnabled,
   getPermission as getBrowserNotifPermission,
   requestPermission as requestBrowserNotifPermission,
 } from "@/lib/browser-notifications";
@@ -88,35 +88,16 @@ export default function SettingsPage() {
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">(() => getBrowserNotifPermission());
   const handleToggleBrowserNotif = async (checked: boolean) => {
     if (!checked) {
-      setBrowserNotifEnabled(false);
       setNotifEnabled(false);
       // Desligar é por aparelho e apaga a inscrição dele (esclarecimento 4 da
       // spec 2026-11-03): não existe preferência no servidor.
-      const { unsubscribeFromPushNotifications } = await import("@/lib/push-notifications");
-      await unsubscribeFromPushNotifications();
+      await desligarNotificacoesDoAparelho();
       return;
     }
     // Turning ON: ensure permission is actually granted before persisting
-    let perm = notifPermission;
-    if (perm === "default") {
-      const result = await requestBrowserNotifPermission();
-      if (result !== "unsupported") {
-        perm = result;
-        setNotifPermission(result);
-      }
-    }
-    if (perm === "granted") {
-      setBrowserNotifEnabled(true);
-      setNotifEnabled(true);
-      if (user?.id) {
-        const { subscribeToPushNotifications } = await import("@/lib/push-notifications");
-        void subscribeToPushNotifications(user.id);
-      }
-    } else {
-      // permission denied or unsupported — do NOT persist true
-      setBrowserNotifEnabled(false);
-      setNotifEnabled(false);
-    }
+    const r = await ligarNotificacoesDoAparelho(user?.id, notifPermission);
+    if (r.permissao !== "unsupported") setNotifPermission(r.permissao);
+    setNotifEnabled(r.ligado);
   };
   const handleRequestNotifPermission = async () => {
     const result = await requestBrowserNotifPermission();
