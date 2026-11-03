@@ -580,6 +580,15 @@ aprovado (`…-app-celular-prototipo.html`) é a fonte da verdade visual. Em tel
   lidas continuam sendo as do sininho.
 - Responder citando (deslizar a bolha) vai no texto, `> **Autor:** trecho`
   (`celular/citacao.ts`) — sem coluna nova; no desktop aparece como citação.
+  Aviso e agente recebem só o texto novo (`textoNovo`), não a citação.
+- ⚠️ **Segurança: nada se envia a partir da query string.** `?prefill=` é no
+  máximo rascunho; `?autosend=1` não existe mais (um link forjado fazia a
+  vítima postar). A resposta rápida do push com o app fechado vai pelo Cache
+  Storage: o SW guarda o texto sob `crypto.randomUUID()` e a URL leva só
+  `?resposta=<id>`; `consumirResposta` (`lib/resposta-rapida.ts`) confere
+  canal/thread, 5 min de validade e uso único antes de enviar.
+- `useConversaAtivaNasNotificacoes` recebe `ativa`: tela inativa não mexe no
+  estado global, e quem zera é só o dono (duas telas convivem na animação).
 
 ### Feature flags — sobrou uma, e ela vem ligada
 
