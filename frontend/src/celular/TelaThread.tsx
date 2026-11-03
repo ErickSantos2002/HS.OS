@@ -17,6 +17,7 @@ import { useMobileChatViewport } from "@/hooks/use-mobile-chat-viewport";
 import { usePeople } from "@/hooks/use-people";
 import { usePersistentDraft } from "@/hooks/use-persistent-draft";
 import { useRecibos } from "@/hooks/use-recibos";
+import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
 import { acoesDaRespostaNaThread } from "@/lib/acoes-da-mensagem";
 import { acoesDoToque } from "@/lib/acoes-do-toque";
 import { normalizeAgentId } from "@/lib/active-agents";
@@ -34,6 +35,7 @@ import { Composer } from "./Composer";
 import { FolhaDeAcoes, FolhaDeEmoji } from "./Folhas";
 import { Ampliada, MidiaDoCanal } from "./Midia";
 import { Avatar } from "./ui";
+import { useMapaDmDoAgente } from "./use-lista";
 import { corDoNome, horaCurta, mesmoDia, rotuloDoDia } from "./formato";
 
 export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: string; raizId: string; ativa: boolean; aoVoltar: () => void }) {
@@ -45,6 +47,9 @@ export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: stri
   const [raizBuscada, setRaizBuscada] = useState<ChannelMessage | null>(null);
   const raiz = doCanal.find((m) => m.id === raizId) ?? raizBuscada;
   const membros = useChannelMembers(canalId);
+  // Thread aberta é o canal dela na tela: marca lido, cala som e push dele.
+  const mapaDm = useMapaDmDoAgente();
+  useConversaAtivaNasNotificacoes({ agentId: null, canalId, agentDmChannelMap: mapaDm, ativa });
   const { people } = usePeople();
   const { reactions, toggleReaction } = useMessageReactions(canalId);
   const { recibos, marcarLido } = useRecibos(canalId, respostas.length);
