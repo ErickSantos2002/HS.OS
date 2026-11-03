@@ -36,7 +36,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, Copy, Info, EyeOff } from "lucide-react";
+import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, Copy, Info, EyeOff, MoreVertical } from "lucide-react";
 import { format } from "date-fns";
 import ChannelMembersPanel from "./ChannelMembersPanel";
 import ChannelFilesPanel from "./ChannelFilesPanel";
@@ -1766,7 +1766,66 @@ export default function ChannelChat({
         </div>
       )}
 
-      {/* Header */}
+      {/* Celular: cabeçalho enxuto (spec 2026-11-03, Frente C2). O do HS.OS
+          some com a conversa aberta, então este respeita o notch. */}
+      {isMobile ? (
+      <div className="aurora-glow pt-[env(safe-area-inset-top,0px)] border-b border-border/40 shrink-0">
+        <div className="h-14 flex items-center justify-between gap-1 pl-1 pr-1">
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            {onBack && (
+              <button onClick={onBack} aria-label="Voltar para as conversas" className="h-11 w-11 shrink-0 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground active:bg-secondary/50 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setMembersOpen(true)}
+              aria-label={`${displayName} — ver participantes`}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 pr-1 text-left active:bg-secondary/40"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/12 text-primary shrink-0">
+                <ChannelIcon type={channel.type} />
+              </span>
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="block truncate text-[15px] font-semibold text-foreground">{displayName}</span>
+                {pendingAgentIds.length > 0 ? (
+                  <span className="block truncate text-[11px] text-primary animate-pulse">
+                    {pendingAgentIds.map((a) => getAgentDisplayName(a)).join(", ")} digitando...
+                  </span>
+                ) : (
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    {isDm && humanPeerId && statusByUserId.get(humanPeerId)
+                      ? `${statusByUserId.get(humanPeerId)!.emoji} ${statusByUserId.get(humanPeerId)!.label}`
+                      : `${members.length} ${members.length === 1 ? "participante" : "participantes"}`}
+                  </span>
+                )}
+              </span>
+            </button>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" aria-label="Mais opções do canal" className="h-11 w-11 shrink-0 flex items-center justify-center rounded-full text-muted-foreground active:bg-secondary/50">
+                <MoreVertical className="h-5 w-5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuItem className="min-h-[44px] gap-3" onSelect={() => setFilesOpen(true)}>
+                <Paperclip className="h-4 w-4" /> Arquivos
+              </DropdownMenuItem>
+              <DropdownMenuItem className="min-h-[44px] gap-3" onSelect={() => setMembersOpen(true)}>
+                <Users className="h-4 w-4" /> {isDm ? "Participantes" : "Membros"}
+              </DropdownMenuItem>
+              {/* integração: o item "Silenciar/Reativar" da Frente B entra aqui */}
+              {canEdit && (
+                <DropdownMenuItem className="min-h-[44px] gap-3" onSelect={() => setEditOpen(true)}>
+                  <Pencil className="h-4 w-4" /> Editar canal
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+      ) : (
       <div className="aurora-glow border-b border-border/40 flex items-center justify-between gap-2 px-3 py-2 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           {onBack && (
@@ -1857,6 +1916,7 @@ export default function ChannelChat({
           </button>
         </div>
       </div>
+      )}
 
       {/* DM peer status banner */}
       {isDm && humanPeerId && (() => {
@@ -2004,7 +2064,7 @@ export default function ChannelChat({
               lastSeenMessageCountRef.current = messages.length;
             }
           }}
-          className={`absolute left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full border border-border/60 bg-background/95 px-3 py-2 text-muted-foreground shadow-lg backdrop-blur-sm transition-all hover:bg-secondary hover:text-foreground hover:shadow-xl ${isMobile ? "bottom-44" : "bottom-28"}`}
+          className={`absolute left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full border border-border/60 bg-background/95 px-3 py-2 text-muted-foreground shadow-lg backdrop-blur-sm transition-all hover:bg-secondary hover:text-foreground hover:shadow-xl ${isMobile ? "bottom-24" : "bottom-28"}`}
           title="Ir para mensagens recentes"
         >
           {unreadBelowCount > 0 && (
@@ -2018,11 +2078,12 @@ export default function ChannelChat({
 
 
       <div
-        className={`mobile-chat-composer relative shrink-0 border-t border-border/40 p-3 ${isMobile ? "pb-2 bg-background" : "bg-background/95 backdrop-blur-sm"}`}
+        className={`mobile-chat-composer relative shrink-0 border-t border-border/40 ${isMobile ? "px-2 pt-2 bg-background" : "p-3 bg-background/95 backdrop-blur-sm"}`}
         style={isMobile ? {
+          // Sem BottomNav na conversa (spec 2026-11-03, C1): só a barra de gestos.
           paddingBottom: isKeyboardOpen
-            ? `calc(max(env(safe-area-inset-bottom, 0px), 12px) + 8px)`
-            : `calc(3.5rem + max(env(safe-area-inset-bottom, 0px), 16px) + 12px)`,
+            ? "8px"
+            : "calc(max(env(safe-area-inset-bottom, 0px), 8px) + 4px)",
           transform: "translateZ(0)",
           willChange: "padding-bottom",
         } : undefined}
