@@ -47,13 +47,16 @@ import logging
 
 import asyncpg
 
-from app import recibos_entrega
+from app import push_envio, recibos_entrega
 from app.config import settings
 from app.realtime import hub, topico_canal, topico_tabela, topico_usuario
 
 logger = logging.getLogger(__name__)
 
 CANAL = "hsos_mudancas"
+# Mensagem nova que pode virar push (`023_push_enviados.sql`). Canal próprio:
+# o `hsos_mudancas` dispara em todo UPDATE/DELETE, e o push só quer INSERT.
+CANAL_PUSH = "push_pendente"
 
 # Quanto esperar antes de tentar de novo. Sobe até o teto para não martelar um
 # banco que está fora, e volta ao mínimo assim que conecta.
@@ -93,6 +96,15 @@ def _ao_receber(_conexao, _pid, _canal, carga: str) -> None:
         logger.warning("Notificação malformada de %s: %s", CANAL, e)
 
 
+def _ao_receber_push(_conexao, _pid, _canal, carga: str) -> None:
+    """Encaminha ao `push_envio`. Os 2 workers chegam aqui; a reserva decide."""
+    try:
+        evento = json.loads(carga)
+        push_envio.disparar(push_envio.processar(evento["tabela"], evento["id"]))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Notificação malformada de %s: %s", CANAL_PUSH, e)
+
+
 async def escutar(parar: asyncio.Event) -> None:
     """Mantém uma conexão dedicada ouvindo o canal, reconectando quando cai.
 
@@ -106,6 +118,7 @@ async def escutar(parar: asyncio.Event) -> None:
         try:
             conexao = await asyncpg.connect(settings.DATABASE_URL)
             await conexao.add_listener(CANAL, _ao_receber)
+            await conexao.add_listener(CANAL_PUSH, _ao_receber_push)
             logger.info("Escuta de mudanças ligada em %s.", CANAL)
             espera = _ESPERA_MINIMA
 

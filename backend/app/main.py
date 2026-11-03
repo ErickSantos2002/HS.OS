@@ -11,10 +11,12 @@ from fastapi.responses import JSONResponse
 from app.auth.router import router as auth_router
 from app.config import settings
 from app.erros import instalar_tratamento_de_erros
+from app import push_envio
 from app.escuta_banco import escutar
 from app.escritorio.log_sem_query import instalar as instalar_log_sem_query
 from app.escritorio.presenca import vigiar as vigiar_escritorio
 from app.coletor_metricas import rodar as rodar_metricas
+from app.coletor_respostas import rodar as rodar_coletor_respostas
 from app.coletor_uso import rodar as rodar_coletor
 from app.vigia_sessoes import rodar as rodar_vigia
 from app.database import close_db, init_db
@@ -63,6 +65,9 @@ from app.routers.ws import router as ws_router, sinalizar_desligamento
 async def lifespan(app: FastAPI):
     await init_db()
 
+    # Sem VAPID o push fica desligado — e o log diz isso uma vez, aqui.
+    push_envio.ligado()
+
     # A escuta do banco é o que substitui o `postgres_changes`. Roda numa
     # conexão dedicada, fora do pool, e reconecta sozinha — ver
     # `app/escuta_banco.py`.
@@ -97,8 +102,17 @@ async def lifespan(app: FastAPI):
     parar_escritorio = asyncio.Event()
     escritorio = asyncio.create_task(vigiar_escritorio(parar_escritorio))
 
+    # ⚠️ **Resposta de agente só era gravada com a tela aberta.** Este laço
+    # busca no gateway a resposta de quem perguntou e fechou o app, pelo mesmo
+    # miolo do `/reply` — e a gravação dispara o push. Ver
+    # `app/coletor_respostas.py`. Desligar: `COLETOR_RESPOSTAS_SEGUNDOS=0`.
+    parar_respostas = asyncio.Event()
+    respostas = asyncio.create_task(rodar_coletor_respostas(parar_respostas))
+
     yield
 
+    parar_respostas.set()
+    respostas.cancel()
     parar_escuta.set()
     parar_coletor.set()
     parar_vigia.set()

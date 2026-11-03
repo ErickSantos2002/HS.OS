@@ -1480,6 +1480,13 @@ async def comando(
             "Isto não é um comando. Comando começa com barra, ex.: /stop.",
         )
 
+    # ⚠️ **Parar vale também para o coletor de respostas.** Sem isto, quem
+    # apertava Parar e fechava o app recebia depois a resposta que mandou
+    # parar — gravada pelo coletor, com push. Antes do gateway: a vontade de
+    # parar vale mesmo se o gateway recusar o comando.
+    if texto.split()[0].lower() == "/stop":
+        await _encerrar_coleta(usuario.id, agent_id)
+
     c = await cfg.carregar()
     if not c.configurado:
         raise HTTPException(
@@ -1503,6 +1510,19 @@ async def comando(
 
     logger.info("Comando %s em %s por %s", texto.split()[0], agent_id, usuario.id)
     return {"ok": True}
+
+
+async def _encerrar_coleta(user_id: str, agent_id: str) -> None:
+    """Tira do coletor os runs abertos desta pessoa com este agente. Nunca levanta."""
+    try:
+        async with sessao(role="authenticated", user_id=user_id) as conn:
+            await conn.execute(
+                """UPDATE public.agent_runs SET coleta_encerrada_em = now()
+                    WHERE user_id = $1::uuid AND agent_id = $2
+                      AND message_id IS NULL AND coleta_encerrada_em IS NULL""",
+                user_id, agent_id)
+    except Exception as e:  # noqa: BLE001 — sem a 024 o /stop continua parando
+        logger.warning("Não encerrei a coleta de %s/%s: %s", user_id, agent_id, e)
 
 
 _JANELA_AUDIO = timedelta(minutes=30)
@@ -1541,6 +1561,10 @@ async def resposta(
 
     Devolve `executando` quando o tempo de espera acaba antes do agente — é o
     sinal para a tela chamar de novo. Chamar repetidamente é o uso normal.
+
+    A rota é casca: valida o run e marca que a tela está perguntando. O miolo
+    é `colher_resposta`, que o coletor de respostas (`app/coletor_respostas.py`)
+    também usa quando a tela fechou — uma leitura só do `chat.history`.
     """
     # A tela continua perguntando pelo run que ela conhece; se houve compactação
     # no meio, seguimos a seta até o run que está de fato respondendo.
@@ -1566,18 +1590,65 @@ async def resposta(
     if not c.configurado:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")
 
+    await _marcar_tela(run_id, usuario.id)
+    return await colher_resposta(c, agent_id, run_id, chave, seq_antes, usuario.id)
+
+
+_avisou_sem_coluna_da_tela = False
+
+
+async def _marcar_tela(run_id: str, user_id: str) -> None:
+    """Carimba que a tela está esperando este run — o coletor deixa ele em paz.
+
+    ⚠️ **Nunca derruba o `/reply`.** A coluna vem da `024`; se o código subir
+    antes dela (já aconteceu com a `016` em 18/09 e o chat ficou duas semanas
+    quebrado), o pior que acontece é o coletor disputar o run com a tela — e a
+    gravação já é protegida contra bolha dobrada. Loga uma vez e segue.
+    """
+    global _avisou_sem_coluna_da_tela
+    try:
+        async with sessao(role="authenticated", user_id=user_id) as conn:
+            await conn.execute(
+                "UPDATE public.agent_runs SET tela_perguntou_em = now() WHERE run_id = $1",
+                run_id)
+    except asyncpg.UndefinedColumnError:
+        if not _avisou_sem_coluna_da_tela:
+            _avisou_sem_coluna_da_tela = True
+            logger.warning("agent_runs.tela_perguntou_em não existe — aplicar a 024.")
+    except Exception as e:  # noqa: BLE001 — carimbo é acessório
+        logger.warning("Não marquei a tela do run %s: %s", run_id, e)
+
+
+async def colher_resposta(c, agent_id: str, run_id: str, chave: str, seq_antes: int,
+                          user_id: str, *, espera_ms: int = _ESPERA_MS,
+                          levantar_erro_gateway: bool = False) -> RespostaOut:
+    """O miolo do `/reply`: espera o run, lê o histórico e grava a resposta.
+
+    ⚠️ **Uma cópia só.** A tela (pelo `/reply`) e o coletor de respostas chamam
+    isto. Os defeitos do `chat.history` (corte de 8.000, fatia velha, piso que
+    vira teto, sessão limpa) moram aqui e nas funções que isto chama; duas
+    cópias divergiriam. Grava, dispara o áudio e, se o contexto estourou,
+    compacta e reenvia — o coletor faz tudo o que a tela faria.
+
+    `run_id` já é o run seguido (`_seguir_run`); `c` é a config do gateway já
+    conferida como configurada. `levantar_erro_gateway` é do coletor: para ele
+    falha de rede é "tente de novo", e `erro` é "desista" — a tela recebe as
+    duas como `erro`, como sempre.
+    """
     # A trava serializa as chamadas do mesmo run; a conferência de dentro pega
     # quem entrou na fila antes de a primeira gravar.
     async with _TRAVA_DO_RUN.setdefault(run_id, asyncio.Lock()):
-        de_novo = await _seguir_run(run_id, usuario.id)
+        de_novo = await _seguir_run(run_id, user_id)
         if de_novo is not None and de_novo["message_id"] and (
-                pronta := await _mensagem_gravada(de_novo["message_id"], usuario.id)):
+                pronta := await _mensagem_gravada(de_novo["message_id"], user_id)):
             return RespostaOut(status="pronta", message=pronta)
 
         espera = obter_cliente_de_espera(c.url, c.token)
         try:
-            r = await espera.chamar("agent.wait", {"runId": run_id, "timeoutMs": _ESPERA_MS})
+            r = await espera.chamar("agent.wait", {"runId": run_id, "timeoutMs": espera_ms})
         except ErroGateway as e:
+            if levantar_erro_gateway:
+                raise
             return RespostaOut(status="erro", detalhe=str(e))
 
         if r.get("status") == "timeout":
@@ -1593,6 +1664,8 @@ async def resposta(
                 {"sessionKey": chave, "limit": 40,
                  "maxChars": _MAX_CHARS_HISTORICO})
         except ErroGateway as e:
+            if levantar_erro_gateway:
+                raise
             return RespostaOut(status="erro", detalhe=str(e))
 
         mensagens = hist.get("messages") or []
@@ -1610,11 +1683,17 @@ async def resposta(
         # ⚠️ **A falha de compactação não é resposta: é manutenção nossa.**
         # Compacta, reenvia a mesma pergunta e aponta este run para o novo. A
         # tela segue perguntando pelo run antigo e recebe a resposta de verdade.
-        if (texto and _FALHA_DE_COMPACTACAO.search(texto)
-                and await _reservar_compactacao(run_id, usuario.id)):
-            novo = await _compactar_e_reenviar(cliente, agent_id, chave, hist, usuario.id)
+        if texto and _FALHA_DE_COMPACTACAO.search(texto):
+            # ⚠️ **Quem perde a reserva NÃO grava o texto.** Antes, perder a
+            # corrida (tela e coletor no mesmo run, em workers diferentes)
+            # fazia cair no caminho normal e gravar "auto-compaction could not
+            # recover" como resposta — com push e áudio. Quem ganhou está
+            # compactando e vai apontar este run para o novo.
+            if not await _reservar_compactacao(run_id, user_id):
+                return RespostaOut(status="executando")
+            novo = await _compactar_e_reenviar(cliente, agent_id, chave, hist, user_id)
             if novo:
-                await _apontar_run(run_id, novo, usuario.id)
+                await _apontar_run(run_id, novo, user_id)
                 logger.info("Compactei %s e reenviei a pergunta (run %s → %s)",
                             chave, run_id, novo)
                 return RespostaOut(status="executando")
@@ -1639,9 +1718,9 @@ async def resposta(
         # rollback desfaz o INSERT — em vez de deixar na conversa uma segunda
         # mensagem idêntica, que foi o que o CEO recebeu em 20/08.
         try:
-            async with sessao(role="authenticated", user_id=usuario.id) as conn:
+            async with sessao(role="authenticated", user_id=user_id) as conn:
                 async with conn.transaction():
-                    linha, nova = await _gravar_resposta(conn, agent_id, usuario.id, texto,
+                    linha, nova = await _gravar_resposta(conn, agent_id, user_id, texto,
                                                        so_sem_run=True)
                     ganhou = await conn.fetchval(
                         """UPDATE public.agent_runs
@@ -1652,8 +1731,8 @@ async def resposta(
                     if not ganhou:
                         raise _JaGravado
         except _JaGravado:
-            outra = await _seguir_run(run_id, usuario.id)
-            pronta = await _mensagem_gravada(outra["message_id"], usuario.id) if outra else None
+            outra = await _seguir_run(run_id, user_id)
+            pronta = await _mensagem_gravada(outra["message_id"], user_id) if outra else None
             if pronta:
                 logger.info("Outra chamada já gravou o run %s; devolvendo a dela.", run_id)
                 return RespostaOut(status="pronta", message=pronta)
@@ -1663,10 +1742,10 @@ async def resposta(
         # Resumo em áudio, depois do commit e em segundo plano — o texto não
         # espera. Só se a resposta for nova: se o `/recuperar` gravou antes, ele
         # já disparou o áudio, e disparar de novo daria dois.
-        _audio_se_nova(linha, nova, agent_id, usuario.id, texto)
+        _audio_se_nova(linha, nova, agent_id, user_id, texto)
         # Vai para o próprio usuário: é ele quem tem a conversa aberta, e assim uma
         # segunda aba do mesmo dono também recebe a resposta.
-        hub.publicar(topico_usuario(usuario.id), "resposta-agente",
+        hub.publicar(topico_usuario(user_id), "resposta-agente",
                      {"agent_id": agent_id, "message": saida.model_dump()})
         logger.info("Resposta de %s gravada (run %s, %d chars)", agent_id, run_id, len(texto))
         return RespostaOut(status="pronta", message=saida)

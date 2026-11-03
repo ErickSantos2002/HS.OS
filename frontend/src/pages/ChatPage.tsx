@@ -80,6 +80,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { usePendingAgentTask } from "@/hooks/use-pending-agent-task";
 import { playNotificationSound } from "@/lib/notification-sound";
+import { IconeSilenciado } from "@/components/chat/SilenciarCanal";
 import {
   Dialog,
   DialogContent,
@@ -137,6 +138,7 @@ import { copyToClipboard, hasActiveTextSelection } from "@/lib/clipboard";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 import { NoEscritorioAgora } from "@/components/escritorio/NoEscritorioAgora";
 import { useEscritorioPresenca } from "@/hooks/use-escritorio-presenca";
+import { InstalarApp } from "@/components/InstalarApp";
 
 /** Strip markdown formatting for sidebar preview */
 function stripMarkdown(text: string): string {
@@ -2979,7 +2981,7 @@ export default function ChatPage() {
                 para fora da tela — o mesmo ajuste que a lateral do desktop tem. */}
             <ScrollArea className="flex-1 [&>[data-radix-scroll-area-viewport]>div]:!block">
               <div className="px-3 py-2 pb-20 w-full min-w-0">
-                {/* integração: <InstalarApp variante="cartao" /> da Frente A entra aqui */}
+                <InstalarApp variante="cartao" />
                 {abaAtual === "channels" ? (
                   <>
                     {publicChannels.length > 0 && (
@@ -3394,6 +3396,7 @@ function ChannelSidebarItem({ channel, active, onClick, unreadCount = 0 }: { cha
                 ? "font-bold text-foreground"
                 : "font-medium text-muted-foreground"
           }`}>{channel.name}</span>
+          <IconeSilenciado channelId={channel.id} />
           {unreadCount > 0 && (
             <span className="flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-bold shrink-0 shadow-sm">
               {unreadCount > 99 ? "99+" : unreadCount}

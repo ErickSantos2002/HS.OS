@@ -5,6 +5,10 @@ import { useAuthContext } from "@/contexts/auth-context";
 import { AGENT_UNREAD_EVENT, clearUnreadAgent, getUnreadAgentCount, getUnreadAgentIds } from "@/lib/chat-sender";
 import { getAgentIdAliases } from "@/lib/agent-id";
 import { NotificationsPermissionBanner } from "@/components/NotificationsPermissionBanner";
+import { isEnabled as isBrowserNotifEnabled } from "@/lib/browser-notifications";
+import { useCanaisSilenciados } from "@/hooks/use-canais-silenciados";
+import { definirMeuNome } from "@/lib/canais-silenciados";
+import { corpoDaRespostaRapida } from "@/lib/resposta-rapida";
 
 interface NotificationsContextValue {
   notifications: Notification[];
@@ -46,8 +50,14 @@ const NotificationsContext = createContext<NotificationsContextValue>(fallbackNo
 const BASE_DOC_TITLE = "HS.OS";
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuthContext();
+  const { user, profile } = useAuthContext();
   const notifs = useNotifications(user?.id);
+  // Canais silenciados: o `use-notifications` consulta o estado de módulo que
+  // este hook enche. Montado aqui porque o provider está sempre na árvore.
+  useCanaisSilenciados(!!user?.id);
+  useEffect(() => {
+    definirMeuNome(profile?.full_name);
+  }, [profile?.full_name]);
 
   const [agentUnreadCount, setAgentUnreadCount] = useState(() => getUnreadAgentCount());
   const [agentUnreadIds, setAgentUnreadIds] = useState<string[]>(() => getUnreadAgentIds());
@@ -65,6 +75,9 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   useEffect(() => {
     if (!user?.id) return;
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    // Desligado nas Configurações = este aparelho saiu do push; recarregar a
+    // página não pode inscrevê-lo de novo.
+    if (!isBrowserNotifEnabled()) return;
     import("@/lib/push-notifications").then(({ subscribeToPushNotifications }) => {
       subscribeToPushNotifications(user.id).catch((e) =>
         console.warn("[NotificationsProvider] push auto-subscribe failed:", e)
@@ -79,7 +92,13 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
 
     const onSwMessage = async (event: MessageEvent) => {
       const data = event.data as
-        | { type?: string; notificationId?: string | null; channelId?: string | null; text?: string }
+        | {
+            type?: string;
+            notificationId?: string | null;
+            channelId?: string | null;
+            threadId?: string | null;
+            text?: string;
+          }
         | undefined;
       if (!data?.type) return;
 
@@ -103,12 +122,10 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
             (profile?.full_name?.trim()) || user.email?.split("@")[0] || "Usuário";
           await api(`/channels/${data.channelId}/messages`, {
             method: "POST",
-            body: {
-              author_type: "human",
-              author_name: displayName,
-              content: data.text,
-              author_avatar: profile?.avatar_url || null,
-            },
+            body: corpoDaRespostaRapida(
+              { channelId: data.channelId, threadId: data.threadId, text: data.text },
+              { nome: displayName, avatar: profile?.avatar_url || null },
+            ),
           });
           await notifs.markAllAsReadForChannel(data.channelId);
         } catch (e) {
@@ -126,12 +143,23 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     if (!user?.id) return;
     const params = new URLSearchParams(window.location.search);
     const markReadId = params.get("mark_read");
-    if (!markReadId) return;
-    notifs.markAsRead(markReadId).catch((e) =>
-      console.warn("[NotificationsProvider] URL mark_read failed:", e)
-    );
+    // `?marcar_lido=<canal>`: o "Marcar como lida" do push sem aba aberta (o SW
+    // não tem o token, então abre o app para ele marcar). Ver `sw.ts`.
+    const marcarCanal = params.get("marcar_lido");
+    if (!markReadId && !marcarCanal) return;
+    if (markReadId) {
+      notifs.markAsRead(markReadId).catch((e) =>
+        console.warn("[NotificationsProvider] URL mark_read failed:", e)
+      );
+    }
+    if (marcarCanal) {
+      notifs.markAllAsReadForChannel(marcarCanal).catch((e) =>
+        console.warn("[NotificationsProvider] URL marcar_lido failed:", e)
+      );
+    }
     // Clean URL
     params.delete("mark_read");
+    params.delete("marcar_lido");
     const newSearch = params.toString();
     const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ""}${window.location.hash}`;
     window.history.replaceState({}, "", newUrl);

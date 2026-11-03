@@ -146,6 +146,18 @@ export function useAuth() {
   }, [initAuth]);
 
   const signOut = useCallback(async () => {
+    // ⚠️ Desinscreve o push DESTE aparelho antes de limpar o token: o `DELETE`
+    // exige login. Sem isto, aparelho compartilhado seguia recebendo as
+    // mensagens de quem saiu. Teto de 3 s para a rede ruim não prender o sair.
+    try {
+      const { unsubscribeFromPushNotifications } = await import("@/lib/push-notifications");
+      await Promise.race([
+        unsubscribeFromPushNotifications(),
+        new Promise((resolve) => setTimeout(resolve, 3000)),
+      ]);
+    } catch {
+      // sair nunca falha por causa do push
+    }
     gravarToken(null);
     setState({ ...DESLOGADO });
   }, []);

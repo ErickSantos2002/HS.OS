@@ -38,12 +38,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, Copy, Info, EyeOff, MoreVertical } from "lucide-react";
+import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, Copy, Info, EyeOff, MoreVertical, Bell, BellOff } from "lucide-react";
+import { useCanaisSilenciados } from "@/hooks/use-canais-silenciados";
 import { format } from "date-fns";
 import ChannelMembersPanel from "./ChannelMembersPanel";
 import ChannelFilesPanel from "./ChannelFilesPanel";
 import { useLocation } from "react-router-dom";
 import EditChannelDialog from "./EditChannelDialog";
+import { BotaoSilenciarCanal } from "./SilenciarCanal";
 import MentionPopup, { MentionOption } from "./MentionPopup";
 import {
   DropdownMenu,
@@ -1214,6 +1216,8 @@ export default function ChannelChat({
 
   useEffect(() => { setMentionIndex(0); }, [mentionQuery]);
   const isDm = channel.type === "dm";
+  const { estaSilenciado, alternar: alternarSilencio } = useCanaisSilenciados();
+  const canalSilenciado = estaSilenciado(channel.id);
   const canEdit = !isDm && (role === "administrador" || user?.id === channel.created_by);
   const displayName = isDm && dmPeerName ? dmPeerName : channel.name;
 
@@ -1819,7 +1823,13 @@ export default function ChannelChat({
               <DropdownMenuItem className="min-h-[44px] gap-3" onSelect={() => setMembersOpen(true)}>
                 <Users className="h-4 w-4" /> {isDm ? "Participantes" : "Membros"}
               </DropdownMenuItem>
-              {/* integração: o item "Silenciar/Reativar" da Frente B entra aqui */}
+              <DropdownMenuItem
+                className="min-h-[44px] gap-3"
+                onSelect={() => alternarSilencio(channel.id, !canalSilenciado)}
+              >
+                {canalSilenciado ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+                {canalSilenciado ? "Reativar notificações" : "Silenciar"}
+              </DropdownMenuItem>
               {canEdit && (
                 <DropdownMenuItem className="min-h-[44px] gap-3" onSelect={() => setEditOpen(true)}>
                   <Pencil className="h-4 w-4" /> Editar canal
@@ -1876,6 +1886,7 @@ export default function ChannelChat({
           {agentMembers.length > 0 && (
             <div className="flex items-center gap-1"><Bot className="h-3.5 w-3.5" /><span className="text-[10px]">{agentMembers.length}</span></div>
           )}
+          <BotaoSilenciarCanal channelId={channel.id} />
           <button
             className="flex items-center gap-1.5 rounded-full border border-border/50 bg-card/60 backdrop-blur-sm px-2 py-1 hover:border-primary/40 hover:text-foreground transition-colors text-xs font-medium"
             onClick={() => setFilesOpen(true)}
