@@ -37,12 +37,16 @@ export interface PreviaDoCanal {
   created_at: string;
 }
 
+/** Prefixo da chave das prévias; a chave completa leva o id de quem está logado. */
 export const CHAVE_PREVIAS = ["celular", "previas"] as const;
+/** Por usuário: trocar de conta no mesmo aparelho não pode mostrar a prévia da conta anterior. */
+export const chaveDasPrevias = (userId: string | undefined) => [...CHAVE_PREVIAS, userId ?? ""] as const;
 
 /** Mapa agente → canal de DM dele (para as não lidas), igual ao `ChatPage`. */
 export function useMapaDmDoAgente(): Record<string, string> {
+  const { user } = useAuthContext();
   const { data } = useQuery({
-    queryKey: ["celular", "dms-agentes"],
+    queryKey: ["celular", "dms-agentes", user?.id ?? ""],
     queryFn: () => api<{ channel_id: string; agent_id: string }[]>("/channels/dms/agentes"),
     staleTime: 60_000,
   });
@@ -65,13 +69,13 @@ export function useListaDoCelular() {
   const qc = useQueryClient();
 
   const previas = useQuery({
-    queryKey: CHAVE_PREVIAS,
+    queryKey: chaveDasPrevias(user?.id),
     queryFn: () => api<PreviaDoCanal[]>("/channels/previas"),
     enabled: !!user?.id,
     refetchOnWindowFocus: true,
   });
   const membros = useQuery({
-    queryKey: ["celular", "membros"],
+    queryKey: ["celular", "membros", user?.id ?? ""],
     queryFn: () => api<{ channel_id: string; agents: string[]; humans: string[] }[]>("/channels/membros"),
     enabled: !!user?.id,
     staleTime: 60_000,
