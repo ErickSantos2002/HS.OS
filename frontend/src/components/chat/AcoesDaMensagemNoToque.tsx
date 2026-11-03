@@ -44,7 +44,12 @@ export default function AcoesDaMensagemNoToque({ aberto, aoMudar, acoes, aoReagi
 
   return (
     <Drawer open={aberto} onOpenChange={mudar}>
-      <DrawerContent className="max-h-[85dvh] pb-[max(env(safe-area-inset-bottom,0px),12px)]">
+      <DrawerContent
+        className="max-h-[85dvh] pb-[max(env(safe-area-inset-bottom,0px),12px)]"
+        // Ao fechar, o Radix devolve o foco a quem tinha antes — o composer —
+        // e no celular isso abre o teclado por cima da conversa.
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         <DrawerHeader className="sr-only">
           <DrawerTitle>Ações da mensagem</DrawerTitle>
           <DrawerDescription>Reagir ou escolher uma ação para esta mensagem.</DrawerDescription>
