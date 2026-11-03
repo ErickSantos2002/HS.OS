@@ -248,7 +248,6 @@ function ThreadMessageCard({
             ? "border-[hsl(var(--agent-accent)/0.55)] bg-[hsl(var(--agent-accent)/0.06)] shadow-[0_0_28px_-12px_hsl(var(--agent-accent)/0.55)]"
             : "border-border/60 bg-card/70"
       }`}
-      data-pressionando={toqueLongo.pressionando ? "true" : undefined}
       {...(toque
         ? toqueLongo.handlers
         : { onTouchStart: handleTouchStart, onTouchEnd: handleTouchEnd, onTouchCancel: handleTouchEnd })}

@@ -468,7 +468,6 @@ export const MessageBubble = memo(function MessageBubble({
     <div
       ref={wrapperRef}
       className={`flex ${toque ? "gap-2" : "gap-3"} group relative px-3 ${continuacao ? "py-0.5" : "py-1.5"} -mx-3 transition-colors ${isOwn ? "flex-row-reverse" : ""} ${threadHasUnread ? "bg-primary/[0.06] border-l-4 border-primary rounded-r-md" : isMarkedUnread ? "bg-primary/[0.04] border-l-2 border-primary/50" : ""}`}
-      data-pressionando={toqueLongo.pressionando ? "true" : undefined}
       {...(toque
         ? { ...toqueLongo.handlers, onClick: (e: React.MouseEvent) => { if (continuacao && doProprioElemento(e)) setMostrarHora((v) => !v); } }
         : { onTouchStart: handleTouchStart, onTouchEnd: handleTouchEnd, onTouchCancel: handleTouchEnd })}

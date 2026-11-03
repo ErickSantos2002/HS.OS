@@ -57,4 +57,22 @@ describe("useToqueLongo", () => {
     act(() => { vi.advanceTimersByTime(1000); });
     expect(aoDisparar).not.toHaveBeenCalled();
   });
+
+  it("encostar o dedo marca o elemento no DOM sem re-renderizar quem usa o hook", () => {
+    let renders = 0;
+    function Lista() {
+      renders += 1;
+      const { handlers } = useToqueLongo(() => {}, true);
+      return <div data-testid="bolha" {...handlers}>bolha</div>;
+    }
+    render(<Lista />);
+    const bolha = screen.getByTestId("bolha");
+    const antes = renders;
+    fireEvent.touchStart(bolha, { touches: [{ clientX: 0, clientY: 0 }] });
+    expect(bolha.getAttribute("data-pressionando")).toBe("true");
+    fireEvent.touchEnd(bolha, { changedTouches: [{ clientX: 0, clientY: 0 }] });
+    expect(bolha.hasAttribute("data-pressionando")).toBe(false);
+    expect(renders).toBe(antes);
+  });
 });
+

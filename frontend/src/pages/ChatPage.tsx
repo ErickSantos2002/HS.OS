@@ -493,9 +493,9 @@ export const AgentMessageList = React.memo(function AgentMessageList({
   activitiesByMessageId,
   trailingActivities,
 }: AgentMessageListProps) {
-  // Celular: uma folha só para a lista inteira; o toque guarda de quem é.
+  // Celular: uma folha só para a lista inteira; o toque guarda de quem é num
+  // ref — estado aqui re-renderizava a lista toda a cada dedo encostado.
   const [folha, setFolha] = useState<{ aberta: boolean; acoes: AcaoDaMensagem[] }>({ aberta: false, acoes: [] });
-  const [alvoDoToque, setAlvoDoToque] = useState<string | null>(null);
   const acoesDoAlvoRef = useRef<AcaoDaMensagem[]>([]);
   const toqueLongo = useToqueLongo(() => {
     if (acoesDoAlvoRef.current.length > 0) setFolha({ aberta: true, acoes: acoesDoAlvoRef.current });
@@ -528,13 +528,11 @@ export const AgentMessageList = React.memo(function AgentMessageList({
             {showDateDivider && <DateDivider date={msg.timestamp} />}
             <div
               data-message-id={msg.id}
-              data-pressionando={toqueLongo.pressionando && alvoDoToque === msg.id ? "true" : undefined}
               className={`flex ${isMobile ? "gap-2" : "gap-3"} group relative px-3 py-1.5 -mx-3 ${isOwn ? "flex-row-reverse" : ""}`}
               {...toqueLongo.handlers}
               {...(isMobile ? {
                 onTouchStart: (e: React.TouchEvent) => {
                   acoesDoAlvoRef.current = acoes;
-                  setAlvoDoToque(msg.id);
                   toqueLongo.handlers.onTouchStart?.(e);
                 },
                 // Botão direito numa janela estreita também precisa saber de quem é.

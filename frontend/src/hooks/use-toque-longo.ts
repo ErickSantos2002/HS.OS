@@ -2,11 +2,16 @@
  * Liga o `criarDetectorDeToqueLongo` aos eventos de toque de um elemento.
  *
  * Com `ativo = false` (desktop) devolve handlers vazios: o desktop segue com a
- * seta do `MenuDaMensagem` e nada aqui roda. `pressionando` existe para a
- * bolha desligar a seleção nativa de texto durante o gesto — senão o iOS abre
- * a lupa e o menu de copiar por cima da nossa folha.
+ * seta do `MenuDaMensagem` e nada aqui roda.
+ *
+ * ⚠️ **Nada aqui é estado React.** Durante o gesto o elemento ganha
+ * `data-pressionando="true"` direto no DOM (é o que o CSS usa para desligar a
+ * seleção nativa — senão o iOS abre a lupa e o menu de copiar por cima da
+ * folha). Com estado, cada `touchstart` re-renderizava quem usa o hook: no
+ * `AgentMessageList`, a lista inteira, a cada vez que o dedo encostava numa
+ * bolha para rolar (revisão de 03/11/2026).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type React from "react";
 
 import { criarDetectorDeToqueLongo, menuVeioDoMouse } from "@/lib/toque-longo";
@@ -31,11 +36,14 @@ export function doProprioElemento(e: { currentTarget: EventTarget | null; target
   return !!alvo && !!dono && typeof dono.contains === "function" && dono.contains(alvo);
 }
 
-export function useToqueLongo(aoDisparar: () => void, ativo: boolean) {
-  const [pressionando, setPressionando] = useState(false);
+const ATRIBUTO = "data-pressionando";
+
+export function useToqueLongo(aoDisparar: () => void, ativo: boolean): { handlers: HandlersDoToqueLongo } {
   const aoDispararRef = useRef(aoDisparar);
-  const ultimoToqueRef = useRef<number | null>(null);
   aoDispararRef.current = aoDisparar;
+  const ultimoToqueRef = useRef<number | null>(null);
+  const elementoRef = useRef<HTMLElement | null>(null);
+  const aoRolarRef = useRef<() => void>(() => {});
 
   const detector = useMemo(
     () =>
@@ -52,30 +60,30 @@ export function useToqueLongo(aoDisparar: () => void, ativo: boolean) {
     [],
   );
 
-  // Rolagem cancela. Escuta em captura porque quem rola é a lista, não o window.
-  useEffect(() => {
-    if (!pressionando) return;
-    const aoRolar = () => detector.rolou();
-    document.addEventListener("scroll", aoRolar, true);
-    return () => document.removeEventListener("scroll", aoRolar, true);
-  }, [pressionando, detector]);
-
-  useEffect(() => () => detector.fim(), [detector]);
-
-  const encerrar = useCallback(() => {
-    detector.fim();
-    setPressionando(false);
-  }, [detector]);
-
   const handlers = useMemo<HandlersDoToqueLongo>(() => {
     if (!ativo) return {};
+
+    // Rolagem cancela. Escuta em captura porque quem rola é a lista, não o window.
+    const aoRolar = () => detector.rolou();
+    aoRolarRef.current = aoRolar;
+
+    const encerrar = () => {
+      detector.fim();
+      document.removeEventListener("scroll", aoRolar, true);
+      elementoRef.current?.removeAttribute(ATRIBUTO);
+      elementoRef.current = null;
+    };
+
     return {
       onTouchStart: (e) => {
         if (!doProprioElemento(e) || e.touches.length !== 1) return;
         ultimoToqueRef.current = Date.now();
         const t = e.touches[0];
         detector.inicio(t.clientX, t.clientY);
-        setPressionando(true);
+        elementoRef.current?.removeAttribute(ATRIBUTO);
+        elementoRef.current = e.currentTarget as HTMLElement;
+        elementoRef.current.setAttribute(ATRIBUTO, "true");
+        document.addEventListener("scroll", aoRolar, true);
       },
       onTouchMove: (e) => {
         if (!doProprioElemento(e)) return;
@@ -89,20 +97,28 @@ export function useToqueLongo(aoDisparar: () => void, ativo: boolean) {
         encerrar();
       },
       onTouchCancel: () => encerrar(),
-      // Menu nativo do Android ao segurar (copiar link, salvar imagem).
       // Do dedo (Android), só bloqueia o menu nativo — o detector já abriu.
       // Do mouse (janela estreita), abre a folha: a seta de hover não existe
       // no modo toque e o botão direito é o caminho para as ações.
       onContextMenu: (e) => {
         if (!doProprioElemento(e)) return;
         e.preventDefault();
-        const pointerType = (e.nativeEvent as PointerEvent | MouseEvent & { pointerType?: string }).pointerType;
+        const pointerType = (e.nativeEvent as MouseEvent & { pointerType?: string }).pointerType;
         if (menuVeioDoMouse({ pointerType, agora: Date.now(), ultimoToque: ultimoToqueRef.current })) {
           aoDispararRef.current();
         }
       },
     };
-  }, [ativo, detector, encerrar]);
+  }, [ativo, detector]);
 
-  return { handlers, pressionando: ativo && pressionando };
+  useEffect(
+    () => () => {
+      detector.fim();
+      document.removeEventListener("scroll", aoRolarRef.current, true);
+      elementoRef.current?.removeAttribute(ATRIBUTO);
+    },
+    [detector],
+  );
+
+  return { handlers };
 }
