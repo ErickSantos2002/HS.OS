@@ -6,6 +6,8 @@ import { AGENT_UNREAD_EVENT, clearUnreadAgent, getUnreadAgentCount, getUnreadAge
 import { getAgentIdAliases } from "@/lib/agent-id";
 import { NotificationsPermissionBanner } from "@/components/NotificationsPermissionBanner";
 import { isEnabled as isBrowserNotifEnabled } from "@/lib/browser-notifications";
+import { useCanaisSilenciados } from "@/hooks/use-canais-silenciados";
+import { definirMeuNome } from "@/lib/canais-silenciados";
 
 interface NotificationsContextValue {
   notifications: Notification[];
@@ -47,8 +49,14 @@ const NotificationsContext = createContext<NotificationsContextValue>(fallbackNo
 const BASE_DOC_TITLE = "HS.OS";
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuthContext();
+  const { user, profile } = useAuthContext();
   const notifs = useNotifications(user?.id);
+  // Canais silenciados: o `use-notifications` consulta o estado de módulo que
+  // este hook enche. Montado aqui porque o provider está sempre na árvore.
+  useCanaisSilenciados(!!user?.id);
+  useEffect(() => {
+    definirMeuNome(profile?.full_name);
+  }, [profile?.full_name]);
 
   const [agentUnreadCount, setAgentUnreadCount] = useState(() => getUnreadAgentCount());
   const [agentUnreadIds, setAgentUnreadIds] = useState<string[]>(() => getUnreadAgentIds());

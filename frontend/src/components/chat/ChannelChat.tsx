@@ -39,6 +39,7 @@ import ChannelMembersPanel from "./ChannelMembersPanel";
 import ChannelFilesPanel from "./ChannelFilesPanel";
 import { useLocation } from "react-router-dom";
 import EditChannelDialog from "./EditChannelDialog";
+import { BotaoSilenciarCanal } from "./SilenciarCanal";
 import MentionPopup, { MentionOption } from "./MentionPopup";
 import {
   DropdownMenu,
@@ -1786,6 +1787,7 @@ export default function ChannelChat({
           {agentMembers.length > 0 && (
             <div className="flex items-center gap-1"><Bot className="h-3.5 w-3.5" /><span className="text-[10px]">{agentMembers.length}</span></div>
           )}
+          <BotaoSilenciarCanal channelId={channel.id} />
           <button
             className="flex items-center gap-1.5 rounded-full border border-border/50 bg-card/60 backdrop-blur-sm px-2 py-1 hover:border-primary/40 hover:text-foreground transition-colors text-xs font-medium"
             onClick={() => setFilesOpen(true)}

@@ -72,6 +72,7 @@ import {
 } from "lucide-react";
 import { usePendingAgentTask } from "@/hooks/use-pending-agent-task";
 import { playNotificationSound } from "@/lib/notification-sound";
+import { IconeSilenciado } from "@/components/chat/SilenciarCanal";
 import {
   Dialog,
   DialogContent,
@@ -3271,6 +3272,7 @@ function ChannelSidebarItem({ channel, active, onClick, unreadCount = 0 }: { cha
                 ? "font-bold text-foreground"
                 : "font-medium text-muted-foreground"
           }`}>{channel.name}</span>
+          <IconeSilenciado channelId={channel.id} />
           {unreadCount > 0 && (
             <span className="flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-bold shrink-0 shadow-sm">
               {unreadCount > 99 ? "99+" : unreadCount}
