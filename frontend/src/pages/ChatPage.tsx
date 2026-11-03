@@ -69,7 +69,15 @@ import {
   Mic, Paperclip, Image as ImageIcon,
   X, ZoomIn, Info, Volume2, Square,
   RefreshCw, Hash, Lock, MessageCircle, Plus, RotateCcw, History, Search,
+  MoreVertical, Gauge,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { usePendingAgentTask } from "@/hooks/use-pending-agent-task";
 import { playNotificationSound } from "@/lib/notification-sound";
 import {
@@ -118,7 +126,13 @@ import { shouldShowDateDivider } from "@/lib/chat-date-groups";
 import { resetComposerTextarea, resizeComposerTextarea } from "@/lib/chat-composer";
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
-import MenuDaMensagem from "@/components/chat/MenuDaMensagem";
+import MenuDaMensagem, { type AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
+import AcoesDaMensagemNoToque from "@/components/chat/AcoesDaMensagemNoToque";
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { useToqueLongo } from "@/hooks/use-toque-longo";
+import { semMarkdown } from "@/lib/previa-da-mensagem";
+import { canalNaoResolve } from "@/lib/tela-cheia";
+import { useInformarConversaAberta } from "@/hooks/use-conversa-aberta";
 import { copyToClipboard, hasActiveTextSelection } from "@/lib/clipboard";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 import { NoEscritorioAgora } from "@/components/escritorio/NoEscritorioAgora";
@@ -290,12 +304,12 @@ export function MediaBubble({ attachment, onImageClick, onErroImagem, urlAgora }
       <div className="relative group rounded-md overflow-hidden max-w-[240px] mt-1">
         <img src={src} onError={onErroImagem} alt={attachment.name ?? "image"} className="rounded-md max-h-48 object-cover cursor-pointer" onClick={async () => onImageClick(await srcAgora())} />
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center gap-2 pointer-events-none">
-          <button onClick={async () => onImageClick(await srcAgora())} className="pointer-events-auto h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={async () => onImageClick(await srcAgora())} className="pointer-events-auto h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity toque-visivel">
             <ZoomIn className="h-4 w-4" />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); srcAgora().then((u) => handleDownload(u, attachment.name || "image.png")); }}
-            className="pointer-events-auto h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+            className="pointer-events-auto h-8 w-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity toque-visivel"
             title="Download"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
@@ -362,7 +376,7 @@ function StagedPreview({ items, onRemove }: { items: MediaAttachment[]; onRemove
               <span className="text-[8px] text-muted-foreground truncate max-w-[56px]">{att.name ?? "file"}</span>
             </div>
           )}
-          <button onClick={() => onRemove(i)} className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={() => onRemove(i)} className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity toque-visivel">
             <X className="h-3 w-3" />
           </button>
         </div>
@@ -425,6 +439,23 @@ const StreamingIndicator = React.memo(function StreamingIndicator({
 });
 
 
+/** Ações da mensagem na conversa com agente. ⚠️ Fonte única: a seta do
+ *  desktop (`MenuDaMensagem`) e a folha do toque longo no celular recebem
+ *  este mesmo array (spec 2026-11-03, Frente C3). */
+function acoesDaMensagemDoAgente(msg: ChatMessage, effectiveAgentId: string): AcaoDaMensagem[] {
+  if (msg.id.startsWith("optimistic-") || msg.isError) return [];
+  return [
+    ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => {
+      void copyToClipboard(msg.content).then((ok) =>
+        (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar")));
+    } }] : []),
+    ...(msg.role === "agent" && effectiveAgentId ? [{ rotulo: "Marcar como não lida", icone: BellDot, aoEscolher: () => {
+      markAgentUnread(effectiveAgentId);
+      toast.success("Marcada como não lida");
+    } }] : []),
+  ];
+}
+
 interface AgentMessageListProps {
   messages: ChatMessage[];
   isMobile: boolean;
@@ -462,6 +493,13 @@ export const AgentMessageList = React.memo(function AgentMessageList({
   activitiesByMessageId,
   trailingActivities,
 }: AgentMessageListProps) {
+  // Celular: uma folha só para a lista inteira; o toque guarda de quem é num
+  // ref — estado aqui re-renderizava a lista toda a cada dedo encostado.
+  const [folha, setFolha] = useState<{ aberta: boolean; acoes: AcaoDaMensagem[] }>({ aberta: false, acoes: [] });
+  const acoesDoAlvoRef = useRef<AcaoDaMensagem[]>([]);
+  const toqueLongo = useToqueLongo(() => {
+    if (acoesDoAlvoRef.current.length > 0) setFolha({ aberta: true, acoes: acoesDoAlvoRef.current });
+  }, isMobile);
   const lastAgentIndex = (() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "agent") return i;
@@ -483,15 +521,29 @@ export const AgentMessageList = React.memo(function AgentMessageList({
           ? "rounded-2xl border border-primary/30 bg-primary/10 px-3.5 py-2 text-foreground backdrop-blur-sm shadow-[0_0_0_1px_hsl(var(--primary)/0.08)]"
           : "rounded-2xl border border-primary/30 bg-card/60 px-3.5 py-2 text-foreground/90 backdrop-blur-sm shadow-[0_0_24px_-12px_hsl(var(--primary)/0.45),inset_0_0_0_1px_hsl(var(--primary)/0.08)]";
 
+        const acoes = acoesDaMensagemDoAgente(msg, effectiveAgentId);
+
         return (
           <Fragment key={msg.id}>
             {showDateDivider && <DateDivider date={msg.timestamp} />}
             <div
               data-message-id={msg.id}
-              className={`flex gap-3 group relative px-3 py-1.5 -mx-3 ${isOwn ? "flex-row-reverse" : ""}`}
+              className={`flex ${isMobile ? "gap-2" : "gap-3"} group relative px-3 py-1.5 -mx-3 ${isOwn ? "flex-row-reverse" : ""}`}
+              {...toqueLongo.handlers}
+              {...(isMobile ? {
+                onTouchStart: (e: React.TouchEvent) => {
+                  acoesDoAlvoRef.current = acoes;
+                  toqueLongo.handlers.onTouchStart?.(e);
+                },
+                // Botão direito numa janela estreita também precisa saber de quem é.
+                onContextMenu: (e: React.MouseEvent) => {
+                  acoesDoAlvoRef.current = acoes;
+                  toqueLongo.handlers.onContextMenu?.(e);
+                },
+              } : {})}
             >
               {/* Avatar */}
-              <div className={`h-9 w-9 shrink-0 mt-0.5 overflow-hidden ring-2 ring-border/30 ${isAgent ? "rounded-md" : "rounded-full"}`}>
+              <div className={`${isMobile ? "h-8 w-8" : "h-9 w-9"} shrink-0 mt-0.5 overflow-hidden ring-2 ring-border/30 ${isAgent ? "rounded-md" : "rounded-full"}`}>
                 {isAgent ? (
                   <AgentChatAvatar sizeClass="h-9 w-9" ringClass="" agentId={effectiveAgentId} />
                 ) : userAvatarUrl ? (
@@ -530,7 +582,7 @@ export const AgentMessageList = React.memo(function AgentMessageList({
 
                 <div className={`relative w-full flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
                   <div
-                    className={`relative mt-1 inline-block max-w-[70%] pr-7 text-left ${isOwn ? "w-max" : "w-fit"} ${bubbleClass}`}
+                    className={`relative mt-1 inline-block ${isMobile ? "max-w-[85%]" : "max-w-[70%] pr-7"} text-left ${isOwn ? "w-max" : "w-fit"} ${bubbleClass}`}
                   >
                     <div className="chat-message-content-selectable break-words" data-message-select-scope={msg.id}>
                       {msg.content && (
@@ -557,18 +609,7 @@ export const AgentMessageList = React.memo(function AgentMessageList({
                     {/* Estilo WhatsApp (13/10/2026): uma seta no canto abre as
                         ações. Saíram a barra do hover e o "copiar" solto embaixo
                         da resposta. "Ouvir" segue pausado — ver EM-CONSTRUCAO. */}
-                    {!msg.id.startsWith("optimistic-") && !msg.isError && (
-                      <MenuDaMensagem acoes={[
-                        ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => {
-                          void copyToClipboard(msg.content).then((ok) =>
-                            (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar")));
-                        } }] : []),
-                        ...(isAgent && effectiveAgentId ? [{ rotulo: "Marcar como não lida", icone: BellDot, aoEscolher: () => {
-                          markAgentUnread(effectiveAgentId);
-                          toast.success("Marcada como não lida");
-                        } }] : []),
-                      ]} />
-                    )}
+                    {!isMobile && <MenuDaMensagem acoes={acoes} />}
                   </div>
 
                   {/* Own timestamp below bubble */}
@@ -598,6 +639,13 @@ export const AgentMessageList = React.memo(function AgentMessageList({
           </Fragment>
         );
       })}
+      {isMobile && (
+        <AcoesDaMensagemNoToque
+          aberto={folha.aberta}
+          aoMudar={(aberta) => setFolha((f) => ({ ...f, aberta }))}
+          acoes={folha.acoes}
+        />
+      )}
     </>
   );
 });
@@ -669,6 +717,9 @@ export default function ChatPage() {
   const { unreadByChannel, unreadByAgentOnly, markAllAsReadForChannel, markAllAsReadForAgent, setActiveChannel, setActiveAgent } = useNotificationsContext();
   const isMobile = useIsMobile();
   const { bottomOffset, isKeyboardOpen } = useMobileChatViewport();
+  // Celular: a faixa de contexto/modelo fica recolhida e abre pelo ⋮ ou pelo
+  // nome do agente (spec 2026-11-03, Frente C2).
+  const [contextoAberto, setContextoAberto] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -693,12 +744,15 @@ export default function ChatPage() {
 
   // If channel param exists but not in channels list yet, trigger a refetch — once per channelId
   const refetchedForChannelRef = useRef<Set<string>>(new Set());
+  // Para qual `?channel=` o recarregamento já terminou — só então dá para
+  // afirmar que o canal não existe (ver `canalNaoResolve`).
+  const [recarregadoPara, setRecarregadoPara] = useState<string | null>(null);
   useEffect(() => {
     if (!channelParam || channelsLoading) return;
     if (channels.find((c) => c.id === channelParam)) return;
     if (refetchedForChannelRef.current.has(channelParam)) return;
     refetchedForChannelRef.current.add(channelParam);
-    refetchChannels();
+    void Promise.resolve(refetchChannels()).finally(() => setRecarregadoPara(channelParam));
   }, [channelParam, channels, channelsLoading, refetchChannels]);
 
   // ⚠️ **DM que outra pessoa acabou de criar não está na lista carregada.**
@@ -755,6 +809,19 @@ export default function ChatPage() {
     }
     return null;
   }, [agentIdFromChannelParam, channelParam, channels, resolvedAgentParam]);
+
+  // Celular: só a conversa selecionada de fato esconde o cabeçalho e a
+  // BottomNav (spec 2026-11-03, C1).
+  useInformarConversaAberta(isMobile && !!selection);
+
+  // ⚠️ `?channel=` que não resolve nem depois de recarregar (push de canal do
+  // qual a pessoa saiu, canal apagado, link antigo) volta para a lista, em vez
+  // de deixar a tela num limbo com a URL de conversa.
+  useEffect(() => {
+    if (!canalNaoResolve({ channelParam, recarregadoPara, encontrado: !!selection })) return;
+    toast.error("Essa conversa não está mais disponível.");
+    navigate("/chat", { replace: true });
+  }, [channelParam, recarregadoPara, selection, navigate]);
 
   useEffect(() => {
     if (!channelParam || !agentIdFromChannelParam || agentParam) return;
@@ -2545,49 +2612,79 @@ export default function ChatPage() {
           </div>
         )}
 
-        {/* Mobile header - minimal */}
+        {/* Celular: cabeçalho enxuto (spec 2026-11-03, Frente C2). Com a
+            conversa aberta o cabeçalho do HS.OS some (`AppLayout`), então este
+            assume o topo e respeita o notch. Os ícones soltos foram para o ⋮. */}
         {isMobile && (
-          <div className="px-3 py-2 border-b border-border/30 flex items-center justify-between gap-2 bg-gradient-to-r from-primary/8 via-card/80 to-accent/8 backdrop-blur-xl">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <button onClick={() => navigate("/chat")} className="p-1 -ml-1 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors touch-target">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+          <div className="pt-[env(safe-area-inset-top,0px)] border-b border-border/30 bg-gradient-to-r from-primary/8 via-card/80 to-accent/8 backdrop-blur-xl shrink-0">
+          <div className="pl-1 pr-1 h-14 flex items-center justify-between gap-1">
+            <div className="flex min-w-0 flex-1 items-center gap-1">
+              <button onClick={() => navigate("/chat")} aria-label="Voltar para as conversas" className="h-11 w-11 shrink-0 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground active:bg-secondary/50 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
               </button>
-              <AgentChatAvatar sizeClass="h-8 w-8 shrink-0" ringClass={`ring-2 ring-border/50 ${isAgentWorking ? "agent-working-pulse" : ""}`.trim()} agentId={effectiveAgentId} />
-              <div className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-display font-bold text-foreground">{selectedAgent?.name ?? "Agente"}</span>
-                {isAgentWorking && <span className="agent-working-fade block truncate text-[11px] text-primary">digitando...</span>}
-              </div>
+              <button
+                type="button"
+                onClick={() => setContextoAberto((v) => !v)}
+                aria-expanded={contextoAberto}
+                aria-label={`${selectedAgent?.name ?? "Agente"} — contexto e modelo`}
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 pr-1 text-left active:bg-secondary/40"
+              >
+                <AgentChatAvatar sizeClass="h-9 w-9 shrink-0" ringClass={`ring-2 ring-border/50 ${isAgentWorking ? "agent-working-pulse" : ""}`.trim()} agentId={effectiveAgentId} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-display font-bold text-foreground">{selectedAgent?.name ?? "Agente"}</span>
+                  {isAgentWorking
+                    ? <span className="agent-working-fade block truncate text-[11px] text-primary">digitando...</span>
+                    : <span className="block truncate text-[11px] text-muted-foreground">{selectedAgent?.model ?? "agente"}</span>}
+                </span>
+              </button>
             </div>
-            <div className="flex shrink-0 items-center gap-1.5 pl-1">
+            <div className="flex shrink-0 items-center gap-0.5">
               {showReconnecting && (
                 <span
                   className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-500"
                   title="Reconectando"
+                  aria-label="Reconectando"
                 >
                   <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
                 </span>
               )}
+              {/* Artefatos: o próprio ArtifactsList é o botão e a lista; ele só
+                  aparece quando a conversa tem algum. */}
               {conversationArtifacts.length > 0 && (
                 <ArtifactsList artifacts={conversationArtifacts} onSelect={(a) => { setActiveArtifact(a); setActiveLiveArtifactId(null); }} onOpenLive={(id) => { setActiveLiveArtifactId(id); setActiveArtifact(null); }} onDelete={handleDeleteArtifact} onRename={handleRenameArtifact} />
               )}
-              
-              <button onClick={handleCopyConversation} disabled={agentMessages.length === 0} className="p-2 rounded-full text-muted-foreground hover:bg-secondary/50 transition-colors disabled:opacity-40 touch-target" title="Copiar conversa">
-                {conversationCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              </button>
-              <button onClick={() => setAnterioresAberto(true)} disabled={!effectiveAgentId} className="p-2 rounded-full text-muted-foreground hover:bg-secondary/50 transition-colors disabled:opacity-40 touch-target" title="Conversas anteriores" aria-label="Conversas anteriores">
-                <History className="h-4 w-4" />
-              </button>
-              <button onClick={() => setArquivosAberto(true)} disabled={!effectiveAgentId} className="p-2 rounded-full text-muted-foreground hover:bg-secondary/50 transition-colors disabled:opacity-40 touch-target" title="Arquivos" aria-label="Arquivos">
-                <Paperclip className="h-4 w-4" />
-              </button>
-               <button onClick={() => setClearConfirmOpen(true)} disabled={!effectiveAgentId} className="p-2 rounded-full text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors disabled:opacity-40 touch-target" title="Começar uma nova conversa">
-                <RotateCcw className="h-4 w-4" />
-              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" aria-label="Mais opções da conversa" className="h-11 w-11 flex items-center justify-center rounded-full text-muted-foreground active:bg-secondary/50">
+                    <MoreVertical className="h-5 w-5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  <DropdownMenuItem className="min-h-[44px] gap-3" disabled={!effectiveAgentId} onSelect={() => setArquivosAberto(true)}>
+                    <Paperclip className="h-4 w-4" /> Arquivos
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="min-h-[44px] gap-3" disabled={!effectiveAgentId} onSelect={() => setAnterioresAberto(true)}>
+                    <History className="h-4 w-4" /> Conversas anteriores
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="min-h-[44px] gap-3" disabled={agentMessages.length === 0} onSelect={() => { void handleCopyConversation(); }}>
+                    <Copy className="h-4 w-4" /> Copiar conversa
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="min-h-[44px] gap-3" disabled={!effectiveAgentId} onSelect={() => setContextoAberto((v) => !v)}>
+                    <Gauge className="h-4 w-4" /> {contextoAberto ? "Esconder contexto e modelo" : "Contexto e modelo"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  {/* Não desabilitar com o agente trabalhando — ver o botão do desktop. */}
+                  <DropdownMenuItem className="min-h-[44px] gap-3" disabled={!effectiveAgentId} onSelect={() => setClearConfirmOpen(true)}>
+                    <RotateCcw className="h-4 w-4" /> Nova conversa
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
+          </div>
           </div>
         )}
 
-        {effectiveAgentId && (
+        {effectiveAgentId && (!isMobile || contextoAberto) && (
           <ContextWindowIndicator
             agentId={effectiveAgentId}
             actions={<ModelSelector agentId={toCanonicalAgentId(effectiveAgentId)} />}
@@ -2667,11 +2764,12 @@ export default function ChatPage() {
 
         {/* Input area */}
         <div
-          className={`mobile-chat-composer border-t border-border/30 bg-card/70 p-3 backdrop-blur-xl md:p-4 ${isMobile ? "pb-2" : ""}`}
+          className={`mobile-chat-composer border-t border-border/30 bg-card/70 backdrop-blur-xl ${isMobile ? "px-2 pt-2" : "p-3 md:p-4"}`}
           style={isMobile ? {
+            // Sem BottomNav na conversa (C1): só a barra de gestos do aparelho.
             paddingBottom: isKeyboardOpen
-              ? `calc(max(env(safe-area-inset-bottom, 0px), 12px) + 8px)`
-              : `calc(3.5rem + max(env(safe-area-inset-bottom, 0px), 16px) + 12px)`,
+              ? "8px"
+              : "calc(max(env(safe-area-inset-bottom, 0px), 8px) + 4px)",
           } : undefined}
         >
           <StagedPreview items={media.staged} onRemove={media.removeStaged} />
@@ -2681,7 +2779,9 @@ export default function ChatPage() {
               <button onClick={media.pickFile} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors touch-target rounded-full hover:bg-secondary/30" title="Anexar arquivo">
                 <Paperclip className="h-4 w-4" />
               </button>
-              <FolderButton iconClassName="h-4 w-4" />
+              {/* Pasta local usa a File System Access API, que não existe no
+                  navegador do celular — o botão só ocuparia espaço ali. */}
+              {!isMobile && <FolderButton iconClassName="h-4 w-4" />}
             </div>
 
             {/* Center: textarea */}
@@ -2694,7 +2794,7 @@ export default function ChatPage() {
                   onClick={handleTextareaClick}
                   onKeyDown={handleTextareaKeyDown}
                   onPaste={handlePaste}
-                  placeholder={isAgentWorking ? "Agente trabalhando..." : "Pergunte qualquer coisa..."}
+                  placeholder={isAgentWorking ? "Agente trabalhando..." : isMobile ? "Mensagem" : "Pergunte qualquer coisa..."}
                   rows={1}
                   className="w-full bg-transparent text-sm leading-5 text-foreground placeholder:text-muted-foreground/40 focus:outline-none resize-none overflow-y-auto overflow-x-hidden break-words [overflow-wrap:anywhere] py-1.5"
                   style={{ minHeight: "32px" }}
@@ -2704,13 +2804,13 @@ export default function ChatPage() {
 
             {/* Right: mic + send */}
             <div className="flex items-center gap-1.5 shrink-0">
-                  <button onClick={async () => { try { const s = await audioRecorder.start(); if (s) audioLevel.start(s); } catch (e) { console.error("Audio start failed:", e); } }} className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors" title="Falar para transcrever">
+                  <button onClick={async () => { try { const s = await audioRecorder.start(); if (s) audioLevel.start(s); } catch (e) { console.error("Audio start failed:", e); } }} className={`flex ${isMobile ? "h-11 w-11" : "h-10 w-10"} items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors`} title="Falar para transcrever" aria-label="Falar para transcrever">
                     <Mic className="h-4 w-4" />
                   </button>
                   <button
                     onClick={isAgentWorking && !inputLocalRef.current.trim() && media.staged.length === 0 ? handleStopAgentResponse : handleSend}
                     disabled={!effectiveAgentId || uploading || (!inputLocalRef.current.trim() && media.staged.length === 0 && !isAgentWorking)}
-                    className="btn-send-gradient flex h-10 w-10 items-center justify-center"
+                    className={`btn-send-gradient flex ${isMobile ? "h-11 w-11" : "h-10 w-10"} items-center justify-center`}
                     title={isAgentWorking && !inputLocalRef.current.trim() && media.staged.length === 0 ? "Interromper resposta" : "Enviar mensagem"}
                   >
                     {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : isAgentWorking && !inputLocalRef.current.trim() && media.staged.length === 0 ? <Square className="h-4 w-4" /> : <Send className="h-4 w-4" />}
@@ -2797,7 +2897,7 @@ export default function ChatPage() {
   const abasDaLateral = (
     <Tabs value={abaAtual} onValueChange={(v) => setSidebarTab(v as "dms" | "agentes" | "channels")} className="w-full">
       <TabsList className="w-full bg-transparent border-b border-border/30 rounded-none p-0 h-auto justify-start gap-6">
-        <TabsTrigger value="dms" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
+        <TabsTrigger value="dms" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5${isMobile ? " min-h-[44px] text-sm" : ""}`}>
           DMs
           {pessoasNaoLidas > 0 && (
             <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
@@ -2806,7 +2906,7 @@ export default function ChatPage() {
           )}
         </TabsTrigger>
         {temAgentes && (
-          <TabsTrigger value="agentes" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
+          <TabsTrigger value="agentes" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5${isMobile ? " min-h-[44px] text-sm" : ""}`}>
             Agentes
             {agentesNaoLidas > 0 && (
             <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
@@ -2815,7 +2915,7 @@ export default function ChatPage() {
           )}
           </TabsTrigger>
         )}
-        <TabsTrigger value="channels" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
+        <TabsTrigger value="channels" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5${isMobile ? " min-h-[44px] text-sm" : ""}`}>
           Canais
           {channelUnreadCount > 0 && (
             <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
@@ -2874,8 +2974,12 @@ export default function ChatPage() {
             </div>
 
 
-            <ScrollArea className="flex-1">
-              <div className="px-3 py-2 pb-20">
+            {/* `!block`: sem ele o Radix monta o conteúdo em `display: table`,
+                que cresce com a prévia mais longa e empurra horário e contador
+                para fora da tela — o mesmo ajuste que a lateral do desktop tem. */}
+            <ScrollArea className="flex-1 [&>[data-radix-scroll-area-viewport]>div]:!block">
+              <div className="px-3 py-2 pb-20 w-full min-w-0">
+                {/* integração: <InstalarApp variante="cartao" /> da Frente A entra aqui */}
                 {abaAtual === "channels" ? (
                   <>
                     {publicChannels.length > 0 && (
@@ -2942,6 +3046,14 @@ export default function ChatPage() {
                                   )}
                                 </div>
                               </div>
+                              {/* Prévia da última mensagem: já vem de
+                                  /conversations/ultimas/por-agente (spec C9). As DMs
+                                  não têm prévia na API e ficam só com o horário. */}
+                              {lastMsg?.content && (
+                                <p className={`mt-0.5 truncate text-[13px] ${hasUnread ? "text-foreground/90" : "text-muted-foreground"}`}>
+                                  {semMarkdown(lastMsg.content)}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </button>
@@ -3010,16 +3122,27 @@ export default function ChatPage() {
             ) : selection?.type === "agent" ? (
               <>
                 {renderAgentChat()}
-                {activeArtifact && (
-                  <div className="h-[50vh] border-t border-border">
-                    <ArtifactPanel type={activeArtifact.type} code={activeArtifact.code} onClose={() => setActiveArtifact(null)} />
-                  </div>
-                )}
-                {activeLiveArtifactId && (
-                  <div className="h-[50vh] border-t border-border">
-                    <LiveArtifactViewer artifactId={activeLiveArtifactId} onClose={() => setActiveLiveArtifactId(null)} />
-                  </div>
-                )}
+                {/* Artefato numa folha de baixo, por cima da conversa — antes era
+                    uma faixa de 50vh empilhada embaixo do composer
+                    (spec 2026-11-03, Frente C5). */}
+                <Drawer
+                  open={!!activeArtifact || !!activeLiveArtifactId}
+                  onOpenChange={(aberto) => { if (!aberto) { setActiveArtifact(null); setActiveLiveArtifactId(null); } }}
+                >
+                  <DrawerContent className="h-[85dvh] max-h-[85dvh] flex flex-col p-0 pb-[env(safe-area-inset-bottom,0px)]">
+                    <DrawerHeader className="sr-only">
+                      <DrawerTitle>Artefato</DrawerTitle>
+                      <DrawerDescription>Artefato desta conversa.</DrawerDescription>
+                    </DrawerHeader>
+                    <div className="min-h-0 flex-1 overflow-hidden" data-vaul-no-drag>
+                      {activeArtifact ? (
+                        <ArtifactPanel type={activeArtifact.type} code={activeArtifact.code} onClose={() => setActiveArtifact(null)} />
+                      ) : activeLiveArtifactId ? (
+                        <LiveArtifactViewer artifactId={activeLiveArtifactId} onClose={() => setActiveLiveArtifactId(null)} />
+                      ) : null}
+                    </div>
+                  </DrawerContent>
+                </Drawer>
               </>
             ) : null}
           </>
@@ -3029,7 +3152,7 @@ export default function ChatPage() {
         {dialogoNovaConversa}
         <Dialog open={!!lightboxSrc} onOpenChange={() => setLightboxSrc(null)}>
           <DialogContent className="max-w-3xl p-2 bg-transparent border-none shadow-none">
-            {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80vh] object-contain" />}
+            {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80dvh] object-contain" />}
           </DialogContent>
         </Dialog>
       </div>
@@ -3228,7 +3351,7 @@ export default function ChatPage() {
         {dialogoNovaConversa}
       <Dialog open={!!lightboxSrc} onOpenChange={() => setLightboxSrc(null)}>
         <DialogContent className="max-w-3xl p-2 bg-transparent border-none shadow-none">
-          {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80vh] object-contain" />}
+          {lightboxSrc && <img src={lightboxSrc} alt="Expanded" className="w-full h-auto rounded-lg max-h-[80dvh] object-contain" />}
         </DialogContent>
       </Dialog>
     </div>

@@ -7,6 +7,8 @@ import { format, isThisWeek, isThisMonth, isToday, isYesterday, isValid, startOf
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
+import PainelDoChat from "@/components/chat/PainelDoChat";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { arquivosDoCanal, type ArquivoDoCanal } from "@/lib/arquivos-do-canal";
 
 interface Props {
@@ -23,6 +25,7 @@ type FileItem = ArquivoDoCanal;
 type Filter = "all" | "image" | "doc";
 
 export default function ChannelFilesPanel({ endpoint, open, onClose }: Props) {
+  const isMobile = useIsMobile();
   const [items, setItems] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -71,12 +74,8 @@ export default function ChannelFilesPanel({ endpoint, open, onClose }: Props) {
 
   const grouped = useMemo(() => groupByPeriod(filtered), [filtered]);
 
-  if (!open) return null;
-
   return (
-    <>
-      <div className="fixed inset-0 z-40" onClick={onClose} />
-      <div className="absolute right-0 top-0 bottom-0 z-50 flex w-80 flex-col overflow-hidden rounded-l-2xl border-l border-border/40 bg-card/95 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-right-5 duration-200">
+    <PainelDoChat aberto={open} aoFechar={onClose} titulo="Arquivos" largura="w-80">
         <div className="aurora-glow h-14 border-b border-border/30 flex items-center justify-between px-4 shrink-0">
           <h3 className="font-display font-bold text-sm text-foreground relative z-10">
             Arquivos {items.length > 0 && <span className="text-muted-foreground font-normal">· {items.length}</span>}
@@ -120,7 +119,7 @@ export default function ChannelFilesPanel({ endpoint, open, onClose }: Props) {
           </div>
         </div>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className={`flex-1${isMobile ? " [&>[data-radix-scroll-area-viewport]>div]:!block" : ""}`}>
           <div className="p-3 space-y-4">
             {loading ? (
               <div className="flex items-center justify-center py-10 text-muted-foreground">
@@ -150,8 +149,7 @@ export default function ChannelFilesPanel({ endpoint, open, onClose }: Props) {
             )}
           </div>
         </ScrollArea>
-      </div>
-    </>
+    </PainelDoChat>
   );
 }
 
@@ -165,6 +163,8 @@ interface FileRowProps {
 }
 
 function FileRow({ file, url, renovar, urlAgora }: FileRowProps) {
+  // Celular: sem hover, o baixar fica sempre à vista (spec 2026-11-03, C4).
+  const isMobile = useIsMobile();
   const isImage = file.mimeType.startsWith("image/");
   const Icon = isImage ? ImageIcon : FileText;
   const date = new Date(file.created_at);
@@ -214,7 +214,7 @@ function FileRow({ file, url, renovar, urlAgora }: FileRowProps) {
             toast.error(err?.message || "Não foi possível baixar.");
           }
         }}
-        className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+        className={`${isMobile ? "h-11 w-11 opacity-100" : "h-7 w-7 opacity-0 group-hover:opacity-100"} flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all shrink-0`}
         aria-label={`Baixar ${file.name}`}
       >
         <Download className="h-3.5 w-3.5" />

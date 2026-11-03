@@ -24,7 +24,9 @@ async function fetchGifs(query: string, offset: number): Promise<GifResult[]> {
   return api<GifResult[]>(`/gifs?${params}`);
 }
 
-export default function GifPicker({ onSelect }: { onSelect: (gif: GifResult) => void }) {
+/** `className` troca a largura e a altura fixas (380/460px) — no celular o
+ *  seletor abre numa folha de largura total (spec 2026-11-03, C6). */
+export default function GifPicker({ onSelect, className }: { onSelect: (gif: GifResult) => void; className?: string }) {
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [gifs, setGifs] = useState<GifResult[]>([]);
@@ -89,7 +91,7 @@ export default function GifPicker({ onSelect }: { onSelect: (gif: GifResult) => 
   }, [loadMore]);
 
   return (
-    <div className="flex flex-col w-[380px] sm:w-[460px] h-[460px] bg-popover">
+    <div className={`flex flex-col ${className ?? "w-[380px] sm:w-[460px] h-[460px]"} bg-popover`}>
       {/* Search */}
       <div className="flex items-center gap-2 p-2 border-b border-border/40">
         <div className="relative flex-1">

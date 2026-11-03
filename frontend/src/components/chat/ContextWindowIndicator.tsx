@@ -1,6 +1,8 @@
 import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { getContextWindowFor, getModelLabel } from "@/lib/model-pricing";
 import { useGatewayModels } from "@/hooks/use-gateway-models";
 import { getModelOverride, MODEL_OVERRIDE_EVENT } from "@/lib/agent-model-override";
@@ -50,6 +52,7 @@ function timeAgo(iso: string | null): string {
 }
 
 export function ContextWindowIndicator({ agentId, actions }: Props) {
+  const isMobile = useIsMobile();
   const [data, setData] = useState<CtxData | null>(null);
   // O snapshot reporta o modelo PADRÃO do agente. Se esta conversa escolheu
   // outro (ModelSelector), o modelo e a janela mudam — sem isso, os dois badges
@@ -138,13 +141,7 @@ export function ContextWindowIndicator({ agentId, actions }: Props) {
   const modelLabel = overrideModel?.label ?? getModelLabel(data.model);
   const cost = Number.isFinite(data.estimatedCost) ? data.estimatedCost : 0;
 
-  return (
-    <div className="w-full">
-      <div className="flex items-center justify-end gap-2 px-4 pt-2">
-        {actions}
-        <TooltipProvider delayDuration={150}>
-          <Tooltip>
-            <TooltipTrigger asChild>
+  const botaoContexto = (
               <button
                 type="button"
                 className="inline-flex items-center gap-2 rounded-full border border-border/40 bg-secondary/30 px-2.5 py-0.5 text-[10px] font-mono text-muted-foreground hover:bg-secondary/50 transition-colors"
@@ -155,9 +152,8 @@ export function ContextWindowIndicator({ agentId, actions }: Props) {
                     tooltip abaixo. */}
                 <span className="text-foreground/80">contexto {pct}%</span>
                 <span className={`inline-block h-2 w-2 rounded-full ${c.bg}`} style={{ boxShadow: `0 0 8px ${c.ring}` }} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="w-72 p-3">
+              </button>);
+  const detalheContexto = (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold text-foreground">janela de contexto</p>
@@ -184,10 +180,35 @@ export function ContextWindowIndicator({ agentId, actions }: Props) {
                     <span className="font-mono text-foreground">${cost.toFixed(4)}</span>
                   </div>
                 </div>
-              </div>
+              </div>);
+
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-end gap-2 px-4 pt-2">
+        {actions}
+        {isMobile ? (
+          // Celular: Tooltip não abre no toque — o detalhe vira Popover
+          // (spec 2026-11-03, Frente C2).
+          <Popover>
+            <PopoverTrigger asChild>
+              {botaoContexto}
+            </PopoverTrigger>
+            <PopoverContent side="bottom" align="end" className="w-72 p-3">
+              {detalheContexto}
+            </PopoverContent>
+          </Popover>
+        ) : (
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {botaoContexto}
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="w-72 p-3">
+              {detalheContexto}
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
+        )}
       </div>
       <div className="px-4 pt-1.5">
         <div className="h-1 w-full rounded-full bg-secondary/40 overflow-hidden">

@@ -84,7 +84,7 @@ export default function PdfAttachmentPreview({ attachment, open }: PdfAttachment
 
   if (isLoadingPdf) {
     return (
-      <div className="flex h-[68vh] items-center justify-center gap-2 rounded-xl border border-border bg-muted/20 text-sm text-muted-foreground">
+      <div className="flex h-[68dvh] items-center justify-center gap-2 rounded-xl border border-border bg-muted/20 text-sm text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
         Carregando PDF...
       </div>
@@ -93,7 +93,7 @@ export default function PdfAttachmentPreview({ attachment, open }: PdfAttachment
 
   if (pdfError) {
     return (
-      <div className="flex h-[68vh] flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-muted/20 px-6 text-center">
+      <div className="flex h-[68dvh] flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-muted/20 px-6 text-center">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground">
           <FileText className="h-7 w-7" />
         </div>
@@ -139,18 +139,18 @@ export default function PdfAttachmentPreview({ attachment, open }: PdfAttachment
         </div>
       </div>
 
-      <div ref={containerRef} className="flex min-h-[68vh] justify-center overflow-auto rounded-xl border border-border bg-muted/20 p-4">
+      <div ref={containerRef} className="flex min-h-[68dvh] justify-center overflow-auto rounded-xl border border-border bg-muted/20 p-4">
         {pdfData ? (
           <Document
             file={{ data: pdfData }}
             loading={
-              <div className="flex h-[60vh] items-center justify-center gap-2 text-sm text-muted-foreground">
+              <div className="flex h-[60dvh] items-center justify-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Renderizando página...
               </div>
             }
             error={
-              <div className="flex h-[60vh] items-center justify-center px-6 text-center text-sm text-muted-foreground">
+              <div className="flex h-[60dvh] items-center justify-center px-6 text-center text-sm text-muted-foreground">
                 Não foi possível processar este PDF no modal.
               </div>
             }
@@ -168,7 +168,7 @@ export default function PdfAttachmentPreview({ attachment, open }: PdfAttachment
               renderAnnotationLayer={false}
               renderTextLayer={false}
               loading={
-                <div className="flex h-[60vh] items-center justify-center gap-2 text-sm text-muted-foreground">
+                <div className="flex h-[60dvh] items-center justify-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Carregando página...
                 </div>
@@ -176,7 +176,7 @@ export default function PdfAttachmentPreview({ attachment, open }: PdfAttachment
             />
           </Document>
         ) : (
-          <div className="flex h-[60vh] items-center justify-center text-sm text-muted-foreground">Preparando PDF...</div>
+          <div className="flex h-[60dvh] items-center justify-center text-sm text-muted-foreground">Preparando PDF...</div>
         )}
       </div>
     </div>

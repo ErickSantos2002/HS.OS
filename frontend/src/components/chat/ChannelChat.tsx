@@ -19,6 +19,11 @@ import { uploadFileToStorage, formatFileSize, isImageFile } from "@/lib/file-upl
 import FileAttachmentCard from "./FileAttachmentCard";
 import AudioDaMensagem from "./AudioDaMensagem";
 import MenuDaMensagem, { type AcaoDaMensagem } from "./MenuDaMensagem";
+import AcoesDaMensagemNoToque from "./AcoesDaMensagemNoToque";
+import EmojiPickerLargo from "./EmojiPickerLargo";
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
+import { doProprioElemento, useToqueLongo } from "@/hooks/use-toque-longo";
+import { temOQueAbrir } from "@/lib/acoes-do-toque";
 import VistoDaMensagem from "./VistoDaMensagem";
 import DadosDaMensagem from "./DadosDaMensagem";
 import { estadoNoCanal, type EstadoDoVisto } from "@/lib/vistos";
@@ -33,7 +38,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, Copy, Info, EyeOff } from "lucide-react";
+import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, Copy, Info, EyeOff, MoreVertical } from "lucide-react";
 import { format } from "date-fns";
 import ChannelMembersPanel from "./ChannelMembersPanel";
 import ChannelFilesPanel from "./ChannelFilesPanel";
@@ -226,6 +231,7 @@ export const MessageBubble = memo(function MessageBubble({
   onDadosDaMensagem,
   onApagarParaMim,
   continuacao = false,
+  toque = false,
 }: {
   msg: ChannelMessage;
   currentUserId: string;
@@ -252,6 +258,9 @@ export const MessageBubble = memo(function MessageBubble({
   onApagarParaMim?: () => void;
   /** Segue a mensagem anterior do mesmo autor: sai sem foto e sem nome. */
   continuacao?: boolean;
+  /** Celular: segurar abre a folha de ações; seta e "reagir" de hover saem
+   *  (spec 2026-11-03, Frente C3). No desktop fica `false` e nada muda. */
+  toque?: boolean;
 }) {
   const isAgent = msg.author_type === "agent";
   const agentIdForAvatar = isAgent ? normalizeAgentId(msg.author_id || "") : "";
@@ -272,6 +281,10 @@ export const MessageBubble = memo(function MessageBubble({
   const [longPressTimer, setLongPressTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [folhaAberta, setFolhaAberta] = useState(false);
+  const [folhaMontada, setFolhaMontada] = useState(false);
+  // Celular: o horário de quem segue a sequência aparece ao tocar, não no hover.
+  const [mostrarHora, setMostrarHora] = useState(false);
   const closeEmojiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleTouchStart = useCallback(() => {
@@ -403,6 +416,13 @@ export const MessageBubble = memo(function MessageBubble({
     // fica sabendo; o "Apagar" de cima é que some para todos.
     ...(onApagarParaMim ? [{ rotulo: "Apagar para mim", icone: EyeOff, aoEscolher: () => { onApagarParaMim(); setShowMobileMenu(false); } }] : []),
   ];
+  // A folha do toque usa ESTE array — o mesmo do `MenuDaMensagem` acima.
+  const podeReagir = !msg.id.startsWith("optimistic-") && !isDeleted;
+  const toqueLongo = useToqueLongo(() => {
+    if (!temOQueAbrir(acoesDoMenu, podeReagir)) return;
+    setFolhaMontada(true);
+    setFolhaAberta(true);
+  }, toque);
 
 
   // ⚠️ Fora do ramo de "não apagada" de propósito. Em 13/10/2026 uma resposta
@@ -447,23 +467,31 @@ export const MessageBubble = memo(function MessageBubble({
   return (
     <div
       ref={wrapperRef}
-      className={`flex gap-3 group relative px-3 ${continuacao ? "py-0.5" : "py-1.5"} -mx-3 transition-colors ${isOwn ? "flex-row-reverse" : ""} ${threadHasUnread ? "bg-primary/[0.06] border-l-4 border-primary rounded-r-md" : isMarkedUnread ? "bg-primary/[0.04] border-l-2 border-primary/50" : ""}`}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
+      className={`flex ${toque ? "gap-2" : "gap-3"} group relative px-3 ${continuacao ? "py-0.5" : "py-1.5"} -mx-3 transition-colors ${isOwn ? "flex-row-reverse" : ""} ${threadHasUnread ? "bg-primary/[0.06] border-l-4 border-primary rounded-r-md" : isMarkedUnread ? "bg-primary/[0.04] border-l-2 border-primary/50" : ""}`}
+      {...(toque
+        ? { ...toqueLongo.handlers, onClick: (e: React.MouseEvent) => { if (continuacao && doProprioElemento(e)) setMostrarHora((v) => !v); } }
+        : { onTouchStart: handleTouchStart, onTouchEnd: handleTouchEnd, onTouchCancel: handleTouchEnd })}
     >
+      {toque && folhaMontada && (
+        <AcoesDaMensagemNoToque
+          aberto={folhaAberta}
+          aoMudar={setFolhaAberta}
+          acoes={acoesDoMenu}
+          aoReagir={podeReagir ? onToggleReaction : undefined}
+        />
+      )}
       {continuacao ? (
         // Sem foto, o espaço fica para alinhar com a primeira da sequência; o
         // horário de quem não sou eu aparece aqui ao passar o mouse.
-        <div className="w-9 shrink-0 flex items-start justify-center pt-2.5">
+        <div className={`${toque ? "w-8" : "w-9"} shrink-0 flex items-start justify-center pt-2.5`}>
           {!isOwn && (
-            <span className="hidden group-hover:inline text-[10px] leading-none text-muted-foreground">
+            <span className={`${toque && mostrarHora ? "inline" : "hidden group-hover:inline"} text-[10px] leading-none text-muted-foreground`}>
               {format(new Date(msg.created_at), "HH:mm")}
             </span>
           )}
         </div>
       ) : (
-      <div className={`h-9 w-9 shrink-0 mt-0.5 overflow-hidden ring-2 ring-border/30 ${isAgent ? "rounded-md" : "rounded-full"}`}>
+      <div className={`${toque ? "h-8 w-8" : "h-9 w-9"} shrink-0 mt-0.5 overflow-hidden ring-2 ring-border/30 ${isAgent ? "rounded-md" : "rounded-full"}`}>
         {isAgent ? (
           agentAvatar ? (
             <img src={agentAvatar} alt="" className="h-9 w-9 object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
@@ -539,7 +567,7 @@ export const MessageBubble = memo(function MessageBubble({
             {indicadorDeRespostas}
           </>
         ) : (
-          <div className={`relative max-w-[70%] flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
+          <div className={`relative ${toque ? "max-w-[85%]" : "max-w-[70%]"} flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
             {mentionsEveryone && (
               <div className="mt-1.5 mb-2 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-primary/20">
                 <Users className="h-3 w-3" />
@@ -553,7 +581,7 @@ export const MessageBubble = memo(function MessageBubble({
               </div>
             )}
             {temTexto && (
-            <div ref={bubbleRef} className={`relative mt-1 inline-block w-fit max-w-full pr-7 text-left ${bubbleClass}`}>
+            <div ref={bubbleRef} className={`relative mt-1 inline-block w-fit max-w-full ${toque ? "" : "pr-7"} text-left ${bubbleClass}`}>
               {(() => {
                 // Strip @todos prefix from rendered text when the "Aviso para todos" badge is already shown
                 const displayContent = mentionsEveryone
@@ -564,8 +592,8 @@ export const MessageBubble = memo(function MessageBubble({
                 return <MarkdownMessageContent text={displayContent} highlightMentions={hasMention} className="text-sm text-foreground/90" />;
               })()}
 
-              {renderReagir()}
-              <MenuDaMensagem acoes={acoesDoMenu} className={showMobileMenu ? "opacity-100" : undefined} />
+              {!toque && renderReagir()}
+              {!toque && <MenuDaMensagem acoes={acoesDoMenu} className={showMobileMenu ? "opacity-100" : undefined} />}
             </div>
             )}
 
@@ -597,7 +625,7 @@ export const MessageBubble = memo(function MessageBubble({
                     }
                   </AnexoResolvido>
                 ))}
-                {!temTexto && (
+                {!temTexto && !toque && (
                   <>
                     {renderReagir()}
                     <MenuDaMensagem acoes={acoesDoMenu} className={showMobileMenu ? "opacity-100" : undefined} />
@@ -768,6 +796,7 @@ export default function ChannelChat({
   const currentUserName = (profile?.full_name && profile.full_name.trim()) || user?.email?.split("@")[0] || "Alguém";
   const isMobile = useIsMobile();
   const { bottomOffset, isKeyboardOpen } = useMobileChatViewport();
+  const [seletorNoCelular, setSeletorNoCelular] = useState<"emoji" | "gif" | null>(null);
   const { messages, loading: msgsLoading, sendMessage, ensureMessageLoaded, esconder, reexibir } = useChannelMessages(channel.id);
   const threadCounts = useThreadCounts(channel.id);
   const { ligado: resumoLigado } = useResumoEmAudio();
@@ -1718,7 +1747,9 @@ export default function ChannelChat({
   return (
     <div
       className={`relative flex flex-1 min-h-0 min-w-0 flex-col overflow-hidden ${dragOver ? "ring-2 ring-primary ring-inset" : ""}`}
-      style={isMobile && isKeyboardOpen ? { paddingBottom: `${bottomOffset}px` } : undefined}
+      // Teclado: quem compensa é o contêiner do ChatPage, único lugar que
+      // renderiza este componente. Aplicar aqui também empurrava o composer
+      // duas vezes a altura do teclado (spec 2026-11-03, Frente C7).
 
       onDragOver={(e) => {
         e.preventDefault();
@@ -1739,7 +1770,66 @@ export default function ChannelChat({
         </div>
       )}
 
-      {/* Header */}
+      {/* Celular: cabeçalho enxuto (spec 2026-11-03, Frente C2). O do HS.OS
+          some com a conversa aberta, então este respeita o notch. */}
+      {isMobile ? (
+      <div className="aurora-glow pt-[env(safe-area-inset-top,0px)] border-b border-border/40 shrink-0">
+        <div className="h-14 flex items-center justify-between gap-1 pl-1 pr-1">
+          <div className="flex min-w-0 flex-1 items-center gap-1">
+            {onBack && (
+              <button onClick={onBack} aria-label="Voltar para as conversas" className="h-11 w-11 shrink-0 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground active:bg-secondary/50 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setMembersOpen(true)}
+              aria-label={`${displayName} — ver participantes`}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 pr-1 text-left active:bg-secondary/40"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/12 text-primary shrink-0">
+                <ChannelIcon type={channel.type} />
+              </span>
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="block truncate text-[15px] font-semibold text-foreground">{displayName}</span>
+                {pendingAgentIds.length > 0 ? (
+                  <span className="block truncate text-[11px] text-primary animate-pulse">
+                    {pendingAgentIds.map((a) => getAgentDisplayName(a)).join(", ")} digitando...
+                  </span>
+                ) : (
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    {isDm && humanPeerId && statusByUserId.get(humanPeerId)
+                      ? `${statusByUserId.get(humanPeerId)!.emoji} ${statusByUserId.get(humanPeerId)!.label}`
+                      : `${members.length} ${members.length === 1 ? "participante" : "participantes"}`}
+                  </span>
+                )}
+              </span>
+            </button>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" aria-label="Mais opções do canal" className="h-11 w-11 shrink-0 flex items-center justify-center rounded-full text-muted-foreground active:bg-secondary/50">
+                <MoreVertical className="h-5 w-5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              <DropdownMenuItem className="min-h-[44px] gap-3" onSelect={() => setFilesOpen(true)}>
+                <Paperclip className="h-4 w-4" /> Arquivos
+              </DropdownMenuItem>
+              <DropdownMenuItem className="min-h-[44px] gap-3" onSelect={() => setMembersOpen(true)}>
+                <Users className="h-4 w-4" /> {isDm ? "Participantes" : "Membros"}
+              </DropdownMenuItem>
+              {/* integração: o item "Silenciar/Reativar" da Frente B entra aqui */}
+              {canEdit && (
+                <DropdownMenuItem className="min-h-[44px] gap-3" onSelect={() => setEditOpen(true)}>
+                  <Pencil className="h-4 w-4" /> Editar canal
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+      ) : (
       <div className="aurora-glow border-b border-border/40 flex items-center justify-between gap-2 px-3 py-2 shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           {onBack && (
@@ -1830,6 +1920,7 @@ export default function ChannelChat({
           </button>
         </div>
       </div>
+      )}
 
       {/* DM peer status banner */}
       {isDm && humanPeerId && (() => {
@@ -1932,6 +2023,7 @@ export default function ChannelChat({
                       onDadosDaMensagem={() => setDadosDaMensagemId(msg.id)}
                       onApagarParaMim={() => { void apagarParaMim(msg); }}
                       continuacao={continuacao}
+                      toque={isMobile}
                     />
                   )}
                 </div>
@@ -1976,7 +2068,7 @@ export default function ChannelChat({
               lastSeenMessageCountRef.current = messages.length;
             }
           }}
-          className={`absolute left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full border border-border/60 bg-background/95 px-3 py-2 text-muted-foreground shadow-lg backdrop-blur-sm transition-all hover:bg-secondary hover:text-foreground hover:shadow-xl ${isMobile ? "bottom-44" : "bottom-28"}`}
+          className={`absolute left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-full border border-border/60 bg-background/95 px-3 py-2 text-muted-foreground shadow-lg backdrop-blur-sm transition-all hover:bg-secondary hover:text-foreground hover:shadow-xl ${isMobile ? "bottom-24" : "bottom-28"}`}
           title="Ir para mensagens recentes"
         >
           {unreadBelowCount > 0 && (
@@ -1990,11 +2082,12 @@ export default function ChannelChat({
 
 
       <div
-        className={`mobile-chat-composer relative shrink-0 border-t border-border/40 p-3 ${isMobile ? "pb-2 bg-background" : "bg-background/95 backdrop-blur-sm"}`}
+        className={`mobile-chat-composer relative shrink-0 border-t border-border/40 ${isMobile ? "px-2 pt-2 bg-background" : "p-3 bg-background/95 backdrop-blur-sm"}`}
         style={isMobile ? {
+          // Sem BottomNav na conversa (spec 2026-11-03, C1): só a barra de gestos.
           paddingBottom: isKeyboardOpen
-            ? `calc(max(env(safe-area-inset-bottom, 0px), 12px) + 8px)`
-            : `calc(3.5rem + max(env(safe-area-inset-bottom, 0px), 16px) + 12px)`,
+            ? "8px"
+            : "calc(max(env(safe-area-inset-bottom, 0px), 8px) + 4px)",
           transform: "translateZ(0)",
           willChange: "padding-bottom",
         } : undefined}
@@ -2036,7 +2129,7 @@ export default function ChannelChat({
                     </div>
                   </div>
                 )}
-                <button onClick={() => channelMedia.removeStaged(i)} className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => channelMedia.removeStaged(i)} className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity toque-visivel">
                   <X className="h-3 w-3" />
                 </button>
               </div>
@@ -2072,14 +2165,14 @@ export default function ChannelChat({
                     <button
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
-                      className="shrink-0 h-9 w-9 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/40 active:bg-secondary/60 transition-colors"
+                      className="shrink-0 h-11 w-11 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/40 active:bg-secondary/60 transition-colors"
                       title="Mais opções"
                       aria-label="Mais opções"
                     >
                       <Plus className="h-5 w-5" />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent className="p-2 w-[280px]" align="start" side="top">
+                  <PopoverContent className="p-2 w-[280px] max-w-[calc(100vw-16px)]" align="start" side="top">
                     <div className="space-y-2">
                       {/* Primary actions */}
                       <div className="grid grid-cols-3 gap-1.5">
@@ -2093,36 +2186,31 @@ export default function ChannelChat({
                             <span>Anexar</span>
                           </button>
                         </PopoverClose>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              onMouseDown={(e) => e.preventDefault()}
-                              className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg text-xs text-foreground hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
-                            >
-                              <Smile className="h-4 w-4 text-muted-foreground" />
-                              <span>Emoji</span>
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="p-0 border-0 bg-transparent shadow-none w-auto" align="start" side="top">
-                            <EmojiPicker onSelect={(emoji) => inputRef.current?.insertText(emoji)} />
-                          </PopoverContent>
-                        </Popover>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              onMouseDown={(e) => e.preventDefault()}
-                              className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg text-xs text-foreground hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
-                            >
-                              <span className="text-[10px] font-bold tracking-wider text-muted-foreground border border-current rounded px-1 py-0.5 leading-none">GIF</span>
-                              <span>GIF</span>
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="p-0 overflow-hidden w-auto" align="start" side="top">
-                            <GifPicker onSelect={(gif) => { void handleSendGif(gif); }} />
-                          </PopoverContent>
-                        </Popover>
+                        {/* Emoji e GIF abrem numa folha de largura total: o
+                            popover de 320/380px não cabia em 360px
+                            (spec 2026-11-03, Frente C6). */}
+                        <PopoverClose asChild>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setSeletorNoCelular("emoji")}
+                            className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg text-xs text-foreground hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
+                          >
+                            <Smile className="h-4 w-4 text-muted-foreground" />
+                            <span>Emoji</span>
+                          </button>
+                        </PopoverClose>
+                        <PopoverClose asChild>
+                          <button
+                            type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => setSeletorNoCelular("gif")}
+                            className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-lg text-xs text-foreground hover:bg-secondary/60 active:bg-secondary/80 transition-colors"
+                          >
+                            <span className="text-[10px] font-bold tracking-wider text-muted-foreground border border-current rounded px-1 py-0.5 leading-none">GIF</span>
+                            <span>GIF</span>
+                          </button>
+                        </PopoverClose>
                       </div>
                       {/* Formatting */}
                       <div>
@@ -2243,7 +2331,7 @@ export default function ChannelChat({
                     }
                   }}
                   disabled={isBusy}
-                  className="shrink-0 h-10 w-10 flex items-center justify-center rounded-full bg-primary/15 text-primary hover:bg-primary/25 active:bg-primary/35 transition-colors disabled:opacity-40"
+                  className="shrink-0 h-11 w-11 flex items-center justify-center rounded-full bg-primary/15 text-primary hover:bg-primary/25 active:bg-primary/35 transition-colors disabled:opacity-40"
                   title="Gravar áudio"
                   aria-label="Gravar áudio"
                 >
@@ -2253,7 +2341,8 @@ export default function ChannelChat({
                 <button
                   onClick={handleSend}
                   disabled={(!inputLocalRef.current.trim() && channelMedia.staged.length === 0) || isBusy}
-                  className="btn-send-gradient shrink-0"
+                  className={`btn-send-gradient shrink-0${isMobile ? " !h-11 !w-11" : ""}`}
+                  aria-label="Enviar mensagem"
                 >
                   <Send className="h-4 w-4" />
                 </button>
@@ -2358,6 +2447,27 @@ export default function ChannelChat({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {isMobile && (
+        <Drawer open={seletorNoCelular !== null} onOpenChange={(v) => { if (!v) setSeletorNoCelular(null); }}>
+          <DrawerContent className="max-h-[85dvh] pb-[env(safe-area-inset-bottom,0px)]">
+            <DrawerHeader className="sr-only">
+              <DrawerTitle>{seletorNoCelular === "gif" ? "Enviar GIF" : "Inserir emoji"}</DrawerTitle>
+              <DrawerDescription>Escolha para colocar na mensagem.</DrawerDescription>
+            </DrawerHeader>
+            <div className="px-2 pt-2 pb-2">
+              {seletorNoCelular === "gif" ? (
+                <GifPicker
+                  className="w-full h-[60dvh] rounded-lg overflow-hidden"
+                  onSelect={(gif) => { setSeletorNoCelular(null); void handleSendGif(gif); }}
+                />
+              ) : seletorNoCelular === "emoji" ? (
+                <EmojiPickerLargo onSelect={(emoji) => inputRef.current?.insertText(emoji)} />
+              ) : null}
+            </div>
+          </DrawerContent>
+        </Drawer>
+      )}
 
       {/* Members Panel */}
       <ChannelMembersPanel
