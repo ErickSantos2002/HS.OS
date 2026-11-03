@@ -26,7 +26,7 @@ import ConversasAnteriores from "@/components/chat/ConversasAnteriores";
 import ChannelFilesPanel from "@/components/chat/ChannelFilesPanel";
 import { acrescentarCitacao, semPedidoDaBusca } from "@/lib/conversas-anteriores";
 import { formatFileSize } from "@/lib/file-upload";
-import { Bot, FileText, File as FileIcon, Copy, Check, BellDot } from "lucide-react";
+import { Bot, FileText, File as FileIcon, Copy, Check } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   loadPersistedHistory,
@@ -54,7 +54,6 @@ import {
   hasUnreadAgentMessage,
   getUnreadAgentIds,
   clearUnreadAgent,
-  markAgentUnread,
   pruneUnreadAgents,
   resumePendingBackgroundTasks,
   CHAT_UPDATE_EVENT,
@@ -128,6 +127,8 @@ import { resetComposerTextarea, resizeComposerTextarea } from "@/lib/chat-compos
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import MenuDaMensagem, { type AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
+import { acoesDaMensagemDoAgente } from "@/lib/acoes-da-mensagem";
+import { naoLidasDoAgente } from "@/lib/nao-lidas-do-agente";
 import AcoesDaMensagemNoToque from "@/components/chat/AcoesDaMensagemNoToque";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { useToqueLongo } from "@/hooks/use-toque-longo";
@@ -441,23 +442,6 @@ const StreamingIndicator = React.memo(function StreamingIndicator({
 });
 
 
-/** Ações da mensagem na conversa com agente. ⚠️ Fonte única: a seta do
- *  desktop (`MenuDaMensagem`) e a folha do toque longo no celular recebem
- *  este mesmo array (spec 2026-11-03, Frente C3). */
-function acoesDaMensagemDoAgente(msg: ChatMessage, effectiveAgentId: string): AcaoDaMensagem[] {
-  if (msg.id.startsWith("optimistic-") || msg.isError) return [];
-  return [
-    ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => {
-      void copyToClipboard(msg.content).then((ok) =>
-        (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar")));
-    } }] : []),
-    ...(msg.role === "agent" && effectiveAgentId ? [{ rotulo: "Marcar como não lida", icone: BellDot, aoEscolher: () => {
-      markAgentUnread(effectiveAgentId);
-      toast.success("Marcada como não lida");
-    } }] : []),
-  ];
-}
-
 interface AgentMessageListProps {
   messages: ChatMessage[];
   isMobile: boolean;
@@ -731,13 +715,10 @@ export default function ChatPage() {
   // agent_id (channel_id nulo, caso do dm-agent-reply quando o canal não
   // resolve). Antes só o primeiro mapa era lido e as órfãs nunca acendiam
   // badge — apareciam na aba "Não lidas" e sumiam da lista de DMs.
-  const agentUnreadTotal = useCallback((agentId: string): number => {
-    const aliases = getAgentIdAliases(agentId);
-    const dmChId = aliases.map((alias) => agentDmChannelMap[alias]).find(Boolean);
-    const fromChannel = dmChId ? (unreadByChannel[dmChId] || 0) : 0;
-    const fromAgentOnly = aliases.reduce((acc, alias) => acc + (unreadByAgentOnly[alias] || 0), 0);
-    return fromChannel + fromAgentOnly;
-  }, [agentDmChannelMap, unreadByChannel, unreadByAgentOnly]);
+  const agentUnreadTotal = useCallback(
+    (agentId: string): number => naoLidasDoAgente(agentId, agentDmChannelMap, unreadByChannel, unreadByAgentOnly),
+    [agentDmChannelMap, unreadByChannel, unreadByAgentOnly],
+  );
 
   // Derive selection from URL search params
   const channelParam = searchParams.get("channel");

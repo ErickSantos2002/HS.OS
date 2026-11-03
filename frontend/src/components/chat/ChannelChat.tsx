@@ -8,17 +8,22 @@ import { fraseDeQuemEscreve, podeEscreverNoCanal } from "@/lib/canal-avisos";
 import { useMessageReactions } from "@/hooks/use-message-reactions";
 import { usePersistentDraft } from "@/hooks/use-persistent-draft";
 import { useAuthContext } from "@/contexts/auth-context";
-import { startChannelAgentReplies, getAgentDisplayName } from "@/lib/channel-agents";
+import { getAgentDisplayName } from "@/lib/channel-agents";
 import { getPendingAgentsForChannel, subscribeToChannelAgentPending } from "@/lib/channel-agent-pending";
 import { useAgentAvatar } from "@/hooks/use-agent-avatar";
 import { normalizeAgentId } from "@/lib/active-agents";
 import { useChatMedia } from "@/hooks/use-chat-media";
-import { getAudioFileExtension, useAudioRecorder } from "@/hooks/use-audio-recorder";
+import { useAudioRecorder } from "@/hooks/use-audio-recorder";
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import { uploadFileToStorage, formatFileSize, isImageFile } from "@/lib/file-upload";
 import FileAttachmentCard from "./FileAttachmentCard";
 import AudioDaMensagem from "./AudioDaMensagem";
 import MenuDaMensagem, { type AcaoDaMensagem } from "./MenuDaMensagem";
+import { acoesDaMensagemDoCanal } from "@/lib/acoes-da-mensagem";
+import {
+  apagarNoCanal, apagarParaMimNoCanal, editarNoCanal, enviarAudioNoCanal, publicarAudioNaThread,
+  publicarNaThread, publicarNoCanal, type ContextoDeEnvio,
+} from "@/lib/envio-no-canal";
 import AcoesDaMensagemNoToque from "./AcoesDaMensagemNoToque";
 import EmojiPickerLargo from "./EmojiPickerLargo";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
@@ -27,9 +32,7 @@ import { temOQueAbrir } from "@/lib/acoes-do-toque";
 import VistoDaMensagem from "./VistoDaMensagem";
 import DadosDaMensagem from "./DadosDaMensagem";
 import { estadoNoCanal, type EstadoDoVisto } from "@/lib/vistos";
-import { copyToClipboard } from "@/lib/clipboard";
 import { useResumoEmAudio } from "@/hooks/use-resumo-em-audio";
-import { enviarAudioDoCanal } from "@/lib/audio-de-mensagem";
 import CollapsibleTranscription from "./CollapsibleTranscription";
 import { useTypingIndicator, formatTypingLabel } from "@/hooks/use-typing-indicator";
 import { useNotificationsContext } from "@/components/NotificationsProvider";
@@ -38,7 +41,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Trash2, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, Copy, Info, EyeOff, MoreVertical, Bell, BellOff } from "lucide-react";
+import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Plus, Type, MoreVertical, Bell, BellOff } from "lucide-react";
 import { useCanaisSilenciados } from "@/hooks/use-canais-silenciados";
 import { format } from "date-fns";
 import ChannelMembersPanel from "./ChannelMembersPanel";
@@ -399,25 +402,16 @@ export const MessageBubble = memo(function MessageBubble({
     );
   };
 
-  const acoesDoMenu: AcaoDaMensagem[] = msg.id.startsWith("optimistic-") || isDeleted ? [] : [
-    { rotulo: "Responder em thread", icone: MessageSquare, aoEscolher: () => { onReply(); setShowMobileMenu(false); } },
-    ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => {
-      void copyToClipboard(msg.content).then((ok) => (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar")));
-    } }] : []),
-    { rotulo: "Marcar como não lida", icone: BellDot, aoEscolher: () => {
-      void Promise.resolve(onMarkUnread()).then(
-        (ok) => (ok ? toast.success("Marcada como não lida") : toast.error("Não foi possível marcar como não lida")),
-        () => toast.error("Não foi possível marcar como não lida"));
-    } },
-    ...(isOwn ? [
-      ...(onDadosDaMensagem ? [{ rotulo: "Dados da mensagem", icone: Info, aoEscolher: () => { onDadosDaMensagem(); setShowMobileMenu(false); } }] : []),
-      { rotulo: "Editar", icone: Pencil, aoEscolher: () => { onEdit(); setShowMobileMenu(false); } },
-      { rotulo: "Apagar", icone: Trash2, perigo: true, aoEscolher: () => { onDelete(); setShowMobileMenu(false); } },
-    ] : []),
-    // Em qualquer mensagem, inclusive a minha — como no WhatsApp. O autor não
-    // fica sabendo; o "Apagar" de cima é que some para todos.
-    ...(onApagarParaMim ? [{ rotulo: "Apagar para mim", icone: EyeOff, aoEscolher: () => { onApagarParaMim(); setShowMobileMenu(false); } }] : []),
-  ];
+  const acoesDoMenu: AcaoDaMensagem[] = acoesDaMensagemDoCanal(msg, {
+    souAutor: isOwn,
+    aoResponderThread: onReply,
+    aoMarcarNaoLida: onMarkUnread,
+    aoEditar: onEdit,
+    aoApagar: onDelete,
+    aoDados: onDadosDaMensagem,
+    aoApagarParaMim: onApagarParaMim,
+    depois: () => setShowMobileMenu(false),
+  });
   // A folha do toque usa ESTE array — o mesmo do `MenuDaMensagem` acima.
   const podeReagir = !msg.id.startsWith("optimistic-") && !isDeleted;
   const toqueLongo = useToqueLongo(() => {
@@ -1402,14 +1396,12 @@ export default function ChannelChat({
     if (newCount > 0) setUnreadBelowCount(newCount);
   }, [messages.length]);
 
-  const triggerAgents = useCallback((text: string) => {
-    startChannelAgentReplies({
-      channelId: channel.id,
-      channelType: channel.type,
-      agentMembers,
-      messageText: text,
-    });
-  }, [agentMembers, channel.id, channel.type]);
+  // O envio mora em `lib/envio-no-canal.ts` desde 03/11/2026 — o app do
+  // celular passa pelo mesmo caminho (gravar, avisar, acordar o agente).
+  const ctxEnvio = useMemo<ContextoDeEnvio | null>(
+    () => (user ? { canal: channel, user, profile, sendMessage, agentMembers } : null),
+    [channel, user, profile, sendMessage, agentMembers],
+  );
 
   const handleSend = async () => {
     const currentInput = inputLocalRef.current;
@@ -1461,22 +1453,7 @@ export default function ChannelChat({
         setUploadingFiles(false);
       }
 
-      const nonImageAttachments = attachments ? attachments.filter(a => !a.mimeType?.startsWith("image/")) : [];
-      const displayContent = msg || (nonImageAttachments.length > 0 ? `📎 ${nonImageAttachments.map(a => a.name).join(", ")}` : "");
-      const displayName = (profile?.full_name && profile.full_name.trim()) || user.email?.split("@")[0] || "Usuário";
-      const avatarUrl = profile?.avatar_url || null;
-      await sendMessage(channel.id, user.id, displayName, displayContent, "human", avatarUrl, null, attachments);
-
-      await notifyChannelRecipients({
-        channelId: channel.id,
-        senderUserId: user.id,
-        authorName: displayName,
-        contentPreview: displayContent.slice(0, 100),
-        contentText: displayContent,
-        forceNotifyAll: channel.type === "dm",
-      });
-
-      triggerAgents(displayContent);
+      if (ctxEnvio) await publicarNoCanal(ctxEnvio, msg, attachments);
     } finally {
       sendingRef.current = false;
     }
@@ -1606,92 +1583,41 @@ export default function ChannelChat({
 
   const handleEditSave = async (msgId: string, newContent: string) => {
     setEditingId(null);
-    // O `edited_at` é do servidor, e a rota confere que a mensagem é de quem
-    // está editando — antes bastava saber o id.
-    await api(`/channels/${channel.id}/messages/${msgId}`, {
-      method: "PATCH",
-      body: { content: newContent },
-    }).catch(() => { /* a tela já saiu do modo de edição */ });
+    await editarNoCanal(channel.id, msgId, newContent);
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteConfirmId) return;
     const id = deleteConfirmId;
     setDeleteConfirmId(null);
-    try {
-      await api(`/channels/${channel.id}/messages/${id}`, { method: "DELETE" });
-    } catch (erro) {
-      // Antes o erro era engolido: a pessoa clicava em apagar e nada acontecia.
-      toast.error(erro instanceof Error ? erro.message : "Não consegui apagar a mensagem.");
-      return;
-    }
+    if (!(await apagarNoCanal(channel.id, id))) return;
     setActiveThreadMessage((aberta) => threadDepoisDeApagar(aberta, id));
   };
 
-  /** "Apagar para mim" (30/10/2026): some daqui na hora, o servidor grava, e o
-   *  aviso oferece desfazer. O autor e os outros membros não percebem nada. */
+  /** "Apagar para mim" (30/10/2026) — ver `apagarParaMimNoCanal`. */
   const apagarParaMim = useCallback(async (msg: ChannelMessage) => {
-    const rota = `/channels/${channel.id}/messages/${msg.id}/apagar-para-mim`;
-    esconder(msg.id);
-    setActiveThreadMessage((aberta) => threadDepoisDeApagar(aberta, msg.id));
-    try {
-      await api(rota, { method: "POST" });
-    } catch (erro) {
-      reexibir(msg);
-      toast.error(erro instanceof Error ? erro.message : "Não consegui apagar a mensagem para você.");
-      return;
-    }
-    toast("Mensagem apagada para você", {
-      duration: 6000,
-      action: {
-        label: "Desfazer",
-        onClick: () => {
-          void api(rota, { method: "DELETE" }).then(
-            () => reexibir(msg),
-            () => toast.error("Não consegui desfazer."),
-          );
-        },
-      },
+    await apagarParaMimNoCanal(channel.id, msg, {
+      esconder,
+      reexibir,
+      aoApagar: (id) => setActiveThreadMessage((aberta) => threadDepoisDeApagar(aberta, id)),
     });
   }, [channel.id, esconder, reexibir]);
 
   const handleSendThreadReply = useCallback(async (content: string, rootMessageId: string, attachments?: ChannelAttachment[] | null) => {
-    if (!user) return;
+    if (!ctxEnvio) return;
     if (sendingRef.current) return;
     sendingRef.current = true;
     try {
-      const replyDisplayName = (profile?.full_name && profile.full_name.trim()) || user.email?.split("@")[0] || "Usuário";
-      const replyAvatarUrl = profile?.avatar_url || null;
-      await sendMessage(channel.id, user.id, replyDisplayName, content, "human", replyAvatarUrl, null, attachments ?? null, rootMessageId);
-      await notifyChannelRecipients({
-        channelId: channel.id,
-        senderUserId: user.id,
-        authorName: `${replyDisplayName} (em conversa)`,
-        contentPreview: `💬 ${content.slice(0, 100)}`,
-        contentText: content,
-        forceNotifyAll: true,
-        threadRootId: rootMessageId,
-      });
+      await publicarNaThread(ctxEnvio, content, rootMessageId, attachments);
     } finally {
       sendingRef.current = false;
     }
-  }, [channel.id, profile?.avatar_url, profile?.full_name, sendMessage, user]);
+  }, [ctxEnvio]);
 
   const handleSendThreadAudio = useCallback(async (audioUrl: string, transcription: string, rootMessageId: string) => {
-    if (!user) return;
-    const displayName = (profile?.full_name && profile.full_name.trim()) || user.email?.split("@")[0] || "Usuário";
-    const avatarUrl = profile?.avatar_url || null;
-    await sendMessage(channel.id, user.id, displayName, transcription, "human", avatarUrl, audioUrl, null, rootMessageId);
-    await notifyChannelRecipients({
-      channelId: channel.id,
-      senderUserId: user.id,
-      authorName: `${displayName} (em conversa)`,
-      contentPreview: `🎤 ${transcription.slice(0, 100)}`,
-      contentText: transcription,
-      forceNotifyAll: true,
-      threadRootId: rootMessageId,
-    });
-  }, [channel.id, profile?.avatar_url, profile?.full_name, sendMessage, user]);
+    if (!ctxEnvio) return;
+    await publicarAudioNaThread(ctxEnvio, audioUrl, transcription, rootMessageId);
+  }, [ctxEnvio]);
 
   const handleAudioStop = async () => {
     if (!user) return;
@@ -1704,40 +1630,9 @@ export default function ChannelChat({
         return;
       }
 
-      const ext = getAudioFileExtension(blob.type);
       // Anexo privado do canal desde 13/10/2026 — antes ia para o bucket
       // público `audio-messages`, que qualquer um com o link ouvia.
-      let audioUrl: string;
-      try {
-        audioUrl = await enviarAudioDoCanal(channel.id, blob);
-      } catch (uploadErr) {
-        console.error("Upload error:", uploadErr);
-        toast.error("Falha ao enviar o áudio.");
-        recorder.setIsProcessing(false);
-        return;
-      }
-      const formData = new FormData();
-      // ⚠️ O campo chama `arquivo` (a rota é nossa agora, não a edge).
-      formData.append("arquivo", blob, `audio.${ext}`);
-      const { data: transcribeData, error: transcribeErr } = await api<{ text: string }>(
-        "/ia/transcrever", { method: "POST", body: formData },
-      ).then((d) => ({ data: d, error: null as Error | null }),
-             (e: Error) => ({ data: null, error: e }));
-      const transcription = transcribeErr ? "Transcrição indisponível" : (transcribeData?.text || "Mensagem de áudio");
-      const audioDisplayName = (profile?.full_name && profile.full_name.trim()) || user.email?.split("@")[0] || "Usuário";
-      const audioAvatarUrl = profile?.avatar_url || null;
-      await sendMessage(channel.id, user.id, audioDisplayName, transcription, "human", audioAvatarUrl, audioUrl);
-
-      await notifyChannelRecipients({
-        channelId: channel.id,
-        senderUserId: user.id,
-        authorName: audioDisplayName,
-        contentPreview: `🎤 ${transcription.slice(0, 100)}`,
-        contentText: transcription,
-        forceNotifyAll: channel.type === "dm",
-      });
-
-      triggerAgents(transcription);
+      if (ctxEnvio) await enviarAudioNoCanal(ctxEnvio, blob);
     } catch (err) {
       console.error("Audio send error:", err);
       toast.error("Falha ao processar o áudio.");
