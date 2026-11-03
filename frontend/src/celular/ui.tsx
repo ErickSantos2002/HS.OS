@@ -8,6 +8,33 @@ import { Hash, Sparkles } from "lucide-react";
 import { useResolvedAgentAvatar } from "@/hooks/use-agent-avatar";
 import { corDoAvatar } from "./formato";
 
+
+/**
+ * Folha e menu fecham com o voltar do Android, como no WhatsApp — em vez de o
+ * voltar desempilhar a conversa que está por baixo.
+ *
+ * Abrir empilha uma entrada no histórico com a MESMA URL (a pilha de telas
+ * não muda); o voltar a consome e fecha. Fechar pelo toque devolve a entrada
+ * — mas só se ela ainda for a atual: se a ação escolhida navegou (abrir a
+ * thread), voltar ali desfaria a navegação.
+ */
+function useFecharComVoltar(aberto: boolean, aoFechar: () => void) {
+  const aoFecharRef = useRef(aoFechar);
+  aoFecharRef.current = aoFechar;
+  useEffect(() => {
+    if (!aberto) return;
+    const marca = Date.now() + Math.random();
+    window.history.pushState({ ...(window.history.state ?? {}), celFolha: marca }, "");
+    let peloVoltar = false;
+    const aoPop = () => { peloVoltar = true; aoFecharRef.current(); };
+    window.addEventListener("popstate", aoPop);
+    return () => {
+      window.removeEventListener("popstate", aoPop);
+      if (!peloVoltar && (window.history.state as { celFolha?: number } | null)?.celFolha === marca) window.history.back();
+    };
+  }, [aberto]);
+}
+
 type Tam = "" | "sm" | "xs";
 
 export function Avatar({
@@ -49,6 +76,7 @@ export function Folha({ aberta, aoFechar, children, rotulo }: { aberta: boolean;
   const ref = useRef<HTMLDivElement>(null);
   const [desvio, setDesvio] = useState(0);
   const inicio = useRef<number | null>(null);
+  useFecharComVoltar(aberta, aoFechar);
 
   useEffect(() => {
     if (!aberta) return;
@@ -87,6 +115,7 @@ export interface ItemDeMenu {
 }
 
 export function MenuSuspenso({ aberto, aoFechar, itens }: { aberto: boolean; aoFechar: () => void; itens: ItemDeMenu[] }) {
+  useFecharComVoltar(aberto, aoFechar);
   useEffect(() => {
     if (!aberto) return;
     const aoTeclar = (e: KeyboardEvent) => { if (e.key === "Escape") aoFechar(); };

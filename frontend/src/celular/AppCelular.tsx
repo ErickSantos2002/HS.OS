@@ -67,7 +67,13 @@ export default function AppCelular() {
     if (idx > 0) navigate(-1);
     else navigate(urlDoPai(location.search), { replace: true });
   }, [navigate, location.search]);
-  const abrir = useCallback((t: Tela) => navigate(urlAoAbrir(location.search, t)), [navigate, location.search]);
+  // Abrir a partir de uma folha ou do ⋮: a entrada que eles puseram no
+  // histórico (para o voltar fechá-los) é TROCADA pela tela nova, senão o
+  // voltar da tela nova cairia nela e precisaria de dois toques.
+  const abrir = useCallback((t: Tela) => {
+    const deFolha = !!(window.history.state as { celFolha?: number } | null)?.celFolha;
+    navigate(urlAoAbrir(location.search, t), { replace: deFolha });
+  }, [navigate, location.search]);
   const trocarAba = useCallback((a: Aba) => navigate(urlDaAba(a), { replace: true }), [navigate]);
 
   // Clique no aviso (toast) de mensagem nova — os mesmos eventos do desktop.
