@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 
-import { criarDetectorDeToqueLongo } from "@/lib/toque-longo";
+import { criarDetectorDeToqueLongo, menuVeioDoMouse } from "@/lib/toque-longo";
 
 export interface HandlersDoToqueLongo {
   onTouchStart?: (e: React.TouchEvent) => void;
@@ -34,6 +34,7 @@ export function doProprioElemento(e: { currentTarget: EventTarget | null; target
 export function useToqueLongo(aoDisparar: () => void, ativo: boolean) {
   const [pressionando, setPressionando] = useState(false);
   const aoDispararRef = useRef(aoDisparar);
+  const ultimoToqueRef = useRef<number | null>(null);
   aoDispararRef.current = aoDisparar;
 
   const detector = useMemo(
@@ -71,6 +72,7 @@ export function useToqueLongo(aoDisparar: () => void, ativo: boolean) {
     return {
       onTouchStart: (e) => {
         if (!doProprioElemento(e) || e.touches.length !== 1) return;
+        ultimoToqueRef.current = Date.now();
         const t = e.touches[0];
         detector.inicio(t.clientX, t.clientY);
         setPressionando(true);
@@ -88,8 +90,16 @@ export function useToqueLongo(aoDisparar: () => void, ativo: boolean) {
       },
       onTouchCancel: () => encerrar(),
       // Menu nativo do Android ao segurar (copiar link, salvar imagem).
+      // Do dedo (Android), só bloqueia o menu nativo — o detector já abriu.
+      // Do mouse (janela estreita), abre a folha: a seta de hover não existe
+      // no modo toque e o botão direito é o caminho para as ações.
       onContextMenu: (e) => {
-        if (doProprioElemento(e)) e.preventDefault();
+        if (!doProprioElemento(e)) return;
+        e.preventDefault();
+        const pointerType = (e.nativeEvent as PointerEvent | MouseEvent & { pointerType?: string }).pointerType;
+        if (menuVeioDoMouse({ pointerType, agora: Date.now(), ultimoToque: ultimoToqueRef.current })) {
+          aoDispararRef.current();
+        }
       },
     };
   }, [ativo, detector, encerrar]);

@@ -33,6 +33,23 @@ describe("useToqueLongo", () => {
     expect(aoDisparar).toHaveBeenCalledTimes(1);
   });
 
+  it("botão direito do mouse (janela estreita) abre a folha", () => {
+    const aoDisparar = vi.fn();
+    render(<Bolha aoDisparar={aoDisparar} />);
+    fireEvent.contextMenu(screen.getByText("texto da bolha"));
+    expect(aoDisparar).toHaveBeenCalledTimes(1);
+  });
+
+  it("contextmenu logo depois de um toque (Android segurando) não abre de novo", () => {
+    const aoDisparar = vi.fn();
+    render(<Bolha aoDisparar={aoDisparar} />);
+    const alvo = screen.getByText("texto da bolha");
+    fireEvent.touchStart(alvo, { touches: [{ clientX: 0, clientY: 0 }] });
+    act(() => { vi.advanceTimersByTime(450); });
+    fireEvent.contextMenu(alvo);
+    expect(aoDisparar).toHaveBeenCalledTimes(1);
+  });
+
   it("segurar algo do portal (a folha) não dispara o detector da bolha", () => {
     const aoDisparar = vi.fn();
     render(<Bolha aoDisparar={aoDisparar} />);

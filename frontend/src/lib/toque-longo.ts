@@ -68,3 +68,24 @@ export function criarDetectorDeToqueLongo({
     },
   };
 }
+
+/** Janela em que um `contextmenu` ainda é consequência de um toque. */
+export const JANELA_TOQUE_RECENTE_MS = 1000;
+
+/**
+ * O `contextmenu` veio do mouse (botão direito numa janela estreita) ou do
+ * dedo segurando? Do mouse, ele precisa ABRIR a folha — senão quem usa o
+ * desktop com a janela abaixo de 768px fica sem ações, porque a seta de hover
+ * não é desenhada no modo toque. Do dedo, o detector já abriu.
+ * `pointerType` decide quando o navegador o informa; senão, toque recente.
+ */
+export function menuVeioDoMouse(params: {
+  pointerType?: string | null;
+  agora: number;
+  ultimoToque: number | null;
+}): boolean {
+  const { pointerType, agora, ultimoToque } = params;
+  if (pointerType === "mouse" || pointerType === "pen") return true;
+  if (pointerType === "touch") return false;
+  return ultimoToque === null || agora - ultimoToque > JANELA_TOQUE_RECENTE_MS;
+}

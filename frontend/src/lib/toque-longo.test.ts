@@ -7,7 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { criarDetectorDeToqueLongo } from "@/lib/toque-longo";
+import { criarDetectorDeToqueLongo, menuVeioDoMouse } from "@/lib/toque-longo";
 
 describe("criarDetectorDeToqueLongo", () => {
   beforeEach(() => vi.useFakeTimers());
@@ -79,5 +79,23 @@ describe("criarDetectorDeToqueLongo", () => {
     d.rolou();
     vi.advanceTimersByTime(1000);
     expect(aoDisparar).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Mouse numa janela abaixo de 768px: a seta de hover não é desenhada no modo
+ * toque, então o botão direito é o único caminho para as ações.
+ */
+describe("menuVeioDoMouse", () => {
+  it("pointerType mouse é mouse, touch é dedo", () => {
+    expect(menuVeioDoMouse({ pointerType: "mouse", agora: 5000, ultimoToque: 4900 })).toBe(true);
+    expect(menuVeioDoMouse({ pointerType: "touch", agora: 5000, ultimoToque: null })).toBe(false);
+  });
+  it("sem pointerType: toque recente é dedo", () => {
+    expect(menuVeioDoMouse({ agora: 5000, ultimoToque: 4500 })).toBe(false);
+  });
+  it("sem pointerType e sem toque recente é mouse", () => {
+    expect(menuVeioDoMouse({ agora: 5000, ultimoToque: null })).toBe(true);
+    expect(menuVeioDoMouse({ agora: 5000, ultimoToque: 3000 })).toBe(true);
   });
 });

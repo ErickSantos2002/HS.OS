@@ -537,6 +537,11 @@ export const AgentMessageList = React.memo(function AgentMessageList({
                   setAlvoDoToque(msg.id);
                   toqueLongo.handlers.onTouchStart?.(e);
                 },
+                // Botão direito numa janela estreita também precisa saber de quem é.
+                onContextMenu: (e: React.MouseEvent) => {
+                  acoesDoAlvoRef.current = acoes;
+                  toqueLongo.handlers.onContextMenu?.(e);
+                },
               } : {})}
             >
               {/* Avatar */}
