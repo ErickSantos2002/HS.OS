@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
 import { api } from "@/lib/api";
+import { ehQuadrado } from "@/lib/instalacao-app";
 
 export interface BrandingConfig {
   logo: string;
@@ -115,35 +116,45 @@ function hslToHex(hslStr: string): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
+const APPLE_TOUCH_ESTATICO = "/icons/apple-touch-icon.png";
+let iconeAppleEmTeste: string | null = null;
+
+function definirAppleTouchIcon(href: string) {
+  let apple = document.querySelector("link[rel='apple-touch-icon']") as HTMLLinkElement | null;
+  if (!apple) {
+    apple = document.createElement("link");
+    apple.rel = "apple-touch-icon";
+    document.head.appendChild(apple);
+  }
+  if (apple.getAttribute("href") !== href) apple.href = href;
+}
+
 function applyManifest(config: BrandingConfig) {
   const icon = config.pwaIconUrl || config.faviconUrl || config.logo;
   const themeColor = hslToHex(config.primaryColor);
 
-  // O manifest é servido pela própria instalação (public/manifest.json). Antes
-  // apontava para uma edge function de OUTRO projeto Supabase — endereço que
-  // não é nosso e que quebraria numa instalação própria.
-  const version = encodeURIComponent(
-    (icon || "") + "|" + (config.companyName || "") + "|" + themeColor,
-  );
-  const manifestUrl = `/manifest.json?v=${version}`;
+  // O manifest é o mesmo arquivo estático (public/manifest.json) e o `<link>`
+  // do index.html já aponta para ele. Até 03/11/2026 o href era trocado por
+  // `/manifest.json?v=<marca>` a cada carga — mesma resposta, URL nova, que o
+  // Chrome lê como outro manifest. Era só ruído: a marca nunca chegou ao
+  // manifest por esse caminho.
 
-  let link = document.querySelector("link[rel='manifest']") as HTMLLinkElement | null;
-  if (!link) {
-    link = document.createElement("link");
-    link.rel = "manifest";
-    document.head.appendChild(link);
-  }
-  if (!link.href.endsWith(manifestUrl)) link.href = manifestUrl;
-
-  // Apple touch icon (iOS reads this separately from the manifest)
-  if (icon) {
-    let apple = document.querySelector("link[rel='apple-touch-icon']") as HTMLLinkElement | null;
-    if (!apple) {
-      apple = document.createElement("link");
-      apple.rel = "apple-touch-icon";
-      document.head.appendChild(apple);
-    }
-    apple.href = icon;
+  // Apple touch icon (o iOS lê à parte do manifest). O ícone do branding só
+  // vale se for QUADRADO: o padrão é o wordmark (1910×823), que o iOS
+  // espremeria no quadrado da tela de início. Senão fica o estático da HS.
+  if (icon && icon !== iconeAppleEmTeste) {
+    iconeAppleEmTeste = icon;
+    const img = new Image();
+    img.onload = () => {
+      if (iconeAppleEmTeste !== icon) return; // chegou outra marca no meio
+      definirAppleTouchIcon(
+        ehQuadrado(img.naturalWidth, img.naturalHeight) ? icon : APPLE_TOUCH_ESTATICO,
+      );
+    };
+    img.onerror = () => {
+      if (iconeAppleEmTeste === icon) definirAppleTouchIcon(APPLE_TOUCH_ESTATICO);
+    };
+    img.src = icon;
   }
 
   // theme-color meta
