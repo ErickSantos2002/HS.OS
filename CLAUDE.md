@@ -557,6 +557,15 @@ sobe e loga `push desligado: VAPID ausente`.
 `channel_members.silenciado` (`025`) corta push, som e notificação local; o
 sininho e as não lidas continuam.
 
+⚠️ **"Ficou com cara de computador no Android" é o Chrome com "Site para
+computador" ligado, não defeito nosso.** Com ele, o Chrome ignora o
+`width=device-width` e desenha em 980px — o app instalado herda a opção do
+site, cai no layout de desktop e tudo fica minúsculo. Em 03/11/2026 isso fez
+a primeira entrega mobile parecer "um desastre no Android" e motivou refazer a
+interface inteira; só depois apareceu a causa. Antes de mexer em layout por
+causa de queixa no Android: Chrome → ⋮ → desmarcar "Site para computador"
+(e conferir em Configurações → Configurações do site → Site para computador).
+
 ### Celular: interface própria — `frontend/src/celular/` (03/11/2026)
 
 Spec `docs/superpowers/specs/2026-11-03-app-celular-design.md`; o protótipo
