@@ -5,6 +5,7 @@ import { useAuthContext } from "@/contexts/auth-context";
 import { AGENT_UNREAD_EVENT, clearUnreadAgent, getUnreadAgentCount, getUnreadAgentIds } from "@/lib/chat-sender";
 import { getAgentIdAliases } from "@/lib/agent-id";
 import { NotificationsPermissionBanner } from "@/components/NotificationsPermissionBanner";
+import { isEnabled as isBrowserNotifEnabled } from "@/lib/browser-notifications";
 
 interface NotificationsContextValue {
   notifications: Notification[];
@@ -65,6 +66,9 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   useEffect(() => {
     if (!user?.id) return;
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    // Desligado nas Configurações = este aparelho saiu do push; recarregar a
+    // página não pode inscrevê-lo de novo.
+    if (!isBrowserNotifEnabled()) return;
     import("@/lib/push-notifications").then(({ subscribeToPushNotifications }) => {
       subscribeToPushNotifications(user.id).catch((e) =>
         console.warn("[NotificationsProvider] push auto-subscribe failed:", e)
@@ -126,12 +130,23 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
     if (!user?.id) return;
     const params = new URLSearchParams(window.location.search);
     const markReadId = params.get("mark_read");
-    if (!markReadId) return;
-    notifs.markAsRead(markReadId).catch((e) =>
-      console.warn("[NotificationsProvider] URL mark_read failed:", e)
-    );
+    // `?marcar_lido=<canal>`: o "Marcar como lida" do push sem aba aberta (o SW
+    // não tem o token, então abre o app para ele marcar). Ver `sw.ts`.
+    const marcarCanal = params.get("marcar_lido");
+    if (!markReadId && !marcarCanal) return;
+    if (markReadId) {
+      notifs.markAsRead(markReadId).catch((e) =>
+        console.warn("[NotificationsProvider] URL mark_read failed:", e)
+      );
+    }
+    if (marcarCanal) {
+      notifs.markAllAsReadForChannel(marcarCanal).catch((e) =>
+        console.warn("[NotificationsProvider] URL marcar_lido failed:", e)
+      );
+    }
     // Clean URL
     params.delete("mark_read");
+    params.delete("marcar_lido");
     const newSearch = params.toString();
     const newUrl = `${window.location.pathname}${newSearch ? `?${newSearch}` : ""}${window.location.hash}`;
     window.history.replaceState({}, "", newUrl);

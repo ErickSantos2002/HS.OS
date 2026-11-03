@@ -1,6 +1,7 @@
 /**
  * Web Push (PWA) subscription helpers.
- * Backend infra: push_subscriptions table, send-push edge function, sw.ts push handler.
+ * Backend: `push_subscriptions` + `app/push_envio.py` (o servidor envia a
+ * partir da mensagem gravada, spec 2026-11-03) + handler `push` em `sw.ts`.
  *
  * Usage:
  *   await subscribeToPushNotifications(userId);
@@ -124,6 +125,7 @@ export async function subscribeToPushNotifications(
       console.warn("[push] failed to persist subscription:", error.message);
     } else {
       try { localStorage.setItem("hsos:push:endpoint", endpoint); } catch { /* noop */ }
+      confirmacao = { endpoint, ok: true, em: Date.now() };
       console.log("[push] subscription saved");
     }
 
@@ -134,19 +136,57 @@ export async function subscribeToPushNotifications(
   }
 }
 
+/**
+ * Desinscreve ESTE aparelho: apaga no servidor e no navegador.
+ *
+ * ⚠️ **Servidor primeiro, e antes de limpar o token.** O `DELETE` exige login e
+ * confere o dono (esclarecimento 4 da spec). É o que o logout chama — sem
+ * isto, um aparelho compartilhado seguia recebendo as mensagens de quem saiu.
+ * Desligar as notificações nas Configurações também passa por aqui.
+ */
 export async function unsubscribeFromPushNotifications(): Promise<void> {
   if (!isPushSupported()) return;
   try {
-    const registration = await navigator.serviceWorker.ready;
-    const subscription = await registration.pushManager.getSubscription();
-    if (subscription) {
-      const endpoint = subscription.endpoint;
-      await subscription.unsubscribe();
-      await api(`/push/inscricao?endpoint=${encodeURIComponent(endpoint)}`, {
-        method: "DELETE",
-      });
-    }
+    const registration = await navigator.serviceWorker.getRegistration();
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) return;
+    const endpoint = subscription.endpoint;
+    await api(`/push/inscricao?endpoint=${encodeURIComponent(endpoint)}`, {
+      method: "DELETE",
+    }).catch((e) => console.warn("[push] server unsubscribe failed:", e));
+    await subscription.unsubscribe().catch(() => false);
+    try { localStorage.removeItem("hsos:push:endpoint"); } catch { /* noop */ }
+    confirmacao = null;
   } catch (err) {
     console.warn("[push] unsubscribe failed:", err);
+  }
+}
+
+// Cache curto da confirmação: a notificação local consulta isto a cada
+// mensagem, e uma ida ao servidor por mensagem seria desperdício.
+let confirmacao: { endpoint: string; ok: boolean; em: number } | null = null;
+const VALIDADE_CONFIRMACAO_MS = 5 * 60 * 1000;
+
+/**
+ * O servidor tem a inscrição DESTE aparelho? (`/push/inscricoes/contagem?endpoint=`)
+ *
+ * ⚠️ Inscrição no navegador não basta: até 03/11/2026 a notificação local era
+ * suprimida só por existir inscrição no navegador, o servidor nunca enviava, e
+ * quem se inscrevia perdia as duas.
+ */
+export async function inscricaoConfirmada(endpoint: string): Promise<boolean> {
+  const agora = Date.now();
+  if (confirmacao && confirmacao.endpoint === endpoint && agora - confirmacao.em < VALIDADE_CONFIRMACAO_MS) {
+    return confirmacao.ok;
+  }
+  try {
+    const r = await api<{ count: number }>(
+      `/push/inscricoes/contagem?endpoint=${encodeURIComponent(endpoint)}`,
+    );
+    const ok = (r?.count ?? 0) > 0;
+    confirmacao = { endpoint, ok, em: agora };
+    return ok;
+  } catch {
+    return false;
   }
 }

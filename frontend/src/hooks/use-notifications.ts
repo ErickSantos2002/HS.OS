@@ -5,6 +5,7 @@ import { getAgentIdAliases } from "@/lib/agent-id";
 import { toast } from "sonner";
 import { playNotificationSound } from "@/lib/notification-sound";
 import { showNotification as showBrowserNotification } from "@/lib/browser-notifications";
+import { definirAgenteAberto, definirCanalAberto } from "@/lib/conversa-aberta";
 
 export interface Notification {
   id: string;
@@ -433,6 +434,8 @@ export function useNotifications(userId: string | undefined) {
   function setActiveChannel(channelId: string | null) {
     const previous = activeChannelRef.current;
     activeChannelRef.current = channelId;
+    // O service worker pergunta isto antes de mostrar um push.
+    definirCanalAberto(channelId);
 
     // When leaving a channel, remove it from the "cleared" set so future
     // messages for it will properly notify (otherwise once visited, a channel
@@ -449,6 +452,7 @@ export function useNotifications(userId: string | undefined) {
 
   function setActiveAgent(agentId: string | null) {
     activeAgentRef.current = agentId;
+    definirAgenteAberto(agentId);
   }
 
   const unreadByChannel = notifications.reduce<Record<string, number>>((acc, n) => {
