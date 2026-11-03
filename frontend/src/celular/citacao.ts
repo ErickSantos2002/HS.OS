@@ -22,6 +22,14 @@ export function trechoParaCitar(conteudo: string): string {
   return linha.length > LIMITE_TRECHO ? `${linha.slice(0, LIMITE_TRECHO).trimEnd()}…` : linha;
 }
 
+/**
+ * Quem a citação nomeia: o nome de verdade, também quando a mensagem citada é
+ * minha. "Você" gravado no texto seria lido como "você" por todos os outros.
+ */
+export function autorDaCitacao(ehMinha: boolean, meuNome: string, nomeDoAutor: string): string {
+  return ehMinha ? meuNome : nomeDoAutor;
+}
+
 export function montarResposta(citacao: Citacao | null, texto: string): string {
   if (!citacao) return texto;
   return `> **${citacao.autor}:** ${citacao.texto}\n\n${texto}`;

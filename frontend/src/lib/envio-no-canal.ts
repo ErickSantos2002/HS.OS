@@ -62,9 +62,21 @@ function acordarAgentes(ctx: ContextoDeEnvio, texto: string) {
   });
 }
 
+export interface OpcoesDeEnvio {
+  /**
+   * O que a pessoa escreveu AGORA, sem a citação (`> **Autor:** trecho`) que o
+   * celular põe na frente ao responder. É isto que vai para o aviso e para o
+   * agente: a citação repetia a menção e acordava o agente citado de novo.
+   */
+  textoNovo?: string;
+}
+
 /** Mensagem no nível de cima do canal (texto e/ou anexos já enviados). */
-export async function publicarNoCanal(ctx: ContextoDeEnvio, texto: string, anexos: ChannelAttachment[] | null): Promise<void> {
+export async function publicarNoCanal(
+  ctx: ContextoDeEnvio, texto: string, anexos: ChannelAttachment[] | null, opcoes: OpcoesDeEnvio = {},
+): Promise<void> {
   const displayContent = conteudoComAnexos(texto, anexos);
+  const paraAvisos = opcoes.textoNovo !== undefined ? conteudoComAnexos(opcoes.textoNovo, anexos) : displayContent;
   const displayName = nomeDeQuemEscreve(ctx);
   const avatarUrl = ctx.profile?.avatar_url || null;
   await ctx.sendMessage(ctx.canal.id, ctx.user.id, displayName, displayContent, "human", avatarUrl, null, anexos);
@@ -72,23 +84,26 @@ export async function publicarNoCanal(ctx: ContextoDeEnvio, texto: string, anexo
     channelId: ctx.canal.id,
     senderUserId: ctx.user.id,
     authorName: displayName,
-    contentPreview: displayContent.slice(0, 100),
-    contentText: displayContent,
+    contentPreview: paraAvisos.slice(0, 100),
+    contentText: paraAvisos,
     forceNotifyAll: ctx.canal.type === "dm",
   });
-  acordarAgentes(ctx, displayContent);
+  acordarAgentes(ctx, paraAvisos);
 }
 
 /** Resposta numa thread. Não acorda agente — era assim no `ChannelChat`. */
-export async function publicarNaThread(ctx: ContextoDeEnvio, texto: string, raiz: string, anexos?: ChannelAttachment[] | null): Promise<void> {
+export async function publicarNaThread(
+  ctx: ContextoDeEnvio, texto: string, raiz: string, anexos?: ChannelAttachment[] | null, opcoes: OpcoesDeEnvio = {},
+): Promise<void> {
   const nome = nomeDeQuemEscreve(ctx);
+  const paraAvisos = opcoes.textoNovo ?? texto;
   await ctx.sendMessage(ctx.canal.id, ctx.user.id, nome, texto, "human", ctx.profile?.avatar_url || null, null, anexos ?? null, raiz);
   await notifyChannelRecipients({
     channelId: ctx.canal.id,
     senderUserId: ctx.user.id,
     authorName: `${nome} (em conversa)`,
-    contentPreview: `💬 ${texto.slice(0, 100)}`,
-    contentText: texto,
+    contentPreview: `💬 ${paraAvisos.slice(0, 100)}`,
+    contentText: paraAvisos,
     forceNotifyAll: true,
     threadRootId: raiz,
   });

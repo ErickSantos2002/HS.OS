@@ -46,7 +46,7 @@ import { canalNaoResolve } from "@/lib/tela-cheia";
 import { estadoNoCanal } from "@/lib/vistos";
 import { AudioDoAnexo, Bolha, Pensando, type ReacaoNaBolha } from "./Bolha";
 import { Cabecalho, Sobreposta } from "./Cabecalho";
-import { montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "./citacao";
+import { autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "./citacao";
 import { Composer } from "./Composer";
 import { FolhaDeAcoes, FolhaDeAnexo, FolhaDeEmoji } from "./Folhas";
 import { Ampliada, MidiaDoCanal } from "./Midia";
@@ -187,9 +187,9 @@ export function TelaConversaCanal({
 
   const responder = useCallback((m: ChannelMessage) => {
     setEditando(null);
-    setResposta({ autor: m.author_id === user?.id ? "Você" : nomeDoAutor(m), texto: trechoParaCitar(m.content || "") || "📎 anexo" });
+    setResposta({ autor: autorDaCitacao(m.author_id === user?.id, nomeProprio, nomeDoAutor(m)), texto: trechoParaCitar(m.content || "") || "📎 anexo" });
     requestAnimationFrame(() => campoRef.current?.focus());
-  }, [nomeDoAutor, user?.id]);
+  }, [nomeDoAutor, nomeProprio, user?.id]);
 
   const enviar = async () => {
     if (!ctxEnvio || enviandoRef.current) return;
@@ -223,7 +223,7 @@ export function TelaConversaCanal({
           return;
         }
       }
-      await publicarNoCanal(ctxEnvio, texto, anexos);
+      await publicarNoCanal(ctxEnvio, texto, anexos, { textoNovo: antes.trim() });
     } finally {
       enviandoRef.current = false;
       setEnviando(false);

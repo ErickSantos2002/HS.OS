@@ -26,11 +26,11 @@ import { idDoAnexoDeAudio } from "@/lib/audio-de-mensagem";
 import { fraseDeQuemEscreve, podeEscreverNoCanal } from "@/lib/canal-avisos";
 import { getAgentDisplayName } from "@/lib/channel-agents";
 import { copyToClipboard } from "@/lib/clipboard";
-import { anexosDoCanal, apagarNoCanal, editarNoCanal, enviarAudioNoCanal, publicarNaThread, type ContextoDeEnvio } from "@/lib/envio-no-canal";
+import { anexosDoCanal, nomeDeQuemEscreve, apagarNoCanal, editarNoCanal, enviarAudioNoCanal, publicarNaThread, type ContextoDeEnvio } from "@/lib/envio-no-canal";
 import { estadoNoCanal } from "@/lib/vistos";
 import { AudioDoAnexo, Bolha, type ReacaoNaBolha } from "./Bolha";
 import { Cabecalho } from "./Cabecalho";
-import { montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "./citacao";
+import { autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "./citacao";
 import { Composer } from "./Composer";
 import { FolhaDeAcoes, FolhaDeEmoji } from "./Folhas";
 import { Ampliada, MidiaDoCanal } from "./Midia";
@@ -113,7 +113,7 @@ export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: stri
   const reagir = (m: ChannelMessage, e: string) => { if (user) void toggleReaction(m.id, e, user.id); };
   const responder = (m: ChannelMessage) => {
     setEditando(null);
-    setResposta({ autor: m.author_id === user?.id ? "Você" : nomeDoAutor(m), texto: trechoParaCitar(m.content || "") || "📎 anexo" });
+    setResposta({ autor: autorDaCitacao(m.author_id === user?.id, nomeDeQuemEscreve({ profile, user: user! }), nomeDoAutor(m)), texto: trechoParaCitar(m.content || "") || "📎 anexo" });
     requestAnimationFrame(() => campoRef.current?.focus());
   };
 
@@ -126,7 +126,8 @@ export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: stri
       limparRascunho();
       return;
     }
-    const texto = montarResposta(resposta, rascunho.trim());
+    const rascunhoEnviado = rascunho.trim();
+    const texto = montarResposta(resposta, rascunhoEnviado);
     if (!texto.trim() && media.staged.length === 0) return;
     setEnviando(true);
     try {
@@ -134,7 +135,7 @@ export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: stri
       media.clearStaged();
       limparRascunho();
       setResposta(null);
-      await publicarNaThread(ctxEnvio, texto, raizId, anexos);
+      await publicarNaThread(ctxEnvio, texto, raizId, anexos, { textoNovo: rascunhoEnviado });
     } catch {
       toast.error("Não consegui enviar a resposta.");
     } finally {

@@ -18,6 +18,7 @@ import { ModelSelector } from "@/components/chat/ModelSelector";
 import { PainelEmbutido } from "@/components/chat/painel-embutido";
 import LiveArtifactViewer from "@/components/LiveArtifactViewer";
 import { useAgents } from "@/hooks/use-agents";
+import { useAuthContext } from "@/contexts/auth-context";
 import { useChatMedia } from "@/hooks/use-chat-media";
 import { LIMITE_TEXTO_COMO_ANEXO, useConversaAgente } from "@/hooks/use-conversa-agente";
 import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
@@ -31,7 +32,7 @@ import type { ChatMessage } from "@/lib/mock-data";
 import { estadoNoAgente } from "@/lib/vistos";
 import { Bolha, Pensando } from "./Bolha";
 import { Cabecalho, Sobreposta } from "./Cabecalho";
-import { montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "./citacao";
+import { autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "./citacao";
 import { Composer } from "./Composer";
 import { FolhaDeAcoes, FolhaDeAnexo, FolhaDeEmoji } from "./Folhas";
 import { Ampliada, MidiaDoAgente } from "./Midia";
@@ -61,6 +62,8 @@ export function TelaConversaAgente({
   const { agents } = useAgents();
   const agente = agents.find((a) => a.id === agentId);
   const nome = agente?.name ?? agentId;
+  const { profile, user } = useAuthContext();
+  const meuNome = (profile?.full_name && profile.full_name.trim()) || user?.email?.split("@")[0] || "Eu";
   const mapaDm = useMapaDmDoAgente();
   useConversaAtivaNasNotificacoes({ agentId, canalId: null, agentDmChannelMap: mapaDm, ativa });
 
@@ -98,9 +101,9 @@ export function TelaConversaAgente({
   }, [mensagens.length]);
 
   const responder = useCallback((m: ChatMessage) => {
-    setResposta({ autor: m.role === "user" ? "Você" : nome, texto: trechoParaCitar(m.content || "") || "📎 anexo" });
+    setResposta({ autor: autorDaCitacao(m.role === "user", meuNome, nome), texto: trechoParaCitar(m.content || "") || "📎 anexo" });
     requestAnimationFrame(() => campoRef.current?.focus());
-  }, [nome]);
+  }, [nome, meuNome]);
 
   const enviar = async () => {
     if (enviando) return;
