@@ -176,6 +176,46 @@ def test_falha_de_compactacao_nao_grava_texto_quando_perde_a_reserva(ambiente, m
     assert ambiente.conn.updates == [] and ambiente.audios == [] and ambiente.publicados == []
 
 
+def _comando(monkeypatch, texto):
+    executado = []
+
+    class Conn_:
+        async def execute(self, sql, *a):
+            executado.append((" ".join(sql.split()), a))
+
+    @asynccontextmanager
+    async def sessao(**_):
+        yield Conn_()
+
+    async def carregar():
+        return CFG
+
+    class Gw:
+        async def chamar(self, *_):
+            return {}
+
+    monkeypatch.setattr(c, "sessao", sessao)
+    monkeypatch.setattr(c.cfg, "carregar", carregar)
+    monkeypatch.setattr(c, "obter_cliente", lambda *_: Gw())
+    asyncio.run(c.comando("nina", c.ComandoIn(comando=texto), SimpleNamespace(id=UID)))
+    return executado
+
+
+def test_parar_encerra_os_runs_abertos_para_o_coletor(monkeypatch):
+    """A pessoa apertou Parar e fechou o app; sem isto o coletor buscava a
+    resposta que ela mandou parar, gravava e ainda mandava push dela."""
+    executado = _comando(monkeypatch, "/stop")
+    assert len(executado) == 1
+    sql, args = executado[0]
+    assert "SET coleta_encerrada_em = now()" in sql
+    assert "message_id IS NULL" in sql and "coleta_encerrada_em IS NULL" in sql
+    assert args == (UID, "nina")
+
+
+def test_outro_comando_nao_encerra_nada(monkeypatch):
+    assert _comando(monkeypatch, "/compact") == []
+
+
 class _GatewayFora:
     async def chamar(self, *_):
         raise c.ErroGateway("conexão recusada")

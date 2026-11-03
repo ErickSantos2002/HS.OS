@@ -1480,6 +1480,13 @@ async def comando(
             "Isto não é um comando. Comando começa com barra, ex.: /stop.",
         )
 
+    # ⚠️ **Parar vale também para o coletor de respostas.** Sem isto, quem
+    # apertava Parar e fechava o app recebia depois a resposta que mandou
+    # parar — gravada pelo coletor, com push. Antes do gateway: a vontade de
+    # parar vale mesmo se o gateway recusar o comando.
+    if texto.split()[0].lower() == "/stop":
+        await _encerrar_coleta(usuario.id, agent_id)
+
     c = await cfg.carregar()
     if not c.configurado:
         raise HTTPException(
@@ -1503,6 +1510,19 @@ async def comando(
 
     logger.info("Comando %s em %s por %s", texto.split()[0], agent_id, usuario.id)
     return {"ok": True}
+
+
+async def _encerrar_coleta(user_id: str, agent_id: str) -> None:
+    """Tira do coletor os runs abertos desta pessoa com este agente. Nunca levanta."""
+    try:
+        async with sessao(role="authenticated", user_id=user_id) as conn:
+            await conn.execute(
+                """UPDATE public.agent_runs SET coleta_encerrada_em = now()
+                    WHERE user_id = $1::uuid AND agent_id = $2
+                      AND message_id IS NULL AND coleta_encerrada_em IS NULL""",
+                user_id, agent_id)
+    except Exception as e:  # noqa: BLE001 — sem a 024 o /stop continua parando
+        logger.warning("Não encerrei a coleta de %s/%s: %s", user_id, agent_id, e)
 
 
 _JANELA_AUDIO = timedelta(minutes=30)
