@@ -527,6 +527,36 @@ agente, procura a mensagem igual e só então insere. Assinatura para diagnostic
 bolha dobrada: o `created_at` do `/recuperar` tem milissegundos, o do `/reply`
 tem microssegundos.
 
+### Celular: push, coletor de respostas e silenciar — 03/11/2026
+
+Spec: `docs/superpowers/specs/2026-11-03-mobile-conversas-design.md`.
+
+⚠️ **A resposta do agente não depende mais da tela aberta.** Até 03/11 só o
+`/reply` (chamado em laço pelo navegador) e o `/recuperar` gravavam resposta;
+quem fechava o app depois de perguntar não tinha o que receber. Hoje o miolo
+do `/reply` é `colher_resposta` (`routers/conversations.py`), e o
+`app/coletor_respostas.py` o chama para runs cuja tela não pergunta há 45 s.
+**Ao mexer no `/reply`, mexe-se nos dois** — de propósito, para as armadilhas
+do `chat.history` morarem num lugar só. O coletor só colhe o **último** run
+aberto da pessoa com o agente (pergunta seguinte e "Nova conversa" são
+fronteira), desiste em `erro`, `/stop` ou 3 falhas de gateway
+(`agent_runs.coleta_encerrada_em`) e nunca grava o texto de compactação que
+falhou.
+
+**Push nasce da mensagem, não do sininho:** trigger `trg_push_pendente`
+(`023`) → `pg_notify('push_pendente')` → `escuta_banco` → `app/push_envio.py`,
+com reserva em `push_enviados` contra os 2 workers. Destinatários, menção
+(`@Nome` em texto, `@todos` fura o silenciar) e payload em `app/push_regras.py`,
+puro. ⚠️ O `endpoint` da inscrição é **allowlist** de serviços de push
+(regex estrita + `urlsplit` e `urllib3` concordando no host) — o servidor faz
+POST nele, e sem isso era SSRF para o túnel do gateway. ⚠️ `webpush` com
+`ttl=86400` e `Urgency: high`: o padrão `ttl=0` descarta push de celular
+dormindo, que é o caso inteiro. Chaves VAPID no EasyPanel; sem elas o backend
+sobe e loga `push desligado: VAPID ausente`.
+
+`channel_members.silenciado` (`025`) corta push, som e notificação local; o
+sininho e as não lidas continuam.
+
 ### Feature flags — sobrou uma, e ela vem ligada
 
 ⚠️ **Revisadas em 31/08/2026, e o que estava escrito aqui não batia com o
