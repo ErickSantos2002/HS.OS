@@ -99,10 +99,10 @@ export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: stri
   );
 
   // Resposta rápida do push a uma thread, com o app fechado: responde NELA.
-  usePedidoDaUrl(`thread:${canalId}:${raizId}`, !!ctxEnvio, false, (pedido) => {
-    if (pedido.texto && pedido.enviar && ctxEnvio) void publicarNaThread(ctxEnvio, pedido.texto, raizId);
-    else if (pedido.texto) setRascunho(pedido.texto);
-    if (pedido.focar) requestAnimationFrame(() => campoRef.current?.focus());
+  usePedidoDaUrl(`thread:${canalId}:${raizId}`, !!ctxEnvio, false, { canal: canalId, thread: raizId }, {
+    rascunho: setRascunho,
+    enviar: (texto) => { if (ctxEnvio) void publicarNaThread(ctxEnvio, texto, raizId); },
+    focar: () => requestAnimationFrame(() => campoRef.current?.focus()),
   });
 
   const nomeDoAutor = (m: ChannelMessage) => (m.author_type === "agent"

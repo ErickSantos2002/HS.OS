@@ -1,10 +1,11 @@
 /**
  * Pedidos que chegam pela URL, de fora do app:
  *
- * - **Resposta rápida do push com o app fechado** (Android): o SW abre
- *   `/chat?channel=…[&thread=…]&prefill=<texto>&autosend=1&focus=composer`
- *   (`sw.ts`). Era o `ChannelChat` quem tratava; no celular é a conversa (ou
- *   a thread) do topo.
+ * - **Resposta rápida do push com o app fechado** (Android): o SW guarda o
+ *   texto no Cache Storage e abre `/chat?channel=…[&thread=…]&resposta=<id>`.
+ *   O texto só é enviado depois de `consumirResposta` conferir o id (ver
+ *   `lib/resposta-rapida.ts`). ⚠️ `prefill` e `autosend` da URL NUNCA enviam:
+ *   qualquer um monta esse link. `prefill` vira no máximo rascunho.
  * - **Busca global numa conversa anterior**: `/chat?agent=…&anterior=<reset>&message=<id>`.
  *
  * ⚠️ Enviar uma vez só: a tela pode montar de novo antes de a URL ser limpa.
@@ -12,20 +13,23 @@
  */
 
 export interface PedidoDeResposta {
-  texto: string | null;
-  enviar: boolean;
+  /** `prefill`: vai para o rascunho, nunca é enviado sozinho. */
+  rascunho: string | null;
+  /** `resposta`: id de uma resposta rápida guardada pelo SW, a conferir. */
+  respostaId: string | null;
   focar: boolean;
 }
 
-const PARAMS_DO_PEDIDO = ["prefill", "autosend", "focus"];
+const PARAMS_DO_PEDIDO = ["prefill", "autosend", "focus", "resposta"];
 
 export function pedidoDaUrl(search: string): PedidoDeResposta | null {
   const p = new URLSearchParams(search);
   const bruto = p.get("prefill");
-  const texto = bruto && bruto.trim() ? bruto : null;
+  const rascunho = bruto && bruto.trim() ? bruto : null;
+  const respostaId = p.get("resposta") || null;
   const focar = p.get("focus") === "composer";
-  if (!texto && !focar) return null;
-  return { texto, enviar: p.get("autosend") === "1" && !!texto, focar };
+  if (!rascunho && !respostaId && !focar) return null;
+  return { rascunho, respostaId, focar };
 }
 
 /** A URL sem o pedido (para o voltar e o recarregar não repetirem). */
@@ -46,7 +50,7 @@ const atendidos = new Set<string>();
 
 /** Primeira vez que este pedido é atendido nesta página? Marca e responde. */
 export function jaAtendido(onde: string, pedido: PedidoDeResposta): boolean {
-  const chave = `${onde}|${pedido.texto ?? ""}|${pedido.enviar ? 1 : 0}|${pedido.focar ? 1 : 0}`;
+  const chave = `${onde}|${pedido.rascunho ?? ""}|${pedido.respostaId ?? ""}|${pedido.focar ? 1 : 0}`;
   if (atendidos.has(chave)) return true;
   atendidos.add(chave);
   return false;

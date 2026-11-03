@@ -5,8 +5,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const avisos = vi.hoisted(() => ({ notifyChannelRecipients: vi.fn(async () => undefined) }));
-const agentes = vi.hoisted(() => ({ startChannelAgentReplies: vi.fn() }));
+const avisos = vi.hoisted(() => ({ notifyChannelRecipients: vi.fn(async (..._a: unknown[]) => undefined) }));
+const agentes = vi.hoisted(() => ({ startChannelAgentReplies: vi.fn((..._a: unknown[]) => undefined) }));
 vi.mock("@/lib/channel-notifications", () => avisos);
 vi.mock("@/lib/channel-agents", () => agentes);
 

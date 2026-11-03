@@ -6,7 +6,7 @@ import {
 } from "workbox-precaching";
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import { LISTA_NEGADA } from "./lib/navegacao-do-app";
-import { clienteDaResposta } from "./lib/resposta-rapida";
+import { CACHE_RESPOSTA, clienteDaResposta, guardarResposta } from "./lib/resposta-rapida";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -249,14 +249,21 @@ self.addEventListener("notificationclick", (event) => {
             });
             await alvo.focus().catch(() => undefined);
           } else if (self.clients.openWindow) {
-            // Sem aba aberta o SW não tem o token: abre o app com o texto na
-            // URL e ele posta. Com `thread`, o app do celular (`TelaThread`)
-            // responde NA thread; o desktop, que não abre thread pela URL,
-            // ignora o pedido em vez de postar na raiz.
+            // Sem aba aberta o SW não tem o token: guarda o texto no Cache
+            // Storage sob um id aleatório e abre o app com SÓ o id. ⚠️ Nunca o
+            // texto na URL com envio automático — um link forjado faria quem
+            // o abrisse postar (ver `lib/resposta-rapida.ts`).
+            const id = crypto.randomUUID();
+            await guardarResposta(await caches.open(CACHE_RESPOSTA), id, {
+              texto: replyText,
+              channel_id: data.channel_id,
+              thread_id: data.thread_id ?? null,
+              criado_em: Date.now(),
+            });
             await self.clients.openWindow(
               urlDoCanal(data.channel_id, {
                 ...(data.thread_id ? { thread: data.thread_id } : {}),
-                prefill: replyText, autosend: "1", focus: "composer",
+                resposta: id, focus: "composer",
               }),
             );
           }

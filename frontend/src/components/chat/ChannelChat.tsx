@@ -19,6 +19,7 @@ import FileAttachmentCard from "./FileAttachmentCard";
 import AudioDaMensagem from "./AudioDaMensagem";
 import MenuDaMensagem, { type AcaoDaMensagem } from "./MenuDaMensagem";
 import { acoesDaMensagemDoCanal } from "@/lib/acoes-da-mensagem";
+import { abrirCacheDeRespostas, consumirResposta } from "@/lib/resposta-rapida";
 import {
   anexosDoCanal, apagarNoCanal, apagarParaMimNoCanal, editarNoCanal, enviarAudioNoCanal, publicarAudioNaThread,
   publicarNaThread, publicarNoCanal, type ContextoDeEnvio,
@@ -1414,22 +1415,28 @@ export default function ChannelChat({
     }
   };
 
-  // Notification action hooks: ?focus=composer, ?prefill=<text>, ?autosend=1
-  // Triggered when the user clicks "Responder" on a desktop push notification
-  // (focus only) or when Android sends inline text via SW openWindow fallback.
+  // Pedidos do push pela URL: `?focus=composer` (Responder no desktop),
+  // `?prefill=<texto>` (só RASCUNHO) e `?resposta=<id>` (Android, app fechado).
+  //
+  // ⚠️ **Segurança (03/11/2026): nada se envia a partir da query string.**
+  // Havia `?autosend=1`, e qualquer um podia mandar um link
+  // `/chat?channel=X&prefill=…&autosend=1` e fazer a vítima postar em nome
+  // dela. Agora só envia o texto que o service worker guardou no Cache
+  // Storage sob `resposta=<id>`, conferido por `consumirResposta` (canal,
+  // validade de 5 min, uso único). Ver `lib/resposta-rapida.ts`.
   const handledNotifActionRef = useRef<string | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const wantsFocus = params.get("focus") === "composer";
     const prefill = params.get("prefill");
-    const autosend = params.get("autosend") === "1";
-    if (!wantsFocus && !prefill) return;
+    const respostaId = params.get("resposta");
+    if (!wantsFocus && !prefill && !respostaId) return;
     // Resposta rápida a uma THREAD: o desktop não abre thread pela URL, e
     // postar aqui mandaria a resposta para a raiz do canal. Quem trata é o
     // app do celular (`TelaThread`), onde esse campo de texto existe.
     if (params.get("thread")) return;
 
-    const signature = `${channel.id}|${prefill ?? ""}|${autosend ? "1" : "0"}|${wantsFocus ? "1" : "0"}`;
+    const signature = `${channel.id}|${prefill ?? ""}|${respostaId ?? ""}|${wantsFocus ? "1" : "0"}`;
     if (handledNotifActionRef.current === signature) return;
     handledNotifActionRef.current = signature;
 
@@ -1438,6 +1445,7 @@ export default function ChannelChat({
       p.delete("focus");
       p.delete("prefill");
       p.delete("autosend");
+      p.delete("resposta");
       const s = p.toString();
       const newUrl = `${location.pathname}${s ? `?${s}` : ""}${location.hash}`;
       window.history.replaceState({}, "", newUrl);
@@ -1454,10 +1462,16 @@ export default function ChannelChat({
       }
       inputRef.current?.focus();
       cleanUrl();
-      if (autosend && prefill && prefill.trim()) {
-        // Allow the composer state to settle, then send.
-        setTimeout(() => { void handleSend(); }, 120);
-      }
+      if (!respostaId) return;
+      const cache = await abrirCacheDeRespostas();
+      const texto = cache ? await consumirResposta(cache, respostaId, { canal: channel.id, thread: null }) : null;
+      if (!texto) return;
+      inputLocalRef.current = texto;
+      setDraftValue(texto);
+      inputRef.current?.setMarkdown(texto);
+      setHasComposerText(true);
+      // Allow the composer state to settle, then send.
+      setTimeout(() => { void handleSend(); }, 120);
     };
     void run();
     // eslint-disable-next-line react-hooks/exhaustive-deps

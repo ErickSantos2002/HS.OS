@@ -239,13 +239,13 @@ export function TelaConversaCanal({
     aoApagarParaMim: () => void apagarParaMimNoCanal(canalId, m, { esconder, reexibir }),
   });
 
-  // Resposta rápida do push com o app fechado (`?prefill=&autosend=1`). Com
-  // `thread` na URL quem responde é a `TelaThread`.
+  // Resposta rápida do push com o app fechado (`?resposta=<id>`, conferido no
+  // cache do SW). Com `thread` na URL quem responde é a `TelaThread`.
   const urlTemThread = new URLSearchParams(useLocation().search).has("thread");
-  usePedidoDaUrl(`canal:${canalId}`, !!ctxEnvio, urlTemThread, (pedido) => {
-    if (pedido.texto && pedido.enviar && ctxEnvio) void publicarNoCanal(ctxEnvio, pedido.texto, null);
-    else if (pedido.texto) setRascunho(pedido.texto);
-    if (pedido.focar) requestAnimationFrame(() => campoRef.current?.focus());
+  usePedidoDaUrl(`canal:${canalId}`, !!ctxEnvio, urlTemThread, { canal: canalId, thread: null }, {
+    rascunho: setRascunho,
+    enviar: (texto) => { if (ctxEnvio) void publicarNoCanal(ctxEnvio, texto, null); },
+    focar: () => requestAnimationFrame(() => campoRef.current?.focus()),
   });
 
   const reacoesDe = (m: ChannelMessage): ReacaoNaBolha[] =>
