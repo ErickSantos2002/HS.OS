@@ -6,13 +6,15 @@
  * para todo mundo: as notificações (contador, som, push), a presença e o
  * catálogo de agentes.
  */
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 
 import { AppLayout } from "@/components/AppLayout";
 import { NotificationsProvider } from "@/components/NotificationsProvider";
 import { useAuthContext } from "@/contexts/auth-context";
 import { useAgentCatalog } from "@/hooks/use-agent-catalog";
+import { useAgents } from "@/hooks/use-agents";
+import { pruneUnreadAgents, resumePendingBackgroundTasks } from "@/lib/chat-sender";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { usePresence } from "@/hooks/use-presence";
 import AppCelular from "./AppCelular";
@@ -22,6 +24,16 @@ function AppCelularComServicos() {
   const { user } = useAuthContext();
   usePresence(user?.id);
   useAgentCatalog();
+  // O que o `ChatPage` faz ao montar: retomar a espera de resposta que estava
+  // em curso antes de recarregar, e limpar "não lida" de agente que não existe.
+  const { agents } = useAgents();
+  const idsDosAgentes = agents.map((a) => a.id).sort().join(",");
+  useEffect(() => {
+    if (user?.id) resumePendingBackgroundTasks(user.id);
+  }, [user?.id]);
+  useEffect(() => {
+    if (idsDosAgentes) pruneUnreadAgents(idsDosAgentes.split(","));
+  }, [idsDosAgentes]);
   return (
     <NotificationsProvider>
       <AppCelular />
