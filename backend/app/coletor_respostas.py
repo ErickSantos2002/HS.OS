@@ -60,7 +60,10 @@ SQL_RESERVAR_RUNS = """
               -- gravaria a conversa nova inteira.
               AND NOT EXISTS (SELECT 1 FROM public.conversation_resets cr
                                WHERE cr.user_id = a.user_id AND cr.agent_id = a.agent_id AND cr.created_at > a.criado_em)
-            ORDER BY a.criado_em
+            -- Quem nunca foi colhido primeiro, depois quem foi há mais tempo:
+            -- com `ORDER BY criado_em` os 10 mais velhos ainda rodando
+            -- tomavam toda passada e o 11º nunca era olhado.
+            ORDER BY a.coletando_em NULLS FIRST, a.criado_em
             LIMIT 10
             FOR UPDATE SKIP LOCKED)
        AND r.message_id IS NULL
@@ -69,7 +72,10 @@ SQL_RESERVAR_RUNS = """
     RETURNING r.run_id, r.agent_id, r.session_key, r.seq_antes, r.user_id::text AS user_id
 """
 
-SQL_SOLTAR = "UPDATE public.agent_runs SET coletando_em = NULL WHERE run_id = $1"
+# Solta empurrando a vez: volta a ser elegível em 10 s (a guarda é 30 s) e,
+# pela ordem da fila, depois de quem ainda não foi olhado.
+SQL_SOLTAR = ("UPDATE public.agent_runs SET coletando_em = now() - interval '20 seconds' "
+              "WHERE run_id = $1")
 
 # O coletor desiste do run e não volta a ele.
 SQL_ENCERRAR = ("UPDATE public.agent_runs SET coleta_encerrada_em = now() "

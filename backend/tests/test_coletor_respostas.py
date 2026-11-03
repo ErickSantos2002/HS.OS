@@ -180,3 +180,14 @@ def test_run_anterior_a_nova_conversa_nao_e_colhido():
     sql = _sql()
     assert "NOT EXISTS (SELECT 1 FROM public.conversation_resets cr" in sql
     assert "cr.user_id = a.user_id AND cr.agent_id = a.agent_id AND cr.created_at > a.criado_em" in sql
+
+
+def test_quem_acabou_de_ser_colhido_vai_para_o_fim_da_fila():
+    """Com `ORDER BY criado_em LIMIT 10` e a soltura zerando a reserva, os dez
+    runs mais velhos ainda rodando voltavam primeiro em toda passada e o
+    décimo primeiro — talvez já respondido — nunca era olhado. Soltar empurra
+    a vez, e a fila ordena pela última colheita."""
+    sql = _sql()
+    assert "ORDER BY a.coletando_em NULLS FIRST, a.criado_em" in sql
+    soltar = " ".join(k.SQL_SOLTAR.split())
+    assert "coletando_em = now() - interval '20 seconds'" in soltar
