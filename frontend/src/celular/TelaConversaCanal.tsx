@@ -9,7 +9,7 @@
  */
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Bell, BellOff, Paperclip, Search, Users, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import ChannelFilesPanel from "@/components/chat/ChannelFilesPanel";
@@ -54,6 +54,7 @@ import type { Painel, Tela } from "./pilha";
 import { Avatar, Folha, MenuSuspenso } from "./ui";
 import { corDoNome, horaCurta, mesmoDia, rotuloDoDia } from "./formato";
 import { useMapaDmDoAgente } from "./use-lista";
+import { usePedidoDaUrl } from "./use-pedido-da-url";
 
 /** Até onde o canal agrupa bolhas do mesmo autor (5 min, como no desktop). */
 const AGRUPA_MS = 5 * 60_000;
@@ -236,6 +237,15 @@ export function TelaConversaCanal({
     aoEditar: () => { setResposta(null); setEditando(m); setRascunho(m.content); requestAnimationFrame(() => campoRef.current?.focus()); },
     aoApagar: () => setApagar(m),
     aoApagarParaMim: () => void apagarParaMimNoCanal(canalId, m, { esconder, reexibir }),
+  });
+
+  // Resposta rápida do push com o app fechado (`?prefill=&autosend=1`). Com
+  // `thread` na URL quem responde é a `TelaThread`.
+  const urlTemThread = new URLSearchParams(useLocation().search).has("thread");
+  usePedidoDaUrl(`canal:${canalId}`, !!ctxEnvio, urlTemThread, (pedido) => {
+    if (pedido.texto && pedido.enviar && ctxEnvio) void publicarNoCanal(ctxEnvio, pedido.texto, null);
+    else if (pedido.texto) setRascunho(pedido.texto);
+    if (pedido.focar) requestAnimationFrame(() => campoRef.current?.focus());
   });
 
   const reacoesDe = (m: ChannelMessage): ReacaoNaBolha[] =>

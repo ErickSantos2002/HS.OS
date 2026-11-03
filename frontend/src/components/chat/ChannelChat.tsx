@@ -1424,6 +1424,10 @@ export default function ChannelChat({
     const prefill = params.get("prefill");
     const autosend = params.get("autosend") === "1";
     if (!wantsFocus && !prefill) return;
+    // Resposta rápida a uma THREAD: o desktop não abre thread pela URL, e
+    // postar aqui mandaria a resposta para a raiz do canal. Quem trata é o
+    // app do celular (`TelaThread`), onde esse campo de texto existe.
+    if (params.get("thread")) return;
 
     const signature = `${channel.id}|${prefill ?? ""}|${autosend ? "1" : "0"}|${wantsFocus ? "1" : "0"}`;
     if (handledNotifActionRef.current === signature) return;

@@ -39,7 +39,8 @@ import type { Painel, Tela } from "./pilha";
 import { Avatar, Folha, MenuSuspenso } from "./ui";
 import { horaCurta, mesmoDia, rotuloDoDia } from "./formato";
 import { useMapaDmDoAgente } from "./use-lista";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { anteriorDaUrl, semPedido } from "./pedido-da-url";
 
 const PARCIAL_SEM_TEXTO = new Set(["", "[working]", "[retrying]"]);
 
@@ -54,6 +55,9 @@ export function TelaConversaAgente({
   aoAbrir: (t: Tela) => void;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Busca global numa conversa anterior: `?anterior=<reset>&message=<id>`.
+  const anteriorDaBusca = ativa ? anteriorDaUrl(location.search) : null;
   const { agents } = useAgents();
   const agente = agents.find((a) => a.id === agentId);
   const nome = agente?.name ?? agentId;
@@ -271,12 +275,21 @@ export function TelaConversaAgente({
       )}
       <ConversasAnteriores
         agentId={agentId}
-        open={painel === "anteriores"}
-        onOpenChange={(aberto) => { if (!aberto) voltarDoPainel(); }}
-        abrirConversa={null}
-        destacarMensagem={null}
+        open={painel === "anteriores" || !!anteriorDaBusca}
+        onOpenChange={(aberto) => {
+          if (aberto) return;
+          // Veio da busca global: consome o pedido da URL em vez de voltar.
+          if (anteriorDaBusca) navigate(`${location.pathname}${semPedido(location.search, ["anterior", "message"])}`, { replace: true });
+          else voltarDoPainel();
+        }}
+        abrirConversa={anteriorDaBusca?.reset ?? null}
+        destacarMensagem={anteriorDaBusca?.mensagem ?? null}
         renderMidia={(lista) => lista.map((att, k) => <MidiaDoAgente key={k} att={att} semente={`ant:${k}`} aoAmpliar={setAmpliada} />)}
-        onCitar={(texto) => { setRascunho(acrescentarCitacao(rascunho, texto)); voltarDoPainel(); }}
+        onCitar={(texto) => {
+          setRascunho(acrescentarCitacao(rascunho, texto));
+          if (anteriorDaBusca) navigate(`${location.pathname}${semPedido(location.search, ["anterior", "message"])}`, { replace: true });
+          else voltarDoPainel();
+        }}
       />
 
       {(artefato || vivo) && (

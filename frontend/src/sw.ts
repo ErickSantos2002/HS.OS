@@ -249,13 +249,15 @@ self.addEventListener("notificationclick", (event) => {
             });
             await alvo.focus().catch(() => undefined);
           } else if (self.clients.openWindow) {
-            // O `prefill`+`autosend` do `ChannelChat` posta na raiz do canal.
-            // Resposta de thread sem aba aberta abre a thread em vez de
-            // postar no lugar errado (o texto digitado se perde).
+            // Sem aba aberta o SW não tem o token: abre o app com o texto na
+            // URL e ele posta. Com `thread`, o app do celular (`TelaThread`)
+            // responde NA thread; o desktop, que não abre thread pela URL,
+            // ignora o pedido em vez de postar na raiz.
             await self.clients.openWindow(
-              data.thread_id
-                ? data.url ?? urlDoCanal(data.channel_id)
-                : urlDoCanal(data.channel_id, { prefill: replyText, autosend: "1", focus: "composer" }),
+              urlDoCanal(data.channel_id, {
+                ...(data.thread_id ? { thread: data.thread_id } : {}),
+                prefill: replyText, autosend: "1", focus: "composer",
+              }),
             );
           }
         } else {

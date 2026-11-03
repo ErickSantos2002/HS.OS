@@ -36,6 +36,7 @@ import { FolhaDeAcoes, FolhaDeEmoji } from "./Folhas";
 import { Ampliada, MidiaDoCanal } from "./Midia";
 import { Avatar } from "./ui";
 import { useMapaDmDoAgente } from "./use-lista";
+import { usePedidoDaUrl } from "./use-pedido-da-url";
 import { corDoNome, horaCurta, mesmoDia, rotuloDoDia } from "./formato";
 
 export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: string; raizId: string; ativa: boolean; aoVoltar: () => void }) {
@@ -96,6 +97,13 @@ export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: stri
   const avisoEscrita = fraseDeQuemEscreve(
     membros.filter((m) => m.pode_escrever && pessoaPorId.has(m.user_id)).map((m) => pessoaPorId.get(m.user_id)!.full_name || "?"),
   );
+
+  // Resposta rápida do push a uma thread, com o app fechado: responde NELA.
+  usePedidoDaUrl(`thread:${canalId}:${raizId}`, !!ctxEnvio, false, (pedido) => {
+    if (pedido.texto && pedido.enviar && ctxEnvio) void publicarNaThread(ctxEnvio, pedido.texto, raizId);
+    else if (pedido.texto) setRascunho(pedido.texto);
+    if (pedido.focar) requestAnimationFrame(() => campoRef.current?.focus());
+  });
 
   const nomeDoAutor = (m: ChannelMessage) => (m.author_type === "agent"
     ? getAgentDisplayName(normalizeAgentId(m.author_id || ""))
