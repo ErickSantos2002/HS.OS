@@ -181,7 +181,7 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, isDm 
                 autoFocus
               />
             </div>
-            <ScrollArea className="max-h-40">
+            <ScrollArea className={`max-h-40${isMobile ? " [&>[data-radix-scroll-area-viewport]>div]:!block" : ""}`}>
               {filtered.length === 0 ? (
                 <p className="text-xs text-muted-foreground p-2">Nenhum resultado</p>
               ) : (
@@ -211,7 +211,9 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, isDm 
           </div>
         )}
 
-        <ScrollArea className="flex-1">
+        {/* Celular: o Radix põe o conteúdo num `display: table` que cresce com
+            o nome mais longo e empurra o selo para fora da tela. */}
+        <ScrollArea className={`flex-1${isMobile ? " [&>[data-radix-scroll-area-viewport]>div]:!block" : ""}`}>
           <div className="p-3 space-y-1">
             {members.map((m) => (
               <div key={m.user_id} className="flex items-center gap-2 px-2 py-1.5 rounded-xl group hover:bg-primary/5 transition-colors">

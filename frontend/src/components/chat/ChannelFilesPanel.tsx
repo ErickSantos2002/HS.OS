@@ -25,6 +25,7 @@ type FileItem = ArquivoDoCanal;
 type Filter = "all" | "image" | "doc";
 
 export default function ChannelFilesPanel({ endpoint, open, onClose }: Props) {
+  const isMobile = useIsMobile();
   const [items, setItems] = useState<FileItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -118,7 +119,7 @@ export default function ChannelFilesPanel({ endpoint, open, onClose }: Props) {
           </div>
         </div>
 
-        <ScrollArea className="flex-1">
+        <ScrollArea className={`flex-1${isMobile ? " [&>[data-radix-scroll-area-viewport]>div]:!block" : ""}`}>
           <div className="p-3 space-y-4">
             {loading ? (
               <div className="flex items-center justify-center py-10 text-muted-foreground">

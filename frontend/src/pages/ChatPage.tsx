@@ -2953,8 +2953,11 @@ export default function ChatPage() {
             </div>
 
 
-            <ScrollArea className="flex-1">
-              <div className="px-3 py-2 pb-20">
+            {/* `!block`: sem ele o Radix monta o conteúdo em `display: table`,
+                que cresce com a prévia mais longa e empurra horário e contador
+                para fora da tela — o mesmo ajuste que a lateral do desktop tem. */}
+            <ScrollArea className="flex-1 [&>[data-radix-scroll-area-viewport]>div]:!block">
+              <div className="px-3 py-2 pb-20 w-full min-w-0">
                 {/* integração: <InstalarApp variante="cartao" /> da Frente A entra aqui */}
                 {abaAtual === "channels" ? (
                   <>

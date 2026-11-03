@@ -824,7 +824,7 @@ export default function ThreadPanel({
                 }
               }}
               rows={1}
-              placeholder="Responder na conversa..."
+              placeholder={isMobile ? "Responder" : "Responder na conversa..."}
               className="min-h-[40px] max-h-[88px] flex-1 resize-none border-0 bg-transparent px-0 py-2 text-sm leading-6 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             />
             {onSendAudioReply && !input.trim() && threadMedia.staged.length === 0 ? (
