@@ -1,11 +1,25 @@
 /// <reference lib="webworker" />
-import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
+import {
+  precacheAndRoute,
+  cleanupOutdatedCaches,
+  createHandlerBoundToURL,
+} from "workbox-precaching";
+import { NavigationRoute, registerRoute } from "workbox-routing";
+import { LISTA_NEGADA } from "./lib/navegacao-do-app";
 
 declare const self: ServiceWorkerGlobalScope;
 
 // Precache assets injected at build time by vite-plugin-pwa (injectManifest)
 precacheAndRoute(self.__WB_MANIFEST || []);
 cleanupOutdatedCaches();
+
+// Fallback de navegação: toda tela do SPA é respondida pelo index.html
+// precacheado. É o que faz o app instalado abrir sem rede mostrando o app,
+// e não a página de erro do navegador. API, tempo real, arquivos e artefatos
+// publicados ficam de fora (LISTA_NEGADA) e vão direto à rede.
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL("/index.html"), { denylist: LISTA_NEGADA }),
+);
 
 // A versão nova ESPERA o usuário. O skipWaiting automático no install fazia
 // o SW novo assumir sozinho e a página recarregar no meio da interação;
