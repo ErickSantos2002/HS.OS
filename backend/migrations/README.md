@@ -16,7 +16,7 @@ Schema do Postgres próprio, extraído do Supabase e validado em Postgres puro.
 | `021_canal_so_alguns_escrevem.sql` | Canal de avisos: `channels.so_alguns_escrevem`, `channel_members.pode_escrever`, `pode_escrever_no_canal()` na policy de INSERT de `channel_messages`. Aplicada em 30/10/2026. ⚠️ Superusuário: `~/projetos/bancos/.venv/bin/python ~/aplicar-hsos-021.py` |
 | `022_mensagens_ocultas.sql` | "Apagar para mim": `mensagens_ocultas` (pessoa × mensagem, RLS por dono). Aplicada em 30/10/2026. ⚠️ Superusuário: `~/projetos/bancos/.venv/bin/python ~/aplicar-hsos-022.py` |
 | `023_push_enviados.sql` | Push nasce da mensagem: `push_enviados` (reserva entre os 2 workers) e o trigger `trg_push_pendente` (`pg_notify('push_pendente')`) em `channel_messages` e em `conversations` (`role='agent'`). **Não aplicada.** ⚠️ Superusuário: `~/aplicar-hsos-023.py` |
-| `024_coletor_respostas.sql` | `agent_runs.tela_perguntou_em` e `agent_runs.coletando_em` para o coletor de respostas. **Não aplicada.** ⚠️ Superusuário: `~/aplicar-hsos-024.py` |
+| `024_coletor_respostas.sql` | `agent_runs.tela_perguntou_em`, `coletando_em`, `coleta_encerrada_em` e `coleta_tentativas` para o coletor de respostas. **Não aplicada.** ⚠️ Superusuário: `~/aplicar-hsos-024.py` |
 | `025_silenciar_canal.sql` | `channel_members.silenciado`. **Não aplicada.** ⚠️ Superusuário: `~/aplicar-hsos-025.py` |
 | `026_remover_push_morto.sql` | Remove `notifications_send_push` / `trigger_send_push_on_notification` (chamava a edge da dn.ia). **Não aplicada.** ⚠️ Superusuário: `~/aplicar-hsos-026.py` |
 | ⚠️ `008_pessoas_talenths.sql` | **Não é deste banco** — ver abaixo. |

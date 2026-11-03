@@ -159,3 +159,34 @@ def test_rota_marca_a_tela_antes_de_colher(monkeypatch):
     r = asyncio.run(c.resposta("nina", "run-1", usuario))
     assert r.status == "executando"
     assert ordem == [("marcar", "run-1"), ("colher", "run-1", "agent:nina:x", 10)]
+
+
+def test_falha_de_compactacao_nao_grava_texto_quando_perde_a_reserva(ambiente, monkeypatch):
+    """Tela e coletor no mesmo run: quem perdia a reserva da compactação caía no
+    caminho normal e gravava "auto-compaction could not recover" como resposta
+    — com push e resumo em áudio de um aviso interno."""
+    async def perdeu(*_):
+        return False
+    monkeypatch.setattr(c, "_reservar_compactacao", perdeu)
+    ambiente.gateway = Gateway({"status": "ok"}, [
+        {"role": "assistant", "content": "Auto-compaction could not recover the session.",
+         "__openclaw": {"seq": 12}}])
+    r = _colher()
+    assert r.status == "executando"
+    assert ambiente.conn.updates == [] and ambiente.audios == [] and ambiente.publicados == []
+
+
+class _GatewayFora:
+    async def chamar(self, *_):
+        raise c.ErroGateway("conexão recusada")
+
+
+def test_erro_de_gateway_vira_erro_na_tela_e_excecao_no_coletor(ambiente):
+    """Para a tela, gateway fora é `erro` como sempre. Para o coletor, `erro`
+    agora significa "desista" — então a falha de rede tem que chegar como
+    exceção, para ele tentar de novo em vez de perder a resposta."""
+    ambiente.gateway = _GatewayFora()
+    assert _colher().status == "erro"
+    with pytest.raises(c.ErroGateway):
+        asyncio.run(c.colher_resposta(CFG, "nina", "run-1", "agent:nina:x", 10, UID,
+                                      levantar_erro_gateway=True))

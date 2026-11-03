@@ -3,13 +3,19 @@
 -- Quem buscava a resposta no gateway era só o `GET /reply`, chamado em laço
 -- pelo navegador. Fechou o app depois de perguntar, ninguém buscava — e não
 -- havia o que notificar. O `app/coletor_respostas.py` busca no lugar da tela,
--- e precisa de duas colunas:
+-- e precisa de quatro colunas:
 --
 --   tela_perguntou_em  a última vez que o `/reply` foi chamado para o run. O
 --                      coletor só pega run em que a tela não pergunta há 45 s —
 --                      com a tela esperando, ela mesma grava.
 --   coletando_em       reserva entre os 2 workers. Quem fizer o UPDATE com
 --                      `coletando_em IS NULL OR < now() - 30 s` leva o run.
+--   coleta_encerrada_em o coletor desistiu deste run e não volta a ele: o
+--                      agente terminou sem texto, a pessoa mandou parar, ou
+--                      o gateway falhou 3 vezes. Sem isso um run com `erro`
+--                      era colhido de novo a cada 30 s por meia hora — e
+--                      acabava gravando a resposta da PRÓXIMA pergunta.
+--   coleta_tentativas  falhas de gateway/conexão já sofridas (teto 3).
 --
 -- Nulas nas linhas antigas: o coletor só olha runs dos últimos 30 minutos.
 --
@@ -24,6 +30,8 @@ BEGIN;
 
 ALTER TABLE public.agent_runs ADD COLUMN IF NOT EXISTS tela_perguntou_em timestamptz;
 ALTER TABLE public.agent_runs ADD COLUMN IF NOT EXISTS coletando_em timestamptz;
+ALTER TABLE public.agent_runs ADD COLUMN IF NOT EXISTS coleta_encerrada_em timestamptz;
+ALTER TABLE public.agent_runs ADD COLUMN IF NOT EXISTS coleta_tentativas integer NOT NULL DEFAULT 0;
 
 -- A consulta do coletor roda a cada 5 s em cada worker: só os pendentes.
 CREATE INDEX IF NOT EXISTS agent_runs_pendentes_idx
@@ -34,6 +42,10 @@ COMMENT ON COLUMN public.agent_runs.tela_perguntou_em IS
   'quando a tela não pergunta há 45 s.';
 COMMENT ON COLUMN public.agent_runs.coletando_em IS
   'Reserva do coletor de respostas entre os workers; vale 30 s.';
+COMMENT ON COLUMN public.agent_runs.coleta_encerrada_em IS
+  'O coletor de respostas desistiu deste run (erro, /stop ou 3 falhas de gateway).';
+COMMENT ON COLUMN public.agent_runs.coleta_tentativas IS
+  'Falhas de gateway/conexão do coletor neste run; no 3º ele desiste.';
 
 COMMIT;
 
@@ -41,4 +53,5 @@ COMMIT;
 --
 --   SELECT column_name FROM information_schema.columns
 --    WHERE table_name = 'agent_runs'
---      AND column_name IN ('tela_perguntou_em', 'coletando_em');   -- 2 linhas
+--      AND column_name IN ('tela_perguntou_em', 'coletando_em',
+--                          'coleta_encerrada_em', 'coleta_tentativas'); -- 4 linhas

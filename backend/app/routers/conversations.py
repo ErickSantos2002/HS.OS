@@ -1600,7 +1600,8 @@ async def _marcar_tela(run_id: str, user_id: str) -> None:
 
 
 async def colher_resposta(c, agent_id: str, run_id: str, chave: str, seq_antes: int,
-                          user_id: str, *, espera_ms: int = _ESPERA_MS) -> RespostaOut:
+                          user_id: str, *, espera_ms: int = _ESPERA_MS,
+                          levantar_erro_gateway: bool = False) -> RespostaOut:
     """O miolo do `/reply`: espera o run, lê o histórico e grava a resposta.
 
     ⚠️ **Uma cópia só.** A tela (pelo `/reply`) e o coletor de respostas chamam
@@ -1610,7 +1611,9 @@ async def colher_resposta(c, agent_id: str, run_id: str, chave: str, seq_antes: 
     compacta e reenvia — o coletor faz tudo o que a tela faria.
 
     `run_id` já é o run seguido (`_seguir_run`); `c` é a config do gateway já
-    conferida como configurada.
+    conferida como configurada. `levantar_erro_gateway` é do coletor: para ele
+    falha de rede é "tente de novo", e `erro` é "desista" — a tela recebe as
+    duas como `erro`, como sempre.
     """
     # A trava serializa as chamadas do mesmo run; a conferência de dentro pega
     # quem entrou na fila antes de a primeira gravar.
@@ -1624,6 +1627,8 @@ async def colher_resposta(c, agent_id: str, run_id: str, chave: str, seq_antes: 
         try:
             r = await espera.chamar("agent.wait", {"runId": run_id, "timeoutMs": espera_ms})
         except ErroGateway as e:
+            if levantar_erro_gateway:
+                raise
             return RespostaOut(status="erro", detalhe=str(e))
 
         if r.get("status") == "timeout":
@@ -1639,6 +1644,8 @@ async def colher_resposta(c, agent_id: str, run_id: str, chave: str, seq_antes: 
                 {"sessionKey": chave, "limit": 40,
                  "maxChars": _MAX_CHARS_HISTORICO})
         except ErroGateway as e:
+            if levantar_erro_gateway:
+                raise
             return RespostaOut(status="erro", detalhe=str(e))
 
         mensagens = hist.get("messages") or []
@@ -1656,8 +1663,14 @@ async def colher_resposta(c, agent_id: str, run_id: str, chave: str, seq_antes: 
         # ⚠️ **A falha de compactação não é resposta: é manutenção nossa.**
         # Compacta, reenvia a mesma pergunta e aponta este run para o novo. A
         # tela segue perguntando pelo run antigo e recebe a resposta de verdade.
-        if (texto and _FALHA_DE_COMPACTACAO.search(texto)
-                and await _reservar_compactacao(run_id, user_id)):
+        if texto and _FALHA_DE_COMPACTACAO.search(texto):
+            # ⚠️ **Quem perde a reserva NÃO grava o texto.** Antes, perder a
+            # corrida (tela e coletor no mesmo run, em workers diferentes)
+            # fazia cair no caminho normal e gravar "auto-compaction could not
+            # recover" como resposta — com push e áudio. Quem ganhou está
+            # compactando e vai apontar este run para o novo.
+            if not await _reservar_compactacao(run_id, user_id):
+                return RespostaOut(status="executando")
             novo = await _compactar_e_reenviar(cliente, agent_id, chave, hist, user_id)
             if novo:
                 await _apontar_run(run_id, novo, user_id)

@@ -17,8 +17,9 @@ velha, piso que vira teto, sessão limpa) moram numa cópia só. Grava, dispara 
 
 ⚠️ **Reserva entre os 2 workers** por `coletando_em` (`024`): o UPDATE com a
 guarda no WHERE de fora devolve o run a um worker só. Em `executando` a
-reserva é solta para a próxima passada; em erro ela fica e vence em 30 s —
-senão um run que terminou sem texto martelaria o gateway a cada 5 s.
+reserva é solta para a próxima passada; em `erro` o run é encerrado para o
+coletor (`coleta_encerrada_em`) — repetir fazia o run velho engolir a
+resposta da pergunta seguinte. Só falha de gateway tenta de novo, até 3 vezes.
 
 ⚠️ **Corrida com a tela.** Se a tela voltar no meio, as duas chamam o mesmo
 miolo: a trava por run (mesmo processo), a reserva do `message_id` (entre
@@ -32,6 +33,7 @@ import asyncpg
 
 from app.database import sessao
 from app.gateway import config as cfg
+from app.gateway.client import ErroGateway
 
 logger = logging.getLogger(__name__)
 
@@ -41,22 +43,48 @@ _ESPERA_MS = 1_500
 SQL_RESERVAR_RUNS = """
     UPDATE public.agent_runs r SET coletando_em = now()
      WHERE r.run_id IN (
-           SELECT run_id FROM public.agent_runs
-            WHERE message_id IS NULL
-              AND redireciona_para IS NULL
-              AND criado_em > now() - interval '30 minutes'
-              AND criado_em < now() - interval '20 seconds'
-              AND (tela_perguntou_em IS NULL OR tela_perguntou_em < now() - interval '45 seconds')
-              AND (coletando_em IS NULL OR coletando_em < now() - interval '30 seconds')
-            ORDER BY criado_em
+           SELECT a.run_id FROM public.agent_runs a
+            WHERE a.message_id IS NULL
+              AND a.redireciona_para IS NULL
+              AND a.coleta_encerrada_em IS NULL
+              AND a.criado_em > now() - interval '30 minutes'
+              AND a.criado_em < now() - interval '20 seconds'
+              AND (a.tela_perguntou_em IS NULL OR a.tela_perguntou_em < now() - interval '45 seconds')
+              AND (a.coletando_em IS NULL OR a.coletando_em < now() - interval '30 seconds')
+              -- A pergunta seguinte é fronteira: só o último run aberto da
+              -- pessoa com o agente. O `_texto_da_resposta` junta tudo depois
+              -- do `seq_antes`, e o run velho levaria a resposta do novo.
+              AND NOT EXISTS (SELECT 1 FROM public.agent_runs n
+                               WHERE n.user_id = a.user_id AND n.agent_id = a.agent_id AND n.criado_em > a.criado_em)
+              -- "Nova conversa" depois do envio: o corte vira 0 e o run velho
+              -- gravaria a conversa nova inteira.
+              AND NOT EXISTS (SELECT 1 FROM public.conversation_resets cr
+                               WHERE cr.user_id = a.user_id AND cr.agent_id = a.agent_id AND cr.created_at > a.criado_em)
+            ORDER BY a.criado_em
             LIMIT 10
             FOR UPDATE SKIP LOCKED)
-       AND message_id IS NULL
+       AND r.message_id IS NULL
+       AND r.coleta_encerrada_em IS NULL
        AND (r.coletando_em IS NULL OR r.coletando_em < now() - interval '30 seconds')
     RETURNING r.run_id, r.agent_id, r.session_key, r.seq_antes, r.user_id::text AS user_id
 """
 
 SQL_SOLTAR = "UPDATE public.agent_runs SET coletando_em = NULL WHERE run_id = $1"
+
+# O coletor desiste do run e não volta a ele.
+SQL_ENCERRAR = ("UPDATE public.agent_runs SET coleta_encerrada_em = now() "
+                "WHERE run_id = $1 AND coleta_encerrada_em IS NULL")
+
+# Falha de gateway/conexão: conta, mantém a reserva (volta em 30 s) e desiste
+# na terceira.
+SQL_FALHOU = """
+    UPDATE public.agent_runs
+       SET coleta_tentativas = coleta_tentativas + 1,
+           coleta_encerrada_em = CASE WHEN coleta_tentativas + 1 >= 3
+                                      THEN now() ELSE coleta_encerrada_em END
+     WHERE run_id = $1
+    RETURNING coleta_tentativas
+"""
 
 
 def intervalo() -> int:
@@ -67,31 +95,52 @@ def intervalo() -> int:
 
 
 async def passada(sessao_fn, colher, c) -> int:
-    """Uma rodada: reserva, colhe cada run e solta o que ainda está rodando.
+    """Uma rodada: reserva e colhe cada run.
+
+    - `pronta`: gravou (ou outro gravou); nada a fazer.
+    - `executando`: o agente ainda trabalha; solta para a próxima passada.
+    - `erro`: **encerra** — a tela também parava no primeiro erro. Repetir era
+      o que fazia o run velho engolir a resposta da pergunta seguinte.
+    - `ErroGateway`/conexão: conta a tentativa e mantém a reserva; desiste na 3ª.
+    - outra exceção (defeito nosso): encerra.
 
     Devolve quantos runs foram reservados. Erro num run não para os outros.
     """
     async with sessao_fn(role="service_role") as conn:
         runs = await conn.fetch(SQL_RESERVAR_RUNS)
     for r in runs:
-        soltar = False
+        acao, args = None, (r["run_id"],)
         try:
             saida = await colher(c, r["agent_id"], r["run_id"], r["session_key"],
-                                 r["seq_antes"], r["user_id"], espera_ms=_ESPERA_MS)
-            soltar = saida.status == "executando"
-            if saida.status == "pronta":
+                                 r["seq_antes"], r["user_id"], espera_ms=_ESPERA_MS,
+                                 levantar_erro_gateway=True)
+            if saida.status == "executando":
+                acao = "soltar"
+            elif saida.status == "erro":
+                acao = "encerrar"
+                logger.info("Coletor desistiu do run %s: %s", r["run_id"],
+                            getattr(saida, "detalhe", ""))
+            elif saida.status == "pronta":
                 logger.info("Coletor gravou a resposta do run %s (%s).",
                             r["run_id"], r["agent_id"])
+        except (ErroGateway, OSError, asyncio.TimeoutError) as e:
+            logger.warning("Coletor: gateway falhou no run %s: %s", r["run_id"], e)
+            acao = "falhou"
         except Exception as e:  # noqa: BLE001 — um run não derruba a passada
-            # A reserva fica e vence em 30 s, como no `erro`: exceção que se
-            # repete não pode virar uma chamada ao gateway a cada 5 s.
-            logger.warning("Coletor: run %s falhou: %s", r["run_id"], e)
-        if soltar:
-            try:
-                async with sessao_fn(role="service_role") as conn:
-                    await conn.execute(SQL_SOLTAR, r["run_id"])
-            except Exception as e:  # noqa: BLE001
-                logger.warning("Coletor: não soltei o run %s: %s", r["run_id"], e)
+            logger.warning("Coletor: run %s quebrou, desistindo: %s", r["run_id"], e)
+            acao = "encerrar"
+        if acao is None:
+            continue
+        try:
+            async with sessao_fn(role="service_role") as conn:
+                if acao == "soltar":
+                    await conn.execute(SQL_SOLTAR, *args)
+                elif acao == "encerrar":
+                    await conn.execute(SQL_ENCERRAR, *args)
+                else:
+                    await conn.fetchval(SQL_FALHOU, *args)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Coletor: não registrei %s do run %s: %s", acao, r["run_id"], e)
     return len(runs)
 
 
