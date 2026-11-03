@@ -763,7 +763,8 @@ export default function ThreadPanel({
             <button
               type="button"
               onClick={threadMedia.pickFile}
-              className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+              className={`shrink-0 ${isMobile ? "h-11 w-11 flex items-center justify-center" : "p-1.5"} rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors`}
+              aria-label="Anexar arquivo"
               title="Anexar arquivo"
             >
               <Paperclip className="h-4 w-4" />
@@ -830,7 +831,8 @@ export default function ThreadPanel({
               <button
                 type="button"
                 onClick={() => void recorder.start()}
-                className="shrink-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+                className={`shrink-0 ${isMobile ? "h-11 w-11 flex items-center justify-center" : "p-1.5"} rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors`}
+                aria-label="Gravar áudio"
                 title="Gravar áudio"
               >
                 <Mic className="h-4 w-4" />
@@ -839,7 +841,8 @@ export default function ThreadPanel({
               <button
                 onClick={() => void handleSend()}
                 disabled={(!input.trim() && threadMedia.staged.length === 0) || uploadingFiles}
-                className="btn-send-gradient shrink-0 disabled:opacity-40"
+                className={`btn-send-gradient shrink-0 disabled:opacity-40${isMobile ? " !h-11 !w-11" : ""}`}
+                aria-label="Enviar resposta"
                 type="button"
               >
                 <Send className="h-4 w-4" />

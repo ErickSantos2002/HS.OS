@@ -2166,14 +2166,14 @@ export default function ChannelChat({
                     <button
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
-                      className="shrink-0 h-9 w-9 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/40 active:bg-secondary/60 transition-colors"
+                      className="shrink-0 h-11 w-11 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/40 active:bg-secondary/60 transition-colors"
                       title="Mais opções"
                       aria-label="Mais opções"
                     >
                       <Plus className="h-5 w-5" />
                     </button>
                   </PopoverTrigger>
-                  <PopoverContent className="p-2 w-[280px]" align="start" side="top">
+                  <PopoverContent className="p-2 w-[280px] max-w-[calc(100vw-16px)]" align="start" side="top">
                     <div className="space-y-2">
                       {/* Primary actions */}
                       <div className="grid grid-cols-3 gap-1.5">
@@ -2332,7 +2332,7 @@ export default function ChannelChat({
                     }
                   }}
                   disabled={isBusy}
-                  className="shrink-0 h-10 w-10 flex items-center justify-center rounded-full bg-primary/15 text-primary hover:bg-primary/25 active:bg-primary/35 transition-colors disabled:opacity-40"
+                  className="shrink-0 h-11 w-11 flex items-center justify-center rounded-full bg-primary/15 text-primary hover:bg-primary/25 active:bg-primary/35 transition-colors disabled:opacity-40"
                   title="Gravar áudio"
                   aria-label="Gravar áudio"
                 >
@@ -2342,7 +2342,8 @@ export default function ChannelChat({
                 <button
                   onClick={handleSend}
                   disabled={(!inputLocalRef.current.trim() && channelMedia.staged.length === 0) || isBusy}
-                  className="btn-send-gradient shrink-0"
+                  className={`btn-send-gradient shrink-0${isMobile ? " !h-11 !w-11" : ""}`}
+                  aria-label="Enviar mensagem"
                 >
                   <Send className="h-4 w-4" />
                 </button>

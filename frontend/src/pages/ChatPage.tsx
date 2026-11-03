@@ -130,6 +130,7 @@ import MenuDaMensagem, { type AcaoDaMensagem } from "@/components/chat/MenuDaMen
 import AcoesDaMensagemNoToque from "@/components/chat/AcoesDaMensagemNoToque";
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { useToqueLongo } from "@/hooks/use-toque-longo";
+import { semMarkdown } from "@/lib/previa-da-mensagem";
 import { copyToClipboard, hasActiveTextSelection } from "@/lib/clipboard";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 import { NoEscritorioAgora } from "@/components/escritorio/NoEscritorioAgora";
@@ -2757,7 +2758,9 @@ export default function ChatPage() {
               <button onClick={media.pickFile} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors touch-target rounded-full hover:bg-secondary/30" title="Anexar arquivo">
                 <Paperclip className="h-4 w-4" />
               </button>
-              <FolderButton iconClassName="h-4 w-4" />
+              {/* Pasta local usa a File System Access API, que não existe no
+                  navegador do celular — o botão só ocuparia espaço ali. */}
+              {!isMobile && <FolderButton iconClassName="h-4 w-4" />}
             </div>
 
             {/* Center: textarea */}
@@ -2780,13 +2783,13 @@ export default function ChatPage() {
 
             {/* Right: mic + send */}
             <div className="flex items-center gap-1.5 shrink-0">
-                  <button onClick={async () => { try { const s = await audioRecorder.start(); if (s) audioLevel.start(s); } catch (e) { console.error("Audio start failed:", e); } }} className="flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors" title="Falar para transcrever">
+                  <button onClick={async () => { try { const s = await audioRecorder.start(); if (s) audioLevel.start(s); } catch (e) { console.error("Audio start failed:", e); } }} className={`flex ${isMobile ? "h-11 w-11" : "h-10 w-10"} items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/30 transition-colors`} title="Falar para transcrever" aria-label="Falar para transcrever">
                     <Mic className="h-4 w-4" />
                   </button>
                   <button
                     onClick={isAgentWorking && !inputLocalRef.current.trim() && media.staged.length === 0 ? handleStopAgentResponse : handleSend}
                     disabled={!effectiveAgentId || uploading || (!inputLocalRef.current.trim() && media.staged.length === 0 && !isAgentWorking)}
-                    className="btn-send-gradient flex h-10 w-10 items-center justify-center"
+                    className={`btn-send-gradient flex ${isMobile ? "h-11 w-11" : "h-10 w-10"} items-center justify-center`}
                     title={isAgentWorking && !inputLocalRef.current.trim() && media.staged.length === 0 ? "Interromper resposta" : "Enviar mensagem"}
                   >
                     {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : isAgentWorking && !inputLocalRef.current.trim() && media.staged.length === 0 ? <Square className="h-4 w-4" /> : <Send className="h-4 w-4" />}
@@ -2873,7 +2876,7 @@ export default function ChatPage() {
   const abasDaLateral = (
     <Tabs value={abaAtual} onValueChange={(v) => setSidebarTab(v as "dms" | "agentes" | "channels")} className="w-full">
       <TabsList className="w-full bg-transparent border-b border-border/30 rounded-none p-0 h-auto justify-start gap-6">
-        <TabsTrigger value="dms" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
+        <TabsTrigger value="dms" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5${isMobile ? " min-h-[44px] text-sm" : ""}`}>
           DMs
           {pessoasNaoLidas > 0 && (
             <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
@@ -2882,7 +2885,7 @@ export default function ChatPage() {
           )}
         </TabsTrigger>
         {temAgentes && (
-          <TabsTrigger value="agentes" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
+          <TabsTrigger value="agentes" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5${isMobile ? " min-h-[44px] text-sm" : ""}`}>
             Agentes
             {agentesNaoLidas > 0 && (
             <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
@@ -2891,7 +2894,7 @@ export default function ChatPage() {
           )}
           </TabsTrigger>
         )}
-        <TabsTrigger value="channels" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5">
+        <TabsTrigger value="channels" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5${isMobile ? " min-h-[44px] text-sm" : ""}`}>
           Canais
           {channelUnreadCount > 0 && (
             <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
@@ -2952,6 +2955,7 @@ export default function ChatPage() {
 
             <ScrollArea className="flex-1">
               <div className="px-3 py-2 pb-20">
+                {/* integração: <InstalarApp variante="cartao" /> da Frente A entra aqui */}
                 {abaAtual === "channels" ? (
                   <>
                     {publicChannels.length > 0 && (
@@ -3018,6 +3022,14 @@ export default function ChatPage() {
                                   )}
                                 </div>
                               </div>
+                              {/* Prévia da última mensagem: já vem de
+                                  /conversations/ultimas/por-agente (spec C9). As DMs
+                                  não têm prévia na API e ficam só com o horário. */}
+                              {lastMsg?.content && (
+                                <p className={`mt-0.5 truncate text-[13px] ${hasUnread ? "text-foreground/90" : "text-muted-foreground"}`}>
+                                  {semMarkdown(lastMsg.content)}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </button>

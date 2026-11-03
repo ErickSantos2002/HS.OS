@@ -658,8 +658,13 @@
       min-width: 44px;
     }
 
-    /* Prevent iOS zoom on input focus */
-    input, textarea, select {
+    /* Prevent iOS zoom on input focus. O `contentEditable` do RichComposer
+       (canal, DM, edição) entra junto: em text-sm (14px) o iPhone dá zoom ao
+       focar, e quem segurava isso era o `user-scalable=no` que a Frente A tira
+       do index.html (spec 2026-11-03, C8 — pré-requisito de A3). */
+    input, textarea, select,
+    [contenteditable="true"],
+    .rich-composer {
       font-size: 16px !important;
     }
   }

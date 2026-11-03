@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { BookOpen, Bot, MessageSquare, Swords, Settings, Zap } from "lucide-react";
+import { BookOpen, Bot, MessageSquare, Settings, Zap } from "lucide-react";
 import { useAuthContext } from "@/contexts/auth-context";
 import { useNotificationsContext } from "@/components/NotificationsProvider";
 
@@ -19,7 +19,10 @@ const adminTabs: BottomTab[] = [
 
 const memberTabs: BottomTab[] = [
   { label: "Chat", icon: MessageSquare, path: "/chat", matchPaths: ["/chat"] },
-  { label: "Arenas", icon: Swords, path: "/arenas", matchPaths: ["/arenas"] },
+  // "Arenas" saiu (spec 2026-11-03, C10): a tela está pausada e a aba levava
+  // o colaborador para fora do chat sem ter o que fazer lá. Não existe rota
+  // "Documentos" própria para pôr no lugar — os documentos moram na Base de
+  // Conhecimento, que já é a última aba.
   { label: "Super agentes", icon: Bot, path: "/agents", matchPaths: ["/agents"] },
   { label: "Conhecimento", icon: BookOpen, path: "/base-de-conhecimento", matchPaths: ["/base-de-conhecimento"] },
 ];
