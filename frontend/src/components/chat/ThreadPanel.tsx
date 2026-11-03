@@ -42,6 +42,8 @@ import { shouldShowDateDivider } from "@/lib/chat-date-groups";
 import type { Reaction } from "@/hooks/use-message-reactions";
 import { getAudioFileExtension, useAudioRecorder } from "@/hooks/use-audio-recorder";
 import { toast } from "sonner";
+import { anexosDoCanal } from "@/lib/envio-no-canal";
+import { acoesDaRespostaNaThread } from "@/lib/acoes-da-mensagem";
 import type { AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
 
 function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
@@ -209,12 +211,9 @@ function ThreadMessageCard({
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showActions = !compact && !isDeleted && !!onToggleReaction && !message.id.startsWith("optimistic-");
-  // Uma lista só: a barra do desktop é desenhada a partir dela e a folha do
-  // celular a recebe inteira (mais o "Copiar", que o toque precisa).
-  const acoesDaResposta: AcaoDaMensagem[] = [
-    ...(isOwn && onEdit ? [{ rotulo: "Editar", icone: Pencil, aoEscolher: onEdit }] : []),
-    ...(isOwn && onDelete ? [{ rotulo: "Apagar", icone: Trash2, perigo: true, aoEscolher: onDelete }] : []),
-  ];
+  // Uma lista só (`lib/acoes-da-mensagem.ts`): a barra do desktop é
+  // desenhada a partir dela e a folha do celular usa a mesma.
+  const acoesDaResposta: AcaoDaMensagem[] = acoesDaRespostaNaThread({ souAutor: isOwn, aoEditar: onEdit, aoApagar: onDelete });
 
   const handleTouchStart = useCallback(() => {
     longPressTimer.current = setTimeout(() => setShowMobileMenu(true), 500);
@@ -483,13 +482,7 @@ export default function ThreadPanel({
       setUploadingFiles(true);
       try {
         const finalized = await threadMedia.finalizeStaged({ contexto: "canal", channelId });
-        attachments = finalized.map((f) => ({
-          id: f.id,
-          name: f.name ?? "arquivo",
-          url: f.id ? "" : (f.url || f.base64),
-          size: f.size ?? 0,
-          mimeType: f.mimeType,
-        }));
+        attachments = anexosDoCanal(finalized);
         threadMedia.clearStaged();
       } catch (err) {
         console.error("Thread file upload error:", err);

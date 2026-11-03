@@ -35,7 +35,7 @@ export default function PainelDoChat({ aberto, aoFechar, titulo, largura, childr
 
   if (embutido) {
     return (
-      <section aria-label={titulo} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <section aria-label={titulo} className="painel-embutido flex min-h-0 flex-1 flex-col overflow-hidden">
         {children}
       </section>
     );

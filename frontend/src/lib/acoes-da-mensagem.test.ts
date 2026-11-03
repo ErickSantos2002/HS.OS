@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { acoesDaMensagemDoAgente, acoesDaMensagemDoCanal } from "./acoes-da-mensagem";
+import { acoesDaMensagemDoAgente, acoesDaMensagemDoCanal, acoesDaRespostaNaThread } from "./acoes-da-mensagem";
 
 const ctx = () => ({
   souAutor: false,
@@ -49,5 +49,13 @@ describe("acoesDaMensagemDoAgente", () => {
   it("minha: só copiar; erro: nada", () => {
     expect(acoesDaMensagemDoAgente({ ...base, id: "u1", role: "user" }, "nina").map((a) => a.rotulo)).toEqual(["Copiar"]);
     expect(acoesDaMensagemDoAgente({ ...base, id: "e1", role: "agent", isError: true }, "nina")).toEqual([]);
+  });
+});
+
+describe("acoesDaRespostaNaThread", () => {
+  it("só o autor edita e apaga", () => {
+    const f = vi.fn();
+    expect(acoesDaRespostaNaThread({ souAutor: true, aoEditar: f, aoApagar: f }).map((a) => a.rotulo)).toEqual(["Editar", "Apagar"]);
+    expect(acoesDaRespostaNaThread({ souAutor: false, aoEditar: f, aoApagar: f })).toEqual([]);
   });
 });

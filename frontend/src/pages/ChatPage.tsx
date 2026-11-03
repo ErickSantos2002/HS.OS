@@ -102,7 +102,7 @@ import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import MenuDaMensagem from "@/components/chat/MenuDaMensagem";
 import { acoesDaMensagemDoAgente } from "@/lib/acoes-da-mensagem";
 import { naoLidasDoAgente } from "@/lib/nao-lidas-do-agente";
-import { useConversaAgente } from "@/hooks/use-conversa-agente";
+import { LIMITE_TEXTO_COMO_ANEXO, useConversaAgente } from "@/hooks/use-conversa-agente";
 import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
 import { canalNaoResolve } from "@/lib/tela-cheia";
 import { copyToClipboard, hasActiveTextSelection } from "@/lib/clipboard";
@@ -923,7 +923,7 @@ export default function ChatPage() {
     loadingMore, isAgentWorking, bgPending, realtimePendingByAgent, pendingAgentIds, streamingText, setStreamingText, showReconnecting,
     setRealtimePending, updateAgentHistory, upsertAgentMessage, appendAgentMessage,
     handleLoadMore: carregarAnteriores, handleConfirmClearConversation: novaConversa,
-    handleStopAgentResponse, handleRetry, despacharAoAgente, enviarVoz,
+    handleStopAgentResponse, handleRetry, despacharAoAgente, enviarPergunta, enviarVoz,
   } = useConversaAgente(effectiveAgentId, {
     aoGravarPergunta: (agentId, gravada) => setLastMessages((prev) => ({
       ...prev,
@@ -1503,7 +1503,7 @@ export default function ChatPage() {
     let input = inputLocalRef.current;
     if ((!input.trim() && media.staged.length === 0) || !effectiveAgentId || uploading) return;
     // Long messages (> 10k chars) are automatically converted to a .txt attachment.
-    if (input.trim().length > 10000) {
+    if (input.trim().length > LIMITE_TEXTO_COMO_ANEXO) {
       const converted = media.stagePastedText(input);
       if (converted) {
         input = "";
@@ -1513,38 +1513,21 @@ export default function ChatPage() {
       }
     }
     const sendingAgentId = effectiveAgentId;
-    if (isAgentWorking) {
-      setRealtimePending(sendingAgentId, false);
-      setStreamingText("");
-      stopAgentResponse(sendingAgentId);
-    }
-    agentShouldAutoScrollRef.current = true;
-    // New turn → reset scoped AAC so it opens zeroed for this interaction.
-    turnStartByAgentRef.current[sendingAgentId] = Date.now();
-    setTurnStartTick((t) => t + 1);
     setUploading(true);
     try {
-      const outgoingMedia = await media.finalizeStaged({ contexto: "conversa_agente", agentId: sendingAgentId });
-      const hasImages = outgoingMedia.some((m) => m.type === "image");
-      const hasDocs = outgoingMedia.some((m) => m.type === "file");
-      let displayContent = input.trim();
-      if (!displayContent && outgoingMedia.length > 0) {
-        if (hasImages) displayContent = "[imagem anexada]";
-        else if (hasDocs) displayContent = "[documento anexado]";
-        else displayContent = "[mídia anexada]";
-      }
-      const userMsg: ChatMessage = {
-        id: `m${Date.now()}`, agentId: sendingAgentId, role: "user",
-        content: displayContent, timestamp: new Date().toISOString(), channel: "web",
-        media: outgoingMedia.length > 0 ? outgoingMedia : undefined,
-      };
-      if (!(await despacharAoAgente(sendingAgentId, userMsg))) return;
+      const enviada = await enviarPergunta(input, media.finalizeStaged, () => {
+        agentShouldAutoScrollRef.current = true;
+        // New turn → reset scoped AAC so it opens zeroed for this interaction.
+        turnStartByAgentRef.current[sendingAgentId] = Date.now();
+        setTurnStartTick((t) => t + 1);
+      });
+      if (!enviada) return;
       inputLocalRef.current = "";
       clearInputDraft();
       resetComposerTextarea(inputRef.current);
       media.clearStaged();
     } finally { setUploading(false); }
-  }, [media, effectiveAgentId, isAgentWorking, uploading, clearInputDraft, despacharAoAgente, setRealtimePending]);
+  }, [media, effectiveAgentId, uploading, clearInputDraft, enviarPergunta]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     if (e.clipboardData.files.length > 0) {

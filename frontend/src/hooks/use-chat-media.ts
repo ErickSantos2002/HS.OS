@@ -235,11 +235,14 @@ export function useChatMedia() {
   }, [staged]);
 
   /* ── File picker (all types) ── */
-  const openFilePicker = useCallback((accept: string) => {
+  const openFilePicker = useCallback((accept: string, camera = false) => {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = accept;
-    input.multiple = true;
+    input.multiple = !camera;
+    // Câmera do celular (app do celular, 03/11/2026): abre direto a câmera
+    // traseira em vez da galeria.
+    if (camera) input.setAttribute("capture", "environment");
     // iOS Safari requires the input to be in the DOM
     input.style.position = "fixed";
     input.style.opacity = "0";
@@ -270,6 +273,7 @@ export function useChatMedia() {
 
   /* ── Image picker ── */
   const pickImage = useCallback(() => openFilePicker("image/*"), [openFilePicker]);
+  const pickCamera = useCallback(() => openFilePicker("image/*", true), [openFilePicker]);
 
   /* ── Handle paste / drop → image + documents ── */
   const handlePasteOrDrop = useCallback(
@@ -442,6 +446,7 @@ export function useChatMedia() {
     removeStaged,
     clearStaged,
     pickImage,
+    pickCamera,
     pickFile,
     handlePasteOrDrop,
     stagePastedText,

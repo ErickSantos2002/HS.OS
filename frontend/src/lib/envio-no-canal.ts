@@ -15,6 +15,7 @@ import { startChannelAgentReplies } from "@/lib/channel-agents";
 import { notifyChannelRecipients } from "@/lib/channel-notifications";
 import { transcreverAudio } from "@/lib/transcrever-audio";
 import type { Channel, ChannelAttachment, ChannelMessage } from "@/hooks/use-channels";
+import type { MediaAttachment } from "@/lib/mock-data";
 
 type SendMessage = (
   channelId: string, authorId: string, authorName: string, content: string,
@@ -33,6 +34,17 @@ export interface ContextoDeEnvio {
 
 export function nomeDeQuemEscreve(ctx: Pick<ContextoDeEnvio, "profile" | "user">): string {
   return (ctx.profile?.full_name && ctx.profile.full_name.trim()) || ctx.user.email?.split("@")[0] || "Usuário";
+}
+
+/** Anexo já enviado (`finalizeStaged`) no formato de `channel_messages.attachments`. */
+export function anexosDoCanal(finalizados: MediaAttachment[]): ChannelAttachment[] {
+  return finalizados.map((f) => ({
+    id: f.id,
+    name: f.name ?? "arquivo",
+    url: f.id ? "" : (f.url || f.base64),
+    size: f.size ?? 0,
+    mimeType: f.mimeType,
+  }));
 }
 
 /** O texto que a mensagem leva quando só tem anexo: "📎 nome". Imagem não entra. */

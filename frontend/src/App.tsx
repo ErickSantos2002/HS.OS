@@ -4,7 +4,7 @@ import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AppLayout } from "@/components/AppLayout";
+import { CascaDoApp } from "@/celular/CascaDoApp";
 import { AuthProvider } from "@/components/AuthGuard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -111,7 +111,9 @@ const App = () => {
                   path="/*"
                   element={
                     <ProtectedRoute>
-                        <AppLayout>
+                        {/* No celular, `/` e `/chat` são o app próprio
+                            (src/celular/, spec 2026-11-03); o resto, o AppLayout. */}
+                        <CascaDoApp>
                         <Routes>
                           <Route path="/" element={<HomePage />} />
                           <Route path="/chat" element={<ChatPage />} />
@@ -267,7 +269,7 @@ const App = () => {
                           <Route path="/profile" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                           <Route path="*" element={<NotFound />} />
                         </Routes>
-                        </AppLayout>
+                        </CascaDoApp>
                     </ProtectedRoute>
                   }
                 />

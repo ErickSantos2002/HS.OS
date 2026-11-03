@@ -5,7 +5,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     <NextThemesProvider
       attribute="class"
       defaultTheme="dark"
-      enableSystem={false}
+      // "Sistema" existe para o tema do app do celular (Eu → Tema). Quem
+      // nunca escolheu continua no escuro de sempre (`defaultTheme`).
+      enableSystem
       storageKey="hsos-theme"
     >
       {children}

@@ -20,7 +20,7 @@ import AudioDaMensagem from "./AudioDaMensagem";
 import MenuDaMensagem, { type AcaoDaMensagem } from "./MenuDaMensagem";
 import { acoesDaMensagemDoCanal } from "@/lib/acoes-da-mensagem";
 import {
-  apagarNoCanal, apagarParaMimNoCanal, editarNoCanal, enviarAudioNoCanal, publicarAudioNaThread,
+  anexosDoCanal, apagarNoCanal, apagarParaMimNoCanal, editarNoCanal, enviarAudioNoCanal, publicarAudioNaThread,
   publicarNaThread, publicarNoCanal, type ContextoDeEnvio,
 } from "@/lib/envio-no-canal";
 import VistoDaMensagem from "./VistoDaMensagem";
@@ -1394,13 +1394,7 @@ export default function ChannelChat({
         setUploadingFiles(true);
         try {
           const finalized = await channelMedia.finalizeStaged({ contexto: "canal", channelId: channel.id });
-          attachments = finalized.map((f) => ({
-            id: f.id,
-            name: f.name ?? "arquivo",
-            url: f.id ? "" : (f.url || f.base64),
-            size: f.size ?? 0,
-            mimeType: f.mimeType,
-          }));
+          attachments = anexosDoCanal(finalized);
           channelMedia.clearStaged();
         } catch (err) {
           console.error("File upload error:", err);

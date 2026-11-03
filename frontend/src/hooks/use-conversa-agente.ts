@@ -46,7 +46,10 @@ import {
 import { hasActiveTextSelection } from "@/lib/clipboard";
 import { conteudoDeVoz } from "@/lib/mensagem-de-voz";
 import { transcreverAudio } from "@/lib/transcrever-audio";
-import type { ChatMessage } from "@/lib/mock-data";
+import type { ChatMessage, MediaAttachment } from "@/lib/mock-data";
+
+/** Texto maior que isto vira anexo `.txt` antes de ir ao agente. */
+export const LIMITE_TEXTO_COMO_ANEXO = 10000;
 
 const VAZIO: ChatMessage[] = [];
 
@@ -469,6 +472,42 @@ export function useConversaAgente(agentId: string, opcoes: OpcoesDaConversaAgent
 
 
   /**
+   * Pergunta digitada (com ou sem anexos): para a resposta em curso, sobe os
+   * anexos, monta a mensagem e despacha. Era o miolo do `handleSend` do
+   * `ChatPage`. `finalizarAnexos` é o `finalizeStaged` do `useChatMedia` de
+   * quem chama. Devolve `true` se a pergunta foi gravada e enviada.
+   */
+  const enviarPergunta = useCallback(async (
+    texto: string,
+    finalizarAnexos: (contexto: { contexto: "conversa_agente"; agentId: string }) => Promise<MediaAttachment[]>,
+    antesDeEnviar?: () => void,
+  ): Promise<boolean> => {
+    if (!effectiveAgentId) return false;
+    const sendingAgentId = effectiveAgentId;
+    if (isAgentWorking) {
+      setRealtimePending(sendingAgentId, false);
+      setStreamingText("");
+      stopAgentResponse(sendingAgentId);
+    }
+    antesDeEnviar?.();
+    const outgoingMedia = await finalizarAnexos({ contexto: "conversa_agente", agentId: sendingAgentId });
+    const hasImages = outgoingMedia.some((m) => m.type === "image");
+    const hasDocs = outgoingMedia.some((m) => m.type === "file");
+    let displayContent = texto.trim();
+    if (!displayContent && outgoingMedia.length > 0) {
+      if (hasImages) displayContent = "[imagem anexada]";
+      else if (hasDocs) displayContent = "[documento anexado]";
+      else displayContent = "[mídia anexada]";
+    }
+    const userMsg: ChatMessage = {
+      id: `m${Date.now()}`, agentId: sendingAgentId, role: "user",
+      content: displayContent, timestamp: new Date().toISOString(), channel: "web",
+      media: outgoingMedia.length > 0 ? outgoingMedia : undefined,
+    };
+    return despacharAoAgente(sendingAgentId, userMsg);
+  }, [effectiveAgentId, isAgentWorking, setRealtimePending, despacharAoAgente]);
+
+  /**
    * Voz para o agente: transcreve e manda como se fosse digitado, com a marca
    * 🎤 (`conteudoDeVoz`). O áudio não é guardado — o agente não ouve. Era o
    * miolo do `handleAudioSend` do `ChatPage`. Devolve `false` se nada foi.
@@ -525,6 +564,7 @@ export function useConversaAgente(agentId: string, opcoes: OpcoesDaConversaAgent
     handleStopAgentResponse,
     handleRetry,
     despacharAoAgente,
+    enviarPergunta,
     enviarVoz,
   };
 }
