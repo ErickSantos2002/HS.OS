@@ -714,6 +714,21 @@
     user-select: none !important;
   }
 
+  /* Celular, segurando a mensagem (spec 2026-11-03, Frente C3): a seleção
+     nativa e o menu do iOS ficariam por cima da folha de ações. O "Copiar"
+     da folha cobre a necessidade. Vence o `!important` de cima por
+     especificidade. */
+  @media (max-width: 767px) {
+    [data-pressionando="true"],
+    [data-pressionando="true"] *,
+    [data-pressionando="true"] .chat-message-content-selectable,
+    [data-pressionando="true"] .chat-message-content-selectable * {
+      -webkit-user-select: none !important;
+      user-select: none !important;
+      -webkit-touch-callout: none !important;
+    }
+  }
+
   /* Prevent selection on action buttons and metadata */
   .chat-message-actions,
   .chat-message-meta {

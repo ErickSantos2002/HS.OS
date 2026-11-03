@@ -45,6 +45,11 @@ import { shouldShowDateDivider } from "@/lib/chat-date-groups";
 import type { Reaction } from "@/hooks/use-message-reactions";
 import { getAudioFileExtension, useAudioRecorder } from "@/hooks/use-audio-recorder";
 import { toast } from "sonner";
+import type { AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
+import AcoesDaMensagemNoToque from "@/components/chat/AcoesDaMensagemNoToque";
+import { useToqueLongo } from "@/hooks/use-toque-longo";
+import { acoesDoToque } from "@/lib/acoes-do-toque";
+import { copyToClipboard } from "@/lib/clipboard";
 
 function EmojiPicker({ onSelect }: { onSelect: (emoji: string) => void }) {
   const { resolvedTheme } = useTheme();
@@ -188,8 +193,11 @@ function ThreadMessageCard({
   onImageClick,
   onAttachmentPreview,
   visto,
+  toque = false,
 }: {
   message: ChannelMessage;
+  /** Celular: segurar abre a folha de ações (spec 2026-11-03, Frente C3). */
+  toque?: boolean;
   compact?: boolean;
   currentUserId: string;
   reactions: Reaction[];
@@ -211,6 +219,14 @@ function ThreadMessageCard({
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showActions = !compact && !isDeleted && !!onToggleReaction && !message.id.startsWith("optimistic-");
+  // Uma lista só: a barra do desktop é desenhada a partir dela e a folha do
+  // celular a recebe inteira (mais o "Copiar", que o toque precisa).
+  const acoesDaResposta: AcaoDaMensagem[] = [
+    ...(isOwn && onEdit ? [{ rotulo: "Editar", icone: Pencil, aoEscolher: onEdit }] : []),
+    ...(isOwn && onDelete ? [{ rotulo: "Apagar", icone: Trash2, perigo: true, aoEscolher: onDelete }] : []),
+  ];
+  const [folhaAberta, setFolhaAberta] = useState(false);
+  const toqueLongo = useToqueLongo(() => setFolhaAberta(true), toque && showActions);
 
   const handleTouchStart = useCallback(() => {
     longPressTimer.current = setTimeout(() => setShowMobileMenu(true), 500);
@@ -231,10 +247,25 @@ function ThreadMessageCard({
             ? "border-[hsl(var(--agent-accent)/0.55)] bg-[hsl(var(--agent-accent)/0.06)] shadow-[0_0_28px_-12px_hsl(var(--agent-accent)/0.55)]"
             : "border-border/60 bg-card/70"
       }`}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
+      data-pressionando={toqueLongo.pressionando ? "true" : undefined}
+      {...(toque
+        ? toqueLongo.handlers
+        : { onTouchStart: handleTouchStart, onTouchEnd: handleTouchEnd, onTouchCancel: handleTouchEnd })}
     >
+      {toque && showActions && (
+        <AcoesDaMensagemNoToque
+          aberto={folhaAberta}
+          aoMudar={setFolhaAberta}
+          acoes={acoesDoToque(acoesDaResposta, {
+            texto: message.content ?? "",
+            copiar: () => {
+              void copyToClipboard(message.content).then((ok) =>
+                (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar")));
+            },
+          })}
+          aoReagir={onToggleReaction}
+        />
+      )}
       <div className="flex items-start gap-3">
         <div className={`h-9 w-9 shrink-0 overflow-hidden ring-2 ${isOwn ? "ring-primary-foreground/20" : "ring-border/30"} ${isAgent ? "rounded-md" : "rounded-full"}`}>
           {isAgent ? (
@@ -323,7 +354,7 @@ function ThreadMessageCard({
         </div>
       </div>
 
-      {showActions && (
+      {showActions && !toque && (
         <div
           className={`absolute -top-3 ${isOwn ? "left-2" : "right-2"} ${
             showMobileMenu || emojiOpen ? "flex" : "hidden group-hover:flex"
@@ -363,30 +394,19 @@ function ThreadMessageCard({
               />
             </PopoverContent>
           </Popover>
-          {isOwn && onEdit && (
+          {acoesDaResposta.map(({ rotulo, aoEscolher, icone: Icone, perigo }) => (
             <button
+              key={rotulo}
               onClick={() => {
-                onEdit();
+                aoEscolher();
                 setShowMobileMenu(false);
               }}
-              title="Editar"
-              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-secondary/80 hover:text-foreground"
+              title={rotulo}
+              className={`rounded p-1.5 text-muted-foreground transition-colors ${perigo ? "hover:bg-destructive/10 hover:text-destructive" : "hover:bg-secondary/80 hover:text-foreground"}`}
             >
-              <Pencil className="h-3.5 w-3.5" />
+              {Icone && <Icone className="h-3.5 w-3.5" />}
             </button>
-          )}
-          {isOwn && onDelete && (
-            <button
-              onClick={() => {
-                onDelete();
-                setShowMobileMenu(false);
-              }}
-              title="Apagar"
-              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          )}
+          ))}
         </div>
       )}
     </article>
@@ -643,6 +663,7 @@ export default function ThreadPanel({
                     onDelete={() => setDeleteConfirmId(message.id)}
                     onImageClick={(src, alt) => setLightboxImage({ src, alt })}
                     onAttachmentPreview={setPreviewAttachment}
+                    toque={isMobile}
                   />
                 )}
               </Fragment>

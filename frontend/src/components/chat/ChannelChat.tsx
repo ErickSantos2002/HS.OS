@@ -19,6 +19,9 @@ import { uploadFileToStorage, formatFileSize, isImageFile } from "@/lib/file-upl
 import FileAttachmentCard from "./FileAttachmentCard";
 import AudioDaMensagem from "./AudioDaMensagem";
 import MenuDaMensagem, { type AcaoDaMensagem } from "./MenuDaMensagem";
+import AcoesDaMensagemNoToque from "./AcoesDaMensagemNoToque";
+import { useToqueLongo } from "@/hooks/use-toque-longo";
+import { temOQueAbrir } from "@/lib/acoes-do-toque";
 import VistoDaMensagem from "./VistoDaMensagem";
 import DadosDaMensagem from "./DadosDaMensagem";
 import { estadoNoCanal, type EstadoDoVisto } from "@/lib/vistos";
@@ -226,6 +229,7 @@ export const MessageBubble = memo(function MessageBubble({
   onDadosDaMensagem,
   onApagarParaMim,
   continuacao = false,
+  toque = false,
 }: {
   msg: ChannelMessage;
   currentUserId: string;
@@ -252,6 +256,9 @@ export const MessageBubble = memo(function MessageBubble({
   onApagarParaMim?: () => void;
   /** Segue a mensagem anterior do mesmo autor: sai sem foto e sem nome. */
   continuacao?: boolean;
+  /** Celular: segurar abre a folha de ações; seta e "reagir" de hover saem
+   *  (spec 2026-11-03, Frente C3). No desktop fica `false` e nada muda. */
+  toque?: boolean;
 }) {
   const isAgent = msg.author_type === "agent";
   const agentIdForAvatar = isAgent ? normalizeAgentId(msg.author_id || "") : "";
@@ -272,6 +279,10 @@ export const MessageBubble = memo(function MessageBubble({
   const [longPressTimer, setLongPressTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [folhaAberta, setFolhaAberta] = useState(false);
+  const [folhaMontada, setFolhaMontada] = useState(false);
+  // Celular: o horário de quem segue a sequência aparece ao tocar, não no hover.
+  const [mostrarHora, setMostrarHora] = useState(false);
   const closeEmojiTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleTouchStart = useCallback(() => {
@@ -403,6 +414,13 @@ export const MessageBubble = memo(function MessageBubble({
     // fica sabendo; o "Apagar" de cima é que some para todos.
     ...(onApagarParaMim ? [{ rotulo: "Apagar para mim", icone: EyeOff, aoEscolher: () => { onApagarParaMim(); setShowMobileMenu(false); } }] : []),
   ];
+  // A folha do toque usa ESTE array — o mesmo do `MenuDaMensagem` acima.
+  const podeReagir = !msg.id.startsWith("optimistic-") && !isDeleted;
+  const toqueLongo = useToqueLongo(() => {
+    if (!temOQueAbrir(acoesDoMenu, podeReagir)) return;
+    setFolhaMontada(true);
+    setFolhaAberta(true);
+  }, toque);
 
 
   // ⚠️ Fora do ramo de "não apagada" de propósito. Em 13/10/2026 uma resposta
@@ -447,23 +465,32 @@ export const MessageBubble = memo(function MessageBubble({
   return (
     <div
       ref={wrapperRef}
-      className={`flex gap-3 group relative px-3 ${continuacao ? "py-0.5" : "py-1.5"} -mx-3 transition-colors ${isOwn ? "flex-row-reverse" : ""} ${threadHasUnread ? "bg-primary/[0.06] border-l-4 border-primary rounded-r-md" : isMarkedUnread ? "bg-primary/[0.04] border-l-2 border-primary/50" : ""}`}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
+      className={`flex ${toque ? "gap-2" : "gap-3"} group relative px-3 ${continuacao ? "py-0.5" : "py-1.5"} -mx-3 transition-colors ${isOwn ? "flex-row-reverse" : ""} ${threadHasUnread ? "bg-primary/[0.06] border-l-4 border-primary rounded-r-md" : isMarkedUnread ? "bg-primary/[0.04] border-l-2 border-primary/50" : ""}`}
+      data-pressionando={toqueLongo.pressionando ? "true" : undefined}
+      {...(toque
+        ? { ...toqueLongo.handlers, onClick: () => continuacao && setMostrarHora((v) => !v) }
+        : { onTouchStart: handleTouchStart, onTouchEnd: handleTouchEnd, onTouchCancel: handleTouchEnd })}
     >
+      {toque && folhaMontada && (
+        <AcoesDaMensagemNoToque
+          aberto={folhaAberta}
+          aoMudar={setFolhaAberta}
+          acoes={acoesDoMenu}
+          aoReagir={podeReagir ? onToggleReaction : undefined}
+        />
+      )}
       {continuacao ? (
         // Sem foto, o espaço fica para alinhar com a primeira da sequência; o
         // horário de quem não sou eu aparece aqui ao passar o mouse.
-        <div className="w-9 shrink-0 flex items-start justify-center pt-2.5">
+        <div className={`${toque ? "w-8" : "w-9"} shrink-0 flex items-start justify-center pt-2.5`}>
           {!isOwn && (
-            <span className="hidden group-hover:inline text-[10px] leading-none text-muted-foreground">
+            <span className={`${toque && mostrarHora ? "inline" : "hidden group-hover:inline"} text-[10px] leading-none text-muted-foreground`}>
               {format(new Date(msg.created_at), "HH:mm")}
             </span>
           )}
         </div>
       ) : (
-      <div className={`h-9 w-9 shrink-0 mt-0.5 overflow-hidden ring-2 ring-border/30 ${isAgent ? "rounded-md" : "rounded-full"}`}>
+      <div className={`${toque ? "h-8 w-8" : "h-9 w-9"} shrink-0 mt-0.5 overflow-hidden ring-2 ring-border/30 ${isAgent ? "rounded-md" : "rounded-full"}`}>
         {isAgent ? (
           agentAvatar ? (
             <img src={agentAvatar} alt="" className="h-9 w-9 object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
@@ -539,7 +566,7 @@ export const MessageBubble = memo(function MessageBubble({
             {indicadorDeRespostas}
           </>
         ) : (
-          <div className={`relative max-w-[70%] flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
+          <div className={`relative ${toque ? "max-w-[85%]" : "max-w-[70%]"} flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
             {mentionsEveryone && (
               <div className="mt-1.5 mb-2 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-primary/20">
                 <Users className="h-3 w-3" />
@@ -553,7 +580,7 @@ export const MessageBubble = memo(function MessageBubble({
               </div>
             )}
             {temTexto && (
-            <div ref={bubbleRef} className={`relative mt-1 inline-block w-fit max-w-full pr-7 text-left ${bubbleClass}`}>
+            <div ref={bubbleRef} className={`relative mt-1 inline-block w-fit max-w-full ${toque ? "" : "pr-7"} text-left ${bubbleClass}`}>
               {(() => {
                 // Strip @todos prefix from rendered text when the "Aviso para todos" badge is already shown
                 const displayContent = mentionsEveryone
@@ -564,8 +591,8 @@ export const MessageBubble = memo(function MessageBubble({
                 return <MarkdownMessageContent text={displayContent} highlightMentions={hasMention} className="text-sm text-foreground/90" />;
               })()}
 
-              {renderReagir()}
-              <MenuDaMensagem acoes={acoesDoMenu} className={showMobileMenu ? "opacity-100" : undefined} />
+              {!toque && renderReagir()}
+              {!toque && <MenuDaMensagem acoes={acoesDoMenu} className={showMobileMenu ? "opacity-100" : undefined} />}
             </div>
             )}
 
@@ -597,7 +624,7 @@ export const MessageBubble = memo(function MessageBubble({
                     }
                   </AnexoResolvido>
                 ))}
-                {!temTexto && (
+                {!temTexto && !toque && (
                   <>
                     {renderReagir()}
                     <MenuDaMensagem acoes={acoesDoMenu} className={showMobileMenu ? "opacity-100" : undefined} />
@@ -1932,6 +1959,7 @@ export default function ChannelChat({
                       onDadosDaMensagem={() => setDadosDaMensagemId(msg.id)}
                       onApagarParaMim={() => { void apagarParaMim(msg); }}
                       continuacao={continuacao}
+                      toque={isMobile}
                     />
                   )}
                 </div>

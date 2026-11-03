@@ -118,7 +118,9 @@ import { shouldShowDateDivider } from "@/lib/chat-date-groups";
 import { resetComposerTextarea, resizeComposerTextarea } from "@/lib/chat-composer";
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
-import MenuDaMensagem from "@/components/chat/MenuDaMensagem";
+import MenuDaMensagem, { type AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
+import AcoesDaMensagemNoToque from "@/components/chat/AcoesDaMensagemNoToque";
+import { useToqueLongo } from "@/hooks/use-toque-longo";
 import { copyToClipboard, hasActiveTextSelection } from "@/lib/clipboard";
 import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 import { NoEscritorioAgora } from "@/components/escritorio/NoEscritorioAgora";
@@ -425,6 +427,23 @@ const StreamingIndicator = React.memo(function StreamingIndicator({
 });
 
 
+/** Ações da mensagem na conversa com agente. ⚠️ Fonte única: a seta do
+ *  desktop (`MenuDaMensagem`) e a folha do toque longo no celular recebem
+ *  este mesmo array (spec 2026-11-03, Frente C3). */
+function acoesDaMensagemDoAgente(msg: ChatMessage, effectiveAgentId: string): AcaoDaMensagem[] {
+  if (msg.id.startsWith("optimistic-") || msg.isError) return [];
+  return [
+    ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => {
+      void copyToClipboard(msg.content).then((ok) =>
+        (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar")));
+    } }] : []),
+    ...(msg.role === "agent" && effectiveAgentId ? [{ rotulo: "Marcar como não lida", icone: BellDot, aoEscolher: () => {
+      markAgentUnread(effectiveAgentId);
+      toast.success("Marcada como não lida");
+    } }] : []),
+  ];
+}
+
 interface AgentMessageListProps {
   messages: ChatMessage[];
   isMobile: boolean;
@@ -462,6 +481,13 @@ export const AgentMessageList = React.memo(function AgentMessageList({
   activitiesByMessageId,
   trailingActivities,
 }: AgentMessageListProps) {
+  // Celular: uma folha só para a lista inteira; o toque guarda de quem é.
+  const [folha, setFolha] = useState<{ aberta: boolean; acoes: AcaoDaMensagem[] }>({ aberta: false, acoes: [] });
+  const [alvoDoToque, setAlvoDoToque] = useState<string | null>(null);
+  const acoesDoAlvoRef = useRef<AcaoDaMensagem[]>([]);
+  const toqueLongo = useToqueLongo(() => {
+    if (acoesDoAlvoRef.current.length > 0) setFolha({ aberta: true, acoes: acoesDoAlvoRef.current });
+  }, isMobile);
   const lastAgentIndex = (() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "agent") return i;
@@ -483,15 +509,26 @@ export const AgentMessageList = React.memo(function AgentMessageList({
           ? "rounded-2xl border border-primary/30 bg-primary/10 px-3.5 py-2 text-foreground backdrop-blur-sm shadow-[0_0_0_1px_hsl(var(--primary)/0.08)]"
           : "rounded-2xl border border-primary/30 bg-card/60 px-3.5 py-2 text-foreground/90 backdrop-blur-sm shadow-[0_0_24px_-12px_hsl(var(--primary)/0.45),inset_0_0_0_1px_hsl(var(--primary)/0.08)]";
 
+        const acoes = acoesDaMensagemDoAgente(msg, effectiveAgentId);
+
         return (
           <Fragment key={msg.id}>
             {showDateDivider && <DateDivider date={msg.timestamp} />}
             <div
               data-message-id={msg.id}
-              className={`flex gap-3 group relative px-3 py-1.5 -mx-3 ${isOwn ? "flex-row-reverse" : ""}`}
+              data-pressionando={toqueLongo.pressionando && alvoDoToque === msg.id ? "true" : undefined}
+              className={`flex ${isMobile ? "gap-2" : "gap-3"} group relative px-3 py-1.5 -mx-3 ${isOwn ? "flex-row-reverse" : ""}`}
+              {...toqueLongo.handlers}
+              {...(isMobile ? {
+                onTouchStart: (e: React.TouchEvent) => {
+                  acoesDoAlvoRef.current = acoes;
+                  setAlvoDoToque(msg.id);
+                  toqueLongo.handlers.onTouchStart?.(e);
+                },
+              } : {})}
             >
               {/* Avatar */}
-              <div className={`h-9 w-9 shrink-0 mt-0.5 overflow-hidden ring-2 ring-border/30 ${isAgent ? "rounded-md" : "rounded-full"}`}>
+              <div className={`${isMobile ? "h-8 w-8" : "h-9 w-9"} shrink-0 mt-0.5 overflow-hidden ring-2 ring-border/30 ${isAgent ? "rounded-md" : "rounded-full"}`}>
                 {isAgent ? (
                   <AgentChatAvatar sizeClass="h-9 w-9" ringClass="" agentId={effectiveAgentId} />
                 ) : userAvatarUrl ? (
@@ -530,7 +567,7 @@ export const AgentMessageList = React.memo(function AgentMessageList({
 
                 <div className={`relative w-full flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
                   <div
-                    className={`relative mt-1 inline-block max-w-[70%] pr-7 text-left ${isOwn ? "w-max" : "w-fit"} ${bubbleClass}`}
+                    className={`relative mt-1 inline-block ${isMobile ? "max-w-[85%]" : "max-w-[70%] pr-7"} text-left ${isOwn ? "w-max" : "w-fit"} ${bubbleClass}`}
                   >
                     <div className="chat-message-content-selectable break-words" data-message-select-scope={msg.id}>
                       {msg.content && (
@@ -557,18 +594,7 @@ export const AgentMessageList = React.memo(function AgentMessageList({
                     {/* Estilo WhatsApp (13/10/2026): uma seta no canto abre as
                         ações. Saíram a barra do hover e o "copiar" solto embaixo
                         da resposta. "Ouvir" segue pausado — ver EM-CONSTRUCAO. */}
-                    {!msg.id.startsWith("optimistic-") && !msg.isError && (
-                      <MenuDaMensagem acoes={[
-                        ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => {
-                          void copyToClipboard(msg.content).then((ok) =>
-                            (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar")));
-                        } }] : []),
-                        ...(isAgent && effectiveAgentId ? [{ rotulo: "Marcar como não lida", icone: BellDot, aoEscolher: () => {
-                          markAgentUnread(effectiveAgentId);
-                          toast.success("Marcada como não lida");
-                        } }] : []),
-                      ]} />
-                    )}
+                    {!isMobile && <MenuDaMensagem acoes={acoes} />}
                   </div>
 
                   {/* Own timestamp below bubble */}
@@ -598,6 +624,13 @@ export const AgentMessageList = React.memo(function AgentMessageList({
           </Fragment>
         );
       })}
+      {isMobile && (
+        <AcoesDaMensagemNoToque
+          aberto={folha.aberta}
+          aoMudar={(aberta) => setFolha((f) => ({ ...f, aberta }))}
+          acoes={folha.acoes}
+        />
+      )}
     </>
   );
 });
