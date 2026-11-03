@@ -47,6 +47,17 @@ def test_mencao_exige_fronteira_depois_do_nome():
     assert mencionados("@Anabela chegou", [(ANA, "Ana")]) == set()
 
 
+def test_mensagem_cheia_de_arroba_termina_rapido():
+    """Cem mil "@" fatiando o texto a cada um era O(n²): segundos de CPU num
+    worker que atende o WebSocket de todo mundo, a partir de uma mensagem que
+    qualquer membro de canal escreve."""
+    import time
+    membros = [(ANA, "Ana"), (ANA_PAULA, "Ana Paula"), (JOSE, "José Silva")]
+    inicio = time.perf_counter()
+    assert mencionados("@" * 100_000, membros) == set()
+    assert time.perf_counter() - inicio < 0.5
+
+
 def test_todos_casa_como_na_tela():
     assert menciona_todos("@todos reunião agora")
     assert menciona_todos("aviso: @TODOS")

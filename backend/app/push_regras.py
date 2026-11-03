@@ -22,6 +22,10 @@ _TODOS = re.compile(r"(^|\s)@todos\b", re.I | re.U)
 
 _TETO_PREVIA = 140
 
+# Até onde a varredura de menções olha — ver `mencionados`.
+_TETO_CARACTERES = 10_000
+_TETO_ARROBAS = 50
+
 
 @dataclass(frozen=True)
 class Membro:
@@ -58,14 +62,22 @@ def mencionados(conteudo: str, membros: list[tuple[str, str]]) -> set[str]:
             por_nome.setdefault(n, set()).add(uid)
     nomes = sorted(por_nome, key=len, reverse=True)
 
+    # ⚠️ **Trabalho limitado de propósito.** O conteúdo vem de quem escreve, e
+    # a varredura roda num worker que atende todo mundo: uma mensagem com cem
+    # mil "@" fatiando o texto a cada um era O(n²). Compara por índice, sem
+    # cópia, e para nos primeiros `_TETO_ARROBAS` dentro dos primeiros
+    # `_TETO_CARACTERES` — menção de verdade está no começo de mensagem humana.
+    texto = texto[:_TETO_CARACTERES]
     achados: set[str] = set()
-    for m in re.finditer("@", texto):
-        resto = texto[m.end():]
+    for i, m in enumerate(re.finditer("@", texto)):
+        if i >= _TETO_ARROBAS:
+            break
+        inicio = m.end()
         for n in nomes:
-            if not resto.startswith(n):
+            if not texto.startswith(n, inicio):
                 continue
-            depois = resto[len(n):len(n) + 1]
-            if depois and (depois.isalnum() or depois == "_"):
+            fim = inicio + len(n)
+            if fim < len(texto) and (texto[fim].isalnum() or texto[fim] == "_"):
                 continue
             achados |= por_nome[n]
             break
