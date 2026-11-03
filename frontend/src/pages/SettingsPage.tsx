@@ -24,6 +24,7 @@ import ConnectorsTab from "@/components/settings/ConnectorsTab";
 import EmpresaTab from "@/components/settings/EmpresaTab";
 import { Switch } from "@/components/ui/switch";
 import PreferenciaResumoEmAudio from "@/components/settings/PreferenciaResumoEmAudio";
+import { InstalarApp } from "@/components/InstalarApp";
 import MissionControlDossierPage from "@/pages/MissionControlDossierPage";
 import UsersPage from "@/pages/UsersPage";
 import DocumentationPage from "@/pages/DocumentationPage";
@@ -89,6 +90,10 @@ export default function SettingsPage() {
     if (!checked) {
       setBrowserNotifEnabled(false);
       setNotifEnabled(false);
+      // Desligar é por aparelho e apaga a inscrição dele (esclarecimento 4 da
+      // spec 2026-11-03): não existe preferência no servidor.
+      const { unsubscribeFromPushNotifications } = await import("@/lib/push-notifications");
+      await unsubscribeFromPushNotifications();
       return;
     }
     // Turning ON: ensure permission is actually granted before persisting
@@ -103,6 +108,10 @@ export default function SettingsPage() {
     if (perm === "granted") {
       setBrowserNotifEnabled(true);
       setNotifEnabled(true);
+      if (user?.id) {
+        const { subscribeToPushNotifications } = await import("@/lib/push-notifications");
+        void subscribeToPushNotifications(user.id);
+      }
     } else {
       // permission denied or unsupported — do NOT persist true
       setBrowserNotifEnabled(false);
@@ -175,7 +184,7 @@ export default function SettingsPage() {
         },
       }).catch((e: Error) => ({ erro: e.message, sent: 0 }));
 
-      const enviados = json?.sent ?? 0;
+      const enviados = json?.enviados ?? 0;
       toast({
         title: enviados > 0 ? `Push enviado (${enviados} dispositivo(s))` : "Push não chegou a ninguém",
         description: `Inscrições no banco: ${count} | resposta: ${JSON.stringify(json)}`,
@@ -598,6 +607,9 @@ export default function SettingsPage() {
               </div>
 
               <PreferenciaResumoEmAudio />
+
+              {/* Entrada fixa do convite para instalar; some quando já é app. */}
+              <InstalarApp variante="entrada" />
 
               <h3 className="text-sm font-display font-semibold text-foreground flex items-center gap-2">
                 <User className="h-4 w-4 text-primary" /> Foto de Perfil

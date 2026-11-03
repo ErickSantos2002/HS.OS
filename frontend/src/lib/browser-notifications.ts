@@ -1,7 +1,8 @@
 /**
  * Browser-native notifications (Notifications API).
  * Disparadas pelo cliente quando há aba aberta (mesmo em background).
- * Não cobre app totalmente fechado — isso exigiria Web Push + Service Worker + VAPID.
+ * App fechado é com o Web Push (`push-notifications.ts` + `sw.ts`); esta local
+ * só é suprimida quando o push está ativo E confirmado pelo servidor.
  */
 const STORAGE_KEY = "hsos:browserNotifications";
 
@@ -48,15 +49,21 @@ export type ShowNotificationResult =
   | { ok: true; via: "sw" | "direct" }
   | { ok: false; reason: string };
 
-const AUTO_CLOSE_MS = 6000;
-
+/**
+ * Push ativo DE FATO: inscrição no navegador **e** confirmada pelo servidor.
+ *
+ * ⚠️ Só a do navegador não basta. Até 03/11/2026 bastava, o servidor nunca
+ * enviava, e quem se inscrevia perdia o push e a notificação local.
+ */
 async function hasActivePushSubscription(): Promise<boolean> {
   try {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
     const reg = await navigator.serviceWorker.getRegistration();
     if (!reg) return false;
     const sub = await reg.pushManager.getSubscription();
-    return !!sub;
+    if (!sub) return false;
+    const { inscricaoConfirmada } = await import("@/lib/push-notifications");
+    return await inscricaoConfirmada(sub.endpoint);
   } catch {
     return false;
   }
@@ -74,7 +81,8 @@ export async function showNotification(opts: ShowNotificationOptions): Promise<S
     return { ok: false, reason: "push subscription active — handled by SW" };
   }
 
-  // Auto-dismiss after a few seconds so notifications don't pile up.
+  // ⚠️ Sem auto-fechamento: no celular a notificação sumia da bandeja em 6 s,
+  // antes de a pessoa olhar o aparelho. A `tag` por conversa já evita a pilha.
   const notifOptions: NotificationOptions & { data?: unknown; renotify?: boolean } = {
     body: opts.body,
     icon: opts.icon ?? "/icons/icon-192.png",
@@ -94,15 +102,6 @@ export async function showNotification(opts: ShowNotificationOptions): Promise<S
       if (reg && typeof reg.showNotification === "function") {
         await reg.showNotification(opts.title, notifOptions);
         console.log("[browser-notifications] dispatched via SW (scope:", reg.scope, ")");
-        // Auto-close after AUTO_CLOSE_MS
-        setTimeout(async () => {
-          try {
-            const notifs = await reg.getNotifications(opts.tag ? { tag: opts.tag } : {});
-            notifs.forEach((n) => n.close());
-          } catch {
-            // ignore
-          }
-        }, AUTO_CLOSE_MS);
         return { ok: true, via: "sw" };
       }
     } catch (e) {
@@ -118,9 +117,6 @@ export async function showNotification(opts: ShowNotificationOptions): Promise<S
       opts.onClick?.();
       n.close();
     };
-    setTimeout(() => {
-      try { n.close(); } catch { /* noop */ }
-    }, AUTO_CLOSE_MS);
     console.log("[browser-notifications] dispatched via direct Notification()");
     return { ok: true, via: "direct" };
   } catch (e) {

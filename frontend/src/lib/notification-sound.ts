@@ -1,10 +1,23 @@
 /**
- * Shared notification sound utility.
- * Uses Web Audio API to play a short ping sound.
+ * Som curto de notificação (Web Audio).
+ *
+ * ⚠️ **Um `AudioContext` só, reaproveitado.** Criar um por som esgota o limite
+ * do navegador (o Chrome recusa depois de ~6 vivos) e, no iOS, cada contexto
+ * novo nasce suspenso — o som simplesmente não tocava a partir de certo ponto.
  */
+let contexto: AudioContext | null = null;
+
+function obterContexto(): AudioContext | null {
+  if (typeof window === "undefined" || typeof AudioContext === "undefined") return null;
+  if (!contexto || contexto.state === "closed") contexto = new AudioContext();
+  if (contexto.state === "suspended") void contexto.resume().catch(() => undefined);
+  return contexto;
+}
+
 export function playNotificationSound() {
   try {
-    const ctx = new AudioContext();
+    const ctx = obterContexto();
+    if (!ctx) return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);

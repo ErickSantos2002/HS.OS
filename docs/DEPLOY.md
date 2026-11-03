@@ -213,6 +213,51 @@ chama — o gateway não repassa a identidade.
 com `--aplicar`. O volume `/app/uploads` só sai do EasyPanel quando a tabela do
 fim bater.
 
+### Notificações push — VAPID e coletor de respostas
+
+Desde 03/11/2026 o **servidor** envia o push (spec
+`docs/superpowers/specs/2026-11-03-mobile-conversas-design.md`, Frente B): a
+mensagem gravada dispara `pg_notify('push_pendente')`, o `escuta_banco`
+encaminha e o `app/push_envio.py` envia — reservando em `push_enviados` para os
+2 workers não enviarem em dobro. Precisa de três variáveis no serviço do
+**backend**:
+
+| variável | valor |
+|---|---|
+| `VAPID_PUBLIC_KEY` | chave pública (base64url, ~87 caracteres). Vai também para o navegador por `GET /push/chave-publica`. |
+| `VAPID_PRIVATE_KEY` | chave privada (base64url, ~43 caracteres). **Nunca** sai do EasyPanel. |
+| `VAPID_SUBJECT` | `mailto:ti@healthsafetytech.com` |
+
+Gerar o par numa máquina de confiança, uma vez (o par identifica a instalação;
+trocar invalida todas as inscrições e cada aparelho precisa reativar):
+
+```bash
+python -m venv /tmp/vapid && /tmp/vapid/bin/pip install py-vapid
+cd "$(mktemp -d)" && /tmp/vapid/bin/vapid --gen     # private_key.pem / public_key.pem
+/tmp/vapid/bin/vapid --applicationServerKey         # a pública, em base64url
+```
+
+`VAPID_PRIVATE_KEY` é a chave privada no formato que o `pywebpush` lê
+(`Vapid.from_string`: o conteúdo do PEM sem as linhas `-----BEGIN/END-----` e
+sem quebras). Colar no EasyPanel direto do arquivo local — ela não passa por
+chat nem por commit — e conferir pelo botão de teste abaixo.
+
+**Sem as variáveis o backend sobe normalmente** e loga uma vez
+`push desligado: VAPID ausente`; a tela não oferece o push e a notificação
+local continua funcionando.
+
+⚠️ **Migrações antes do código:** `023_push_enviados`, `024_coletor_respostas`,
+`025_silenciar_canal` e `026_remover_push_morto`. O `/reply` sobrevive sem a
+`024` (loga e segue), mas o coletor fica parado e o silenciar responde 500.
+
+**Coletor de respostas** (`app/coletor_respostas.py`): busca no gateway a
+resposta de quem perguntou e fechou o app, a cada `COLETOR_RESPOSTAS_SEGUNDOS`
+(padrão 5; `0` desliga). Sem ele não há push de resposta de agente com o app
+fechado.
+
+**Conferir no ar:** Configurações → Perfil → testar Web Push (vai só para os
+seus aparelhos; `/push/enviar` recusa outro `user_id` com 403).
+
 **Healthcheck:** `GET /health` (já no Dockerfile).
 
 **Migrations:** a imagem inclui `postgresql-client` e a pasta `migrations/`, então

@@ -5,6 +5,8 @@ import { getAgentIdAliases } from "@/lib/agent-id";
 import { toast } from "sonner";
 import { playNotificationSound } from "@/lib/notification-sound";
 import { showNotification as showBrowserNotification } from "@/lib/browser-notifications";
+import { definirAgenteAberto, definirCanalAberto } from "@/lib/conversa-aberta";
+import { deveCalar } from "@/lib/canais-silenciados";
 
 export interface Notification {
   id: string;
@@ -211,7 +213,10 @@ export function useNotifications(userId: string | undefined) {
       });
       setUnreadCount((c) => c + 1);
 
-      if (initialLoadDone.current) {
+      // Canal silenciado: entra no sininho e na contagem, mas sem som, toast
+      // nem notificação local — a não ser que me mencione ou use @todos
+      // (esclarecimento 5 da spec 2026-11-03).
+      if (initialLoadDone.current && !deveCalar(newNotif.channel_id, newNotif.content_preview ?? "")) {
         // Sound dedupe (800ms) — prevents audio spam for rapid bursts,
         // but TOAST and OS notification ALWAYS fire so the user sees them.
         const dedupeKey = `${newNotif.channel_id}:${newNotif.author_name}`;
@@ -433,6 +438,8 @@ export function useNotifications(userId: string | undefined) {
   function setActiveChannel(channelId: string | null) {
     const previous = activeChannelRef.current;
     activeChannelRef.current = channelId;
+    // O service worker pergunta isto antes de mostrar um push.
+    definirCanalAberto(channelId);
 
     // When leaving a channel, remove it from the "cleared" set so future
     // messages for it will properly notify (otherwise once visited, a channel
@@ -449,6 +456,7 @@ export function useNotifications(userId: string | undefined) {
 
   function setActiveAgent(agentId: string | null) {
     activeAgentRef.current = agentId;
+    definirAgenteAberto(agentId);
   }
 
   const unreadByChannel = notifications.reduce<Record<string, number>>((acc, n) => {

@@ -25,6 +25,7 @@ from app import voz_entrega
 from app.database import sessao
 from app.dependencies import Usuario, exige_papel, normalizar_agent_id, usuario_atual
 from app.gateway import config as cfg
+from app.recibos import eh_uuid
 from app.gateway.client import (ErroGateway, chave_de_sessao, obter_cliente,
                                 obter_cliente_de_espera)
 from app.realtime import hub, topico_canal
@@ -654,6 +655,48 @@ async def excluir(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
         # Zero linhas pode ser inexistente ou sem permissão. Não distinguir é
         # deliberado: dizer "existe mas você não pode" entrega a existência.
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Canal não encontrado.")
+
+
+class SilenciarIn(BaseModel):
+    silenciado: bool
+
+
+@router.get("/silenciados", response_model=list[str])
+async def silenciados(usuario: Usuario = Depends(usuario_atual)):
+    """Os canais que eu silenciei (spec 2026-11-03, `025_silenciar_canal.sql`).
+
+    Silenciar corta push, som e notificação local — e só isso: o sininho e as
+    não lidas continuam (esclarecimento 5). A tela usa esta lista para o ícone
+    na lista e para calar o som.
+    """
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            "SELECT channel_id::text AS channel_id FROM public.channel_members "
+            " WHERE user_id = $1 AND silenciado ORDER BY channel_id",
+            usuario.id,
+        )
+    return [l["channel_id"] for l in linhas]
+
+
+@router.put("/{channel_id}/silenciar", status_code=status.HTTP_204_NO_CONTENT)
+async def silenciar(channel_id: str, dados: SilenciarIn,
+                    usuario: Usuario = Depends(usuario_atual)):
+    """Silencia ou reativa um canal **para mim**.
+
+    Como service_role porque a `channel_members` não tem policy de UPDATE para
+    `authenticated`; o `user_id = $2` do token é o que garante que cada um só
+    mexe na própria linha. Quem não é membro recebe 404.
+    """
+    if not eh_uuid(channel_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Você não é membro deste canal.")
+    async with sessao(role="service_role") as conn:
+        r = await conn.execute(
+            "UPDATE public.channel_members SET silenciado = $3 "
+            " WHERE channel_id = $1::uuid AND user_id = $2",
+            channel_id, usuario.id, dados.silenciado,
+        )
+    if r.endswith(" 0"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Você não é membro deste canal.")
 
 
 @router.get("/{channel_id}/members", response_model=list[MembroOut])

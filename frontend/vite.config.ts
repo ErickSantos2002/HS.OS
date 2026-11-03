@@ -57,6 +57,9 @@ export default defineConfig(({ mode }) => ({
       injectManifest: {
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // Não é app: imagens do wizard legado da Hostinger (~500 KB que todo
+        // celular baixaria ao instalar). Os .sh de public/ já não casam o glob.
+        globIgnores: ["**/setup-hostinger-*.png"],
       },
       manifest: false, // We use public/manifest.json
     }),
