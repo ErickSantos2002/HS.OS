@@ -16,6 +16,7 @@ Agente nunca recebe: a lista de membros que chega aqui já é só de humanos.
 import re
 import unicodedata
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 # O mesmo do `EVERYONE_MENTION_REGEX` da tela (`channel-notifications.ts`).
 _TODOS = re.compile(r"(^|\s)@todos\b", re.I | re.U)
@@ -102,6 +103,41 @@ def destinatarios_canal(autor_id: str, membros: list[Membro], conteudo: str,
         base = {m.user_id for m in membros
                 if m.user_id in participantes_thread and not m.silenciado}
     return (base | (chamados & humanos)) - {autor_id}
+
+
+# ── endpoint da inscrição ───────────────────────────────────────────────────
+#
+# ⚠️ **SSRF.** O `endpoint` vem do navegador (`PUT /push/inscricao`) e o
+# servidor faz POST nele a cada mensagem. Aceitar qualquer URL deixava qualquer
+# pessoa logada fazer o backend chamar a bridge do Swarm (172.18.0.1) ou o
+# túnel do gateway (127.0.0.1:18789). A allowlist é de HOST, não de IP: os
+# serviços de push são poucos e conhecidos, e não é preciso resolver DNS.
+
+_HOSTS_DE_PUSH = (
+    "fcm.googleapis.com",                # Chrome, Edge, Android
+    "updates.push.services.mozilla.com",  # Firefox
+    "push.services.mozilla.com",
+    "push.apple.com",                    # Safari / iOS (web.push.apple.com)
+    "notify.windows.com",                # Edge legado / WNS (wns2-*.notify.windows.com)
+)
+
+
+def endpoint_de_push_valido(url: str | None) -> bool:
+    """`https`, sem usuário na URL, porta só 443, host da allowlist ou subdomínio
+    dela (com o ponto: `evilpush.apple.com` não passa)."""
+    if not isinstance(url, str) or not url:
+        return False
+    try:
+        partes = urlsplit(url)
+        porta = partes.port
+    except ValueError:
+        return False
+    if partes.scheme != "https" or "@" in partes.netloc:
+        return False
+    if porta not in (None, 443):
+        return False
+    host = (partes.hostname or "").lower()
+    return any(host == h or host.endswith("." + h) for h in _HOSTS_DE_PUSH)
 
 
 # ── prévia ──────────────────────────────────────────────────────────────────

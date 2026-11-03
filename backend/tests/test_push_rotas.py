@@ -118,3 +118,23 @@ def test_lista_de_silenciados(monkeypatch):
     monkeypatch.setattr(channels, "sessao", _sessao(conn))
     assert asyncio.run(channels.silenciados(_eu())) == ["c1", "c2"]
     assert conn.chamadas[0][1] == (EU,)
+
+
+def test_inscricao_com_endpoint_fora_da_lista_e_400(monkeypatch):
+    """SSRF: o servidor faz POST no endpoint inscrito. URL interna nunca entra."""
+    conn = Conn()
+    monkeypatch.setattr(push, "sessao", _sessao(conn))
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(push.inscrever(
+            push.InscricaoIn(endpoint="http://127.0.0.1:18789/x", p256dh="k", auth="a"), _eu()))
+    assert e.value.status_code == 400
+    assert conn.chamadas == []
+
+
+def test_inscricao_de_servico_de_push_e_gravada(monkeypatch):
+    conn = Conn()
+    monkeypatch.setattr(push, "sessao", _sessao(conn))
+    asyncio.run(push.inscrever(
+        push.InscricaoIn(endpoint="https://fcm.googleapis.com/fcm/send/x", p256dh="k", auth="a"),
+        _eu()))
+    assert "INSERT INTO public.push_subscriptions" in conn.chamadas[0][0]

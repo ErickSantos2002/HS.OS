@@ -27,7 +27,8 @@ from pywebpush import WebPushException, webpush
 
 from app.config import settings
 from app.database import sessao
-from app.push_regras import Membro, destinatarios_canal, payload_agente, payload_canal
+from app.push_regras import (Membro, destinatarios_canal, endpoint_de_push_valido,
+                              payload_agente, payload_canal)
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,12 @@ async def enviar_para(user_id: str, payload: dict) -> dict:
         corpo = json.dumps(payload, ensure_ascii=False)
         mortas: list[str] = []
         for i in inscricoes:
+            # ⚠️ SSRF: linha gravada antes da allowlist pode apontar para a
+            # rede interna. Não chama, e apaga.
+            if not endpoint_de_push_valido(i["endpoint"]):
+                logger.warning("Inscrição %s com endpoint fora da lista; apagando.", i["id"])
+                mortas.append(i["id"])
+                continue
             try:
                 await asyncio.to_thread(
                     webpush,

@@ -15,6 +15,7 @@ from app import push_envio as p
 UID = "6f1c2c8e-8a3e-4b8e-9a51-0d4f2d1e7a10"
 OUTRO = "7a1c2c8e-8a3e-4b8e-9a51-0d4f2d1e7a11"
 MSG = "8b1c2c8e-8a3e-4b8e-9a51-0d4f2d1e7a12"
+FCM = "https://fcm.googleapis.com/fcm/send/"
 
 
 @pytest.fixture(autouse=True)
@@ -68,7 +69,7 @@ def test_envio_roda_fora_do_laco_de_eventos(monkeypatch):
         threads.append(threading.get_ident())
 
     conn = Conn({"FROM public.push_subscriptions": [
-        {"id": "s1", "endpoint": "https://e/1", "p256dh": "k", "auth": "a"}]})
+        {"id": "s1", "endpoint": FCM + "1", "p256dh": "k", "auth": "a"}]})
     monkeypatch.setattr(p, "webpush", falso)
     monkeypatch.setattr(p, "sessao", _sessao_com(conn))
     r = asyncio.run(p.enviar_para(UID, {"title": "t"}))
@@ -87,9 +88,9 @@ def test_inscricao_morta_e_removida_e_erro_comum_nao_derruba(monkeypatch):
             raise WebPushException("500", response=SimpleNamespace(status_code=500))
 
     conn = Conn({"FROM public.push_subscriptions": [
-        {"id": "s1", "endpoint": "https://e/morta", "p256dh": "k", "auth": "a"},
-        {"id": "s2", "endpoint": "https://e/ruim", "p256dh": "k", "auth": "a"},
-        {"id": "s3", "endpoint": "https://e/boa", "p256dh": "k", "auth": "a"}]})
+        {"id": "s1", "endpoint": FCM + "morta", "p256dh": "k", "auth": "a"},
+        {"id": "s2", "endpoint": FCM + "ruim", "p256dh": "k", "auth": "a"},
+        {"id": "s3", "endpoint": FCM + "boa", "p256dh": "k", "auth": "a"}]})
     monkeypatch.setattr(p, "webpush", falso)
     monkeypatch.setattr(p, "sessao", _sessao_com(conn))
     r = asyncio.run(p.enviar_para(UID, {"title": "t"}))
@@ -225,3 +226,24 @@ def test_erro_no_processar_nao_levanta(monkeypatch):
         yield
     monkeypatch.setattr(p, "sessao", quebrada)
     asyncio.run(p.processar("channel_messages", MSG))
+
+
+def test_inscricao_antiga_com_endpoint_interno_e_pulada_e_apagada(monkeypatch):
+    """SSRF: linhas gravadas antes da allowlist podem apontar para dentro da
+    rede (a bridge do Swarm, o túnel do gateway). O envio confere de novo: não
+    chama e apaga."""
+    chamados = []
+
+    def falso(subscription_info, **_):
+        chamados.append(subscription_info["endpoint"])
+
+    conn = Conn({"FROM public.push_subscriptions": [
+        {"id": "s1", "endpoint": "http://172.18.0.1:8002/x", "p256dh": "k", "auth": "a"},
+        {"id": "s2", "endpoint": FCM + "boa", "p256dh": "k", "auth": "a"}]})
+    monkeypatch.setattr(p, "webpush", falso)
+    monkeypatch.setattr(p, "sessao", _sessao_com(conn))
+    r = asyncio.run(p.enviar_para(UID, {"title": "t"}))
+    assert chamados == [FCM + "boa"]
+    assert r == {"enviados": 1, "inscricoes": 2, "removidas": 1}
+    apagou = [a for s, a in conn.executado if "DELETE" in s]
+    assert apagou == [(["s1"],)]

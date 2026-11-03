@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app import push_envio
+from app.push_regras import endpoint_de_push_valido
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
 
@@ -50,7 +51,14 @@ async def inscrever(dados: InscricaoIn, usuario: Usuario = Depends(usuario_atual
 
     Idempotente pelo `endpoint`: o navegador manda o mesmo a cada carregamento
     da página, e sem isto a tabela encheria de duplicatas do mesmo aparelho.
+
+    ⚠️ **SSRF.** O servidor faz POST neste endpoint a cada mensagem. Só entra
+    URL `https` de serviço de push conhecido (`endpoint_de_push_valido`) —
+    senão qualquer logado apontava o backend para a rede interna.
     """
+    if not endpoint_de_push_valido(dados.endpoint):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Endpoint de push não reconhecido.")
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         await conn.execute(
             """

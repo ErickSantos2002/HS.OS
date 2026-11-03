@@ -5,8 +5,11 @@ mesmos do `channel-notifications.ts` da tela, porque uma menção que a tela
 destaca e o push ignora (ou o contrário) é o tipo de divergência que ninguém
 percebe até alguém dizer "me marcaram e eu não fiquei sabendo".
 """
-from app.push_regras import (Membro, destinatarios_canal, menciona_todos,
-                             mencionados, payload_agente, payload_canal, previa)
+import pytest
+
+from app.push_regras import (Membro, destinatarios_canal, endpoint_de_push_valido,
+                             menciona_todos, mencionados, payload_agente, payload_canal,
+                             previa)
 
 ANA = "11111111-1111-1111-1111-111111111111"
 ANA_PAULA = "22222222-2222-2222-2222-222222222222"
@@ -146,3 +149,44 @@ def test_payload_de_agente_nao_tem_canal():
     p = payload_agente(agent_id="nina", agente_nome="Nina", conteudo="Pronto, **feito**.")
     assert p == {"title": "Nina", "body": "Pronto, feito.", "url": "/chat?agent=nina",
                  "tag": "agente:nina", "conversa": "agente:nina"}
+
+
+# ── endpoint da inscrição (SSRF) ────────────────────────────────────────────
+#
+# O `endpoint` vem do navegador e o servidor faz POST nele. Sem a allowlist,
+# qualquer pessoa logada fazia o backend chamar URL interna — a bridge do Swarm
+# (172.18.0.1) ou o túnel do gateway (127.0.0.1:18789).
+
+@pytest.mark.parametrize("url", [
+    "https://fcm.googleapis.com/fcm/send/abc:def",
+    "https://updates.push.services.mozilla.com/wpush/v2/gAAA",
+    "https://push.services.mozilla.com/wpush/v1/x",
+    "https://web.push.apple.com/QOy8X",
+    "https://push.apple.com/x",
+    "https://wns2-par02p.notify.windows.com/w/?token=abc",
+    "https://fcm.googleapis.com:443/fcm/send/x",
+    "https://FCM.googleapis.com/fcm/send/x",
+])
+def test_endpoint_dos_servicos_de_push_passa(url):
+    assert endpoint_de_push_valido(url)
+
+
+@pytest.mark.parametrize("url", [
+    "http://fcm.googleapis.com/fcm/send/x",
+    "https://142.250.0.1/fcm/send/x",
+    "https://localhost/x",
+    "https://172.18.0.1/x",
+    "http://127.0.0.1:18789/x",
+    "https://fcm.googleapis.com:18789/x",
+    "https://fcm.googleapis.com.evil.com/x",
+    "https://evilpush.apple.com/x",
+    "https://evilnotify.windows.com/x",
+    "https://fcm.googleapis.com@evil.com/",
+    "https://user:senha@fcm.googleapis.com/x",
+    "https://fcm.googleapis.com./x",
+    "",
+    "não é url",
+    None,
+])
+def test_endpoint_fora_da_lista_e_recusado(url):
+    assert not endpoint_de_push_valido(url)
