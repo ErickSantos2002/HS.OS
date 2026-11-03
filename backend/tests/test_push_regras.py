@@ -158,14 +158,14 @@ def test_payload_de_agente_nao_tem_canal():
 # (172.18.0.1) ou o túnel do gateway (127.0.0.1:18789).
 
 @pytest.mark.parametrize("url", [
-    "https://fcm.googleapis.com/fcm/send/abc:def",
+    "https://fcm.googleapis.com/fcm/send/abc:APA91bHPRgkFLJu7tw5vT0fJzK1Rz2b_gq-x8Lxv9yQm",
+    "https://fcm.googleapis.com/wp/dQ1nW3x-y_Z:APA91bF3k9",
     "https://updates.push.services.mozilla.com/wpush/v2/gAAA",
     "https://push.services.mozilla.com/wpush/v1/x",
-    "https://web.push.apple.com/QOy8X",
+    "https://web.push.apple.com/QF2xKj9pLm4nOqRsTuVwXyZ-_aBcDeFgHiJkLmNoPq",
     "https://push.apple.com/x",
-    "https://wns2-par02p.notify.windows.com/w/?token=abc",
+    "https://wns2-par02p.notify.windows.com/w/?token=BQYAAAB%2bXyZ%3d",
     "https://fcm.googleapis.com:443/fcm/send/x",
-    "https://FCM.googleapis.com/fcm/send/x",
 ])
 def test_endpoint_dos_servicos_de_push_passa(url):
     assert endpoint_de_push_valido(url)
@@ -184,6 +184,16 @@ def test_endpoint_dos_servicos_de_push_passa(url):
     "https://fcm.googleapis.com@evil.com/",
     "https://user:senha@fcm.googleapis.com/x",
     "https://fcm.googleapis.com./x",
+    "https://evil.com\\@fcm.googleapis.com/",
+    "https://fcm.googleapis.com\\@evil.com/",
+    "https://fcm%2egoogleapis.com/x",
+    "https://evil.com%40fcm.googleapis.com/x",
+    "https://fcm.googleapis.com/fcm send/x",
+    "https://fcm.googleapis.com/fcm/send/\tx",
+    "https://fcm.googleapis.com\t/x",
+    "https://a@fcm.googleapis.com/x",
+    "https://FCM.googleapis.com/fcm/send/x",
+    "https://fcm.googleapis.com",
     "",
     "não é url",
     None,

@@ -18,6 +18,8 @@ import unicodedata
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
+from urllib3.util import parse_url
+
 # O mesmo do `EVERYONE_MENTION_REGEX` da tela (`channel-notifications.ts`).
 _TODOS = re.compile(r"(^|\s)@todos\b", re.I | re.U)
 
@@ -122,14 +124,26 @@ _HOSTS_DE_PUSH = (
 )
 
 
+# ⚠️ **Forma estrita primeiro, e só depois o parser.** O `urlsplit` (que
+# confere) e o urllib3 (que o `requests` do pywebpush usa para conectar)
+# discordam em URL torta: em `https://evil.com\@fcm.googleapis.com/` um vê o
+# host fcm e o outro pode conectar em evil.com. A regex recusa de saída
+# contrabarra, espaço, controle, `%` e `@` na autoridade, e host em maiúscula —
+# os endpoints reais dos quatro serviços nunca têm nada disso.
+_FORMA_DO_ENDPOINT = re.compile(
+    r"^https://([a-z0-9-]+\.)+[a-z]{2,}(:443)?/[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]*$")
+
+
 def endpoint_de_push_valido(url: str | None) -> bool:
     """`https`, sem usuário na URL, porta só 443, host da allowlist ou subdomínio
-    dela (com o ponto: `evilpush.apple.com` não passa)."""
-    if not isinstance(url, str) or not url:
+    dela (com o ponto: `evilpush.apple.com` não passa), e os dois parsers
+    concordando sobre o host."""
+    if not isinstance(url, str) or not _FORMA_DO_ENDPOINT.fullmatch(url):
         return False
     try:
         partes = urlsplit(url)
         porta = partes.port
+        host_urllib3 = (parse_url(url).host or "").lower()
     except ValueError:
         return False
     if partes.scheme != "https" or "@" in partes.netloc:
@@ -137,6 +151,8 @@ def endpoint_de_push_valido(url: str | None) -> bool:
     if porta not in (None, 443):
         return False
     host = (partes.hostname or "").lower()
+    if not host or host != host_urllib3:
+        return False
     return any(host == h or host.endswith("." + h) for h in _HOSTS_DE_PUSH)
 
 
