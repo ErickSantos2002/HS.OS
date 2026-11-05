@@ -65,23 +65,31 @@ async def feed(
             "p.last_seen_at "
             "FROM public.profiles p JOIN auth.users u ON u.id = p.id WHERE u.is_active")
         perfis = await conn.fetch(
-            "SELECT agent_id, name, role, specialty FROM public.agent_profiles "
-            "ORDER BY sort_order, name")
+            "SELECT agent_id, name, role, specialty, dono_id::text AS dono_id "
+            "FROM public.agent_profiles ORDER BY sort_order, name")
         contexto = await conn.fetch(
             "SELECT DISTINCT ON (agent_id) agent_id, total_tokens, context_tokens "
             "FROM public.agent_context_state ORDER BY agent_id, updated_at DESC")
         # Só papel, hora e quem — o texto não sai do banco.
         ultimas = await conn.fetch(
-            """SELECT DISTINCT ON (agent_id) agent_id, role, created_at, user_id::text AS user_id
-                 FROM public.conversations
-                WHERE created_at >= now() - interval '2 hours'
-                ORDER BY agent_id, created_at DESC""")  # a janela do _ESQUECE
+            # ⚠️ Conversa com bot pessoal só conta se for do DONO dele — teste do
+            # administrador com o bot de outra pessoa não chega à TV (05/11/2026).
+            """SELECT DISTINCT ON (c.agent_id) c.agent_id, c.role, c.created_at,
+                      c.user_id::text AS user_id
+                 FROM public.conversations c
+                 LEFT JOIN public.agent_profiles ap ON ap.agent_id = c.agent_id
+                WHERE c.created_at >= now() - interval '2 hours'
+                  AND (ap.dono_id IS NULL OR c.user_id = ap.dono_id)
+                ORDER BY c.agent_id, c.created_at DESC""")  # a janela do _ESQUECE
         publicados = await conn.fetch(
             "SELECT agent_id, title, created_at FROM public.wiki_documents "
             "WHERE created_at >= $1 AND agent_id IS NOT NULL ORDER BY created_at DESC", hoje)
         msgs_agente = await conn.fetch(
-            "SELECT user_id::text AS user_id, agent_id, role, created_at "
-            "FROM public.conversations WHERE created_at >= $1", hoje)
+            # Mesmo filtro: fora do Fluxo e dos números também.
+            "SELECT c.user_id::text AS user_id, c.agent_id, c.role, c.created_at "
+            "FROM public.conversations c "
+            "LEFT JOIN public.agent_profiles ap ON ap.agent_id = c.agent_id "
+            "WHERE c.created_at >= $1 AND (ap.dono_id IS NULL OR c.user_id = ap.dono_id)", hoje)
         dm_membros = await conn.fetch(
             """SELECT cm.channel_id::text AS channel_id, array_agg(cm.user_id) AS membros
                  FROM public.channel_members cm
@@ -100,6 +108,8 @@ async def feed(
     do_time = {p["id"] for p in pessoas}
     nomes = {p["id"]: p["nome"] for p in pessoas}
     nomes_agente = {r["agent_id"]: (r["name"] or r["agent_id"]) for r in perfis}
+    especialistas, bots = warroom.separar_bots([dict(r) for r in perfis])
+    por_agente = {r["agent_id"]: dict(r) for r in ultimas if r["agent_id"]}
     membros = warroom.membros_do_time([dict(r) for r in dm_membros], do_time)
     msgs_agente_l = [dict(r) for r in msgs_agente]
     msgs_dm_l = [dict(r) for r in msgs_dm]
@@ -110,8 +120,8 @@ async def feed(
         "setores": setores,
         "pessoas": pessoas,
         "agentes": warroom.montar_agentes(
-            [dict(r) for r in perfis], [dict(r) for r in contexto],
-            {r["agent_id"]: dict(r) for r in ultimas if r["agent_id"]}, agora, do_time),
+            especialistas, [dict(r) for r in contexto], por_agente, agora, do_time),
+        "bots": warroom.montar_bots(bots, por_agente, agora, do_time),
         "conversasTime": warroom.dms_vivos(membros, msgs_dm_l, agora),
         "eventos": warroom.montar_eventos(
             [dict(r) for r in publicados],

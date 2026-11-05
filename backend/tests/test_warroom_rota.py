@@ -126,14 +126,15 @@ def test_ultimas_so_olha_a_janela_que_acende_algo(sqls):
     para devolver linhas que não acendem nada.
     """
     asyncio.run(rota.feed(t="tok", usuario=None))
-    sql = _sql_de(sqls, "DISTINCT ON (agent_id) agent_id, role")
+    sql = _sql_de(sqls, "DISTINCT ON (c.agent_id) c.agent_id, c.role")
     assert re.search(r"created_at\s*>=\s*now\(\)\s*-\s*interval\s*'2 hours'", sql), sql
 
 
 def test_resposta_no_contrato_novo_mesmo_com_banco_vazio(sqls):
     r = asyncio.run(rota.feed(t="tok", usuario=None))
-    assert set(r) == {"ts", "diasNoAr", "setores", "pessoas", "agentes",
+    assert set(r) == {"ts", "diasNoAr", "setores", "pessoas", "agentes", "bots",
                       "conversasTime", "eventos", "numeros"}
+    assert r["bots"] == []
     assert r["numeros"] == {"entregas": 0, "atendidas": 0, "pessoasAtivas": 0, "conversasTime": 0}
 
 
@@ -141,3 +142,13 @@ def test_sem_token_e_sem_sessao_recusa(sqls):
     with pytest.raises(Exception) as e:
         asyncio.run(rota.feed(t="errado", usuario=None))
     assert getattr(e.value, "status_code", None) == 401
+
+
+def test_conversa_com_bot_so_conta_a_do_dono(sqls):
+    """Teste do administrador com o bot de outra pessoa não chega à TV: nem o
+    satélite acende, nem vira "fulano conversou" no Fluxo, nem entra nos
+    números. O filtro mora no SQL das duas leituras de `conversations`."""
+    asyncio.run(rota.feed(t="tok", usuario=None))
+    for agulha in ("DISTINCT ON (c.agent_id)", "c.user_id::text AS user_id, c.agent_id, c.role"):
+        sql = _sql_de(sqls, agulha)
+        assert re.search(r"ap\.dono_id\s+IS\s+NULL\s+OR\s+c\.user_id\s*=\s*ap\.dono_id", sql), sql

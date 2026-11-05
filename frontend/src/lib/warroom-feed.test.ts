@@ -95,4 +95,18 @@ describe("contarConversas — o \"N conversas agora\" do cabeçalho", () => {
     expect(f.agentes[1].recenteCom).toBeNull();
     expect(contarConversas(f)).toBe(1);
   });
+
+  it("bot pessoal: só sai satélite de quem está na parede; backend antigo vira lista vazia", () => {
+    const pessoas = [{ id: "u-andre", nome: "André", setor: "Comercial" }];
+    const f = normalizar({ pessoas, bots: [
+      { id: "andre-bot", donoId: "u-andre", estado: "pensando" },
+      { id: "claudia-bot", donoId: "u-fora", estado: "pensando" },
+      { id: "x-bot", donoId: "u-andre", estado: "inventado" },
+    ] });
+    expect(f.bots).toEqual([
+      { id: "andre-bot", donoId: "u-andre", estado: "pensando" },
+      { id: "x-bot", donoId: "u-andre", estado: "ocioso" },
+    ]);
+    expect(normalizar({ pessoas }).bots).toEqual([]);
+  });
 });

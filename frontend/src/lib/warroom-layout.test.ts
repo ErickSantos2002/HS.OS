@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  QUADRO, ROTULO_STATUS, calcularLayout, caixaSetor, caixasAgente, caixasPessoa,
+  QUADRO, ROTULO_STATUS, SATELITE, R_PESSOA, calcularLayout, caixaSetor, caixasAgente, caixasPessoa,
   type Caixa, type EntradaLayout,
 } from "./warroom-layout";
 
@@ -38,10 +38,10 @@ const dentro = (c: Caixa) => c.x0 >= 0 && c.x1 <= QUADRO.w && c.y0 >= 0 && c.y1 
  *  o rótulo de duas linhas mais largo e mais alto que a tela desenha. */
 const PIOR_STATUS = Object.values(ROTULO_STATUS).sort((a, b) => b.length - a.length)[0];
 
-function caixas(e: EntradaLayout) {
+function caixas(e: EntradaLayout, comBot = false) {
   const s = calcularLayout(e);
   const out = Object.entries(s.pessoas).map(([id, p]) => ({
-    id, ...caixasPessoa(p, e.nomes[id], PIOR_STATUS, s.escala),
+    id, ...caixasPessoa(p, e.nomes[id], PIOR_STATUS, s.escala, comBot),
   }));
   return { s, out };
 }
@@ -119,4 +119,37 @@ describe.each([["26 pessoas reais", REAL], ["40 pessoas", QUARENTA]])("layout co
 
 it("cada setor ganha um rótulo, na ordem", () => {
   expect(calcularLayout(entrada(REAL)).setores.map((s) => s.nome)).toEqual(REAL.map(([s]) => s));
+});
+
+/* Bot pessoal (05/11/2026): satélite no canto superior esquerdo do nó do dono.
+ * O teste supõe o pior caso — TODO MUNDO com bot e em reunião. */
+describe.each([["26 pessoas reais", REAL], ["40 pessoas", QUARENTA]])("satélite com %s", (_, setores) => {
+  const e = entrada(setores);
+
+  it("com satélite em todo mundo, nada encosta", () => {
+    const { out } = caixas(e, true);
+    for (let i = 0; i < out.length; i++)
+      for (let j = i + 1; j < out.length; j++) {
+        expect(cruza(out[i].no, out[j].no), `nó ${out[i].id} × nó ${out[j].id}`).toBe(false);
+        expect(cruza(out[i].rotulo, out[j].no), `${out[i].id} × nó ${out[j].id}`).toBe(false);
+        expect(cruza(out[i].no, out[j].rotulo), `nó ${out[i].id} × ${out[j].id}`).toBe(false);
+      }
+    for (const { id, no } of out) expect(dentro(no), `nó ${id}`).toBe(true);
+  });
+
+  it("o satélite não encosta no rótulo do próprio dono", () => {
+    const s = calcularLayout(e);
+    for (const [id, p] of Object.entries(s.pessoas)) {
+      const c = caixasPessoa(p, e.nomes[id], PIOR_STATUS, s.escala, true);
+      expect(c.satelite, id).not.toBeNull();
+      expect(cruza(c.satelite!, c.rotulo), id).toBe(false);
+    }
+  });
+});
+
+it("o satélite é um selo no canto superior esquerdo do nó", () => {
+  expect(SATELITE.dx).toBeLessThan(-R_PESSOA * 0.7);
+  expect(SATELITE.dy).toBeLessThan(0);
+  const c = caixasPessoa({ x: 800, y: 450 }, "Ana", null, 1, false);
+  expect(c.satelite).toBeNull();
 });

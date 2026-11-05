@@ -233,6 +233,31 @@ def montar_agentes(perfis: list, contexto: list, ultimas: dict,
     return nos
 
 
+def separar_bots(perfis: list[dict]) -> tuple[list[dict], list[dict]]:
+    """(especialistas, bots pessoais). Bot é quem tem `dono_id` — spec
+    2026-11-05-bots-pessoais-cascas. O anel interno é só dos especialistas."""
+    especialistas = [p for p in perfis if not p.get("dono_id")]
+    bots = [p for p in perfis if p.get("dono_id")]
+    return especialistas, bots
+
+
+def montar_bots(bots: list[dict], ultimas: dict, agora: datetime,
+                do_time: set[str]) -> list[dict]:
+    """O satélite de cada pessoa: `{id, donoId, estado}`.
+
+    ⚠️ `ultimas` já chega filtrada pelo SQL — só conversa do PRÓPRIO dono com o
+    bot dele. Conversa do administrador com o bot de outra pessoa não acende o
+    satélite: na TV pública ela pareceria do dono. Bot de quem não está na
+    parede (conta desativada) não é desenhado.
+    """
+    return [
+        {"id": b["agent_id"], "donoId": str(b["dono_id"]),
+         "estado": estado_do_agente(ultimas.get(b["agent_id"]), agora)}
+        for b in bots
+        if b.get("agent_id") and str(b.get("dono_id")) in do_time
+    ]
+
+
 def membros_do_time(linhas: list[dict], do_time: set[str]) -> dict[str, tuple[str, str]]:
     """DM com exatamente dois humanos, os dois do time."""
     out = {}

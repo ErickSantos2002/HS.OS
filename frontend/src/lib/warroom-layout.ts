@@ -32,6 +32,16 @@ export interface SaidaLayout {
 export const QUADRO = { w: 1600, h: 900 };
 export const R_PESSOA = 20;
 export const R_AGENTE = 36;
+/** O satélite do bot pessoal (05/11/2026), relativo ao centro do nó da pessoa,
+ *  a escala 1 — um selo no canto do nó, espelho do ponto de status.
+ *
+ *  ⚠️ Não é um nó separado, e não fica na direção radial. Radial, nas pessoas
+ *  da metade de baixo do anel ele cai em cima do próprio rótulo; solto ao
+ *  lado do nó, encosta no nó do vizinho nas fileiras de cima e de baixo, onde o
+ *  passo é o mais curto (medido: Comercial-3 × Comercial-4). Colado no canto
+ *  superior esquerdo do hexágono não sai da vaga da pessoa. Página e teste
+ *  leem daqui. */
+export const SATELITE = { r: 5.5, dx: -(R_PESSOA * 0.75), dy: -(R_PESSOA * 0.75) } as const;
 
 /** Tamanho das fontes no `viewBox` (unidades de 1600×900; a 1920 px de
  *  largura cada unidade dá ~0,9 px na tela).
@@ -85,14 +95,21 @@ export interface Caixa { x0: number; y0: number; x1: number; y1: number }
 
 /** A caixa do nó + rótulo de uma pessoa — a MESMA conta que a página desenha.
  *  `status` é o texto já rotulado ("em reunião"), ou nada. */
-export function caixasPessoa(p: PontoXY, nome: string, status: string | null, escala: number) {
+export function caixasPessoa(p: PontoXY, nome: string, status: string | null, escala: number,
+                             temBot = false) {
   const r = R_PESSOA * escala;
+  const rs = SATELITE.r * escala;
+  const sx = p.x + SATELITE.dx * escala, sy = p.y + SATELITE.dy * escala;
+  const satelite: Caixa | null = temBot ? { x0: sx - rs, y0: sy - rs, x1: sx + rs, y1: sy + rs } : null;
   const w = Math.max(larguraRotulo(nome, escala), status ? larguraMono(status, FONTE.status, escala) : 0);
   const pe = status ? ROTULO_PESSOA.pe : ROTULO_PESSOA.nome + FONTE.nome * 0.25;
   return {
-    no: { x0: p.x - r, y0: p.y - r, x1: p.x + r, y1: p.y + r },
+    // Com bot, o "nó" inclui o satélite — é o que o teste de sobreposição usa.
+    no: { x0: Math.min(p.x - r, satelite?.x0 ?? Infinity), y0: Math.min(p.y - r, satelite?.y0 ?? Infinity),
+          x1: p.x + r, y1: p.y + r },
     rotulo: { x0: p.x - w / 2, y0: p.y + r + ROTULO_PESSOA.topo * escala,
               x1: p.x + w / 2, y1: p.y + r + pe * escala },
+    satelite,
   };
 }
 

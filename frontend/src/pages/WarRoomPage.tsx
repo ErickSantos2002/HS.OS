@@ -6,7 +6,7 @@ import { Sun, Moon, ArrowLeft, Maximize, Minimize } from "lucide-react";
 import { api } from "@/lib/api";
 import { type Feed, type Pessoa, contarConversas, horaMinuto, normalizar } from "@/lib/warroom-feed";
 import {
-  FONTE, QUADRO, R_AGENTE, R_PESSOA, ROTULO_AGENTE, ROTULO_PESSOA, ROTULO_STATUS, calcularLayout,
+  FONTE, QUADRO, R_AGENTE, R_PESSOA, ROTULO_AGENTE, ROTULO_PESSOA, ROTULO_STATUS, SATELITE, calcularLayout,
 } from "@/lib/warroom-layout";
 import "@/styles/warroom.css";
 
@@ -303,6 +303,8 @@ export default function WarRoomPage() {
   }), [feed?.setores, feed?.agentes, feed?.pessoas]);
   const posPessoa = useMemo(() => new Map(Object.entries(layout.pessoas)), [layout]);
   const posAgente = useMemo(() => new Map(Object.entries(layout.agentes)), [layout]);
+  // Bot pessoal por dono: o selo no canto do nó da pessoa (05/11/2026).
+  const botDe = useMemo(() => new Map((feed?.bots ?? []).map((b) => [b.donoId, b])), [feed?.bots]);
   const NUCLEO = layout.nucleo;
   // Controle de cada linha de DM: a busca do contorno amostra a curva, então
   // sai do laço de animação e só refaz quando muda o mapa ou a lista de DMs.
@@ -603,6 +605,12 @@ export default function WarRoomPage() {
                     {ponto && (
                       <circle cx={rP * 0.78} cy={-rP * 0.78} r={5.5 * e} fill={ponto}
                         stroke="var(--wr-canvas)" strokeWidth={1.5} />
+                    )}
+                    {/* Selo do bot pessoal, espelho do ponto de status. Posição e
+                        raio saem de `SATELITE`, o mesmo que o teste de sobreposição usa. */}
+                    {botDe.has(p.id) && (
+                      <circle cx={SATELITE.dx * e} cy={SATELITE.dy * e} r={SATELITE.r * e}
+                        className={`wr-bot wr-${botDe.get(p.id)!.estado}`} strokeWidth={1.5} />
                     )}
                     {/* Linha de base e fonte saem de `ROTULO_PESSOA`/`FONTE`, as
                         mesmas que o teste de sobreposição usa. */}

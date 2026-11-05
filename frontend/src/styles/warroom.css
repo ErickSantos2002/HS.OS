@@ -356,6 +356,11 @@
 .wr-ctx               { stroke: var(--wr-blue); }
 .wr-ctx.wr-longo      { stroke: var(--wr-amber); }
 .wr-sat-ponto         { fill: var(--wr-ink); }
+/* Bot pessoal (05/11/2026): selo no canto do nó do dono. Apagado é só um
+   contorno; aceso (conversa do PRÓPRIO dono) usa a mesma régua dos agentes. */
+.wr-bot               { fill: var(--wr-g-corpo-h); stroke: var(--wr-faint); }
+.wr-bot.wr-pensando   { fill: var(--wr-ink); stroke: var(--wr-ink); }
+.wr-bot.wr-longo      { fill: var(--wr-amber); stroke: var(--wr-amber); }
 
 /* ── Vida em repouso ────────────────────────────────────────────────────
    Uma parede parada lê como tela congelada. O respiro é lento e de baixa
