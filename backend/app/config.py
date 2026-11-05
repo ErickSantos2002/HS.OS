@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # pessoal chama TaskHS/GestorHS como a pessoa. ⚠️ Abre esses sistemas como
     # qualquer colaborador — está também no `.env` local por decisão do Erick.
     AGENTE_CHAVE_PRIVADA: str = ""
+    TASKHS_API_URL: str = "https://taskhsapi.healthsafetytech.com/api"
 
     # ⚠️ NÃO É MAIS USADO — o storage foi para o R2 em 13/10/2026. Continua
     # declarado só porque o pydantic-settings recusa chave desconhecida no
