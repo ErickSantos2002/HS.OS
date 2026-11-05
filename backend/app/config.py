@@ -4,6 +4,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
+    @property
+    def redirect_email(self) -> str:
+        if self.MS_EMAIL_REDIRECT_URI:
+            return self.MS_EMAIL_REDIRECT_URI
+        return self.MS_REDIRECT_URI.replace("/auth/microsoft/callback", "/email/oauth/callback")
+
     # Postgres próprio (VPS). Substitui o banco do Supabase.
     # Vazio por enquanto: o schema ainda vive no Supabase remoto. Sem ele a API
     # sobe mesmo assim e os endpoints de dados respondem 503.
@@ -27,6 +33,15 @@ class Settings(BaseSettings):
     MS_CLIENT_ID: str = ""
     MS_CLIENT_SECRET: str = ""
     MS_REDIRECT_URI: str = ""
+
+    # E-mail dos bots pessoais (spec 2026-11-05-bot-email-piloto) — reaproveita
+    # o app do login acima, com escopos de e-mail pedidos SÓ no "Conectar
+    # e-mail". O redirect vazio deriva do `MS_REDIRECT_URI`; no `.env` local
+    # aponta para o localhost. A chave Fernet cifra o refresh token e TEM que
+    # ser a mesma em todo lugar que lê a `email_contas` — perdida, todo mundo
+    # reconecta.
+    MS_EMAIL_REDIRECT_URI: str = ""
+    EMAIL_CHAVE_CIFRA: str = ""
 
     # ⚠️ NÃO É MAIS USADO — o storage foi para o R2 em 13/10/2026. Continua
     # declarado só porque o pydantic-settings recusa chave desconhecida no

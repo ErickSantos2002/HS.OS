@@ -183,6 +183,9 @@ def _comando(monkeypatch, texto):
         async def execute(self, sql, *a):
             executado.append((" ".join(sql.split()), a))
 
+        async def fetchval(self, sql, *a):   # dono do bot: especialista não tem
+            return None
+
     @asynccontextmanager
     async def sessao(**_):
         yield Conn_()

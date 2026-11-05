@@ -3,12 +3,14 @@
  * hora (`AnexoResolvido`: anexo privado tem URL de 5 minutos).
  */
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
+import CartaoAprovacaoEmail from "@/components/chat/CartaoAprovacaoEmail";
 import type { ChannelAttachment } from "@/hooks/use-channels";
 import type { MediaAttachment } from "@/lib/mock-data";
 import { CartaoDeArquivo, ImagemDaBolha, PlayerDeAudio } from "./Bolha";
 
 /** Anexo da conversa com agente (`ChatMessage.media`). */
 export function MidiaDoAgente({ att, semente, aoAmpliar }: { att: MediaAttachment; semente: string; aoAmpliar: (src: string) => void }) {
+  if (att.type === "email_aprovacao" && att.id) return <CartaoAprovacaoEmail id={att.id} />;
   const tipo = att.type ?? (att.mimeType?.startsWith("image/") ? "image" : att.mimeType?.startsWith("audio/") ? "audio" : "file");
   const dataUri = att.base64?.startsWith("data:");
   return (

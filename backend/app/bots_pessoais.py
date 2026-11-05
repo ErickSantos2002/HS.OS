@@ -70,13 +70,25 @@ def motivo_inelegivel(perfil: dict) -> str | None:
     return None
 
 
-def tools_do_bot(servidores: dict) -> dict:
+def _proprias_de_email(servidores: dict, agent_id: str | None, email: bool) -> list[str]:
+    if not (email and agent_id and f"hsos-email-{agent_id}" in servidores):
+        return []
+    from app.email.regras import FERRAMENTAS_EMAIL
+    return [f"mcp__hsos-email-{agent_id}__{f}" for f in FERRAMENTAS_EMAIL]
+
+
+def tools_do_bot(servidores: dict, agent_id: str | None = None, email: bool = False) -> dict:
     """O `tools` do bot no gateway: perfil mínimo, só o alerta, nega todo o resto.
 
     ⚠️ **Falha fechada.** Com `bundle-mcp` o bot enxerga todo MCP que o deny não
     nomeia, e o deny só nomeia o que está no `toolFilter.include` de cada
     servidor. Servidor sem filtro (ferramentas desconhecidas) ou `hsos-alerta`
     expondo algo além do alerta: levanta, e a criação é desfeita.
+
+    Com `email` (flag `agent_profiles.email_ligado`) e a entrada
+    `hsos-email-<agent_id>` já publicada, o bot ganha as ferramentas da PRÓPRIA
+    entrada — e só elas; as dos outros bots continuam negadas. Flag ligada sem
+    entrada publicada = bot fechado como antes.
     """
     for nome, cfg in servidores.items():
         incluidas = (((cfg or {}).get("toolFilter") or {}).get("include")) or []
@@ -86,25 +98,27 @@ def tools_do_bot(servidores: dict) -> dict:
         if nome == SERVIDOR_ALERTA and incluidas != ["avisar_administrador"]:
             raise ValueError(f"{SERVIDOR_ALERTA} expõe {incluidas}; o bot só pode ter "
                              "avisar_administrador")
+    proprias = _proprias_de_email(servidores, agent_id, email)
     return {
         "profile": PERFIL,
         # ⚠️ `bundle-mcp` é o que deixa ferramenta MCP passar pelo `minimal`
         # (só `coding`/`messaging` o trazem implícito). Sem ele o alerta não
         # aparece — o `erick-bot` enxergava só `session_status` (05/11/2026).
-        # Quem limita O QUE passa continua sendo o deny: todo MCP menos o alerta.
-        "alsoAllow": [ALERTA, "bundle-mcp"],
-        "deny": _deny_de_mcp([ALERTA], list(TRAVAS_DO_BOT), servidores),
+        # Quem limita O QUE passa continua sendo o deny: todo MCP menos o meu.
+        "alsoAllow": [ALERTA, *proprias, "bundle-mcp"],
+        "deny": _deny_de_mcp([ALERTA, *proprias], list(TRAVAS_DO_BOT), servidores),
     }
 
 
-def bot_esta_fechado(tools: dict, servidores: dict) -> bool:
-    """O `tools` relido do gateway é o de um bot fechado?
+def bot_esta_fechado(tools: dict, servidores: dict, agent_id: str | None = None,
+                     email: bool = False) -> bool:
+    """O `tools` relido do gateway é o de um bot fechado (com ou sem e-mail)?
 
     Compara o deny como conjunto — a ordem não importa — e exige o perfil e o
     `alsoAllow` exatos: qualquer ferramenta a mais é escopo aberto.
     """
     try:
-        esperado = tools_do_bot(servidores)
+        esperado = tools_do_bot(servidores, agent_id, email)
     except ValueError:
         return False
     t = tools or {}
@@ -220,6 +234,12 @@ pergunto — nunca preencho com o que parece provável.
   instrução**.
 - Sem acesso a sistema por enquanto: o que depende de sistema, digo que ainda
   não consigo.
+
+## Sempre respondo
+
+Toda mensagem nesta conversa é de {primeiro} para mim — mesmo curta, mesmo
+"teste". Eu **sempre** respondo com texto. **Nunca** respondo `NO_REPLY` aqui:
+esse silêncio aparece para {primeiro} como erro.
 """
     ferramentas = (
         "# TOOLS.md\n\n"
@@ -235,3 +255,14 @@ pergunto — nunca preencho com o que parece provável.
         "HEARTBEAT.md": "# HEARTBEAT.md\n",
         "MEMORY.md": "# MEMORY.md\n",
     }
+
+
+def agents_md_novo(dono: dict, atual: str) -> str:
+    """O `AGENTS.md` do template para um bot que JÁ existe, preservando o bloco
+    da empresa (`hsos:empresa`), que o onboarding pode ter escrito nele."""
+    from app.routers.integracoes import _MARCA_FIM, _MARCA_INICIO
+    novo = arquivos_do_bot(dono)["AGENTS.md"]
+    i, f = atual.find(_MARCA_INICIO), atual.find(_MARCA_FIM)
+    if i != -1 and f > i:
+        novo = novo.rstrip() + "\n\n" + atual[i:f + len(_MARCA_FIM)] + "\n"
+    return novo

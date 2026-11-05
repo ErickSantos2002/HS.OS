@@ -49,7 +49,13 @@ async def main() -> int:
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--so", help="user_id de UMA pessoa")
     g.add_argument("--todos", action="store_true")
+    ap.add_argument("--reescrever-agents-md", action="store_true",
+                    help="regrava SÓ o AGENTS.md dos bots existentes (template novo, "
+                         "preserva o bloco da empresa); com --so, só aquela pessoa")
     a = ap.parse_args()
+
+    if a.reescrever_agents_md:
+        return await _reescrever_agents_md(a.aplicar, a.so)
 
     candidatos = await _candidatos()
     ids = [id_do_bot(c["full_name"]) for c in candidatos]
@@ -90,6 +96,43 @@ async def main() -> int:
         r = await criar_bot(u)
         falhas += r["resultado"] == "falhou"
         print(f"  {r['agent_id'] or '?':16} {r['resultado']:11} {r['motivo'] or ''}")
+    return 1 if falhas else 0
+
+
+async def _reescrever_agents_md(aplicar: bool, so: str | None) -> int:
+    """Para mudança no template que precisa chegar aos bots VIVOS — a criação
+    não reescreve arquivo de bot existente (é dele: MEMORY.md, empresa)."""
+    from app.bots_pessoais import agents_md_novo
+    from app.gateway.client import excede_o_teto
+    deps = _Deps()
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            "SELECT a.agent_id, p.id::text AS id, p.full_name, p.email, p.departamento "
+            "  FROM public.agent_profiles a JOIN public.profiles p ON p.id = a.dono_id "
+            " WHERE ($1::uuid IS NULL OR p.id = $1::uuid) ORDER BY a.agent_id", so)
+    falhas = 0
+    for l in linhas:
+        r = await deps.chamar("agents.files.get", {"agentId": l["agent_id"], "name": "AGENTS.md"})
+        atual = ((r.get("file") or {}).get("content")) or ""
+        novo = agents_md_novo(dict(l), atual)
+        if excede_o_teto(novo):
+            print(f"  {l['agent_id']:16} NÃO: passaria do teto")
+            falhas += 1
+            continue
+        if novo == atual:
+            print(f"  {l['agent_id']:16} já está igual")
+            continue
+        if not aplicar:
+            print(f"  {l['agent_id']:16} mudaria ({len(atual)} → {len(novo)} caracteres)")
+            continue
+        await deps.chamar("agents.files.set",
+                          {"agentId": l["agent_id"], "name": "AGENTS.md", "content": novo})
+        v = await deps.chamar("agents.files.get", {"agentId": l["agent_id"], "name": "AGENTS.md"})
+        ok = ((v.get("file") or {}).get("content")) == novo
+        falhas += not ok
+        print(f"  {l['agent_id']:16} {'regravado' if ok else 'FALHOU na releitura'}")
+    if not aplicar:
+        print("(ensaio — nada foi escrito)")
     return 1 if falhas else 0
 
 

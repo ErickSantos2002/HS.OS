@@ -143,3 +143,53 @@ def test_alerta_com_ferramenta_a_mais_recusa_o_bot():
                     "hsos-alerta": {"toolFilter": {"include": ["avisar_administrador", "outra"]}}}
     with pytest.raises(ValueError, match="hsos-alerta"):
         tools_do_bot(alerta_largo)
+
+
+# ── Bot com e-mail (piloto 05/11/2026) ───────────────────────────────────────
+from app.email.regras import FERRAMENTAS_EMAIL  # noqa: E402
+
+COM_EMAIL = {**SERVIDORES,
+             "hsos-email-erick-bot": {"toolFilter": {"include": list(FERRAMENTAS_EMAIL)}},
+             "hsos-email-andre-bot": {"toolFilter": {"include": list(FERRAMENTAS_EMAIL)}}}
+
+
+def test_bot_com_email_ve_so_o_proprio_email():
+    t = tools_do_bot(COM_EMAIL, "erick-bot", email=True)
+    proprias = {f"mcp__hsos-email-erick-bot__{f}" for f in FERRAMENTAS_EMAIL}
+    assert proprias <= set(t["alsoAllow"])
+    deny = set(t["deny"])
+    assert not any(d.startswith("hsos-email-erick-bot__") for d in deny)
+    assert {f"hsos-email-andre-bot__{f}" for f in FERRAMENTAS_EMAIL} <= deny
+    assert bot_esta_fechado(t, COM_EMAIL, "erick-bot", email=True)
+    # o mesmo tools NÃO é "fechado" para um bot sem e-mail
+    assert not bot_esta_fechado(t, COM_EMAIL, "erick-bot", email=False)
+
+
+def test_bot_sem_email_nega_todas_as_entradas_de_email():
+    t = tools_do_bot(COM_EMAIL, "andre-bot", email=False)
+    assert {f"hsos-email-andre-bot__{f}" for f in FERRAMENTAS_EMAIL} <= set(t["deny"])
+
+
+def test_flag_ligada_sem_entrada_publicada_continua_fechado():
+    """A flag liga antes do script publicar a entrada: o bot não pode ficar
+    com ferramenta que não existe nem perder o fechamento."""
+    t = tools_do_bot(SERVIDORES, "erick-bot", email=True)
+    assert t == tools_do_bot(SERVIDORES)
+
+
+def test_agents_md_manda_sempre_responder():
+    """Em 05/11/2026 o `erick-bot` respondeu `NO_REPLY` (o token de silêncio do
+    OpenClaw) a "teste" e a "não tem nada aqui": o chat mostrou "terminou sem
+    produzir texto". Bot recém-nascido, sem contexto, escolheu calar."""
+    a = arquivos_do_bot({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"})["AGENTS.md"]
+    assert "NO_REPLY" in a and "sempre" in a.lower()
+
+
+def test_regravar_agents_md_preserva_bloco_da_empresa():
+    from app.bots_pessoais import agents_md_novo
+    from app.routers.integracoes import _MARCA_FIM, _MARCA_INICIO
+    atual = f"velho\n\n{_MARCA_INICIO}\nempresa X\n{_MARCA_FIM}\n"
+    novo = agents_md_novo({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"}, atual)
+    assert "NO_REPLY" in novo and "empresa X" in novo and "velho" not in novo
+    sem = agents_md_novo({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"}, "velho")
+    assert _MARCA_INICIO not in sem

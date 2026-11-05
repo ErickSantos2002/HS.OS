@@ -219,3 +219,17 @@ def test_pessoa_que_mudou_de_nome_mantem_o_bot():
     r = asyncio.run(criar_bot("u-andre", f))
     assert r["agent_id"] == "andre-bot" and r["resultado"] == "já existia"
     assert "agents.create" not in f.log
+
+
+def test_rerodar_nao_tira_o_email_do_bot():
+    """Foco 5 do plano: rodar `criar-bots-pessoais --todos` de novo veria o
+    `alsoAllow` com e-mail como "aberto" e o refecharia SEM o e-mail."""
+    from app.email.regras import FERRAMENTAS_EMAIL
+    servidores = {**SERVIDORES,
+                  "hsos-email-andre-bot": {"toolFilter": {"include": list(FERRAMENTAS_EMAIL)}}}
+    f = Falso(linhas={"andre-bot": {"agent_id": "andre-bot", "dono_id": "u-andre", "email_ligado": True}},
+              agentes=[{"id": "nina", "tools": {}},
+                       {"id": "andre-bot", "tools": tools_do_bot(servidores, "andre-bot", email=True)}])
+    f.conf["mcp"]["servers"] = servidores
+    r = asyncio.run(criar_bot("u-andre", f))
+    assert r["resultado"] == "já existia" and "config.patch" not in f.log

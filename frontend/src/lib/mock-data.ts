@@ -13,7 +13,8 @@ export interface Agent {
 }
 
 export interface MediaAttachment {
-  type: "image" | "audio" | "file";
+  /** `email_aprovacao`: cartão do e-mail que o bot pessoal preparou (`id` = pendente). */
+  type: "image" | "audio" | "file" | "email_aprovacao";
   mimeType: string;
   base64: string; // data URI or public URL for files
   name?: string;
