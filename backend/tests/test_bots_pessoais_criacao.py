@@ -154,3 +154,33 @@ def test_config_insegura_recusa_antes_de_escrever():
     r = asyncio.run(criar_bot("u-andre", f))
     assert r["resultado"] == "falhou" and "novo" in r["motivo"]
     assert f.log == [] and f.desfeitos == []
+
+
+def _bot_existente_aberto():
+    """Bot já em uso (linha + gateway), com o escopo aberto — ex.: ganhou um
+    banco por engano e o Erick roda o script para fechar de novo."""
+    f = Falso(linhas={"andre-bot": {"agent_id": "andre-bot", "dono_id": "u-andre"}},
+              agentes=[{"id": "nina", "tools": {}},
+                       {"id": "andre-bot", "tools": {"profile": "coding"}}])
+    return f
+
+
+def test_refechar_bot_existente_nao_reescreve_arquivos():
+    """MEMORY.md e o bloco da empresa no AGENTS.md são do bot vivo — não voltam
+    ao template só porque o escopo precisou ser refeito."""
+    f = _bot_existente_aberto()
+    r = asyncio.run(criar_bot("u-andre", f))
+    assert r["resultado"] == "adotado"
+    assert "agents.files.set" not in f.log
+    assert bot_esta_fechado(_tools(f, "andre-bot"), SERVIDORES)
+
+
+def test_falha_ao_refechar_nunca_apaga_bot_existente():
+    """Desfazer é só para o que ESTA chamada criou. Um timeout ao refechar um
+    bot em uso não pode apagá-lo do gateway e do banco."""
+    f = _bot_existente_aberto()
+    f.falhar_patch = True
+    r = asyncio.run(criar_bot("u-andre", f))
+    assert r["resultado"] == "falhou"
+    assert f.desfeitos == []
+    assert "andre-bot" in f.linhas

@@ -2000,6 +2000,17 @@ async def publicar_banco(
     apelido = _nome_mcp(linha["name"])
     agentes = list(linha["agents_using"] or [])
 
+    # ⚠️ Bot pessoal não recebe banco (05/11/2026): ele trabalha para uma pessoa,
+    # e o banco publicado é o inteiro. Recusa ANTES de tocar no gateway.
+    from app.routers.channels import _bots_pessoais_entre
+    async with sessao(role="service_role") as conn:
+        bots = await _bots_pessoais_entre(conn, agentes)
+    if bots:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"{bots[0]} é um bot pessoal e não recebe banco. Desmarque-o no conector.",
+        )
+
     parsed, base_hash = await patch_gw.config_do_gateway()
 
     servidor = {

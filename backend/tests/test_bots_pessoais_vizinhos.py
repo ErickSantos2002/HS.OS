@@ -80,3 +80,14 @@ def test_anexos_pula_bot_e_mantem_a_trava():
     assert "gateway" in t["deny"]
     assert "hsos-anexos-nina__ler_anexo" in t["deny"]
     assert not any("andre-bot" in x for x in t["alsoAllow"])
+
+
+def test_publicar_banco_recusa_bot_pessoal():
+    """Na tela de Conectores o admin marca agentes; um "Andre-bot" marcado por
+    engano passaria a ler o banco inteiro — e com `bundle-mcp` nada o seguraria,
+    porque o deny é recalculado para excluir o que está no `alsoAllow`."""
+    import inspect
+    from app.routers import integracoes as integ
+    fonte = inspect.getsource(integ.publicar_banco)
+    assert "_bots_pessoais_entre" in fonte
+    assert fonte.index("_bots_pessoais_entre") < fonte.index("config_do_gateway")
