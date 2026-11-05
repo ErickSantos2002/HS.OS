@@ -78,9 +78,8 @@ O piloto é **só com o Erick** (`erick-bot`). Ao fim dele, o bot faz três cois
 
 - **Microsoft Graph** com permissões **delegadas**: `User.Read`,
   `offline_access`, `Mail.ReadWrite`, `Mail.Send`, `Mail.Read.Shared`. O
-  admin consente no tenant. O app é registrado no **Entra ID** pelo Erick, que
-  já tem apps lá para o HSGrowth, o TaskHS e o TalentHS; a spec traz o passo a
-  passo.
+  admin consente no tenant. Reaproveita o app do login do HS.OS no Entra ID;
+  ver a seção do Entra abaixo.
 - O redirect da OAuth cai no **backend** (`hsosapi.healthsafetytech.com`). O
   refresh token é guardado **cifrado** no banco, numa tabela própria e por
   pessoa. Hoje o repositório não tem cifra nenhuma: entra a lib
@@ -169,19 +168,26 @@ rascunho fica no Outlook, sem cartão ativo.
 - O teto de 8.192 tokens de saída do OpenClaw limita o tamanho do corpo que o
   bot consegue escrever.
 
-## Passo a passo do Entra (para o Erick)
+## Entra: reaproveita o app do login (decisão do Erick)
 
-1. Entra ID → Registros de aplicativo → Novo: "HS.OS — e-mail dos bots",
-   single tenant.
-2. URI de redirecionamento (Web):
-   `https://hsosapi.healthsafetytech.com/email/oauth/callback`. Para testar
-   local, também `http://localhost:8002/email/oauth/callback`.
-3. Permissões de API → Microsoft Graph → **delegadas**: `User.Read`,
-   `offline_access`, `Mail.ReadWrite`, `Mail.Send`, `Mail.Read.Shared` →
-   "Conceder consentimento do administrador".
-4. Certificados e segredos → novo segredo. Colar no EasyPanel `MS_EMAIL_CLIENT_ID`,
-   `MS_EMAIL_CLIENT_SECRET` e `MS_EMAIL_TENANT_ID`, mais a
-   `EMAIL_CHAVE_CIFRA` (gerada pelo construtor).
+O app do "Entrar com Microsoft" do HS.OS (`app/auth/microsoft.py`,
+`MS_TENANT_ID`/`MS_CLIENT_ID`/`MS_CLIENT_SECRET`, já no `.env` e no EasyPanel)
+ganhou as permissões delegadas de e-mail e duas URIs de redirect novas:
+`https://hsosapi.healthsafetytech.com/email/oauth/callback` e
+`http://localhost:8002/email/oauth/callback`. **Não há segredo nem client
+novo.** O redirect do e-mail é uma configuração própria (`MS_EMAIL_REDIRECT_URI`,
+que no `.env` local aponta para o localhost), separada do `MS_REDIRECT_URI` do
+login.
+
+⚠️ **O login não pode passar a pedir escopo de e-mail.** O `ESCOPOS` do login
+continua `openid email profile User.Read`. As permissões de e-mail só são
+pedidas no fluxo "Conectar e-mail" (consentimento incremental). Misturar os
+dois faria todo login ganhar refresh token de e-mail, que é o que a flag por
+bot existe para evitar.
+
+Variável nova: só a `EMAIL_CHAVE_CIFRA` (Fernet), gerada em 05/11 no
+`backend/.env` e copiada pelo Erick para o EasyPanel. **Ela tem que ser a
+mesma nos dois lados**, e se for perdida todo mundo precisa reconectar.
 
 ## Para o construtor decidir
 
