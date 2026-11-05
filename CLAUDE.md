@@ -678,6 +678,36 @@ Spec e plano: `docs/superpowers/{specs,plans}/2026-11-05-bot-email-piloto*`. O
 - Modelo segue DeepSeek por decisão do Erick (risco LGPD aceito no piloto;
   reavaliar antes de abrir para outras pessoas).
 
+### Bot pessoal nos sistemas internos — token de agente (05/11/2026)
+
+Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md`,
+`docs/superpowers/plans/2026-11-05-bot-taskhs.md`. Nesta fase: **TaskHS**
+(GestorHS em seguida; DataCore, HelpHS e ChamadosHS depois, ver a spec).
+
+- **Token de agente** (`app/agente_token.py`): JWT **EdDSA** de 5 minutos,
+  `{iss: hsos, aud: <sistema>, sub: <e-mail do DONO>, act: {sub: <bot>}}`,
+  assinado com `AGENTE_CHAVE_PRIVADA`. O sistema confere com a pública
+  (`GET /agente/chave-publica`, env `HSOS_AGENTE_CHAVE_PUBLICA` lá) e aplica as
+  permissões que JÁ tem. ⚠️ A chave privada está também no `.env` local, por
+  decisão do Erick: ela abre os sistemas como qualquer colaborador. ⚠️ O
+  TaskHS recusa `exp` a mais de 600 s e compara o e-mail exatamente.
+- **Servidor `hsos-bot-<bot>`** (`routers/mcp_bot.py`): `lembrar` + `taskhs_*`.
+  Mesmas guardas do e-mail (turno do dono, turno de outra pessoa). Leitura
+  direta; **escrita vira `acoes_pendentes` + cartão** (`acao_aprovacao`), e a
+  confirmação executa o `payload` GRAVADO (`routers/acoes.py`), fora do
+  rollback em caso de erro.
+- **`lembrar`** grava uma linha no `MEMORY.md` (teto de 6.000 caracteres),
+  sem confirmação. A pessoa vê e apaga em Configurações → Perfil → "Memória
+  do bot". ⚠️ O `MEMORY.md` entra em toda sessão, inclusive a do admin com o
+  bot de outra pessoa, e pode ser plantado por injeção: riscos aceitos pelo
+  Erick.
+- Flag `agent_profiles.sistemas_ligados` (`029`). A publicação é feita pelo
+  `backend/scripts/publicar-bots-mcp.py` (e-mail e sistemas num patch só;
+  `--ligar-sistema <bot> taskhs`).
+- **Território:** a mudança em cada sistema é feita na sessão daquele repo,
+  a partir da seção "Para os outros repositórios" da spec. O TaskHS já está
+  pronto (`48832b0`, v2.13.0, sem deploy).
+
 ### Feature flags — sobrou uma, e ela vem ligada
 
 ⚠️ **Revisadas em 31/08/2026, e o que estava escrito aqui não batia com o
