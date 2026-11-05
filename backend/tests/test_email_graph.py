@@ -71,3 +71,10 @@ def test_desde_e_busca_validados(monkeypatch):
         asyncio.run(g.listar("tok", CONTA, CONTA, "inbox", "2026-11-01 or true", None, 5))
     asyncio.run(g.listar("tok", CONTA, CONTA, "inbox", None, 'proposta "x"', 5))
     assert reqs[-1].url.params["$search"] == '"proposta x"'
+
+
+def test_anexos_demais_falha_fechado(monkeypatch):
+    """Listagem paginada: olhar só a 1ª página deixaria anexo fora do cartão."""
+    monkeypatch.setattr(g, "_transporte", _transporte([], corpo={"value": [], "@odata.nextLink": "x"}))
+    with pytest.raises(g.ErroGraph):
+        asyncio.run(g.listar_anexos("tok", CONTA, CONTA, "m1"))

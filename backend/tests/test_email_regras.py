@@ -107,3 +107,10 @@ def test_hash_cobre_tambem_as_imagens_da_assinatura():
     b = [{"name": "b.png", "isInline": True, "contentId": "assinatura-1", "size": 999}]
     assert r.hash_rascunho("ti@x.com", msg, a) != r.hash_rascunho("ti@x.com", msg, b)
     assert r.anexos_extras(a) == []
+
+
+def test_reanexar_o_mesmo_arquivo_muda_o_hash():
+    msg = {"subject": "Oi", "toRecipients": [], "body": {"content": "c"}}
+    a = [{"id": "A1", "name": "x.pdf", "size": 10, "lastModifiedDateTime": "2026-11-05T10:00:00Z"}]
+    b = [{"id": "A2", "name": "x.pdf", "size": 10, "lastModifiedDateTime": "2026-11-05T10:05:00Z"}]
+    assert r.hash_rascunho("t@x.com", msg, a) != r.hash_rascunho("t@x.com", msg, b)
