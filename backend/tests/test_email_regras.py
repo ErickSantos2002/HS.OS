@@ -114,3 +114,8 @@ def test_reanexar_o_mesmo_arquivo_muda_o_hash():
     a = [{"id": "A1", "name": "x.pdf", "size": 10, "lastModifiedDateTime": "2026-11-05T10:00:00Z"}]
     b = [{"id": "A2", "name": "x.pdf", "size": 10, "lastModifiedDateTime": "2026-11-05T10:05:00Z"}]
     assert r.hash_rascunho("t@x.com", msg, a) != r.hash_rascunho("t@x.com", msg, b)
+
+
+def test_previa_mostra_imagem_da_assinatura_em_vez_de_cid():
+    c = r.conteudo_do_rascunho({"body": {"content": "Oi\n[cid:assinatura-1][cid:assinatura-2]\nLGPD"}})
+    assert "[cid:" not in c["corpo"] and "[imagem da assinatura]" in c["corpo"]

@@ -238,3 +238,8 @@ def test_bot_sabe_que_nao_escreve_assinatura():
     do Perfil entrando automática, sairiam duas."""
     a = " ".join(arquivos_do_bot({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"})["AGENTS.md"].split())
     assert "assinatura" in a.lower() and "automaticamente" in a
+
+
+def test_bot_nao_escreve_despedida():
+    a = " ".join(arquivos_do_bot({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"})["AGENTS.md"].split())
+    assert "Não escrevo despedida nem assinatura" in a

@@ -69,7 +69,7 @@ FERRAMENTAS = [
     _ferr("email_preparar", "Prepara um e-mail para outras pessoas. NÃO envia: vira rascunho e um "
           "cartão de aprovação na conversa; só sai quando o seu dono clicar em Enviar no HS.OS. "
           "Depois de preparar, NUNCA diga que foi enviado. Use `de` para escolher a caixa de "
-          "origem — boa parte do time envia pela @healthsafety.com.br. NÃO escreva assinatura "
+          "origem — boa parte do time envia pela @healthsafety.com.br. NÃO escreva despedida nem assinatura "
           "no `corpo`: a do Perfil do seu dono (com imagem) é colocada automaticamente no fim.",
           {"de": _CAIXA, "para": _LISTA, "cc": _LISTA, "assunto": {"type": "string"},
            "corpo": {"type": "string"}}, ("de", "para", "assunto", "corpo")),

@@ -107,7 +107,9 @@ def conteudo_do_rascunho(msg: dict, anexos: list[dict] | None = None) -> dict:
             "cco": ends("bccRecipients"), "responder_para": ends("replyTo"),
             "anexos": extras, "tem_anexo": bool(extras),
             "assunto": msg.get("subject") or "",
-            "corpo": ((msg.get("body") or {}).get("content") or "")}
+            # O Graph devolve a imagem embutida, em texto, como "[cid:assinatura-1]".
+            "corpo": re.sub(r"\[cid:assinatura-\d\]", "[imagem da assinatura]",
+                            (msg.get("body") or {}).get("content") or "")}
 
 
 def hash_rascunho(de: str, msg: dict, anexos: list[dict] | None = None) -> str:
