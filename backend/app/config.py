@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # pessoal chama TaskHS/GestorHS como a pessoa. ⚠️ Abre esses sistemas como
     # qualquer colaborador — está também no `.env` local por decisão do Erick.
     AGENTE_CHAVE_PRIVADA: str = ""
+    # Segredo do HMAC das entradas MCP por agente (anexos, e-mail, bot). Em
+    # produção chega pelo EasyPanel e é lido por `ler_segredo`; declarado aqui
+    # porque o `.env` local também o tem (o `publicar-bots-mcp.py` precisa) e o
+    # pydantic-settings recusa chave desconhecida — mostrando o valor no erro.
+    ANEXOS_MCP_SEGREDO: str = ""
     TASKHS_API_URL: str = "https://taskhsapi.healthsafetytech.com/api"
 
     # ⚠️ NÃO É MAIS USADO — o storage foi para o R2 em 13/10/2026. Continua
