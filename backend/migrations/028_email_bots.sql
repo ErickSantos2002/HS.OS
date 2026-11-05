@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS public.email_caixas (
 
 -- `state` da OAuth: o JWT mora no localStorage e a navegação até a Microsoft
 -- não o carrega — quem amarra a volta à pessoa é esta linha, de uso único.
+-- ⚠️ A coluna guarda o SHA-256 do state, nunca o state: o usuário de leitura
+-- enxerga a tabela, e com o state em claro amarraria a SUA conta Microsoft
+-- ao usuário de outra pessoa (mesmo motivo do ticket da 018).
 CREATE TABLE IF NOT EXISTS public.email_oauth_estados (
     state      text        PRIMARY KEY,
     user_id    uuid        NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -52,8 +55,6 @@ CREATE TABLE IF NOT EXISTS public.email_pendentes (
     caixa_de     text        NOT NULL,
     para         text[]      NOT NULL,
     cc           text[]      NOT NULL DEFAULT '{}',
-    assunto      text        NOT NULL DEFAULT '',
-    corpo        text        NOT NULL DEFAULT '',
     graph_id     text        NOT NULL,
     hash         text        NOT NULL,
     status       text        NOT NULL DEFAULT 'pendente'
@@ -62,6 +63,10 @@ CREATE TABLE IF NOT EXISTS public.email_pendentes (
     criado_em    timestamptz NOT NULL DEFAULT now(),
     decidido_em  timestamptz
 );
+-- ⚠️ Sem assunto nem corpo: o conteúdo mora no rascunho do Outlook e é relido
+-- pelo `graph_id` a cada exibição. O usuário de leitura enxerga esta tabela.
+ALTER TABLE public.email_pendentes DROP COLUMN IF EXISTS assunto;
+ALTER TABLE public.email_pendentes DROP COLUMN IF EXISTS corpo;
 CREATE INDEX IF NOT EXISTS email_pendentes_user_idx ON public.email_pendentes (user_id, criado_em DESC);
 
 -- Auditoria SEM corpo: quem, qual bot, o quê, de que caixa, para quem.
