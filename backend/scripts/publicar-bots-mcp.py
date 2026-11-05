@@ -51,7 +51,10 @@ def montar_patch(conf: dict, segredo: str, token: str, bots: set[str],
     if not modelo:
         raise ValueError("não achei hsos-relatorios em mcp.servers para copiar URL e cabeçalhos")
     if not token:
-        raise ValueError("falta GUARDRAILS_API_TOKEN no ambiente")
+        raise ValueError("falta GUARDRAILS_API_TOKEN")
+    if not segredo:
+        raise ValueError("falta ANEXOS_MCP_SEGREDO — sem ele a assinatura não bate com a da "
+                         "produção e toda chamada dá 404")
     base = modelo["url"].rsplit("/mcp/", 1)[0]
     novos = {}
     def entrada(caminho, assinatura, ferramentas):
@@ -145,9 +148,15 @@ async def main() -> int:
         com_email = {l["agent_id"] for l in linhas if l["email_ligado"]}
         com_sistemas = {l["agent_id"] for l in linhas if l["sistemas_ligados"]}
         conf, base_hash = await config_do_gateway()
-        patch, novos = montar_patch(conf, os.environ.get("ANEXOS_MCP_SEGREDO", ""),
-                                    os.environ.get("GUARDRAILS_API_TOKEN", ""), bots, com_email,
-                                    com_sistemas)
+        # Como a produção lê: `integration_secrets` primeiro, depois o ambiente.
+        from app.integracoes import ler_segredo
+        segredo = await ler_segredo("ANEXOS_MCP_SEGREDO") or os.environ.get("ANEXOS_MCP_SEGREDO", "")
+        token = await ler_segredo("GUARDRAILS_API_TOKEN") or os.environ.get("GUARDRAILS_API_TOKEN", "")
+        try:
+            patch, novos = montar_patch(conf, segredo, token, bots, com_email, com_sistemas)
+        except ValueError as e:
+            print("❌", e)
+            return 1
         print("Bots com e-mail:", sorted(com_email) or "(nenhum)")
         print("Bots com sistemas:", sorted(com_sistemas) or "(nenhum)")
         print("Entradas:", json.dumps(_mascarar(novos), ensure_ascii=False, indent=1))
