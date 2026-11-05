@@ -14,8 +14,8 @@ uma pessoa, sem escrever nada — e tem que ser mostrado ao Erick antes do
 ele enxerga; só depois o lote.
 
 ⚠️ **A lista de quem ganha é DECISÃO, não regra:** o Nicholson fica de fora
-(continua só com os cinco especialistas), e isso vive aqui, em `_FORA`, não
-em `motivo_inelegivel`. Quem for contratado depois entra sozinho no `--todos`.
+(continua só com os cinco especialistas), e isso vive em `FORA_POR_DECISAO`
+(`app/bots_pessoais.py`), que a rota também confere. Quem for contratado depois entra sozinho no `--todos`.
 """
 import argparse
 import asyncio
@@ -27,12 +27,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from app.bots_pessoais import (  # noqa: E402
-    EMOJI, arquivos_do_bot, id_do_bot, motivo_inelegivel, nome_do_bot, tools_do_bot)
+    EMOJI, FORA_POR_DECISAO, arquivos_do_bot, id_do_bot, motivo_inelegivel, nome_do_bot, tools_do_bot)
 from app.database import close_db, get_pool, init_db, sessao  # noqa: E402
 from app.routers.bots_pessoais import MODELO, _Deps, _servidores, _workspace, criar_bot  # noqa: E402
 
-# Decisão do Erick, 05/11/2026: o Nicholson segue só com os especialistas.
-_FORA = {"np@healthsafetytech.com"}
 
 
 async def _candidatos() -> list[dict]:
@@ -42,7 +40,7 @@ async def _candidatos() -> list[dict]:
             "       COALESCE(u.is_active, false) AS ativo "
             "  FROM public.profiles p LEFT JOIN auth.users u ON u.id = p.id ORDER BY p.full_name")
     return [dict(r) for r in linhas
-            if (r["email"] or "").lower() not in _FORA and motivo_inelegivel(dict(r)) is None]
+            if (r["email"] or "").lower() not in FORA_POR_DECISAO and motivo_inelegivel(dict(r)) is None]
 
 
 async def main() -> int:

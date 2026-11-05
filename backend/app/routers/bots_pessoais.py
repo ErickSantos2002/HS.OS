@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from app.bots_pessoais import (
-    EMOJI, arquivos_do_bot, bot_esta_fechado, id_do_bot, motivo_inelegivel,
+    EMOJI, FORA_POR_DECISAO, arquivos_do_bot, bot_esta_fechado, id_do_bot, motivo_inelegivel,
     nome_do_bot, tools_do_bot,
 )
 from app.database import sessao
@@ -62,6 +62,11 @@ class _Deps:
                 "SELECT agent_id, dono_id::text AS dono_id FROM public.agent_profiles "
                 " WHERE agent_id = $1", agent_id)
         return dict(r) if r else None
+
+    async def bot_do_dono(self, user_id: str) -> str | None:
+        async with sessao(role="service_role") as conn:
+            return await conn.fetchval(
+                "SELECT agent_id FROM public.agent_profiles WHERE dono_id = $1::uuid", user_id)
 
     async def inserir(self, agent_id: str, dono: dict, nome_bot: str) -> None:
         async with sessao(role="service_role") as conn:
@@ -125,9 +130,14 @@ async def criar_bot(user_id: str, deps=None) -> dict:
     if perfil is None:
         return {"user_id": user_id, "agent_id": None, "resultado": "falhou",
                 "motivo": "perfil não encontrado"}
-    aid = id_do_bot(perfil.get("full_name") or "")
+    # O bot da pessoa é o que tem `dono_id` nela. O id só é calculado do nome
+    # para quem ainda não tem — o nome é editável, e quem mudou de primeiro nome
+    # não pode ganhar um segundo bot (nem esbarrar no índice único).
+    aid = await deps.bot_do_dono(user_id) or id_do_bot(perfil.get("full_name") or "")
     saida = {"user_id": user_id, "agent_id": aid, "resultado": "falhou", "motivo": None}
 
+    if (perfil.get("email") or "").strip().lower() in FORA_POR_DECISAO:
+        return {**saida, "motivo": "fica só com os especialistas (decisão de 05/11/2026)"}
     motivo = motivo_inelegivel(perfil)
     if motivo:
         return {**saida, "motivo": motivo}
@@ -146,6 +156,11 @@ async def criar_bot(user_id: str, deps=None) -> dict:
     except ValueError as e:
         return {**saida, "motivo": str(e)}
     no_gw = _no_gateway(conf, aid)
+    if no_gw and not linha and no_gw.get("workspace") not in (None, _workspace(aid)):
+        # Sem linha no banco e com workspace que não é o nosso: não é resto de
+        # uma execução anterior, é agente de alguém. Adotar sobrescreveria os
+        # arquivos dele.
+        return {**saida, "motivo": f"colisão: {aid} existe no gateway com outro workspace"}
     if linha and no_gw and bot_esta_fechado(no_gw.get("tools") or {}, _servidores(conf)):
         return {**saida, "resultado": "já existia"}
     adotado = bool(linha or no_gw)

@@ -614,8 +614,8 @@ só do Nicholson — exceção: a Lidisay segue falando com o `bruce`. Spec e pl
   (que vive no teto) e pede os sete arquivos à orquestradora. Bot nasce por
   `app/routers/bots_pessoais.py` (`criar_bot`, idempotente, adota o que ficou
   pela metade) via `backend/scripts/criar-bots-pessoais.py` (ensaio por
-  padrão; `--aplicar --so <user_id>` / `--todos`; o Nicholson fica fora em
-  `_FORA`). Os sete arquivos são template do backend (`app/bots_pessoais.py`).
+  padrão; `--aplicar --so <user_id>` / `--todos`; o Nicholson fica fora por
+  `FORA_POR_DECISAO`, que a rota também confere). Os sete arquivos são template do backend (`app/bots_pessoais.py`).
 - ⚠️ **Ferramentas: `profile: "minimal"` + `alsoAllow: [alerta, "bundle-mcp"]`
   + deny de todo MCP menos o alerta + `gateway`, `sessions_*`, `skill_workshop`,
   `cron`.** O perfil `coding` daria shell no host, ao lado do `openclaw.json`.
@@ -625,6 +625,8 @@ só do Nicholson — exceção: a Lidisay segue falando com o `bruce`. Spec e pl
   novo sem filtro aparece para os bots** até alguém recalcular.
 - ⚠️ **`gateway` precisa estar em `_DENY_PRESERVADO`** (`integracoes.py`): o
   recálculo de deny de toda publicação de banco apaga o que não conhece.
+- O bot de uma pessoa é o que tem `dono_id` nela — mudar o primeiro nome não
+  cria outro. Rodar o script de novo só desfaz o que a própria chamada criou.
 - Conferência: **perguntar ao bot** que ferramentas ele tem. Esperado:
   `session_status` e `avisar_administrador`, e nada mais.
 - Fora de canal (o backend recusa com 400), do roster, do `publicar-anexos-mcp`
