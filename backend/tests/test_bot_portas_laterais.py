@@ -66,3 +66,12 @@ def test_bot_pessoal_nao_tem_cron(com_dono):
     assert e.value.status_code == 400
     import inspect
     assert "_recusar_cron_em_bot" in inspect.getsource(ag.criar_cron)
+
+
+def test_rota_de_cron_continua_sendo_o_criar_cron():
+    """Em 05/11/2026 o helper foi inserido ENTRE o decorator e o `criar_cron`:
+    a rota POST /agents/{id}/crons passou a ser o helper — sem `exige_papel`,
+    sem criar nada. Achado pela revisão de segurança antes do deploy."""
+    rotas = [r for r in ag.router.routes
+             if getattr(r, "path", "").endswith("/{agent_id}/crons") and "POST" in r.methods]
+    assert len(rotas) == 1 and rotas[0].endpoint is ag.criar_cron

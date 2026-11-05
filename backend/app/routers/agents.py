@@ -2768,7 +2768,6 @@ async def _cliente_ou_502():
     return obter_cliente(c.url, c.token)
 
 
-@router.post("/{agent_id}/crons", status_code=status.HTTP_201_CREATED)
 async def _recusar_cron_em_bot(agent_id: str) -> None:
     """⚠️ Bot pessoal não tem agendamento. O cron roda em sessão própria, sem
     linha em `agent_runs`: com o dono num turno aberto, o MCP de e-mail
@@ -2782,6 +2781,7 @@ async def _recusar_cron_em_bot(agent_id: str) -> None:
                             "Bot pessoal não tem agendamento.")
 
 
+@router.post("/{agent_id}/crons", status_code=status.HTTP_201_CREATED)
 async def criar_cron(
     agent_id: str, dados: CronIn, usuario: Usuario = Depends(exige_papel("administrador"))
 ):
