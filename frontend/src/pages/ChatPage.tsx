@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 
 import { useAllAvatars, useResolvedAgentAvatar } from "@/hooks/use-agent-avatar";
 import { useAgents } from "@/hooks/use-agents";
-import { ehBotPessoal } from "@/lib/bots-pessoais";
+import { organizarAgentes } from "@/lib/lista-de-agentes";
 import { useChatMedia } from "@/hooks/use-chat-media";
 import { useAudioRecorder, getAudioFileExtension } from "@/hooks/use-audio-recorder";
 import { useAudioLevel } from "@/hooks/use-audio-level";
@@ -1901,15 +1901,20 @@ export default function ChatPage() {
   // e perdeu o acesso cai em DMs.
   const temAgentes = agents.length > 0;
   const abaAtual = sidebarTab === "agentes" && !temAgentes ? "dms" : sidebarTab;
-  // ⚠️ Bots pessoais (05/11/2026) num bloco recolhido, depois dos
-  // especialistas: são 23 e só o administrador os vê. Bot aberto mantém o
-  // bloco aberto — senão a conversa selecionada some da lista.
-  const especialistasDaLista = listaAgentes.filter((i) => i.kind === "agent" && !ehBotPessoal(i.agent));
-  const botsDaLista = listaAgentes.filter((i) => i.kind === "agent" && ehBotPessoal(i.agent));
-  const botAberto = botsDaLista.some((i) => i.kind === "agent" && selection?.type === "agent" && selection.id === i.agent.id);
+  // ⚠️ Bots pessoais (05/11/2026): o PRÓPRIO bot fica fixo no topo; só os bots
+  // de OUTRAS pessoas (que só admin vê) vão num bloco recolhido. O colaborador
+  // abria um bloco para achar um único item. Bot aberto mantém o bloco aberto.
+  // Regra em `lib/lista-de-agentes.ts`.
+  const itensDeAgente = listaAgentes.filter((i): i is Extract<DmItem, { kind: "agent" }> => i.kind === "agent");
+  const org = organizarAgentes(itensDeAgente.map((i) => ({ ...i, donoId: i.agent.donoId })), user?.id);
+  const meuBotDaLista = org.meu ? [org.meu] : [];
+  const especialistasDaLista = org.especialistas;
+  const botsDaLista = org.outrosBots;
+  const botAberto = botsDaLista.some((i) => selection?.type === "agent" && selection.id === i.agent.id);
   const mostrarBots = botsAbertos || botAberto;
   const listaDaAba: DmItem[] = abaAtual === "agentes"
     ? [
+        ...meuBotDaLista,
         ...especialistasDaLista,
         ...(botsDaLista.length
           ? [{ kind: "secao" as const, total: botsDaLista.length, nome: "", ultimaAtividade: 0,
@@ -2316,7 +2321,7 @@ export default function ChatPage() {
                     return (
                       <button key="secao-bots" onClick={() => setBotsAbertos((v) => !v)}
                         className="w-full flex items-center justify-between px-2 pt-3 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground/60 font-display hover:text-foreground">
-                        <span>{mostrarBots ? "▾" : "▸"} Bots pessoais ({item.total})</span>
+                        <span>{mostrarBots ? "▾" : "▸"} Bots do time ({item.total})</span>
                         {item.naoLidas > 0 && <span className="text-destructive font-bold">{item.naoLidas}</span>}
                       </button>
                     );
