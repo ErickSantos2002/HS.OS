@@ -458,7 +458,11 @@ async def anexar(
             """,
             agent_id, usuario.id, dados.role, dados.content,
             json.dumps(dados.media) if dados.media else None,
-            _instante(dados.created_at, "created_at"),
+            # ⚠️ Mensagem da PESSOA leva o horário do servidor: o relógio do PC
+            # não é confiável. Em 05/11/2026 os do Welton e do Gustavo estavam
+            # ~66 s atrasados, e a mensagem nova ficava gravada ANTES da resposta
+            # do bot que eles tinham acabado de ler (a resposta usa o servidor).
+            None if dados.role == "user" else _instante(dados.created_at, "created_at"),
         )
     return _para_saida(linha)
 
