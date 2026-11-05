@@ -130,10 +130,6 @@ Escolha minha: o script de anexos reconhece o bot pelo `profile: "minimal"`, por
 - [ ] **Passo 4:** `python -m pytest tests -q`, `cd frontend && npx vitest run && npm run lint` → passa (lint sem erro novo).
 - [ ] **Passo 5:** commit `feat(bots): roster, canais, anexos e telas ignoram bot pessoal`.
 
-### Tarefa 5: (incluída na 4)
-
-O script de anexos ficou na Tarefa 4. Numeração mantida para o Foco de revisão.
-
 ### Tarefa 5: war-room — satélite da pessoa
 
 **Arquivos:**
