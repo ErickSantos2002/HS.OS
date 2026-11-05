@@ -64,6 +64,10 @@ def amb(monkeypatch):
         return user_id == estado["turno_de"]
     monkeypatch.setattr(m, "turno_em_curso", turno)
 
+    async def outro(conn, agent_id, dono):
+        return estado.get("outro_aberto", False)
+    monkeypatch.setattr(m, "outro_turno_aberto", outro)
+
     async def access(conn, user_id):
         return "tok", "ti@healthsafetytech.com"
     monkeypatch.setattr(m.contas, "access_token", access)
@@ -148,3 +152,22 @@ def test_rota_recusa_assinatura_errada(monkeypatch):
     with pytest.raises(HTTPException) as e:
         asyncio.run(m.mcp_email("erick-bot", assinatura_do_agente("s", "erick-bot"), None))
     assert e.value.status_code == 404
+
+
+def test_outra_pessoa_com_turno_aberto_no_mesmo_bot_bloqueia(amb):
+    """O gateway não diz ao MCP de que sessão veio a chamada. Com o dono E o
+    admin conversando com o bot ao mesmo tempo, a chamada pode ser da sessão do
+    admin — então ninguém usa o e-mail enquanto houver turno de outra pessoa."""
+    amb["estado"]["outro_aberto"] = True
+    texto, erro = _run("email_listar", {})
+    assert erro and amb["chamadas"] == []
+
+
+def test_outro_turno_aberto_consulta_runs_de_outras_pessoas():
+    class C:
+        async def fetchval(self, sql, *a):
+            self.sql, self.a = sql, a
+            return True
+    c = C()
+    assert asyncio.run(m.outro_turno_aberto(c, "erick-bot", "u-erick")) is True
+    assert "agent_runs" in c.sql and "user_id <>" in c.sql and "message_id IS NULL" in c.sql

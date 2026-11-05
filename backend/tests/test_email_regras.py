@@ -62,3 +62,17 @@ def test_email_nao_fecha_o_delimitador_sozinho():
     assert fim.startswith(">>>") and len(fim) > 3
     miolo = a.split("\n", 1)[1].rsplit("\n", 1)[0]
     assert ">>>" not in miolo and "<<<" not in miolo
+
+
+def test_hash_cobre_cco_responder_para_e_anexos():
+    """Cco, "Responder para" e anexo acrescentados no Outlook depois do cartão
+    não podem passar sem mudar o hash — o cartão não os teria mostrado."""
+    base = {"subject": "Oi", "toRecipients": [{"emailAddress": {"address": "a@y.com"}}],
+            "body": {"content": "c"}}
+    h = r.hash_rascunho("ti@x.com", base)
+    for extra in ({"bccRecipients": [{"emailAddress": {"address": "espiao@z.com"}}]},
+                  {"replyTo": [{"emailAddress": {"address": "outro@z.com"}}]},
+                  {"hasAttachments": True}):
+        assert r.hash_rascunho("ti@x.com", {**base, **extra}) != h
+    c = r.conteudo_do_rascunho({**base, "bccRecipients": [{"emailAddress": {"address": "e@z.com"}}]})
+    assert c["cco"] == ["e@z.com"]

@@ -10,6 +10,13 @@ import json
 import re
 import secrets
 
+# As ferramentas do servidor `hsos-email-<bot>`. Moram aqui (puro, sem rede)
+# porque o escopo do bot, o script de publicação e o servidor precisam
+# concordar sobre elas — divergir tira ferramenta em silêncio (foi o que o
+# `toolFilter` fez com a `relatorio_ponto` do bruce em outubro).
+FERRAMENTAS_EMAIL = ("email_caixas", "email_listar", "email_ler", "email_enviar_para_mim",
+                     "email_preparar", "email_pendentes")
+
 TETO_CORPO = 6000
 MAX_DESTINATARIOS = 20
 MARCA_CORTE = "\n…[cortado]"
@@ -80,11 +87,14 @@ def escolher_caixa(pedida: str | None, conta: str, extras) -> str:
 
 
 def conteudo_do_rascunho(msg: dict) -> dict:
-    """Para, cc, assunto e corpo como o Graph devolve o rascunho — é o que o
-    cartão mostra e o que o hash cobre."""
+    """Tudo o que o cartão mostra e o hash cobre, como o Graph devolve o
+    rascunho — inclusive Cco, "Responder para" e se há anexo, que alguém pode
+    acrescentar no Outlook depois do cartão (alerta da revisão de segurança)."""
     def ends(chave):
         return [((r or {}).get("emailAddress") or {}).get("address", "") for r in msg.get(chave) or []]
     return {"para": ends("toRecipients"), "cc": ends("ccRecipients"),
+            "cco": ends("bccRecipients"), "responder_para": ends("replyTo"),
+            "tem_anexo": bool(msg.get("hasAttachments")),
             "assunto": msg.get("subject") or "",
             "corpo": ((msg.get("body") or {}).get("content") or "")}
 
@@ -93,4 +103,6 @@ def hash_rascunho(de: str, msg: dict) -> str:
     """⚠️ Sempre do rascunho RELIDO, nunca do que o bot mandou: o Graph normaliza
     o corpo, e comparar com a entrada daria "mudou" à toa."""
     c = conteudo_do_rascunho(msg)
-    return hash_email(de, c["para"], c["cc"], c["assunto"], c["corpo"])
+    extra = json.dumps({"cco": _norm(c["cco"]), "rp": _norm(c["responder_para"]),
+                        "anexo": c["tem_anexo"]}, sort_keys=True)
+    return hash_email(de, c["para"], c["cc"], c["assunto"], c["corpo"] + "\x00" + extra)

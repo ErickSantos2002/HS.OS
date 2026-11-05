@@ -25,10 +25,10 @@ from fastapi.responses import JSONResponse
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
 from app.email import contas, graph
-from app.email.regras import (como_dado_externo, escolher_caixa, hash_rascunho, html_para_texto,
+from app.email.regras import (FERRAMENTAS_EMAIL, como_dado_externo, escolher_caixa, hash_rascunho, html_para_texto,
                               validar_enderecos)
 from app.integracoes import exige_segredo, ler_segredo
-from app.routers.mcp_anexos import assinatura_do_agente, turno_em_curso
+from app.routers.mcp_anexos import JANELA_TURNO_S, assinatura_do_agente, turno_em_curso
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/mcp", tags=["mcp"])
@@ -76,10 +76,27 @@ FERRAMENTAS = [
           "(pendente, enviado, descartado, vencido, erro)."),
 ]
 NOMES = tuple(f["name"] for f in FERRAMENTAS)
+assert NOMES == FERRAMENTAS_EMAIL, "FERRAMENTAS do servidor e FERRAMENTAS_EMAIL divergiram"
 
 
 class _Recusa(Exception):
     pass
+
+
+async def outro_turno_aberto(conn, agent_id: str, dono: str) -> bool:
+    """Há turno aberto de OUTRA pessoa com este bot?
+
+    ⚠️ O gateway não diz ao MCP de que sessão veio a chamada. Com o dono e o
+    admin conversando com o bot ao mesmo tempo, a chamada pode ser da sessão do
+    admin — então, enquanto houver turno de outra pessoa, ninguém usa o e-mail.
+    Mesma janela e mesmo critério do `turno_em_curso` (alerta HIGH da revisão).
+    """
+    return bool(await conn.fetchval(
+        """SELECT EXISTS (SELECT 1 FROM public.agent_runs
+             WHERE regexp_replace(lower(btrim(agent_id)), '^openclaw:', '') = $1
+               AND user_id <> $2::uuid AND message_id IS NULL
+               AND criado_em > now() - make_interval(secs => $3))""",
+        agent_id, dono, float(JANELA_TURNO_S)))
 
 
 async def _contexto(conn, agent_id: str) -> dict:
@@ -92,6 +109,9 @@ async def _contexto(conn, agent_id: str) -> dict:
     primeiro = ((p["full_name"] or "").split() or ["seu dono"])[0]
     if not await turno_em_curso(conn, agent_id, p["dono_id"]):
         raise _Recusa(f"Só consigo usar o e-mail enquanto {primeiro} está conversando comigo.")
+    if await outro_turno_aberto(conn, agent_id, p["dono_id"]):
+        raise _Recusa("Outra pessoa está conversando comigo agora; por segurança o e-mail fica "
+                      "bloqueado até essa conversa terminar.")
     try:
         access, conta = await contas.access_token(conn, p["dono_id"])
     except contas.ErroConta as e:
