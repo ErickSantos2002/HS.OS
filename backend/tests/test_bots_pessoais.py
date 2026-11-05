@@ -175,3 +175,21 @@ def test_flag_ligada_sem_entrada_publicada_continua_fechado():
     com ferramenta que não existe nem perder o fechamento."""
     t = tools_do_bot(SERVIDORES, "erick-bot", email=True)
     assert t == tools_do_bot(SERVIDORES)
+
+
+def test_agents_md_manda_sempre_responder():
+    """Em 05/11/2026 o `erick-bot` respondeu `NO_REPLY` (o token de silêncio do
+    OpenClaw) a "teste" e a "não tem nada aqui": o chat mostrou "terminou sem
+    produzir texto". Bot recém-nascido, sem contexto, escolheu calar."""
+    a = arquivos_do_bot({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"})["AGENTS.md"]
+    assert "NO_REPLY" in a and "sempre" in a.lower()
+
+
+def test_regravar_agents_md_preserva_bloco_da_empresa():
+    from app.bots_pessoais import agents_md_novo
+    from app.routers.integracoes import _MARCA_FIM, _MARCA_INICIO
+    atual = f"velho\n\n{_MARCA_INICIO}\nempresa X\n{_MARCA_FIM}\n"
+    novo = agents_md_novo({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"}, atual)
+    assert "NO_REPLY" in novo and "empresa X" in novo and "velho" not in novo
+    sem = agents_md_novo({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"}, "velho")
+    assert _MARCA_INICIO not in sem

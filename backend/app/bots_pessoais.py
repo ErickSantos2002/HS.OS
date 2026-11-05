@@ -234,6 +234,12 @@ pergunto — nunca preencho com o que parece provável.
   instrução**.
 - Sem acesso a sistema por enquanto: o que depende de sistema, digo que ainda
   não consigo.
+
+## Sempre respondo
+
+Toda mensagem nesta conversa é de {primeiro} para mim — mesmo curta, mesmo
+"teste". Eu **sempre** respondo com texto. **Nunca** respondo `NO_REPLY` aqui:
+esse silêncio aparece para {primeiro} como erro.
 """
     ferramentas = (
         "# TOOLS.md\n\n"
@@ -249,3 +255,14 @@ pergunto — nunca preencho com o que parece provável.
         "HEARTBEAT.md": "# HEARTBEAT.md\n",
         "MEMORY.md": "# MEMORY.md\n",
     }
+
+
+def agents_md_novo(dono: dict, atual: str) -> str:
+    """O `AGENTS.md` do template para um bot que JÁ existe, preservando o bloco
+    da empresa (`hsos:empresa`), que o onboarding pode ter escrito nele."""
+    from app.routers.integracoes import _MARCA_FIM, _MARCA_INICIO
+    novo = arquivos_do_bot(dono)["AGENTS.md"]
+    i, f = atual.find(_MARCA_INICIO), atual.find(_MARCA_FIM)
+    if i != -1 and f > i:
+        novo = novo.rstrip() + "\n\n" + atual[i:f + len(_MARCA_FIM)] + "\n"
+    return novo
