@@ -710,6 +710,18 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
 - Flag `agent_profiles.sistemas_ligados` (`029`). A publicação é feita pelo
   `backend/scripts/publicar-bots-mcp.py` (e-mail e sistemas num patch só;
   `--ligar-sistema <bot> taskhs`).
+- **Todo agente conhece o time** (`app/time_da_empresa.py`): bloco
+  `hsos:time` GERADO do cadastro (pessoas com cargo, setor e e-mail;
+  especialistas; bots com nome e dono) no **`USER.md`** de cada agente — o
+  `AGENTS.md` da `nina` vive no teto. Diz que conhecer não é acessar (o bot
+  inventava "consigo ver na tabela de perfis"). Atualizar:
+  `scripts/atualizar-time.py --todos-com-bloco --aplicar` (gente nova); sozinho
+  quando alguém renomeia o bot.
+- **"Meu bot"** (Perfil, `routers/meu_bot.py`): a pessoa muda o NOME DE
+  EXIBIÇÃO e a foto. O `agent_id` não muda (é a chave da sessão). Renomear
+  regrava `IDENTITY.md`/`SOUL.md` e o bloco do time. ⚠️ Pendência antiga: o
+  bucket `agent-files` aceita escrita de qualquer autenticado em qualquer
+  caminho, inclusive `avatars/` de outro agente.
 - **Território:** a mudança em cada sistema é feita na sessão daquele repo,
   a partir da seção "Para os outros repositórios" da spec. O TaskHS já está
   pronto (`48832b0`, v2.13.0, sem deploy).
