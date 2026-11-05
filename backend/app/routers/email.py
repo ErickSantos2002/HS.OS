@@ -84,6 +84,12 @@ async def callback(code: str | None = Query(default=None), state: str | None = Q
             return _voltar("erro_conta")
         await contas.guardar_conta(conn, linha["user_id"], t["conta"], t["refresh"])
         await contas.evento(conn, linha["user_id"], None, "conectar", t["conta"])
+    # As caixas compartilhadas que o admin previu para a pessoa: conferidas
+    # agora, com o token dela. Falha aqui não desfaz a conexão.
+    try:
+        await contas.conferir_previstas(linha["user_id"], t["access"], t["conta"])
+    except Exception:  # noqa: BLE001
+        logger.exception("Caixas previstas não conferidas para %s", linha["user_id"])
     logger.info("E-mail conectado para %s", linha["user_id"])
     return _voltar("conectado")
 

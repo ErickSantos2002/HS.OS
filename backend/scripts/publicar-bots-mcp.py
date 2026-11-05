@@ -115,6 +115,8 @@ async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--aplicar", action="store_true")
     ap.add_argument("--ligar-email", help="liga email_ligado de UM bot pessoal (só banco)")
+    ap.add_argument("--ligar-todos", action="store_true",
+                    help="liga e-mail e TaskHS em TODOS os bots pessoais (só banco)")
     ap.add_argument("--ligar-sistema", nargs=2, metavar=("BOT", "SISTEMA"),
                     help="acrescenta um sistema (taskhs) a sistemas_ligados de UM bot (só banco)")
     a = ap.parse_args()
@@ -125,6 +127,13 @@ async def main() -> int:
         return 1
     try:
         async with sessao(role="service_role") as conn:
+            if a.ligar_todos:
+                n = await conn.fetchval(
+                    "WITH u AS (UPDATE public.agent_profiles SET email_ligado = true, "
+                    "  sistemas_ligados = (SELECT array_agg(DISTINCT x) FROM unnest(sistemas_ligados || "
+                    "  '{taskhs}'::text[]) x) WHERE dono_id IS NOT NULL RETURNING 1) SELECT count(*) FROM u")
+                print(f"e-mail e TaskHS ligados em {n} bots")
+                return 0
             if a.ligar_email:
                 ok = await conn.fetchval(
                     "UPDATE public.agent_profiles SET email_ligado = true "

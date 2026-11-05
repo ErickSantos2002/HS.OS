@@ -60,3 +60,21 @@ async def evento(conn, user_id, agent_id, acao, caixa=None, graph_id=None, desti
         "INSERT INTO public.email_eventos (user_id, agent_id, acao, caixa, graph_id, destinatarios) "
         "VALUES ($1::uuid, $2, $3, $4, $5, $6::text[])",
         user_id, agent_id, acao, caixa, graph_id, list(destinatarios))
+
+
+async def conferir_previstas(user_id: str, access: str, conta: str) -> int:
+    """Confere com o token DA PESSOA as caixas que o admin previu para ela
+    (`email_caixas_previstas`) e ativa as que abrirem. Devolve quantas."""
+    from app.database import sessao
+    async with sessao(role="service_role") as conn:
+        previstas = [r["endereco"] for r in await conn.fetch(
+            "SELECT endereco FROM public.email_caixas_previstas WHERE user_id = $1::uuid", user_id)]
+    ok = 0
+    for caixa in previstas:
+        if caixa.lower() == (conta or "").lower() or not await graph.conferir_caixa(access, conta, caixa):
+            continue
+        async with sessao(role="service_role") as conn:
+            await conn.execute("INSERT INTO public.email_caixas (user_id, endereco) VALUES ($1::uuid, $2) "
+                               "ON CONFLICT DO NOTHING", user_id, caixa.lower())
+        ok += 1
+    return ok
