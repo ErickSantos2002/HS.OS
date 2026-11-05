@@ -111,6 +111,7 @@ import { getAgentIdAliases, toCanonicalAgentId } from "@/lib/agent-id";
 import { NoEscritorioAgora } from "@/components/escritorio/NoEscritorioAgora";
 import { useEscritorioPresenca } from "@/hooks/use-escritorio-presenca";
 import { InstalarApp } from "@/components/InstalarApp";
+import CartaoAprovacaoEmail from "@/components/chat/CartaoAprovacaoEmail";
 
 /** Strip markdown formatting for sidebar preview */
 function stripMarkdown(text: string): string {
@@ -533,7 +534,9 @@ export const AgentMessageList = React.memo(function AgentMessageList({
                           <CollapsiblePlainText text={msg.content} className="text-sm text-foreground/90" />
                         )
                       )}
-                      {Array.isArray(msg.media) && msg.media.map((att, i) => (
+                      {Array.isArray(msg.media) && msg.media.map((att, i) => att.type === "email_aprovacao" && att.id ? (
+                        <CartaoAprovacaoEmail key={i} id={att.id} />
+                      ) : (
                         <AnexoResolvido key={i} id={att.base64?.startsWith("data:") ? undefined : att.id} url={att.base64?.startsWith("data:") ? att.base64 : (att.url || att.base64)}>
                           {(url, renovar, urlAgora) => <MediaBubble attachment={{ ...att, url, base64: att.base64 || url }} onImageClick={onSetLightboxSrc} onErroImagem={renovar} urlAgora={urlAgora} />}
                         </AnexoResolvido>
