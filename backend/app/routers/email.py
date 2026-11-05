@@ -9,7 +9,7 @@ import logging
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
@@ -146,7 +146,7 @@ async def _pendente_do_dono(conn, pend_id: str, usuario: Usuario) -> dict:
     try:
         linha = await conn.fetchrow(
             "SELECT id::text AS id, user_id::text AS user_id, caixa_de, graph_id, status, erro, "
-            "       criado_em FROM public.email_pendentes WHERE id = $1::uuid AND user_id = $2::uuid "
+            "       criado_em, assinatura FROM public.email_pendentes WHERE id = $1::uuid AND user_id = $2::uuid "
             "   FOR UPDATE",
             pend_id, usuario.id)
     except Exception:  # noqa: BLE001 — id malformado
@@ -178,7 +178,8 @@ async def _rascunho(conn, p: dict) -> tuple[str, str, dict]:
 async def ver_pendente(pend_id: str, usuario: Usuario = Depends(usuario_atual)):
     async with sessao(role="service_role") as conn:
         p = await _pendente_do_dono(conn, pend_id, usuario)
-        saida = {"id": p["id"], "status": p["status"], "erro": p["erro"], "de": p["caixa_de"]}
+        saida = {"id": p["id"], "status": p["status"], "erro": p["erro"], "de": p["caixa_de"],
+                 "assinatura": bool(p.get("assinatura"))}
         if p["status"] != "pendente":
             return saida
         _, _, msg = await _rascunho(conn, p)
@@ -241,3 +242,79 @@ async def descartar_pendente(pend_id: str, usuario: Usuario = Depends(usuario_at
                            "decidido_em = now() WHERE id = $1::uuid", pend_id)
         await contas.evento(conn, p["user_id"], None, "descartar", p["caixa_de"], p["graph_id"])
     return {"status": "descartado"}
+
+
+# ── Assinatura de e-mail (Perfil) — modelo do HSGrowth ───────────────────────
+
+from app.email import assinatura as ass_mod  # noqa: E402
+
+
+class AssinaturaTextoIn(BaseModel):
+    texto_antes: str = ""
+    texto_depois: str = ""
+
+
+@router.get("/assinatura")
+async def ver_assinatura(usuario: Usuario = Depends(usuario_atual)):
+    async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow("SELECT texto_antes, texto_depois FROM public.email_assinaturas "
+                                    " WHERE user_id = $1::uuid", usuario.id)
+        imgs = await conn.fetch("SELECT ordem, mime, nome, length(dados) AS tamanho "
+                                "  FROM public.email_assinatura_imagens WHERE user_id = $1::uuid "
+                                " ORDER BY ordem", usuario.id)
+    return {"texto_antes": (linha["texto_antes"] if linha else ""),
+            "texto_depois": (linha["texto_depois"] if linha else ""),
+            "imagens": [dict(i) for i in imgs]}
+
+
+@router.put("/assinatura")
+async def salvar_texto_assinatura(dados: AssinaturaTextoIn, usuario: Usuario = Depends(usuario_atual)):
+    if len(dados.texto_antes) > 1000 or len(dados.texto_depois) > 3000:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Texto da assinatura longo demais.")
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            "INSERT INTO public.email_assinaturas (user_id, texto_antes, texto_depois) VALUES ($1::uuid, $2, $3) "
+            "ON CONFLICT (user_id) DO UPDATE SET texto_antes = EXCLUDED.texto_antes, "
+            "texto_depois = EXCLUDED.texto_depois, atualizado_em = now()",
+            usuario.id, dados.texto_antes, dados.texto_depois)
+    return {"ok": True}
+
+
+@router.post("/assinatura/imagem/{ordem}")
+async def enviar_imagem_assinatura(ordem: int, arquivo: UploadFile = File(...),
+                                   usuario: Usuario = Depends(usuario_atual)):
+    if ordem not in (1, 2):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Só cabem duas imagens (1 e 2).")
+    dados = await arquivo.read()
+    mime = (arquivo.content_type or "").lower()
+    async with sessao(role="service_role") as conn:
+        outras = await conn.fetchval(
+            "SELECT COALESCE(sum(length(dados)), 0) FROM public.email_assinatura_imagens "
+            " WHERE user_id = $1::uuid AND ordem <> $2", usuario.id, ordem) or 0
+        try:
+            ass_mod.validar_imagem(mime, len(dados), int(outras))
+        except ValueError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+        await conn.execute(
+            "INSERT INTO public.email_assinatura_imagens (user_id, ordem, mime, nome, dados) "
+            "VALUES ($1::uuid, $2, $3, $4, $5) ON CONFLICT (user_id, ordem) DO UPDATE SET "
+            "mime = EXCLUDED.mime, nome = EXCLUDED.nome, dados = EXCLUDED.dados",
+            usuario.id, ordem, mime, (arquivo.filename or f"assinatura-{ordem}")[:120], dados)
+    return {"ok": True}
+
+
+@router.get("/assinatura/imagem/{ordem}")
+async def ver_imagem_assinatura(ordem: int, usuario: Usuario = Depends(usuario_atual)):
+    async with sessao(role="service_role") as conn:
+        i = await conn.fetchrow("SELECT mime, dados FROM public.email_assinatura_imagens "
+                                " WHERE user_id = $1::uuid AND ordem = $2", usuario.id, ordem)
+    if not i:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sem imagem.")
+    return Response(content=bytes(i["dados"]), media_type=i["mime"])
+
+
+@router.delete("/assinatura/imagem/{ordem}", status_code=status.HTTP_204_NO_CONTENT)
+async def apagar_imagem_assinatura(ordem: int, usuario: Usuario = Depends(usuario_atual)):
+    async with sessao(role="service_role") as conn:
+        await conn.execute("DELETE FROM public.email_assinatura_imagens WHERE user_id = $1::uuid "
+                           "AND ordem = $2", usuario.id, ordem)

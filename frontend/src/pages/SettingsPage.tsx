@@ -26,6 +26,7 @@ import EmpresaTab from "@/components/settings/EmpresaTab";
 import { Switch } from "@/components/ui/switch";
 import PreferenciaResumoEmAudio from "@/components/settings/PreferenciaResumoEmAudio";
 import ConectarEmail from "@/components/settings/ConectarEmail";
+import AssinaturaEmail from "@/components/settings/AssinaturaEmail";
 import MemoriaDoBot from "@/components/settings/MemoriaDoBot";
 import { InstalarApp } from "@/components/InstalarApp";
 import MissionControlDossierPage from "@/pages/MissionControlDossierPage";
@@ -592,6 +593,8 @@ export default function SettingsPage() {
               <PreferenciaResumoEmAudio />
 
               <ConectarEmail />
+
+              <AssinaturaEmail />
 
               <MemoriaDoBot />
 

@@ -1,0 +1,71 @@
+"""Assinatura de e-mail por pessoa — modelo do HSGrowth (05/11/2026).
+
+Texto antes + até 2 imagens (GIF animado incluso) + texto depois (ex. aviso
+LGPD). Todo e-mail que o bot PREPARA sai em HTML com ela no fim.
+
+⚠️ Imagens EMBUTIDAS (`cid:`), não link: link externo não anima e o Outlook de
+quem recebe bloqueia imagem remota por padrão. ⚠️ O corpo do bot é ESCAPADO:
+ele pode carregar texto de e-mail lido, e tag ali viraria HTML de verdade.
+"""
+from __future__ import annotations
+
+import base64
+import html as h
+
+MIMES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+TETO_IMAGEM = 2_000_000
+TETO_TOTAL = 3_000_000   # o Graph recusa requisição acima de 4 MB (base64 incha ~33%)
+
+
+def validar_imagem(mime: str, tamanho: int, outras: int) -> None:
+    if mime not in MIMES:
+        raise ValueError("Use PNG, JPG, WEBP ou GIF.")
+    if tamanho > TETO_IMAGEM:
+        raise ValueError("Cada imagem pode ter no máximo 2 MB.")
+    if tamanho + outras > TETO_TOTAL:
+        raise ValueError("As imagens da assinatura somam mais de 3 MB.")
+
+
+def _texto_html(t: str) -> str:
+    return h.escape(t or "").replace("\n", "<br>")
+
+
+def montar_html(corpo: str, ass: dict | None) -> str:
+    partes = [f'<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">{_texto_html(corpo)}</div>']
+    if ass:
+        if (ass.get("texto_antes") or "").strip():
+            partes.append(f'<p style="font-family:Calibri,Arial,sans-serif;font-size:11pt">'
+                          f'{_texto_html(ass["texto_antes"])}</p>')
+        imgs = "".join(f'<img src="cid:assinatura-{i["ordem"]}" alt="" style="max-width:600px;'
+                       f'vertical-align:middle">' for i in sorted(ass.get("imagens") or [],
+                                                                     key=lambda i: i["ordem"]))
+        if imgs:
+            partes.append(f"<div>{imgs}</div>")
+        if (ass.get("texto_depois") or "").strip():
+            partes.append(f'<p style="font-family:Calibri,Arial,sans-serif;font-size:9pt;color:#777;'
+                          f'font-style:italic">{_texto_html(ass["texto_depois"])}</p>')
+    return "\n".join(partes)
+
+
+def anexos_inline(ass: dict | None) -> list[dict]:
+    return [{"@odata.type": "#microsoft.graph.fileAttachment", "name": i["nome"],
+             "contentType": i["mime"], "contentBytes": base64.b64encode(bytes(i["dados"])).decode(),
+             "contentId": f"assinatura-{i['ordem']}", "isInline": True}
+            for i in sorted((ass or {}).get("imagens") or [], key=lambda i: i["ordem"])]
+
+
+async def carregar(conn, user_id: str) -> dict | None:
+    """A assinatura da pessoa, ou None se ela não cadastrou nada."""
+    linha = await conn.fetchrow(
+        "SELECT texto_antes, texto_depois FROM public.email_assinaturas WHERE user_id = $1::uuid", user_id)
+    imagens = await conn.fetch(
+        "SELECT ordem, mime, nome, dados FROM public.email_assinatura_imagens WHERE user_id = $1::uuid "
+        "ORDER BY ordem", user_id)
+    if not linha and not imagens:
+        return None
+    ass = {"texto_antes": (linha or {}).get("texto_antes", "") if linha else "",
+           "texto_depois": (linha or {}).get("texto_depois", "") if linha else "",
+           "imagens": [dict(i) for i in imagens]}
+    if not ass["texto_antes"].strip() and not ass["texto_depois"].strip() and not ass["imagens"]:
+        return None
+    return ass
