@@ -599,6 +599,40 @@ aprovado (`…-app-celular-prototipo.html`) é a fonte da verdade visual. Em tel
 - `useConversaAtivaNasNotificacoes` recebe `ativa`: tela inativa não mexe no
   estado global, e quem zera é só o dono (duas telas convivem na animação).
 
+### Bots pessoais — um agente por pessoa (05/11/2026)
+
+Decisão do Erick com o Nicholson: em vez de liberar os cinco especialistas aos
+poucos, **cada colaborador ganha um agente**, `<primeironome>-bot` (23 hoje),
+que no piloto vai também AGIR (e-mail, CRM, Task). Os especialistas continuam
+só do Nicholson — exceção: a Lidisay segue falando com o `bruce`. Spec e plano:
+`docs/superpowers/{specs,plans}/2026-11-05-bots-pessoais-cascas*`.
+
+- ⚠️ **`agent_profiles.dono_id IS NOT NULL` é a definição de bot pessoal**
+  (`027`, FK `ON DELETE RESTRICT` — com `SET NULL` o órfão viraria
+  especialista). Nunca o sufixo `-bot`.
+- **Não é o `POST /agents`.** Aquele põe no `agentToAgent`, no roster da `nina`
+  (que vive no teto) e pede os sete arquivos à orquestradora. Bot nasce por
+  `app/routers/bots_pessoais.py` (`criar_bot`, idempotente, adota o que ficou
+  pela metade) via `backend/scripts/criar-bots-pessoais.py` (ensaio por
+  padrão; `--aplicar --so <user_id>` / `--todos`; o Nicholson fica fora em
+  `_FORA`). Os sete arquivos são template do backend (`app/bots_pessoais.py`).
+- ⚠️ **Ferramentas: `profile: "minimal"` + `alsoAllow: [alerta, "bundle-mcp"]`
+  + deny de todo MCP menos o alerta + `gateway`, `sessions_*`, `skill_workshop`,
+  `cron`.** O perfil `coding` daria shell no host, ao lado do `openclaw.json`.
+  Sem `bundle-mcp` o `minimal` esconde o alerta (o bot via só
+  `session_status`). Com ele, o bot vê o MCP que o deny não nomeia — por isso
+  `tools_do_bot` recusa servidor sem `toolFilter.include`. ⚠️ **Servidor MCP
+  novo sem filtro aparece para os bots** até alguém recalcular.
+- ⚠️ **`gateway` precisa estar em `_DENY_PRESERVADO`** (`integracoes.py`): o
+  recálculo de deny de toda publicação de banco apaga o que não conhece.
+- Conferência: **perguntar ao bot** que ferramentas ele tem. Esperado:
+  `session_status` e `avisar_administrador`, e nada mais.
+- Fora de canal (o backend recusa com 400), do roster, do `publicar-anexos-mcp`
+  (pula `profile: "minimal"`), do mapa da frota e dos times. No chat do admin,
+  bloco recolhido. Na war-room, **selo no canto superior esquerdo do nó do
+  dono**, aceso só por conversa do PRÓPRIO dono — o SQL do feed descarta
+  conversa de admin com bot alheio (estado, Fluxo e números).
+
 ### Feature flags — sobrou uma, e ela vem ligada
 
 ⚠️ **Revisadas em 31/08/2026, e o que estava escrito aqui não batia com o

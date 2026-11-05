@@ -37,7 +37,8 @@ ferramenta.
 - **Por ora, só administrador conversa com as cascas.** O dono ainda não as
   vê: um bot que não faz nada não deve ser a primeira impressão de ninguém.
 - **War-room:** o bot aparece como **satélite da pessoa**, um ponto colado no
-  nó dela que acende quando há conversa com ele. O anel interno continua só
+  nó dela que acende quando há conversa com ele. *(Implementado como selo no
+  canto superior esquerdo do nó — ver "Desvios na implementação".)* O anel interno continua só
   com os cinco especialistas.
 
 ## Objetivos
@@ -241,3 +242,16 @@ está pronto.
 - Agrupar os patches de escopo do lote.
 - A forma do `donoId` no feed da war-room.
 - A redação exata do template, dentro do que está acima.
+
+## Desvios na implementação (05/11/2026)
+
+- **Selo, não satélite radial.** Na direção radial ele cai sobre o rótulo da
+  pessoa na metade de baixo do anel; solto ao lado, encosta no nó vizinho nas
+  fileiras mais apertadas. Ficou dentro da vaga do nó, espelho do ponto de
+  status, sem linha pessoa↔bot.
+- **`bundle-mcp` no `alsoAllow`.** O `minimal` escondia o alerta; com ele, o
+  deny de MCP passou a ser o que limita — e `tools_do_bot` falha fechada se
+  algum servidor não tiver `toolFilter.include`.
+- **A exclusão do Nicholson mora no script** (`_FORA`), não na rota: é decisão
+  de lista, não regra de elegibilidade.
+- **`ON DELETE RESTRICT`** no `dono_id`, não `SET NULL`.
