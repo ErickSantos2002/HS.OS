@@ -175,11 +175,11 @@ async def _rodar(conn, agent_id: str, nome: str, args: dict, ctx: dict) -> str:
         # O hash é o do rascunho RELIDO (o Graph normaliza o corpo) — o mesmo
         # cálculo que o cartão e o "Enviar" fazem.
         relido = await graph.ler(access, conta, de, gid, texto=True)
-        extras = anexos_extras(await graph.listar_anexos(access, conta, de, gid))
+        anexos = (await graph.listar_anexos(access, conta, de, gid))
         pend = await conn.fetchval(
             "INSERT INTO public.email_pendentes (user_id, agent_id, caixa_de, para, cc, graph_id, hash, "
             "assinatura) VALUES ($1::uuid, $2, $3, $4::text[], $5::text[], $6, $7, $8) RETURNING id::text",
-            dono, agent_id, de, para, cc, gid, hash_rascunho(de, relido, extras), ass is not None)
+            dono, agent_id, de, para, cc, gid, hash_rascunho(de, relido, anexos), ass is not None)
         # O cartão é uma mensagem do agente na conversa: push e tempo real vêm
         # dos triggers que já existem (`trg_push_pendente`, `trg_notificar_*`).
         conv = await conn.fetchval(

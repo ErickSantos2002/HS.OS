@@ -168,11 +168,11 @@ async def _rascunho(conn, p: dict) -> tuple[str, str, dict]:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
     try:
         msg = await graph.ler(access, conta, p["caixa_de"], p["graph_id"], texto=True)
-        extras = anexos_extras(await graph.listar_anexos(access, conta, p["caixa_de"], p["graph_id"]))
+        anexos = (await graph.listar_anexos(access, conta, p["caixa_de"], p["graph_id"]))
     except graph.ErroGraph as e:
         raise HTTPException(status.HTTP_409_CONFLICT,
                             "O rascunho não está mais no Outlook (apagado ou movido).") from e
-    return access, conta, msg, extras
+    return access, conta, msg, anexos
 
 
 @router.get("/pendentes/{pend_id}")
@@ -183,9 +183,9 @@ async def ver_pendente(pend_id: str, usuario: Usuario = Depends(usuario_atual)):
                  "assinatura": bool(p.get("assinatura"))}
         if p["status"] != "pendente":
             return saida
-        _, _, msg, extras = await _rascunho(conn, p)
-    return {**saida, **conteudo_do_rascunho(msg, extras),
-            "hash": hash_rascunho(p["caixa_de"], msg, extras)}
+        _, _, msg, anexos = await _rascunho(conn, p)
+    return {**saida, **conteudo_do_rascunho(msg, anexos),
+            "hash": hash_rascunho(p["caixa_de"], msg, anexos)}
 
 
 class EnviarIn(BaseModel):
@@ -199,11 +199,11 @@ async def enviar_pendente(pend_id: str, dados: EnviarIn, usuario: Usuario = Depe
         p = await _pendente_do_dono(conn, pend_id, usuario)
         if p["status"] != "pendente":
             raise HTTPException(status.HTTP_409_CONFLICT, f"Este e-mail já está {p['status']}.")
-        access, conta, msg, extras = await _rascunho(conn, p)
-        if hash_rascunho(p["caixa_de"], msg, extras) != dados.hash:
+        access, conta, msg, anexos = await _rascunho(conn, p)
+        if hash_rascunho(p["caixa_de"], msg, anexos) != dados.hash:
             raise HTTPException(status.HTTP_409_CONFLICT,
                                 "O rascunho mudou desde que você abriu. Revise antes de enviar.")
-        c = conteudo_do_rascunho(msg, extras)
+        c = conteudo_do_rascunho(msg, anexos)
         # ⚠️ O 502 sai FORA da transação: dentro dela o rollback desfazia o
         # 'erro' e o e-mail voltava a 'pendente' (revisão de segurança).
         falha: str | None = None
