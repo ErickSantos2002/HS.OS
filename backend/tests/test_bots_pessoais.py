@@ -94,7 +94,7 @@ def test_arquivos_do_bot():
     assert "André Luiz Neri de Medeiros" in arq["USER.md"]
     assert "servicos03@healthsafetytech.com" in arq["USER.md"]
     assert "André-bot" in arq["IDENTITY.md"]
-    assert "não tenho acesso" in arq["SOUL.md"]
+    assert "Não tenho acesso a nada além delas" in " ".join(arq["SOUL.md"].split())
     assert "avisar_administrador" in arq["SOUL.md"]
     assert "Não afirmo o que não sei" in arq["SOUL.md"]
     # Nada de domínio de especialista vazando no template.
@@ -218,3 +218,16 @@ def test_agents_md_aponta_para_as_ferramentas():
     `faturamento`): um ponteiro curto nos sete arquivos."""
     a = arquivos_do_bot({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"})["AGENTS.md"]
     assert "lembrar" in a and "taskhs_minhas" in a
+
+
+def test_soul_nao_diz_mais_que_nao_tem_acesso():
+    """13:08 de 05/11: o SOUL da casca dizia "não tenho acesso a nenhum sistema"
+    e o bot repetia isso com as ferramentas na mão, até se corrigir sozinho."""
+    s = arquivos_do_bot({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"})["SOUL.md"]
+    assert "não tenho acesso a nenhum sistema" not in s.lower()
+    assert "ferramentas" in s
+
+
+def test_agents_md_diz_que_ele_ve_a_propria_memoria():
+    a = arquivos_do_bot({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"})["AGENTS.md"]
+    assert "MEMORY.md" in a

@@ -27,9 +27,22 @@ async def _taskhs_mover(email, bot, p, dono=None) -> str:
 
 
 async def _taskhs_criar(email, bot, p, dono=None) -> str:
+    """⚠️ O TaskHS NÃO põe quem cria como membro — o card 2534 nasceu sem
+    ninguém e o bot afirmou "responsável: você". Aqui o dono entra como membro,
+    que é o "responsável" no TaskHS, e o card passa a aparecer em "minhas"."""
     corpo = {k: p[k] for k in ("title", "description", "priority", "due_date") if p.get(k) is not None}
-    r = await taskhs.chamar(email, bot, "POST", f"/lists/{int(p['list_id'])}/cards", json=corpo, dono=dono)
-    return f"Tarefa criada (id {(r or {}).get('id')})."
+    lid = int(p["list_id"])
+    r = await taskhs.chamar(email, bot, "POST", f"/lists/{lid}/cards", json=corpo, dono=dono)
+    cid = (r or {}).get("id")
+    if not cid:
+        return "Tarefa criada."
+    try:
+        eu = await taskhs.chamar(email, bot, "GET", "/auth/me", dono=dono)
+        await taskhs.chamar(email, bot, "POST", f"/lists/{lid}/cards/{cid}/members/{int(eu['id'])}",
+                            dono=dono)
+        return f"Tarefa criada (id {cid}), com você como membro."
+    except (taskhs.ErroSistema, KeyError, TypeError, ValueError):
+        return f"Tarefa criada (id {cid}), mas não consegui pôr você como membro — ponha no TaskHS."
 
 
 async def _taskhs_atualizar(email, bot, p, dono=None) -> str:

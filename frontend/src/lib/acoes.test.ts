@@ -18,6 +18,6 @@ describe("cartão de ação", () => {
     expect(camposDaAcao("atualizar", { list_id: 3, card_id: 9, campos: { done: true } })).toEqual([
       ["Tarefa", "card 9 (lista 3)"], ["Concluída", "sim"]]);
     expect(camposDaAcao("criar", { list_id: 3, title: "Nova", priority: "high" })).toEqual([
-      ["Na lista", "3"], ["Título", "Nova"], ["Prioridade", "high"]]);
+      ["Na lista", "3"], ["Título", "Nova"], ["Membro", "você"], ["Prioridade", "high"]]);
   });
 });

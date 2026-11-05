@@ -46,7 +46,7 @@ export function camposDaAcao(acao: string, p: Record<string, unknown>): [string,
   if (acao === "atualizar")
     return [tarefa, ...Object.entries((p.campos as Record<string, unknown>) ?? {}).map(([k, x]) => [CAMPO[k] ?? k, v(x)] as [string, string])];
   if (acao === "criar") {
-    const out: [string, string][] = [["Na lista", v(p.list_id)], ["Título", v(p.title)]];
+    const out: [string, string][] = [["Na lista", v(p.list_id)], ["Título", v(p.title)], ["Membro", "você"]];
     if (p.description) out.push(["Descrição", v(p.description)]);
     if (p.priority) out.push(["Prioridade", v(p.priority)]);
     if (p.due_date) out.push(["Prazo", v(p.due_date)]);
