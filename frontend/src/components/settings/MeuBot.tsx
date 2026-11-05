@@ -9,6 +9,7 @@ import { Upload } from "lucide-react";
 import { toast } from "sonner";
 import { api, ErroApi } from "@/lib/api";
 import { enviarArquivo, urlPublica } from "@/lib/storage";
+import { AvatarCropDialog } from "@/components/AvatarCropDialog";
 
 interface MeuBotDados { agent_id: string; nome: string; prefixo: string; sufixo: string; avatar_url: string | null }
 
@@ -17,6 +18,8 @@ export default function MeuBot() {
   const [nome, setNome] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [versao, setVersao] = useState(0);   // força recarregar a foto depois de trocar
+  // Igual à foto pessoal: escolhe a imagem, ajusta o corte, e só então envia.
+  const [fotoEmAjuste, setFotoEmAjuste] = useState<string | null>(null);
 
   useEffect(() => {
     api<MeuBotDados>("/bots/meu").then((d) => { setB(d); setNome(d.prefixo); }).catch(() => setB(null));
@@ -35,18 +38,26 @@ export default function MeuBot() {
     }
   };
 
-  const foto = async (f: File | undefined) => {
+  const escolher = (f: File | undefined) => {
     if (!f) return;
-    const ext = (f.type.split("/")[1] || "png").replace("jpeg", "jpg");
-    if (!["png", "jpg", "webp", "gif"].includes(ext) || f.size > 1_000_000) {
-      toast.error("Use PNG, JPG, WEBP ou GIF de até 1 MB.");
+    if (!f.type.startsWith("image/") || f.size > 8_000_000) {
+      toast.error("Escolha uma imagem de até 8 MB.");
       return;
     }
+    const leitor = new FileReader();
+    leitor.onload = () => setFotoEmAjuste(String(leitor.result));
+    leitor.readAsDataURL(f);
+  };
+
+  // O corte sai como PNG redondo de 512×512 (o mesmo da foto pessoal).
+  const enviarAjustada = async (dataUrl: string) => {
     setOcupado(true);
     try {
-      await enviarArquivo("agent-files", `avatars/${b.agent_id}.${ext}`, f);
-      await salvar({ avatar_url: urlPublica("agent-files", `avatars/${b.agent_id}.${ext}`) });
+      const blob = await (await fetch(dataUrl)).blob();
+      await enviarArquivo("agent-files", `avatars/${b.agent_id}.png`, new File([blob], `${b.agent_id}.png`, { type: "image/png" }));
+      await salvar({ avatar_url: urlPublica("agent-files", `avatars/${b.agent_id}.png`) });
       setVersao(Date.now());
+      setFotoEmAjuste(null);
     } catch (e) {
       toast.error(e instanceof ErroApi ? e.message : "Não consegui enviar a foto.");
       setOcupado(false);
@@ -58,7 +69,7 @@ export default function MeuBot() {
       <label className="relative h-12 w-12 shrink-0 cursor-pointer overflow-hidden rounded-full border border-border/40 bg-background">
         {b.avatar_url ? <img src={versao ? `${b.avatar_url}?v=${versao}` : b.avatar_url} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full w-full items-center justify-center text-xl">🤖</span>}
         <span className="absolute inset-x-0 bottom-0 flex justify-center bg-black/50 py-0.5"><Upload className="h-3 w-3 text-white" /></span>
-        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" disabled={ocupado} onChange={(e) => void foto(e.target.files?.[0])} />
+        <input type="file" accept="image/*" className="hidden" disabled={ocupado} onChange={(e) => { escolher(e.target.files?.[0]); e.target.value = ""; }} />
       </label>
       <div className="min-w-0 flex-1">
         <h3 className="text-sm font-display font-semibold text-foreground">Meu bot</h3>
@@ -72,6 +83,13 @@ export default function MeuBot() {
         </div>
         <p className="mt-1 text-[11px] text-muted-foreground">Clique na foto para trocar. O time e os outros agentes passam a conhecê-lo por esse nome.</p>
       </div>
+      <AvatarCropDialog
+        open={!!fotoEmAjuste}
+        onOpenChange={(aberto) => { if (!aberto) setFotoEmAjuste(null); }}
+        initialImage={fotoEmAjuste}
+        title="Ajustar foto do bot"
+        onConfirm={enviarAjustada}
+      />
     </div>
   );
 }
