@@ -14,20 +14,34 @@ import re
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.bots_pessoais import arquivos_do_bot
+from app.bots_pessoais import SUFIXO_EXIBICAO, SUFIXOS_CONHECIDOS, arquivos_do_bot
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bots", tags=["bots"])
 
-_NOME = re.compile(r"^[\w À-ÿ.\-]{2,30}$")
+_PREFIXO = re.compile(r"^[A-Za-zÀ-ÿ0-9 .]{2,20}$")
 
 
-def validar_nome(nome: str) -> str:
-    n = " ".join((nome or "").split())
-    if not _NOME.match(n):
-        raise ValueError("Use de 2 a 30 caracteres: letras, números, espaço, ponto ou hífen.")
+def validar_prefixo(prefixo: str) -> str:
+    """Só a parte antes do sufixo da empresa. Sem hífen: o sufixo é fixo."""
+    p = " ".join((prefixo or "").split())
+    if not _PREFIXO.match(p):
+        raise ValueError("Use de 2 a 20 caracteres: letras, números, espaço ou ponto (o sufixo é fixo).")
+    return p
+
+
+def nome_com_sufixo(prefixo: str) -> str:
+    return f"{prefixo}{SUFIXO_EXIBICAO}"
+
+
+def prefixo_de(nome: str, sufixo: str = SUFIXO_EXIBICAO) -> str:
+    """O que a pessoa escolheu, sem o sufixo — o atual ou qualquer um que já existiu."""
+    n = (nome or "").strip()
+    for suf in (sufixo, *SUFIXOS_CONHECIDOS):
+        if suf and n.endswith(suf):
+            return n[: -len(suf)]
     return n
 
 
@@ -52,11 +66,12 @@ async def _meu(conn, usuario: Usuario) -> dict:
 async def ver_meu_bot(usuario: Usuario = Depends(usuario_atual)):
     async with sessao(role="service_role") as conn:
         b = await _meu(conn, usuario)
-    return {"agent_id": b["agent_id"], "nome": b["name"], "avatar_url": b["avatar_url"]}
+    return {"agent_id": b["agent_id"], "nome": b["name"], "prefixo": prefixo_de(b["name"]),
+            "sufixo": SUFIXO_EXIBICAO, "avatar_url": b["avatar_url"]}
 
 
 class MeuBotIn(BaseModel):
-    nome: str | None = None
+    prefixo: str | None = None
     avatar_url: str | None = None
 
 
@@ -83,9 +98,9 @@ async def alterar_meu_bot(dados: MeuBotIn, usuario: Usuario = Depends(usuario_at
     async with sessao(role="service_role") as conn:
         b = await _meu(conn, usuario)
         nome = b["name"]
-        if dados.nome is not None:
+        if dados.prefixo is not None:
             try:
-                nome = validar_nome(dados.nome)
+                nome = nome_com_sufixo(validar_prefixo(dados.prefixo))
             except ValueError as e:
                 raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
         avatar = b["avatar_url"]
@@ -103,4 +118,5 @@ async def alterar_meu_bot(dados: MeuBotIn, usuario: Usuario = Depends(usuario_at
             raise HTTPException(status.HTTP_502_BAD_GATEWAY,
                                 "O nome foi salvo, mas o bot ainda não se apresenta com ele. Tente de novo.") from e
         asyncio.create_task(_atualizar_times())
-    return {"agent_id": b["agent_id"], "nome": nome, "avatar_url": avatar}
+    return {"agent_id": b["agent_id"], "nome": nome, "prefixo": prefixo_de(nome),
+            "sufixo": SUFIXO_EXIBICAO, "avatar_url": avatar}

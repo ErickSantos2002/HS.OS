@@ -52,10 +52,15 @@ async def main() -> int:
     ap.add_argument("--reescrever-agents-md", action="store_true",
                     help="regrava SÓ o AGENTS.md dos bots existentes (template novo, "
                          "preserva o bloco da empresa); com --so, só aquela pessoa")
+    ap.add_argument("--trocar-sufixo", metavar="NOVO",
+                    help="renomeia TODOS os bots trocando o sufixo (ex.: -Safi), mantendo o "
+                         "prefixo que cada pessoa escolheu; regrava IDENTITY/SOUL e o bloco do time")
     ap.add_argument("--reescrever-soul", action="store_true",
                     help="regrava SÓ o SOUL.md dos bots existentes com o template atual")
     a = ap.parse_args()
 
+    if a.trocar_sufixo:
+        return await _trocar_sufixo(a.trocar_sufixo, a.aplicar)
     if a.reescrever_agents_md:
         return await _reescrever_agents_md(a.aplicar, a.so)
     if a.reescrever_soul:
@@ -139,6 +144,36 @@ async def _reescrever_agents_md(aplicar: bool, so: str | None, arquivo: str = "A
     if not aplicar:
         print("(ensaio — nada foi escrito)")
     return 1 if falhas else 0
+
+
+async def _trocar_sufixo(novo: str, aplicar: bool) -> int:
+    """⚠️ Mude também `SUFIXO_EXIBICAO` em `app/bots_pessoais.py` (e faça deploy):
+    senão o próximo "Salvar nome" no Perfil volta ao sufixo antigo."""
+    from app import time_da_empresa
+    from app.bots_pessoais import SUFIXO_EXIBICAO
+    from app.routers.meu_bot import prefixo_de
+    if novo != SUFIXO_EXIBICAO:
+        print(f"⚠️  SUFIXO_EXIBICAO no código ainda é {SUFIXO_EXIBICAO!r}; troque para {novo!r} e faça deploy.")
+    deps = _Deps()
+    async with sessao(role="service_role") as conn:
+        linhas = await conn.fetch(
+            "SELECT a.agent_id, a.name, p.id::text AS id, p.full_name, p.email, p.departamento "
+            "  FROM public.agent_profiles a JOIN public.profiles p ON p.id = a.dono_id ORDER BY a.agent_id")
+        for l in linhas:
+            nome = prefixo_de(l["name"]) + novo
+            print(f"  {l['agent_id']:16} {l['name']} → {nome}")
+            if aplicar and nome != l["name"]:
+                await conn.execute("UPDATE public.agent_profiles SET name = $2 WHERE agent_id = $1",
+                                   l["agent_id"], nome)
+                arq = arquivos_do_bot(dict(l), nome_bot=nome)
+                for f in ("IDENTITY.md", "SOUL.md"):
+                    await deps.chamar("agents.files.set", {"agentId": l["agent_id"], "name": f, "content": arq[f]})
+    if aplicar:
+        r = await time_da_empresa.atualizar(await time_da_empresa.agentes_com_bloco())
+        print("bloco do time:", r)
+    else:
+        print("(ensaio — nada foi escrito)")
+    return 0
 
 
 async def _rodar() -> int:

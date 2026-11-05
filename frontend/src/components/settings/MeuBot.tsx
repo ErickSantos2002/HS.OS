@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { api, ErroApi } from "@/lib/api";
 import { enviarArquivo, urlPublica } from "@/lib/storage";
 
-interface MeuBotDados { agent_id: string; nome: string; avatar_url: string | null }
+interface MeuBotDados { agent_id: string; nome: string; prefixo: string; sufixo: string; avatar_url: string | null }
 
 export default function MeuBot() {
   const [b, setB] = useState<MeuBotDados | null>(null);
@@ -19,15 +19,15 @@ export default function MeuBot() {
   const [versao, setVersao] = useState(0);   // força recarregar a foto depois de trocar
 
   useEffect(() => {
-    api<MeuBotDados>("/bots/meu").then((d) => { setB(d); setNome(d.nome); }).catch(() => setB(null));
+    api<MeuBotDados>("/bots/meu").then((d) => { setB(d); setNome(d.prefixo); }).catch(() => setB(null));
   }, []);
   if (!b) return null;
 
-  const salvar = async (corpo: { nome?: string; avatar_url?: string }) => {
+  const salvar = async (corpo: { prefixo?: string; avatar_url?: string }) => {
     setOcupado(true);
     try {
       const d = await api<MeuBotDados>("/bots/meu", { method: "PATCH", body: corpo });
-      setB(d); setNome(d.nome); toast.success("Seu bot foi atualizado.");
+      setB(d); setNome(d.prefixo); toast.success("Seu bot foi atualizado.");
     } catch (e) {
       toast.error(e instanceof ErroApi ? e.message : "Não consegui salvar.");
     } finally {
@@ -63,8 +63,12 @@ export default function MeuBot() {
       <div className="min-w-0 flex-1">
         <h3 className="text-sm font-display font-semibold text-foreground">Meu bot</h3>
         <div className="mt-1 flex gap-2">
-          <input value={nome} maxLength={30} onChange={(e) => setNome(e.target.value)} className="min-w-0 flex-1 rounded-md border border-border/40 bg-background px-2 py-1 text-sm text-foreground" />
-          <button disabled={ocupado || nome.trim() === b.nome} onClick={() => void salvar({ nome })} className="shrink-0 rounded-full bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-50">Salvar nome</button>
+          {/* Só o prefixo é da pessoa; o sufixo é da empresa e fica fixo ao lado. */}
+          <div className="flex min-w-0 flex-1 items-center rounded-md border border-border/40 bg-background">
+            <input value={nome} maxLength={20} onChange={(e) => setNome(e.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-1 text-sm text-foreground outline-none" />
+            <span className="shrink-0 select-none pr-2 text-sm text-muted-foreground">{b.sufixo}</span>
+          </div>
+          <button disabled={ocupado || nome.trim() === b.prefixo} onClick={() => void salvar({ prefixo: nome })} className="shrink-0 rounded-full bg-primary px-3 py-1 text-xs text-primary-foreground disabled:opacity-50">Salvar nome</button>
         </div>
         <p className="mt-1 text-[11px] text-muted-foreground">Clique na foto para trocar. O time e os outros agentes passam a conhecê-lo por esse nome.</p>
       </div>
