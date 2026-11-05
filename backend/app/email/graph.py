@@ -72,12 +72,13 @@ async def _pedir(metodo: str, url: str, access: str | None = None, **kw) -> dict
 
 # ── OAuth ────────────────────────────────────────────────────────────────────
 
-def url_autorizacao(state: str) -> str:
-    return f"{_base_login()}/authorize?" + urlencode({
-        "client_id": settings.MS_CLIENT_ID, "response_type": "code",
-        "redirect_uri": settings.redirect_email, "response_mode": "query",
-        "scope": ESCOPOS_EMAIL, "state": state, "prompt": "select_account",
-    })
+def url_autorizacao(state: str, login_hint: str | None = None) -> str:
+    p = {"client_id": settings.MS_CLIENT_ID, "response_type": "code",
+         "redirect_uri": settings.redirect_email, "response_mode": "query",
+         "scope": ESCOPOS_EMAIL, "state": state, "prompt": "select_account"}
+    if login_hint:
+        p["login_hint"] = login_hint
+    return f"{_base_login()}/authorize?" + urlencode(p)
 
 
 async def _token(dados: dict) -> dict:

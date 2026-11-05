@@ -31,6 +31,8 @@ class Conn:
         self.sql.append(sql)
         if "email_ligado" in sql:
             return self.bot
+        if "FROM public.profiles" in sql:
+            return "ti@healthsafetytech.com"
         return None
 
     async def fetchrow(self, sql, *a):
@@ -121,3 +123,21 @@ def test_callback_cancelado(conn, monkeypatch):
     _cb(conn, monkeypatch)
     r = asyncio.run(rota.callback(code=None, state="abc", error="access_denied"))
     assert "email=cancelado" in r.headers["location"]
+
+
+def test_conta_de_outra_pessoa_nao_e_gravada(conn, monkeypatch):
+    """CSRF de vínculo: A gera o link para si e faz B autorizar. Sem esta
+    checagem o refresh de B seria gravado em A, e o bot de A leria o e-mail de B."""
+    _cb(conn, monkeypatch)
+
+    async def trocar(code):
+        return {"access": "a", "refresh": "r", "conta": "vitima@healthsafetytech.com"}
+    monkeypatch.setattr(rota.graph, "trocar_code", trocar)
+    r = asyncio.run(rota.callback(code="c", state="abc", error=None))
+    assert "email=erro_conta" in r.headers["location"]
+    assert conn.gravado is None
+
+
+def test_url_leva_login_hint(conn):
+    r = asyncio.run(rota.conectar(ERICK))
+    assert "login_hint=ti%40healthsafetytech.com" in r["url"]

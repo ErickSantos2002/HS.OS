@@ -48,7 +48,7 @@ async def conectar(usuario: Usuario = Depends(usuario_atual)):
         await conn.execute(
             "INSERT INTO public.email_oauth_estados (state, user_id) VALUES ($1, $2::uuid)",
             _hash(state), usuario.id)
-    return {"url": graph.url_autorizacao(state)}
+    return {"url": graph.url_autorizacao(state, login_hint=usuario.email)}
 
 
 @router.get("/oauth/callback")
@@ -72,6 +72,15 @@ async def callback(code: str | None = Query(default=None), state: str | None = Q
         logger.error("E-mail: troca do code falhou: %s", e)
         return _voltar("erro_microsoft")
     async with sessao(role="service_role") as conn:
+        # ⚠️ CSRF de vínculo: A gera o link para si e faz B autorizar. O state é
+        # de A, a conta é de B — sem esta checagem o bot de A leria o e-mail de
+        # B. Só aceita a conta Microsoft com o MESMO e-mail do usuário do HS.OS.
+        meu = await conn.fetchval("SELECT lower(email) FROM public.profiles WHERE id = $1::uuid",
+                                  linha["user_id"])
+        if not meu or (t["conta"] or "").lower() != meu:
+            logger.warning("E-mail: conta Microsoft de outra pessoa recusada para %s",
+                           linha["user_id"])
+            return _voltar("erro_conta")
         await contas.guardar_conta(conn, linha["user_id"], t["conta"], t["refresh"])
         await contas.evento(conn, linha["user_id"], None, "conectar", t["conta"])
     logger.info("E-mail conectado para %s", linha["user_id"])
