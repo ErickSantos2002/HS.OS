@@ -117,14 +117,14 @@ async def listar(access, conta, caixa, pasta="inbox", desde=None, busca=None, li
         params["$orderby"] = "receivedDateTime desc"
         if desde:
             params["$filter"] = f"receivedDateTime ge {desde}"
-    corpo = await _pedir("GET", f"{_caixa(caixa, conta)}/mailFolders/{quote(pasta or 'inbox')}/messages",
+    corpo = await _pedir("GET", f"{_caixa(caixa, conta)}/mailFolders/{quote(pasta or 'inbox', safe='')}/messages",
                          access, params=params,
                          headers={"ConsistencyLevel": "eventual"} if busca else {})
     return corpo.get("value") or []
 
 
 async def ler(access, conta, caixa, mensagem_id) -> dict:
-    return await _pedir("GET", f"{_caixa(caixa, conta)}/messages/{quote(mensagem_id)}", access,
+    return await _pedir("GET", f"{_caixa(caixa, conta)}/messages/{quote(mensagem_id, safe='')}", access,
                         params={"$select": "id,subject,from,toRecipients,ccRecipients,"
                                            "receivedDateTime,body,hasAttachments"})
 
@@ -147,11 +147,11 @@ async def criar_rascunho(access, conta, de, para, cc, assunto, corpo) -> str:
 
 
 async def enviar_rascunho(access, conta, de, mensagem_id) -> None:
-    await _pedir("POST", f"{_caixa(de, conta)}/messages/{quote(mensagem_id)}/send", access)
+    await _pedir("POST", f"{_caixa(de, conta)}/messages/{quote(mensagem_id, safe='')}/send", access)
 
 
 async def apagar(access, conta, de, mensagem_id) -> None:
-    await _pedir("DELETE", f"{_caixa(de, conta)}/messages/{quote(mensagem_id)}", access)
+    await _pedir("DELETE", f"{_caixa(de, conta)}/messages/{quote(mensagem_id, safe='')}", access)
 
 
 async def enviar_direto(access, conta, de, para, assunto, corpo) -> None:

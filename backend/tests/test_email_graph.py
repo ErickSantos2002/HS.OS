@@ -48,3 +48,15 @@ def test_erro_nao_carrega_token(monkeypatch):
         asyncio.run(g.enviar_rascunho("tok-secreto", CONTA, "ti@healthsafety.com.br", "m1"))
     assert e.value.status == 403 and "ErrorSendAsDenied" in str(e.value)
     assert "tok-secreto" not in str(e.value)
+
+
+def test_id_e_pasta_nao_escapam_do_caminho(monkeypatch):
+    """O id e a pasta vêm do agente — e o agente lê e-mail de terceiros.
+    `../` não pode virar outro recurso do Graph."""
+    reqs = []
+    monkeypatch.setattr(g, "_transporte", _transporte(reqs))
+    asyncio.run(g.ler("tok", CONTA, CONTA, "../../users/ceo@x.com/messages/1"))
+    asyncio.run(g.listar("tok", CONTA, CONTA, "inbox/../../users/ceo@x.com", None, None, 5))
+    for req in reqs:
+        cru = req.url.raw_path.decode()
+        assert "/users/ceo" not in cru and "/../" not in cru, cru
