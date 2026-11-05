@@ -18,6 +18,7 @@ sem gateway nem banco — ver `tests/test_bots_pessoais_criacao.py`.
 from __future__ import annotations
 
 import logging
+from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -148,6 +149,10 @@ async def criar_bot(user_id: str, deps=None) -> dict:
     if linha and no_gw and bot_esta_fechado(no_gw.get("tools") or {}, _servidores(conf)):
         return {**saida, "resultado": "já existia"}
     adotado = bool(linha or no_gw)
+    # ⚠️ Desfazer é só para o que ESTA chamada criou. Um bot que já existia (em
+    # uso, com MEMORY.md e o bloco da empresa no AGENTS.md) não é apagado por
+    # um timeout ao refechá-lo — revisão final de 05/11/2026.
+    criou = False
 
     try:
         if not no_gw:
@@ -156,14 +161,19 @@ async def criar_bot(user_id: str, deps=None) -> dict:
             await deps.chamar("agents.create", {
                 "name": aid, "workspace": _workspace(aid), "model": MODELO, "emoji": EMOJI,
             })
+            criou = True
             conf, _ = await deps.config()
             if not _no_gateway(conf, aid):
                 raise RuntimeError(f"agents.create respondeu, mas {aid} não apareceu na config")
 
         await deps.inserir(aid, perfil, nome_do_bot(perfil.get("full_name") or ""))
 
-        for nome, conteudo in arquivos_do_bot(perfil).items():
-            await deps.chamar("agents.files.set", {"agentId": aid, "name": nome, "content": conteudo})
+        # Bot que já tinha linha e agente é bot vivo: os arquivos são dele.
+        # Só o recém-criado (ou o que ficou pela metade, sem linha) recebe o template.
+        if criou or not linha:
+            for nome, conteudo in arquivos_do_bot(perfil).items():
+                await deps.chamar("agents.files.set",
+                                  {"agentId": aid, "name": nome, "content": conteudo})
 
         conf, base_hash = await deps.config()
         servidores = _servidores(conf)
@@ -175,9 +185,13 @@ async def criar_bot(user_id: str, deps=None) -> dict:
             lambda c: bot_esta_fechado((_no_gateway(c, aid) or {}).get("tools") or {}, servidores),
         )
     except Exception as e:  # noqa: BLE001
-        logger.error("Bot %s não fechou — desfazendo: %s", aid, e)
-        if not await deps.desfazer(aid):
-            logger.error("Bot %s ficou no gateway sem escopo — remova à mão", aid)
+        if criou:
+            logger.error("Bot %s não fechou — desfazendo: %s", aid, e)
+            if not await deps.desfazer(aid):
+                logger.error("Bot %s ficou no gateway sem escopo — remova à mão", aid)
+        else:
+            logger.error("Bot %s (já existia) não fechou; NADA foi apagado — "
+                         "rode de novo: %s", aid, e)
         return {**saida, "motivo": str(e)[:300]}
 
     logger.info("Bot pessoal %s %s para %s", aid, "adotado" if adotado else "criado", user_id)
@@ -185,7 +199,9 @@ async def criar_bot(user_id: str, deps=None) -> dict:
 
 
 class BotsIn(BaseModel):
-    user_ids: list[str]
+    # UUID validado na entrada: id malformado estouraria no `$1::uuid` no meio
+    # do lote, depois de alguns bots já criados.
+    user_ids: list[UUID]
 
 
 @router.post("/bots-pessoais")
@@ -195,4 +211,4 @@ async def criar_bots(dados: BotsIn, _: Usuario = Depends(exige_papel("administra
     Em série de propósito: cada criação faz um `config.patch`, e o patch
     derruba o WebSocket no reload — em paralelo, um pisaria no hash do outro.
     """
-    return {"resultados": [await criar_bot(u) for u in dados.user_ids]}
+    return {"resultados": [await criar_bot(str(u)) for u in dados.user_ids]}

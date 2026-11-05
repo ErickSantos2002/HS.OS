@@ -67,6 +67,7 @@ import {
 } from "@/lib/connector-templates";
 import GuardrailsTokenCard from "./GuardrailsTokenCard";
 import { copyToClipboard } from "@/lib/clipboard";
+import { soEspecialistas } from "@/lib/bots-pessoais";
 
 type ConnectorKind = "api" | "mcp";
 
@@ -264,7 +265,8 @@ export default function ConnectorsTab() {
     if (!agentsRes.error && agentsRes.data) {
       // Mapear, não converter — ver o aviso em `AgentOption`.
       setAgents(
-        (agentsRes.data as Array<{ id?: unknown; name?: unknown }>)
+        // Bot pessoal não recebe conector — o backend também recusa (05/11/2026).
+        soEspecialistas(agentsRes.data as Array<{ id?: unknown; name?: unknown; donoId?: unknown }>)
           .map((a) => ({ id: String(a?.id ?? ""), name: String(a?.name ?? a?.id ?? "") }))
           .filter((a) => a.id),
       );
