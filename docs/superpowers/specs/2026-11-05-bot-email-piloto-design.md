@@ -20,6 +20,13 @@ O piloto é **só com o Erick** (`erick-bot`). Ao fim dele, o bot faz três cois
 
 ## Decisões do Erick
 
+- **Enviar pela caixa compartilhada entra no piloto** (decisão do Erick ao
+  conceder `Mail.Send.Shared`). A maioria das pessoas envia principalmente
+  pela `@healthsafety.com.br`. Por isso o cartão mostra o **De** em destaque.
+  Para isso funcionar, o Exchange precisa dar ao dono "Enviar como" (ou
+  "Enviar em nome de") na caixa; o piloto confere isso com a conta do Erick.
+  Sem a permissão, o Graph recusa e o cartão mostra o motivo.
+
 - O primeiro piloto é o e-mail, com o Erick.
 - Para o dono o envio sai direto; para outros, só com aprovação na tela.
 - A segunda caixa é compartilhada (confirmado por print do Outlook).
@@ -52,8 +59,6 @@ O piloto é **só com o Erick** (`erick-bot`). Ao fim dele, o bot faz três cois
 
 ## Não-objetivos
 
-- Enviar **como** a caixa compartilhada (send-as). No piloto tudo sai pela
-  conta principal.
 - Responder ou encaminhar a partir de um e-mail específico (reply/forward).
 - Anexos de e-mail, que ficam para depois.
 - Abrir para outras pessoas além do Erick. A estrutura é por pessoa, mas o
@@ -76,8 +81,9 @@ O piloto é **só com o Erick** (`erick-bot`). Ao fim dele, o bot faz três cois
 
 ## Restrições
 
-- **Microsoft Graph** com permissões **delegadas**: `User.Read`,
-  `offline_access`, `Mail.ReadWrite`, `Mail.Send`, `Mail.Read.Shared`. O
+- **Microsoft Graph** com permissões **delegadas** (concedidas em 05/11/2026,
+  com consentimento do admin): `User.Read`, `offline_access`, `Mail.ReadWrite`,
+  `Mail.Send`, `Mail.ReadWrite.Shared` e `Mail.Send.Shared`. O
   admin consente no tenant. Reaproveita o app do login do HS.OS no Entra ID;
   ver a seção do Entra abaixo.
 - O redirect da OAuth cai no **backend** (`hsosapi.healthsafetytech.com`). O
@@ -130,8 +136,9 @@ O botão "Desconectar" apaga o token.
   remetente, assunto, data, prévia curta e id.
 - `email_ler(caixa, id)`: o corpo em texto, cortado no teto, marcado como dado.
 - `email_enviar_para_mim(assunto, corpo)`: envia ao dono e só ao dono.
-- `email_preparar(para[], cc[]?, assunto, corpo)`: cria o rascunho no Outlook
-  da conta principal e uma linha "pendente" no HS.OS. O bot recebe "aguardando
+- `email_preparar(de, para[], cc[]?, assunto, corpo)`: `de` é uma das caixas
+  do dono (`email_caixas`). Cria o rascunho **na caixa de origem**
+  (`/users/{de}/messages`) e uma linha "pendente" no HS.OS. O bot recebe "aguardando
   aprovação de <dono>". Ele não tem ferramenta para enviar o rascunho.
 
 **Aprovar.** O cartão é uma **mensagem na conversa** (`conversations`, com um
