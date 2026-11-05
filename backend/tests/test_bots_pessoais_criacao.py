@@ -15,7 +15,7 @@ Async com `asyncio.run`, sem plugin; gateway e banco são falsos em memória.
 import asyncio
 import copy
 
-from app.bots_pessoais import ALERTA, bot_esta_fechado
+from app.bots_pessoais import ALERTA, bot_esta_fechado, tools_do_bot
 from app.routers.bots_pessoais import criar_bot
 
 SERVIDORES = {
@@ -41,6 +41,9 @@ class Falso:
 
     async def linha(self, agent_id):
         return self.linhas.get(agent_id)
+
+    async def bot_do_dono(self, user_id):
+        return next((l["agent_id"] for l in self.linhas.values() if l.get("dono_id") == user_id), None)
 
     async def inserir(self, agent_id, dono, nome_bot):
         self.log.append("INSERT")
@@ -184,3 +187,35 @@ def test_falha_ao_refechar_nunca_apaga_bot_existente():
     assert r["resultado"] == "falhou"
     assert f.desfeitos == []
     assert "andre-bot" in f.linhas
+
+
+def test_nicholson_fica_fora_tambem_pela_rota():
+    """A exclusão é decisão (05/11/2026) e valia só no script: chamar a rota com
+    o id dele criava o bot."""
+    nich = {**ANDRE, "id": "u-n", "full_name": "Nicholson Pimentel", "email": "np@healthsafetytech.com"}
+    f = Falso(perfis={"u-n": nich})
+    r = asyncio.run(criar_bot("u-n", f))
+    assert r["resultado"] == "falhou" and "especialistas" in r["motivo"]
+    assert f.log == []
+
+
+def test_agente_alheio_no_gateway_nao_e_adotado():
+    """Agente `andre-bot` no gateway SEM linha e com outro workspace não é
+    resto de execução nossa: adotá-lo sobrescreveria os arquivos de alguém."""
+    f = Falso(agentes=[{"id": "nina", "tools": {}},
+                       {"id": "andre-bot", "workspace": "/root/.openclaw/workspace-outro"}])
+    r = asyncio.run(criar_bot("u-andre", f))
+    assert r["resultado"] == "falhou" and "colisão" in r["motivo"]
+    assert f.log == []
+
+
+def test_pessoa_que_mudou_de_nome_mantem_o_bot():
+    """O nome é editável pela pessoa. Com outro primeiro nome, o id calculado
+    muda — mas o bot dela é o que já tem `dono_id` nela, não um novo."""
+    f = Falso(perfis={"u-andre": {**ANDRE, "full_name": "Luiz André"}},
+              linhas={"andre-bot": {"agent_id": "andre-bot", "dono_id": "u-andre"}},
+              agentes=[{"id": "nina", "tools": {}},
+                       {"id": "andre-bot", "tools": tools_do_bot(SERVIDORES)}])
+    r = asyncio.run(criar_bot("u-andre", f))
+    assert r["agent_id"] == "andre-bot" and r["resultado"] == "já existia"
+    assert "agents.create" not in f.log

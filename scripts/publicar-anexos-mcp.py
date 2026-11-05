@@ -127,7 +127,9 @@ def montar_patch(conf: dict, segredo: str, token: str = "") -> tuple[dict, dict]
     # perfil, não pelo sufixo `-bot` — este script não lê o banco, e o perfil
     # é o que de fato o separa (spec 2026-11-05-bots-pessoais-cascas). Ele
     # continua na lista abaixo: o deny dele também tem que negar as entradas
-    # dos outros.
+    # dos outros. ⚠️ Um ESPECIALISTA futuro com `profile: "minimal"` também
+    # ficaria sem anexos, em silêncio — se isso acontecer, cruze com o banco
+    # (`agent_profiles.dono_id`) em vez de afrouxar esta regra.
     ids = [str(a["id"]) for a in agentes
            if ((a.get("tools") or {}).get("profile")) != "minimal"]
     novos = montar_entradas(modelo, segredo, ids, token)

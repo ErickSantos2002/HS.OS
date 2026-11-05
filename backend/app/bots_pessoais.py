@@ -31,6 +31,11 @@ ALERTA = f"mcp__{SERVIDOR_ALERTA}__avisar_administrador"
 TRAVAS_DO_BOT = ("gateway", "sessions_send", "sessions_spawn", "skill_workshop", "cron")
 
 PERFIL = "minimal"
+
+# Decisão do Erick, 05/11/2026: o Nicholson continua só com os cinco
+# especialistas. Vale para a rota E para o script — antes morava só no script,
+# e a rota criava o bot dele se alguém a chamasse com o id.
+FORA_POR_DECISAO = frozenset({"np@healthsafetytech.com"})
 EMOJI = "🤖"
 
 
