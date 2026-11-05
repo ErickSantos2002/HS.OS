@@ -69,12 +69,21 @@ async def conferir_previstas(user_id: str, access: str, conta: str) -> int:
     async with sessao(role="service_role") as conn:
         previstas = [r["endereco"] for r in await conn.fetch(
             "SELECT endereco FROM public.email_caixas_previstas WHERE user_id = $1::uuid", user_id)]
+    from app.email.regras import validar_enderecos
     ok = 0
     for caixa in previstas:
-        if caixa.lower() == (conta or "").lower() or not await graph.conferir_caixa(access, conta, caixa):
+        try:
+            caixa = validar_enderecos([caixa])[0]
+        except ValueError:
+            continue
+        if caixa == (conta or "").lower() or not await graph.conferir_caixa(access, conta, caixa):
+            # Fica prevista: a permissão no Exchange pode vir depois.
             continue
         async with sessao(role="service_role") as conn:
             await conn.execute("INSERT INTO public.email_caixas (user_id, endereco) VALUES ($1::uuid, $2) "
-                               "ON CONFLICT DO NOTHING", user_id, caixa.lower())
+                               "ON CONFLICT DO NOTHING", user_id, caixa)
+            # Consumida: se o admin tirar a caixa depois, ela não volta sozinha.
+            await conn.execute("DELETE FROM public.email_caixas_previstas WHERE user_id = $1::uuid "
+                               "AND lower(endereco) = $2", user_id, caixa)
         ok += 1
     return ok
