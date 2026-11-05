@@ -136,6 +136,8 @@ async def definir_caixas(user_id: str, dados: CaixasIn,
             else:
                 recusadas.append(c)
         await conn.execute("DELETE FROM public.email_caixas WHERE user_id = $1::uuid", user_id)
+        # A lista do admin passa a ser esta: as previstas antigas não voltam.
+        await conn.execute("DELETE FROM public.email_caixas_previstas WHERE user_id = $1::uuid", user_id)
         for c in aceitas:
             await conn.execute("INSERT INTO public.email_caixas (user_id, endereco) "
                                "VALUES ($1::uuid, $2)", user_id, c)

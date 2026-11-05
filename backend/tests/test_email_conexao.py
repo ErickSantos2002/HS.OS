@@ -155,3 +155,18 @@ def test_callback_confere_as_caixas_previstas(conn, monkeypatch):
     monkeypatch.setattr(rota.contas, "conferir_previstas", conferir)
     asyncio.run(rota.callback(code="c", state="abc", error=None))
     assert conferidas == [("u-erick", "a", "ti@healthsafetytech.com")]
+
+
+def test_redefinir_caixas_apaga_as_previstas():
+    """Tirar uma caixa de alguém não pode ser desfeito na próxima reconexão
+    pela lista prevista antiga."""
+    import inspect
+    fonte = inspect.getsource(rota.definir_caixas)
+    assert "DELETE FROM public.email_caixas_previstas" in fonte
+
+
+def test_prevista_conferida_e_consumida():
+    import inspect
+    from app.email import contas
+    fonte = inspect.getsource(contas.conferir_previstas)
+    assert "DELETE FROM public.email_caixas_previstas" in fonte and "validar_enderecos" in fonte
