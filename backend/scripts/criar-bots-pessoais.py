@@ -111,7 +111,7 @@ async def _reescrever_agents_md(aplicar: bool, so: str | None, arquivo: str = "A
     deps = _Deps()
     async with sessao(role="service_role") as conn:
         linhas = await conn.fetch(
-            "SELECT a.agent_id, p.id::text AS id, p.full_name, p.email, p.departamento "
+            "SELECT a.agent_id, a.name AS nome_bot, p.id::text AS id, p.full_name, p.email, p.departamento "
             "  FROM public.agent_profiles a JOIN public.profiles p ON p.id = a.dono_id "
             " WHERE ($1::uuid IS NULL OR p.id = $1::uuid) ORDER BY a.agent_id", so)
     falhas = 0
@@ -119,7 +119,7 @@ async def _reescrever_agents_md(aplicar: bool, so: str | None, arquivo: str = "A
         r = await deps.chamar("agents.files.get", {"agentId": l["agent_id"], "name": arquivo})
         atual = ((r.get("file") or {}).get("content")) or ""
         novo = (agents_md_novo(dict(l), atual) if arquivo == "AGENTS.md"
-                else arquivos_do_bot(dict(l))[arquivo])
+                else arquivos_do_bot(dict(l), nome_bot=l["nome_bot"])[arquivo])
         if excede_o_teto(novo):
             print(f"  {l['agent_id']:16} NÃO: passaria do teto")
             falhas += 1

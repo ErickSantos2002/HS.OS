@@ -152,7 +152,7 @@ def _linha(valor: str | None, teto: int = _TETO_CAMPO) -> str:
     return t[:teto]
 
 
-def arquivos_do_bot(dono: dict) -> dict[str, str]:
+def arquivos_do_bot(dono: dict, nome_bot: str | None = None) -> dict[str, str]:
     """Os sete arquivos canônicos. Iguais para todos, preenchidos com o dono.
 
     Escritos pelo backend, sem LLM: o conteúdo não varia por pessoa o bastante
@@ -160,7 +160,8 @@ def arquivos_do_bot(dono: dict) -> dict[str, str]:
     """
     nome = _linha(dono.get("full_name"))
     primeiro = _primeiro_nome(nome)
-    bot = nome_do_bot(nome)
+    # Nome de exibição escolhido pela pessoa ("Gugu-bot"); sem ele, o padrão.
+    bot = _linha(nome_bot, 30) if (nome_bot or "").strip() else nome_do_bot(nome)
     email = _linha(dono.get("email"))
     setor = _linha(dono.get("departamento"))
 
