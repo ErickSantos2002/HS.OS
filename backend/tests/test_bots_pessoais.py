@@ -250,4 +250,13 @@ def test_bloco_do_hs_os_na_mensagem_do_dono_nao_e_invasao():
     bloco de formatação que o HS.OS põe em toda mensagem como injeção. Dado
     externo é o que volta das FERRAMENTAS; a mensagem do dono vale."""
     a = " ".join(arquivos_do_bot({"full_name": "Gustavo O", "email": "q@x.com"})["AGENTS.md"].split())
-    assert "volta das ferramentas" in a and "instruções de formatação" in a
+    assert "volta das ferramentas" in a and "instruções que o HS.OS anexa" in a
+
+
+def test_portugues_inclusive_para_recusar():
+    """05/11: o bot do Gustavo abriu com "I can't help with that." — recusa
+    pronta do modelo, em inglês, para alguém que só pediu um e-mail."""
+    arq = arquivos_do_bot({"full_name": "Gustavo O", "email": "q@x.com"})
+    a = " ".join(arq["AGENTS.md"].split())
+    s = " ".join(arq["SOUL.md"].split())
+    assert "inclusive para recusar" in s and "window.hsos" in a
