@@ -93,3 +93,10 @@ def test_timeout_nao_afirma_que_nao_foi_feito(chave, monkeypatch):
     with pytest.raises(taskhs.ErroSistema) as e:
         asyncio.run(taskhs.chamar("ti@healthsafetytech.com", "erick-bot", "POST", "/lists/1/cards"))
     assert "confira" in str(e.value)
+
+
+def test_chave_colada_com_aspas_funciona(monkeypatch):
+    """No EasyPanel a variável pode ser colada com as aspas do `.env`."""
+    k = Ed25519PrivateKey.generate()
+    monkeypatch.setattr(at.settings, "AGENTE_CHAVE_PRIVADA", '"' + _pem(k).replace("\n", "\\n") + '"')
+    assert at.token_de_agente("taskhs", "a@b.com", "x-bot")

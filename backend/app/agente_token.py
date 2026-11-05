@@ -29,7 +29,7 @@ class ErroToken(Exception):
 
 
 def _privada():
-    pem = (settings.AGENTE_CHAVE_PRIVADA or "").replace("\\n", "\n").strip()
+    pem = (settings.AGENTE_CHAVE_PRIVADA or "").strip().strip("\"'").replace("\\n", "\n").strip()
     if not pem:
         raise ErroToken("AGENTE_CHAVE_PRIVADA ausente — o bot não acessa os sistemas")
     return serialization.load_pem_private_key(pem.encode(), password=None)
