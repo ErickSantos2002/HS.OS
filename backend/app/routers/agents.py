@@ -79,6 +79,9 @@ class AgenteOut(BaseModel):
     # Ordem de exibição no catálogo. Sai do banco porque a ordem é curadoria —
     # ordenar por nome faria o líder aparecer no meio da lista.
     sortOrder: int | None = None
+    # Bot pessoal: a pessoa para quem ele trabalha (`agent_profiles.dono_id`).
+    # `None` = especialista. É por aqui que as telas os separam (05/11/2026).
+    donoId: str | None = None
 
 
 class ListaAgentesOut(BaseModel):
@@ -129,7 +132,7 @@ async def listar(
                    p.status, p.access_type, p.allowed_user_ids, p.department,
                    p.description, p.specialty, p.workspace, p.is_leader,
                    p.leader_id, p.is_official, p.color, p.sort_order,
-                   p.openclaw_id,
+                   p.openclaw_id, p.dono_id::text AS dono_id,
                    -- Presença: a tela derivava online/recente/offline da distância
                    -- até `latest_updated_at`. Sem este join todo mundo apareceria
                    -- offline.
@@ -206,6 +209,7 @@ async def listar(
                 isOfficial=bool(p.get("is_official")),
                 sortOrder=p.get("sort_order"),
                 color=p.get("color"),
+                donoId=p.get("dono_id"),
             )
         )
 
@@ -1660,7 +1664,10 @@ async def _atualizar_roster_do_lider(lider_id: str | None) -> None:
             "SELECT COALESCE(NULLIF(openclaw_id,''), agent_id) AS oid, name, specialty, "
             "       description, is_leader "
             "  FROM public.agent_profiles "
-            " WHERE status IS DISTINCT FROM 'inactive' ORDER BY is_leader DESC, name"
+            # ⚠️ Sem bot pessoal: são 23, e o AGENTS.md dela vive a ~500
+            # caracteres do teto — o roster os poria todos lá (05/11/2026).
+            " WHERE status IS DISTINCT FROM 'inactive' AND dono_id IS NULL "
+            " ORDER BY is_leader DESC, name"
         )
     if not linhas:
         return

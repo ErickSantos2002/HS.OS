@@ -26,6 +26,7 @@ interface RespostaAgentes {
     isLeader?: boolean;
     accessType?: string;
     allowedUserIds?: string[];
+    donoId?: string | null;
   }>;
   defaultId: string | null;
   gatewayOnline: boolean;
@@ -77,6 +78,8 @@ export interface GatewayAgent {
   accessType?: string;
   /** Ids de pessoa, quando `accessType` é `specific_users`. */
   allowedUserIds?: string[];
+  /** Bot pessoal: a pessoa para quem ele trabalha. `null` = especialista. */
+  donoId?: string | null;
 }
 
 function parseTools(raw: any): AgentTool[] {
@@ -235,6 +238,7 @@ async function fetchAgents(_userId?: string, _isAdmin?: boolean): Promise<Gatewa
     isLeader: !!a.isLeader,
     accessType: a.accessType ?? "all",
     allowedUserIds: Array.isArray(a.allowedUserIds) ? a.allowedUserIds.map(String) : [],
+    donoId: a.donoId ?? null,
   }));
 }
 

@@ -2,6 +2,7 @@ import { api } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { useAuthContext } from "@/contexts/auth-context";
 import { useAgents } from "@/hooks/use-agents";
+import { soEspecialistas } from "@/lib/bots-pessoais";
 import { useAllAvatars, getAgentAvatar } from "@/hooks/use-agent-avatar";
 import { getAgentDisplayName } from "@/lib/channel-agents";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -94,7 +95,8 @@ export default function ChannelMembersPanel({ channelId, channelCreatedBy, isDm 
       .filter((p: any) => !memberIds.has(p.id) && p.status !== "inactive")
       .map((p: any) => ({ id: p.id, name: p.full_name || p.email, type: "human" as const, avatar_url: p.avatar_url }));
 
-    const availableAgents = agents
+    // Bot pessoal não entra em canal — o backend recusa também.
+    const availableAgents = soEspecialistas(agents)
       .filter((agent) => !memberIds.has(agent.id))
       .map((agent) => ({
         id: agent.id,
