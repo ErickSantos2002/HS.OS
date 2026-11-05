@@ -66,3 +66,11 @@ def test_entrada_de_sistemas_e_negada_aos_outros():
     alheias = {f"hsos-bot-erick-bot__{f}" for f in FERRAMENTAS_BOT}
     assert alheias <= set(lista["nina"]["deny"]) and alheias <= set(lista["andre-bot"]["deny"])
     assert {f"mcp__hsos-bot-erick-bot__{f}" for f in FERRAMENTAS_BOT} <= set(lista["erick-bot"]["alsoAllow"])
+
+
+def test_segredo_vazio_recusa():
+    """Sem ANEXOS_MCP_SEGREDO a assinatura sai de segredo vazio: a entrada é
+    publicada e toda chamada dá 404 (o servidor recusa segredo vazio)."""
+    import pytest
+    with pytest.raises(ValueError, match="ANEXOS_MCP_SEGREDO"):
+        pub.montar_patch(_conf(), "", "tok", bots={"erick-bot"}, com_email={"erick-bot"})
