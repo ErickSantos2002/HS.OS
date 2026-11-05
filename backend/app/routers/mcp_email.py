@@ -25,7 +25,7 @@ from fastapi.responses import JSONResponse
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
 from app.email import contas, graph
-from app.email.regras import (como_dado_externo, escolher_caixa, hash_email, html_para_texto,
+from app.email.regras import (como_dado_externo, escolher_caixa, hash_rascunho, html_para_texto,
                               validar_enderecos)
 from app.integracoes import exige_segredo, ler_segredo
 from app.routers.mcp_anexos import assinatura_do_agente, turno_em_curso
@@ -147,10 +147,13 @@ async def _rodar(conn, agent_id: str, nome: str, args: dict, ctx: dict) -> str:
         cc = validar_enderecos(args.get("cc"), vazio_ok=True)
         assunto, corpo = str(args.get("assunto") or ""), str(args.get("corpo") or "")
         gid = await graph.criar_rascunho(access, conta, de, para, cc, assunto, corpo)
+        # O hash é o do rascunho RELIDO (o Graph normaliza o corpo) — o mesmo
+        # cálculo que o cartão e o "Enviar" fazem.
+        relido = await graph.ler(access, conta, de, gid, texto=True)
         pend = await conn.fetchval(
             "INSERT INTO public.email_pendentes (user_id, agent_id, caixa_de, para, cc, graph_id, hash) "
             "VALUES ($1::uuid, $2, $3, $4::text[], $5::text[], $6, $7) RETURNING id::text",
-            dono, agent_id, de, para, cc, gid, hash_email(de, para, cc, assunto, corpo))
+            dono, agent_id, de, para, cc, gid, hash_rascunho(de, relido))
         # O cartão é uma mensagem do agente na conversa: push e tempo real vêm
         # dos triggers que já existem (`trg_push_pendente`, `trg_notificar_*`).
         conv = await conn.fetchval(

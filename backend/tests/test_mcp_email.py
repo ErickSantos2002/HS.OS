@@ -81,6 +81,8 @@ def amb(monkeypatch):
     registra("criar_rascunho", "graph-1")
     registra("enviar_rascunho")
     registra("enviar_direto")
+    registra("ler", {"id": "graph-1", "subject": "Proposta", "toRecipients": [],
+                     "ccRecipients": [], "body": {"content": "Segue."}})
     return {"conn": c, "chamadas": chamadas, "estado": estado}
 
 

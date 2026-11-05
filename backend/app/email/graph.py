@@ -124,10 +124,12 @@ async def listar(access, conta, caixa, pasta="inbox", desde=None, busca=None, li
     return corpo.get("value") or []
 
 
-async def ler(access, conta, caixa, mensagem_id) -> dict:
+async def ler(access, conta, caixa, mensagem_id, texto: bool = False) -> dict:
+    """`texto=True` pede o corpo em texto puro (rascunho do cartão)."""
     return await _pedir("GET", f"{_caixa(caixa, conta)}/messages/{quote(mensagem_id, safe='')}", access,
                         params={"$select": "id,subject,from,toRecipients,ccRecipients,"
-                                           "receivedDateTime,body,hasAttachments"})
+                                           "receivedDateTime,body,hasAttachments"},
+                        headers={"Prefer": 'outlook.body-content-type="text"'} if texto else {})
 
 
 def _destinos(lista) -> list[dict]:

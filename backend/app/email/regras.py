@@ -77,3 +77,20 @@ def escolher_caixa(pedida: str | None, conta: str, extras) -> str:
     if p not in permitidas:
         raise ValueError(f"{p} não é uma caixa sua. Use uma de: {', '.join(sorted(permitidas))}")
     return p
+
+
+def conteudo_do_rascunho(msg: dict) -> dict:
+    """Para, cc, assunto e corpo como o Graph devolve o rascunho — é o que o
+    cartão mostra e o que o hash cobre."""
+    def ends(chave):
+        return [((r or {}).get("emailAddress") or {}).get("address", "") for r in msg.get(chave) or []]
+    return {"para": ends("toRecipients"), "cc": ends("ccRecipients"),
+            "assunto": msg.get("subject") or "",
+            "corpo": ((msg.get("body") or {}).get("content") or "")}
+
+
+def hash_rascunho(de: str, msg: dict) -> str:
+    """⚠️ Sempre do rascunho RELIDO, nunca do que o bot mandou: o Graph normaliza
+    o corpo, e comparar com a entrada daria "mudou" à toa."""
+    c = conteudo_do_rascunho(msg)
+    return hash_email(de, c["para"], c["cc"], c["assunto"], c["corpo"])

@@ -17,6 +17,7 @@ from app.config import settings
 from app.database import sessao
 from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.email import contas, graph
+from app.email.regras import conteudo_do_rascunho, hash_rascunho
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/email", tags=["email"])
@@ -133,3 +134,98 @@ async def definir_caixas(user_id: str, dados: CaixasIn,
             await conn.execute("INSERT INTO public.email_caixas (user_id, endereco) "
                                "VALUES ($1::uuid, $2)", user_id, c)
     return {"aceitas": aceitas, "recusadas": recusadas}
+
+
+# ── Aprovação: a única porta de saída para terceiros ─────────────────────────
+
+VALIDADE_PENDENTE = timedelta(hours=24)
+
+
+async def _pendente_do_dono(conn, pend_id: str, usuario: Usuario) -> dict:
+    """404 para quem não é o dono — não confirma que o pendente existe."""
+    try:
+        linha = await conn.fetchrow(
+            "SELECT id::text AS id, user_id::text AS user_id, caixa_de, graph_id, status, erro, "
+            "       criado_em FROM public.email_pendentes WHERE id = $1::uuid AND user_id = $2::uuid",
+            pend_id, usuario.id)
+    except Exception:  # noqa: BLE001 — id malformado
+        linha = None
+    if not linha:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "E-mail não encontrado.")
+    linha = dict(linha)
+    if linha["status"] == "pendente" and datetime.now(timezone.utc) - linha["criado_em"] > VALIDADE_PENDENTE:
+        await conn.execute("UPDATE public.email_pendentes SET status = 'vencido', decidido_em = now() "
+                           " WHERE id = $1::uuid AND status = 'pendente'", pend_id)
+        linha["status"] = "vencido"
+    return linha
+
+
+async def _rascunho(conn, p: dict) -> tuple[str, str, dict]:
+    try:
+        access, conta = await contas.access_token(conn, p["user_id"])
+    except contas.ErroConta as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
+    try:
+        msg = await graph.ler(access, conta, p["caixa_de"], p["graph_id"], texto=True)
+    except graph.ErroGraph as e:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "O rascunho não está mais no Outlook (apagado ou movido).") from e
+    return access, conta, msg
+
+
+@router.get("/pendentes/{pend_id}")
+async def ver_pendente(pend_id: str, usuario: Usuario = Depends(usuario_atual)):
+    async with sessao(role="service_role") as conn:
+        p = await _pendente_do_dono(conn, pend_id, usuario)
+        saida = {"id": p["id"], "status": p["status"], "erro": p["erro"], "de": p["caixa_de"]}
+        if p["status"] != "pendente":
+            return saida
+        _, _, msg = await _rascunho(conn, p)
+    return {**saida, **conteudo_do_rascunho(msg), "hash": hash_rascunho(p["caixa_de"], msg)}
+
+
+class EnviarIn(BaseModel):
+    hash: str
+
+
+@router.post("/pendentes/{pend_id}/enviar")
+async def enviar_pendente(pend_id: str, dados: EnviarIn, usuario: Usuario = Depends(usuario_atual)):
+    """Envia EXATAMENTE o que o cartão mostrou: relê o rascunho e confere o hash."""
+    async with sessao(role="service_role") as conn:
+        p = await _pendente_do_dono(conn, pend_id, usuario)
+        if p["status"] != "pendente":
+            raise HTTPException(status.HTTP_409_CONFLICT, f"Este e-mail já está {p['status']}.")
+        access, conta, msg = await _rascunho(conn, p)
+        if hash_rascunho(p["caixa_de"], msg) != dados.hash:
+            raise HTTPException(status.HTTP_409_CONFLICT,
+                                "O rascunho mudou desde que você abriu. Revise antes de enviar.")
+        c = conteudo_do_rascunho(msg)
+        try:
+            await graph.enviar_rascunho(access, conta, p["caixa_de"], p["graph_id"])
+        except graph.ErroGraph as e:
+            await conn.execute("UPDATE public.email_pendentes SET status = 'erro', erro = $2, "
+                               "decidido_em = now() WHERE id = $1::uuid", pend_id, str(e)[:300])
+            await contas.evento(conn, p["user_id"], None, "enviar_erro", p["caixa_de"], p["graph_id"])
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"A Microsoft recusou o envio: {e}") from e
+        await conn.execute("UPDATE public.email_pendentes SET status = 'enviado', decidido_em = now() "
+                           " WHERE id = $1::uuid", pend_id)
+        await contas.evento(conn, p["user_id"], None, "enviar", p["caixa_de"], p["graph_id"],
+                            [*c["para"], *c["cc"]])
+    return {"status": "enviado"}
+
+
+@router.post("/pendentes/{pend_id}/descartar")
+async def descartar_pendente(pend_id: str, usuario: Usuario = Depends(usuario_atual)):
+    async with sessao(role="service_role") as conn:
+        p = await _pendente_do_dono(conn, pend_id, usuario)
+        if p["status"] != "pendente":
+            raise HTTPException(status.HTTP_409_CONFLICT, f"Este e-mail já está {p['status']}.")
+        try:
+            access, conta = await contas.access_token(conn, p["user_id"])
+            await graph.apagar(access, conta, p["caixa_de"], p["graph_id"])
+        except (contas.ErroConta, graph.ErroGraph) as e:
+            logger.warning("Descartar %s: rascunho não apagado no Outlook: %s", pend_id, e)
+        await conn.execute("UPDATE public.email_pendentes SET status = 'descartado', "
+                           "decidido_em = now() WHERE id = $1::uuid", pend_id)
+        await contas.evento(conn, p["user_id"], None, "descartar", p["caixa_de"], p["graph_id"])
+    return {"status": "descartado"}
