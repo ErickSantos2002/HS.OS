@@ -85,3 +85,13 @@ def test_rota_recusa_imagem_grande(monkeypatch):
     with pytest.raises(HTTPException) as e:
         asyncio.run(rota.enviar_imagem_assinatura(1, Up(), Usuario("u", "e@x.com", "colaborador")))
     assert e.value.status_code == 400
+
+
+def test_despedida_repetida_sai_do_corpo():
+    """05/11: o bot terminou com "Atenciosamente," e a assinatura do Perfil
+    começa com "Atenciosamente," — saiu duas vezes."""
+    ass = {"texto_antes": "Atenciosamente,", "texto_depois": "", "imagens": []}
+    html = a.montar_html("Segue o pedido.\n\nAtenciosamente,\n", ass)
+    assert html.count("Atenciosamente") == 1
+    html = a.montar_html("Segue.\n\natenciosamente", ass)
+    assert html.lower().count("atenciosamente") == 1

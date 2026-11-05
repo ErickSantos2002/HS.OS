@@ -30,7 +30,22 @@ def _texto_html(t: str) -> str:
     return h.escape(t or "").replace("\n", "<br>")
 
 
+def _sem_despedida_repetida(corpo: str, ass: dict | None) -> str:
+    """Se o corpo termina com o mesmo texto que abre a assinatura (ex.:
+    "Atenciosamente,"), tira a cópia do corpo — sairia duas vezes."""
+    antes = " ".join(((ass or {}).get("texto_antes") or "").split()).strip(" ,.").lower()
+    if not antes:
+        return corpo
+    linhas = (corpo or "").rstrip().splitlines()
+    while linhas and " ".join(linhas[-1].split()).strip(" ,.").lower() == antes:
+        linhas.pop()
+        while linhas and not linhas[-1].strip():
+            linhas.pop()
+    return "\n".join(linhas)
+
+
 def montar_html(corpo: str, ass: dict | None) -> str:
+    corpo = _sem_despedida_repetida(corpo, ass)
     partes = [f'<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">{_texto_html(corpo)}</div>']
     if ass:
         if (ass.get("texto_antes") or "").strip():
