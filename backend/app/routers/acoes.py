@@ -69,15 +69,23 @@ async def confirmar_acao(acao_id: str, usuario: Usuario = Depends(usuario_atual)
     o `status='erro'` e a ação voltava a 'pendente', pronta para rodar de novo
     (revisão de segurança). Qualquer exceção do executor vira 'erro'."""
     falha: str | None = None
+    conflito: str | None = None
+    async with sessao(role="service_role") as conn:
+        a = await _acao_do_dono(conn, acao_id, usuario)
+        executor = acoes.EXECUTORES.get((a["sistema"], a["acao"]))
+        if a["status"] != "pendente":
+            # Sem raise aqui dentro: o 'vencida' gravado agora seria desfeito.
+            conflito = f"Esta ação já está {a['status']}."
+        elif not executor:
+            conflito = "Ação desconhecida."
+    if conflito:
+        raise HTTPException(status.HTTP_409_CONFLICT, conflito)
     async with sessao(role="service_role") as conn:
         a = await _acao_do_dono(conn, acao_id, usuario)
         if a["status"] != "pendente":
             raise HTTPException(status.HTTP_409_CONFLICT, f"Esta ação já está {a['status']}.")
-        executor = acoes.EXECUTORES.get((a["sistema"], a["acao"]))
-        if not executor:
-            raise HTTPException(status.HTTP_409_CONFLICT, "Ação desconhecida.")
         try:
-            resultado = await executor(a["email"], a["agent_id"], a["payload"])
+            resultado = await executor(a["email"], a["agent_id"], a["payload"], dono=a["user_id"])
         except ErroSistema as e:
             falha = str(e)
         except Exception as e:  # noqa: BLE001
@@ -98,12 +106,16 @@ async def confirmar_acao(acao_id: str, usuario: Usuario = Depends(usuario_atual)
 
 @router.post("/acoes/{acao_id}/cancelar")
 async def cancelar_acao(acao_id: str, usuario: Usuario = Depends(usuario_atual)):
+    conflito: str | None = None
     async with sessao(role="service_role") as conn:
         a = await _acao_do_dono(conn, acao_id, usuario)
         if a["status"] != "pendente":
-            raise HTTPException(status.HTTP_409_CONFLICT, f"Esta ação já está {a['status']}.")
-        await conn.execute("UPDATE public.acoes_pendentes SET status = 'cancelada', decidido_em = now() "
-                           " WHERE id = $1::uuid AND status = 'pendente'", acao_id)
+            conflito = f"Esta ação já está {a['status']}."
+        else:
+            await conn.execute("UPDATE public.acoes_pendentes SET status = 'cancelada', decidido_em = now() "
+                               " WHERE id = $1::uuid AND status = 'pendente'", acao_id)
+    if conflito:
+        raise HTTPException(status.HTTP_409_CONFLICT, conflito)
     return {"status": "cancelada"}
 
 

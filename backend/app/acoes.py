@@ -11,32 +11,32 @@ from typing import Awaitable, Callable
 
 from app.sistemas import taskhs
 
-Executor = Callable[[str, str, dict], Awaitable[str]]
+Executor = Callable[..., Awaitable[str]]
 
 
-async def _taskhs_comentar(email, bot, p) -> str:
+async def _taskhs_comentar(email, bot, p, dono=None) -> str:
     await taskhs.chamar(email, bot, "POST", f"/lists/{int(p['list_id'])}/cards/{int(p['card_id'])}/comments",
-                        json={"body": p["texto"]})
+                        json={"body": p["texto"]}, dono=dono)
     return "Comentário publicado."
 
 
-async def _taskhs_mover(email, bot, p) -> str:
+async def _taskhs_mover(email, bot, p, dono=None) -> str:
     await taskhs.chamar(email, bot, "PATCH", f"/lists/{int(p['list_id'])}/cards/{int(p['card_id'])}",
-                        json={"list_id": int(p["para_list_id"])})
+                        json={"list_id": int(p["para_list_id"], dono=dono)})
     return "Tarefa movida."
 
 
-async def _taskhs_criar(email, bot, p) -> str:
+async def _taskhs_criar(email, bot, p, dono=None) -> str:
     corpo = {k: p[k] for k in ("title", "description", "priority", "due_date") if p.get(k) is not None}
-    r = await taskhs.chamar(email, bot, "POST", f"/lists/{int(p['list_id'])}/cards", json=corpo)
+    r = await taskhs.chamar(email, bot, "POST", f"/lists/{int(p['list_id'])}/cards", json=corpo, dono=dono)
     return f"Tarefa criada (id {(r or {}).get('id')})."
 
 
-async def _taskhs_atualizar(email, bot, p) -> str:
+async def _taskhs_atualizar(email, bot, p, dono=None) -> str:
     campos = {k: v for k, v in (p.get("campos") or {}).items()
               if k in ("title", "priority", "due_date", "due_date_completed", "done")}
     await taskhs.chamar(email, bot, "PATCH", f"/lists/{int(p['list_id'])}/cards/{int(p['card_id'])}",
-                        json=campos)
+                        json=campos, dono=dono)
     return "Tarefa atualizada."
 
 

@@ -69,3 +69,27 @@ def test_401_vira_mensagem_de_acesso(chave, monkeypatch):
     with pytest.raises(taskhs.ErroSistema) as e:
         asyncio.run(taskhs.chamar("ti@healthsafetytech.com", "erick-bot", "GET", "/auth/me"))
     assert e.value.status == 401 and "acesso" in str(e.value)
+
+
+def test_chamada_fica_na_auditoria(chave, monkeypatch):
+    """`agente_chamadas` existia e nunca recebia linha: não havia como responder
+    "o que o bot do X fez ontem" do lado do HS.OS."""
+    monkeypatch.setattr(taskhs, "_transporte", httpx.MockTransport(lambda r: httpx.Response(200, json={})))
+    gravadas = []
+
+    async def registrar(*a):
+        gravadas.append(a)
+    monkeypatch.setattr(taskhs, "_registrar", registrar)
+    asyncio.run(taskhs.chamar("ti@healthsafetytech.com", "erick-bot", "GET", "/auth/me", dono="u-erick"))
+    dono, bot, sistema, metodo, caminho, st, jti = gravadas[0]
+    assert (dono, bot, sistema, metodo, caminho, st) == ("u-erick", "erick-bot", "taskhs", "GET", "/auth/me", 200)
+    assert jti
+
+
+def test_timeout_nao_afirma_que_nao_foi_feito(chave, monkeypatch):
+    def h(req):
+        raise httpx.ReadTimeout("lento")
+    monkeypatch.setattr(taskhs, "_transporte", httpx.MockTransport(h))
+    with pytest.raises(taskhs.ErroSistema) as e:
+        asyncio.run(taskhs.chamar("ti@healthsafetytech.com", "erick-bot", "POST", "/lists/1/cards"))
+    assert "confira" in str(e.value)

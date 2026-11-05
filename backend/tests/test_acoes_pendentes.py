@@ -57,7 +57,7 @@ def amb(monkeypatch):
     estado = {"conn": Conn(_acao()), "exec": []}
     monkeypatch.setattr(rota, "sessao", lambda **k: estado["conn"])
 
-    async def executor(email, bot, payload):
+    async def executor(email, bot, payload, dono=None):
         estado["exec"].append((email, bot, payload))
         return "comentado"
     monkeypatch.setitem(acoes.EXECUTORES, ("taskhs", "comentar"), executor)
@@ -94,7 +94,7 @@ def test_vencida_nao_executa(amb):
 def test_erro_do_sistema_fica_registrado(amb, monkeypatch):
     from app.sistemas.taskhs import ErroSistema
 
-    async def falha(email, bot, payload):
+    async def falha(email, bot, payload, dono=None):
         raise ErroSistema(403, "o TaskHS não deixa o agente fazer isso")
     monkeypatch.setitem(acoes.EXECUTORES, ("taskhs", "comentar"), falha)
     with pytest.raises(HTTPException) as e:
@@ -111,10 +111,18 @@ def test_erro_e_gravado_fora_do_rollback(amb, monkeypatch):
     """O 502 era levantado DENTRO da transação: o rollback desfazia o
     status='erro' e a ação voltava a 'pendente', pronta para rodar de novo.
     Exceção qualquer (não só ErroSistema) também tem que virar 'erro'."""
-    async def explode(email, bot, payload):
+    async def explode(email, bot, payload, dono=None):
         raise RuntimeError("timeout de rede")
     monkeypatch.setitem(acoes.EXECUTORES, ("taskhs", "comentar"), explode)
     with pytest.raises(HTTPException) as e:
         asyncio.run(rota.confirmar_acao("a1", ERICK))
     assert e.value.status_code == 502
     assert amb["conn"].a["status"] == "erro" and amb["conn"].saiu_com_erro is False
+
+
+def test_vencida_fica_gravada_mesmo_com_o_409(amb):
+    """O 409 era levantado dentro da transação e desfazia o 'vencida'."""
+    amb["conn"].a = _acao(criado_em=datetime.now(timezone.utc) - timedelta(hours=25))
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(rota.confirmar_acao("a1", ERICK))
+    assert e.value.status_code == 409 and amb["conn"].saiu_com_erro is False

@@ -211,3 +211,10 @@ def test_bot_com_sistemas_ve_so_a_propria_entrada():
     assert {f"hsos-bot-andre-bot__{f}" for f in FERRAMENTAS_BOT} <= set(t["deny"])
     assert bot_esta_fechado(t, COM_BOT, "erick-bot", email=True, sistemas=True)
     assert not bot_esta_fechado(t, COM_BOT, "erick-bot", email=True, sistemas=False)
+
+
+def test_agents_md_aponta_para_as_ferramentas():
+    """Ferramenta disponível não é ferramenta usada (lição de 14/08 com a skill
+    `faturamento`): um ponteiro curto nos sete arquivos."""
+    a = arquivos_do_bot({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"})["AGENTS.md"]
+    assert "lembrar" in a and "taskhs_minhas" in a

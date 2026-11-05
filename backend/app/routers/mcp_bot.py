@@ -123,7 +123,7 @@ async def _gravar_memoria(bot: str, conteudo: str) -> None:
 
 
 async def _lembrar(bot: str, fato: str) -> str:
-    linha = _linha(fato)[:TETO_FATO]
+    linha = _linha(fato, TETO_FATO)
     if not linha:
         raise _Recusa("Nada para lembrar.")
     atual = await _ler_memoria(bot) or "# MEMORY.md\n"
@@ -143,6 +143,15 @@ def _int(args, k) -> int:
         raise _Recusa(f"{k} precisa ser um número.") from e
 
 
+def _data(v) -> str:
+    """Prazo validado ANTES do cartão — senão o 422 do TaskHS só aparece
+    depois do clique do dono."""
+    try:
+        return date.fromisoformat(str(v)[:10]).isoformat()
+    except ValueError as e:
+        raise _Recusa("prazo precisa ser uma data AAAA-MM-DD.") from e
+
+
 def _linha_card(c: dict) -> str:
     prazo = c.get("due_date") or "sem prazo"
     return (f"- card {c.get('id')} (lista {c.get('list_id')} '{c.get('list_title', '')}', quadro "
@@ -154,19 +163,19 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
         raise _Recusa("O TaskHS ainda não está ligado para mim.")
     em = ctx["email"]
     if nome == "taskhs_eu":
-        eu = await taskhs.chamar(em, bot, "GET", "/auth/me")
+        eu = await taskhs.chamar(em, bot, "GET", "/auth/me", dono=ctx["dono"])
         return como_dado_externo(f"Nome: {eu.get('name') or eu.get('nome')}\nPapel: {eu.get('role')}")
     if nome == "taskhs_minhas":
         abertas = args.get("abertas", True) is not False
         cards = await taskhs.chamar(em, bot, "GET", "/cards/minhas",
-                                    params={"abertas": str(abertas).lower()})
+                                    params={"abertas": str(abertas).lower()}, dono=ctx["dono"])
         return como_dado_externo("\n".join(_linha_card(c) for c in (cards or [])[:60]) or "(nenhuma)")
     if nome == "taskhs_quadros":
-        qs = await taskhs.chamar(em, bot, "GET", "/boards")
+        qs = await taskhs.chamar(em, bot, "GET", "/boards", dono=ctx["dono"])
         return como_dado_externo("\n".join(f"- quadro {q.get('id')} | {q.get('title')}"
                                            for q in (qs or []) if q.get("can_open")) or "(nenhum)")
     if nome == "taskhs_quadro":
-        s = await taskhs.chamar(em, bot, "GET", f"/boards/{_int(args, 'board_id')}/snapshot")
+        s = await taskhs.chamar(em, bot, "GET", f"/boards/{_int(args, 'board_id')}/snapshot", dono=ctx["dono"])
         por_lista = (s or {}).get("cards_by_list") or {}
         partes, n = [], 0
         for l in (s or {}).get("lists") or []:
@@ -178,11 +187,13 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
                 partes.append(f"  - card {c.get('id')} | {c.get('title')} | prazo {c.get('due_date') or '—'}")
         return como_dado_externo("\n".join(partes) or "(vazio)")
     if nome == "taskhs_tarefa":
-        c = await taskhs.chamar(em, bot, "GET", f"/lists/{_int(args, 'list_id')}/cards/{_int(args, 'card_id')}")
+        c = await taskhs.chamar(em, bot, "GET", f"/lists/{_int(args, 'list_id')}/cards/{_int(args, 'card_id')}",
+                                dono=ctx["dono"])
         return como_dado_externo(f"{c.get('title')}\nPrazo: {c.get('due_date')}\nPrioridade: "
                                  f"{c.get('priority')}\nConcluída: {c.get('done')}\n\n{c.get('description') or ''}")
     if nome == "taskhs_buscar":
-        rs = await taskhs.chamar(em, bot, "GET", "/search", params={"q": str(args.get("q") or "")[:200]})
+        rs = await taskhs.chamar(em, bot, "GET", "/search", params={"q": str(args.get("q") or "")[:200]},
+                                 dono=ctx["dono"])
         return como_dado_externo("\n".join(
             f"- card {r.get('card_id')} (lista {r.get('list_id')}, quadro '{r.get('board_title')}') | "
             f"{r.get('title') or r.get('card_title')}" for r in (rs or [])[:30]) or "(nada)")
@@ -199,12 +210,12 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
         if args.get("prioridade") in _PRIORIDADES:
             payload["priority"] = args["prioridade"]
         if args.get("prazo"):
-            payload["due_date"] = str(args["prazo"])[:10]
+            payload["due_date"] = _data(args["prazo"])
         resumo = f"Criar a tarefa '{titulo}' na lista {lid}"
         acao = "criar"
     else:
         cid = _int(args, "card_id")
-        card = await taskhs.chamar(em, bot, "GET", f"/lists/{lid}/cards/{cid}")
+        card = await taskhs.chamar(em, bot, "GET", f"/lists/{lid}/cards/{cid}", dono=ctx["dono"])
         # ⚠️ O título vem do TaskHS (dado externo) e entra no cartão que o dono
         # confirma: uma linha, sem aspas próprias, cortado — o que manda no
         # cartão são os campos do `payload` (revisão de segurança).
@@ -222,9 +233,11 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
         else:
             campos = {}
             if "concluida" in args:
-                campos["done"] = bool(args["concluida"])
+                if not isinstance(args["concluida"], bool):
+                    raise _Recusa("concluida precisa ser true ou false.")
+                campos["done"] = args["concluida"]
             if args.get("prazo"):
-                campos["due_date"] = str(args["prazo"])[:10]
+                campos["due_date"] = _data(args["prazo"])
             if args.get("prioridade") in _PRIORIDADES:
                 campos["priority"] = args["prioridade"]
             if args.get("titulo"):

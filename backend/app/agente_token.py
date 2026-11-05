@@ -35,11 +35,17 @@ def _privada():
     return serialization.load_pem_private_key(pem.encode(), password=None)
 
 
+def token_e_jti(aud: str, email: str, bot: str) -> tuple[str, str]:
+    """O token e o `jti` dele — o `jti` vai para a auditoria `agente_chamadas`."""
+    agora, jti = int(time.time()), str(uuid.uuid4())
+    t = jwt.encode({"iss": "hsos", "aud": aud, "sub": email, "act": {"sub": bot},
+                    "iat": agora, "exp": agora + VALIDADE_S, "jti": jti},
+                   _privada(), algorithm="EdDSA")
+    return t, jti
+
+
 def token_de_agente(aud: str, email: str, bot: str) -> str:
-    agora = int(time.time())
-    return jwt.encode({"iss": "hsos", "aud": aud, "sub": email, "act": {"sub": bot},
-                       "iat": agora, "exp": agora + VALIDADE_S, "jti": str(uuid.uuid4())},
-                      _privada(), algorithm="EdDSA")
+    return token_e_jti(aud, email, bot)[0]
 
 
 def chave_publica_pem() -> str:

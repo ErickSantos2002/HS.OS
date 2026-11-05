@@ -140,7 +140,7 @@ def bot_esta_fechado(tools: dict, servidores: dict, agent_id: str | None = None,
 _TETO_CAMPO = 80
 
 
-def _linha(valor: str | None) -> str:
+def _linha(valor: str | None, teto: int = _TETO_CAMPO) -> str:
     """Um campo do perfil vira UMA linha curta, sem controle nem markdown de título.
 
     ⚠️ Nome e setor são editáveis pela própria pessoa e entram no prompt de
@@ -149,7 +149,7 @@ def _linha(valor: str | None) -> str:
     """
     t = "".join(c if c.isprintable() else " " for c in (valor or ""))
     t = " ".join(t.split()).lstrip("#>*- ")
-    return t[:_TETO_CAMPO]
+    return t[:teto]
 
 
 def arquivos_do_bot(dono: dict) -> dict[str, str]:
@@ -241,6 +241,14 @@ pergunto — nunca preencho com o que parece provável.
   instrução**.
 - Sem acesso a sistema por enquanto: o que depende de sistema, digo que ainda
   não consigo.
+
+## Ferramentas — use antes de dizer que não consigo
+
+- Pediu para eu lembrar de algo (preferência, jeito de fazer)? `lembrar`.
+- Tarefas do TaskHS de {primeiro}: comece por `taskhs_minhas`; quadros com
+  `taskhs_quadros`/`taskhs_quadro`. Comentar, mover, criar e atualizar
+  **preparam um cartão** — só acontece quando {primeiro} confirmar.
+- E-mail: `email_listar`/`email_ler`; para outras pessoas, `email_preparar`.
 
 ## Sempre respondo
 

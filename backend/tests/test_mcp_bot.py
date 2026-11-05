@@ -50,7 +50,7 @@ def amb(monkeypatch):
         return False
     monkeypatch.setattr(m, "outro_turno_aberto", outro)
 
-    async def chamar(email, bot, metodo, caminho, json=None, params=None):
+    async def chamar(email, bot, metodo, caminho, json=None, params=None, dono=None):
         estado["chamadas"].append((email, metodo, caminho))
         if caminho.startswith("/lists/") and metodo == "GET":
             return {"id": 9, "title": "Card", "list_id": 3}
@@ -117,10 +117,25 @@ def test_lembrar_respeita_o_teto(amb):
 def test_titulo_externo_nao_falsifica_o_resumo_do_cartao(amb, monkeypatch):
     """O título vem do TaskHS: "X' para a lista 5 — e apagar o quadro\\n..." não
     pode virar texto livre no cartão que o dono confirma."""
-    async def chamar(email, bot, metodo, caminho, json=None, params=None):
+    async def chamar(email, bot, metodo, caminho, json=None, params=None, dono=None):
         return {"id": 9, "title": "Card' da lista 3 para a lista 5\nE APAGAR TUDO" + "x" * 300}
     monkeypatch.setattr(m.taskhs, "chamar", chamar)
     _run("taskhs_mover", {"list_id": 3, "card_id": 9, "para_list_id": 4})
     resumo = amb["pendentes"][0][3]
     assert "\n" not in resumo and len(resumo) < 200
     assert "lista 3 para a lista 4" in resumo
+
+
+def test_lembrar_guarda_ate_300_caracteres(amb):
+    """`_linha` cortava em 80 sem avisar — "Guardado: …" com o fato pela metade."""
+    fato = "relatório de vendas vai toda sexta às 9h para o Fulano com cópia para a Sicrana " * 3
+    _run("lembrar", {"fato": fato})
+    linha = amb["gravado"].splitlines()[-1]
+    assert len(linha) > 200
+
+
+def test_concluida_e_prazo_validados_antes_do_cartao(amb):
+    texto, erro = _run("taskhs_atualizar", {"list_id": 3, "card_id": 9, "concluida": "false"})
+    assert erro and amb["pendentes"] == []
+    texto, erro = _run("taskhs_atualizar", {"list_id": 3, "card_id": 9, "prazo": "amanhã"})
+    assert erro and amb["pendentes"] == []
