@@ -131,3 +131,13 @@ def test_vencido_nao_envia(amb):
 def test_descartar(amb):
     asyncio.run(rota.descartar_pendente("p1", ERICK))
     assert amb["conn"].pend["status"] == "descartado"
+
+
+def test_clique_duplo_trava_a_linha_e_nao_rebaixa_enviado():
+    """Duas abas no Enviar: a linha é travada (FOR UPDATE) e o 'erro' do segundo
+    envio não sobrescreve um 'enviado' — o cartão diria que não saiu."""
+    import inspect
+    fonte = inspect.getsource(rota._pendente_do_dono)
+    assert "FOR UPDATE" in fonte
+    fonte_env = inspect.getsource(rota.enviar_pendente)
+    assert fonte_env.count("AND status = 'pendente'") >= 2

@@ -44,7 +44,11 @@ export default function ConectarEmail() {
     try {
       await desconectarEmail();
       setEstado({ ...estado, conectado: false, conta: null });
-      toast.success("E-mail desconectado.");
+      // Apaga o token daqui; o consentimento na Microsoft continua até a pessoa
+      // removê-lo em myapps.microsoft.com — dito na tela para não enganar.
+      toast.success("E-mail desconectado. O HS.OS apagou o acesso guardado.");
+    } catch (e) {
+      toast.error(e instanceof ErroApi ? e.message : "Não consegui desconectar.");
     } finally {
       setOcupado(false);
     }

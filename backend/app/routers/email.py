@@ -146,7 +146,8 @@ async def _pendente_do_dono(conn, pend_id: str, usuario: Usuario) -> dict:
     try:
         linha = await conn.fetchrow(
             "SELECT id::text AS id, user_id::text AS user_id, caixa_de, graph_id, status, erro, "
-            "       criado_em FROM public.email_pendentes WHERE id = $1::uuid AND user_id = $2::uuid",
+            "       criado_em FROM public.email_pendentes WHERE id = $1::uuid AND user_id = $2::uuid "
+            "   FOR UPDATE",
             pend_id, usuario.id)
     except Exception:  # noqa: BLE001 — id malformado
         linha = None
@@ -204,11 +205,12 @@ async def enviar_pendente(pend_id: str, dados: EnviarIn, usuario: Usuario = Depe
             await graph.enviar_rascunho(access, conta, p["caixa_de"], p["graph_id"])
         except graph.ErroGraph as e:
             await conn.execute("UPDATE public.email_pendentes SET status = 'erro', erro = $2, "
-                               "decidido_em = now() WHERE id = $1::uuid", pend_id, str(e)[:300])
+                               "decidido_em = now() WHERE id = $1::uuid AND status = 'pendente'",
+                               pend_id, str(e)[:300])
             await contas.evento(conn, p["user_id"], None, "enviar_erro", p["caixa_de"], p["graph_id"])
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"A Microsoft recusou o envio: {e}") from e
         await conn.execute("UPDATE public.email_pendentes SET status = 'enviado', decidido_em = now() "
-                           " WHERE id = $1::uuid", pend_id)
+                           " WHERE id = $1::uuid AND status = 'pendente'", pend_id)
         await contas.evento(conn, p["user_id"], None, "enviar", p["caixa_de"], p["graph_id"],
                             [*c["para"], *c["cc"]])
     return {"status": "enviado"}

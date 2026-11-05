@@ -1453,6 +1453,24 @@ class ComandoIn(BaseModel):
     comando: str = Field(min_length=1)
 
 
+async def _so_o_dono_aciona_bot(agent_id: str, usuario: Usuario) -> None:
+    """Bot pessoal só é acionado pelo DONO nas portas que não gravam `agent_runs`.
+
+    ⚠️ A guarda do MCP de e-mail enxerga turno pela `agent_runs`. A
+    `pergunta-avulsa` e o `/comando` mandam ao gateway sem gravar run: o admin
+    perguntaria ao `erick-bot` pelos e-mails do Erick enquanto ele tivesse um
+    turno aberto, e a resposta voltaria a quem perguntou (revisão final,
+    05/11/2026). Especialista não tem dono: segue como antes.
+    """
+    async with sessao(role="service_role") as conn:
+        dono = await conn.fetchval(
+            "SELECT dono_id::text FROM public.agent_profiles WHERE agent_id = $1",
+            normalizar_agent_id(agent_id))
+    if dono and dono != usuario.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "Este é o bot pessoal de outra pessoa; só ela o aciona por aqui.")
+
+
 @router.post("/{agent_id}/comando", status_code=status.HTTP_202_ACCEPTED)
 async def comando(
     agent_id: str,
@@ -1473,6 +1491,7 @@ async def comando(
     Dispara e devolve 202 sem esperar: o `/stop` só vale se chegar depressa, e
     a tela não usa a resposta para nada — ela observa o efeito na conversa.
     """
+    await _so_o_dono_aciona_bot(agent_id, usuario)
     texto = dados.comando.strip()
     if not texto.startswith("/"):
         raise HTTPException(
@@ -1920,6 +1939,7 @@ async def pergunta_avulsa(
     Espera a resposta em vez de devolver um `run_id`: a Arena roda uma rodada de
     debate inteira e a tela precisa dos textos juntos para comparar.
     """
+    await _so_o_dono_aciona_bot(agent_id, usuario)
     c = await cfg.carregar()
     if not c.configurado:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado.")

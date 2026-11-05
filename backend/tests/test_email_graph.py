@@ -60,3 +60,14 @@ def test_id_e_pasta_nao_escapam_do_caminho(monkeypatch):
     for req in reqs:
         cru = req.url.raw_path.decode()
         assert "/users/ceo" not in cru and "/../" not in cru, cru
+
+
+def test_desde_e_busca_validados(monkeypatch):
+    """`desde` entra no $filter e `busca` no $search: argumento do agente.
+    Data inválida é recusada antes do Graph; aspas na busca não quebram a sintaxe."""
+    reqs = []
+    monkeypatch.setattr(g, "_transporte", _transporte(reqs))
+    with pytest.raises(ValueError):
+        asyncio.run(g.listar("tok", CONTA, CONTA, "inbox", "2026-11-01 or true", None, 5))
+    asyncio.run(g.listar("tok", CONTA, CONTA, "inbox", None, 'proposta "x"', 5))
+    assert reqs[-1].url.params["$search"] == '"proposta x"'

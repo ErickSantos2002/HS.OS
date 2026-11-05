@@ -11,6 +11,7 @@ resumidos, para o agente.
 """
 from __future__ import annotations
 
+import re
 from urllib.parse import quote, urlencode
 
 import httpx
@@ -107,17 +108,22 @@ async def renovar(refresh: str) -> tuple[str, str]:
 
 # ── Caixa ────────────────────────────────────────────────────────────────────
 
+_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$")
 _CAMPOS_LISTA = "id,subject,from,receivedDateTime,bodyPreview,isRead,hasAttachments"
 
 
 async def listar(access, conta, caixa, pasta="inbox", desde=None, busca=None, limite=10) -> list[dict]:
     params = {"$top": str(max(1, min(int(limite or 10), 25))), "$select": _CAMPOS_LISTA}
     if busca:
-        params["$search"] = f'"{busca}"'
+        # Aspas quebrariam a sintaxe KQL do $search — e erro repetido pausa o MCP.
+        params["$search"] = '"' + str(busca).replace('"', "").replace("\\", "")[:200] + '"'
     else:
         params["$orderby"] = "receivedDateTime desc"
         if desde:
-            params["$filter"] = f"receivedDateTime ge {desde}"
+            # Argumento do agente dentro do $filter: só data ISO, nada mais.
+            if not _ISO.match(str(desde)):
+                raise ValueError("desde deve ser uma data ISO, ex.: 2026-11-01 ou 2026-11-01T00:00:00Z")
+            params["$filter"] = f"receivedDateTime ge {desde if 'T' in str(desde) else str(desde) + 'T00:00:00Z'}"
     corpo = await _pedir("GET", f"{_caixa(caixa, conta)}/mailFolders/{quote(pasta or 'inbox', safe='')}/messages",
                          access, params=params,
                          headers={"ConsistencyLevel": "eventual"} if busca else {})

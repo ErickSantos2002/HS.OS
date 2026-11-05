@@ -2769,6 +2769,19 @@ async def _cliente_ou_502():
 
 
 @router.post("/{agent_id}/crons", status_code=status.HTTP_201_CREATED)
+async def _recusar_cron_em_bot(agent_id: str) -> None:
+    """⚠️ Bot pessoal não tem agendamento. O cron roda em sessão própria, sem
+    linha em `agent_runs`: com o dono num turno aberto, o MCP de e-mail
+    passaria, e o `avisar_administrador` levaria o conteúdo a quem criou o job
+    (revisão final, 05/11/2026)."""
+    async with sessao(role="service_role") as conn:
+        dono = await conn.fetchval(
+            "SELECT dono_id::text FROM public.agent_profiles WHERE agent_id = $1", agent_id)
+    if dono:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Bot pessoal não tem agendamento.")
+
+
 async def criar_cron(
     agent_id: str, dados: CronIn, usuario: Usuario = Depends(exige_papel("administrador"))
 ):
@@ -2788,6 +2801,7 @@ async def criar_cron(
     sondagem com agente inexistente criou o job). Por isso conferimos o agente
     aqui antes, senão a tela deixaria criar agendamento fantasma.
     """
+    await _recusar_cron_em_bot(agent_id)
     cliente = await _cliente_ou_502()
 
     try:
