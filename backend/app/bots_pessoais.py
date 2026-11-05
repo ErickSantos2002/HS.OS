@@ -60,7 +60,7 @@ def motivo_inelegivel(perfil: dict) -> str | None:
         return "inativo"
     if not e_do_time(perfil.get("email")):
         return "e-mail fora do time"
-    if not _primeiro_nome(perfil.get("full_name") or ""):
+    if id_do_bot(perfil.get("full_name") or "") == "-bot":
         return "sem nome"
     return None
 
@@ -90,17 +90,32 @@ def bot_esta_fechado(tools: dict, servidores: dict) -> bool:
     )
 
 
+_TETO_CAMPO = 80
+
+
+def _linha(valor: str | None) -> str:
+    """Um campo do perfil vira UMA linha curta, sem controle nem markdown de título.
+
+    ⚠️ Nome e setor são editáveis pela própria pessoa e entram no prompt de
+    sistema do bot. Com quebra de linha, `"Ana\n## Limites…"` viraria uma seção
+    nova do `SOUL.md`, escrita por quem o bot deveria limitar.
+    """
+    t = "".join(c if c.isprintable() else " " for c in (valor or ""))
+    t = " ".join(t.split()).lstrip("#>*- ")
+    return t[:_TETO_CAMPO]
+
+
 def arquivos_do_bot(dono: dict) -> dict[str, str]:
     """Os sete arquivos canônicos. Iguais para todos, preenchidos com o dono.
 
     Escritos pelo backend, sem LLM: o conteúdo não varia por pessoa o bastante
     para pagar uma rodada da orquestradora por bot.
     """
-    nome = (dono.get("full_name") or "").strip()
+    nome = _linha(dono.get("full_name"))
     primeiro = _primeiro_nome(nome)
     bot = nome_do_bot(nome)
-    email = (dono.get("email") or "").strip()
-    setor = (dono.get("departamento") or "").strip()
+    email = _linha(dono.get("email"))
+    setor = _linha(dono.get("departamento"))
 
     identidade = (
         f"# IDENTITY.md\n\n"
