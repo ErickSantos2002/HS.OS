@@ -52,10 +52,14 @@ async def main() -> int:
     ap.add_argument("--reescrever-agents-md", action="store_true",
                     help="regrava SÓ o AGENTS.md dos bots existentes (template novo, "
                          "preserva o bloco da empresa); com --so, só aquela pessoa")
+    ap.add_argument("--reescrever-soul", action="store_true",
+                    help="regrava SÓ o SOUL.md dos bots existentes com o template atual")
     a = ap.parse_args()
 
     if a.reescrever_agents_md:
         return await _reescrever_agents_md(a.aplicar, a.so)
+    if a.reescrever_soul:
+        return await _reescrever_agents_md(a.aplicar, a.so, arquivo="SOUL.md")
 
     candidatos = await _candidatos()
     ids = [id_do_bot(c["full_name"]) for c in candidatos]
@@ -99,7 +103,7 @@ async def main() -> int:
     return 1 if falhas else 0
 
 
-async def _reescrever_agents_md(aplicar: bool, so: str | None) -> int:
+async def _reescrever_agents_md(aplicar: bool, so: str | None, arquivo: str = "AGENTS.md") -> int:
     """Para mudança no template que precisa chegar aos bots VIVOS — a criação
     não reescreve arquivo de bot existente (é dele: MEMORY.md, empresa)."""
     from app.bots_pessoais import agents_md_novo
@@ -112,9 +116,10 @@ async def _reescrever_agents_md(aplicar: bool, so: str | None) -> int:
             " WHERE ($1::uuid IS NULL OR p.id = $1::uuid) ORDER BY a.agent_id", so)
     falhas = 0
     for l in linhas:
-        r = await deps.chamar("agents.files.get", {"agentId": l["agent_id"], "name": "AGENTS.md"})
+        r = await deps.chamar("agents.files.get", {"agentId": l["agent_id"], "name": arquivo})
         atual = ((r.get("file") or {}).get("content")) or ""
-        novo = agents_md_novo(dict(l), atual)
+        novo = (agents_md_novo(dict(l), atual) if arquivo == "AGENTS.md"
+                else arquivos_do_bot(dict(l))[arquivo])
         if excede_o_teto(novo):
             print(f"  {l['agent_id']:16} NÃO: passaria do teto")
             falhas += 1
@@ -126,8 +131,8 @@ async def _reescrever_agents_md(aplicar: bool, so: str | None) -> int:
             print(f"  {l['agent_id']:16} mudaria ({len(atual)} → {len(novo)} caracteres)")
             continue
         await deps.chamar("agents.files.set",
-                          {"agentId": l["agent_id"], "name": "AGENTS.md", "content": novo})
-        v = await deps.chamar("agents.files.get", {"agentId": l["agent_id"], "name": "AGENTS.md"})
+                          {"agentId": l["agent_id"], "name": arquivo, "content": novo})
+        v = await deps.chamar("agents.files.get", {"agentId": l["agent_id"], "name": arquivo})
         ok = ((v.get("file") or {}).get("content")) == novo
         falhas += not ok
         print(f"  {l['agent_id']:16} {'regravado' if ok else 'FALHOU na releitura'}")

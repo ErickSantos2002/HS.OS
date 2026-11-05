@@ -126,3 +126,22 @@ def test_vencida_fica_gravada_mesmo_com_o_409(amb):
     with pytest.raises(HTTPException) as e:
         asyncio.run(rota.confirmar_acao("a1", ERICK))
     assert e.value.status_code == 409 and amb["conn"].saiu_com_erro is False
+
+
+def test_criar_tarefa_poe_o_dono_como_membro(monkeypatch):
+    """O card 2534 nasceu sem membro e o bot afirmou "responsável: você". O
+    TaskHS não põe quem cria como membro — o executor põe."""
+    from app.sistemas import taskhs
+    chamadas = []
+
+    async def chamar(email, bot, metodo, caminho, json=None, params=None, dono=None):
+        chamadas.append((metodo, caminho))
+        if caminho == "/auth/me":
+            return {"id": 22}
+        if metodo == "POST" and caminho == "/lists/368/cards":
+            return {"id": 2534}
+        return {}
+    monkeypatch.setattr(taskhs, "chamar", chamar)
+    r = asyncio.run(acoes.EXECUTORES[("taskhs", "criar")]("ti@x.com", "erick-bot",
+                                                           {"list_id": 368, "title": "T"}, dono="u"))
+    assert ("POST", "/lists/368/cards/2534/members/22") in chamadas and "membro" in r

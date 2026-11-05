@@ -32,6 +32,10 @@ from app.routers.mcp_email import outro_turno_aberto
 from app.sistemas import taskhs
 
 logger = logging.getLogger(__name__)
+
+
+def como_dado_externo_taskhs(texto: str) -> str:
+    return como_dado_externo(texto, origem="TaskHS")
 router = APIRouter(prefix="/mcp", tags=["mcp"])
 
 TETO_MEMORIA = 6000
@@ -164,15 +168,15 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
     em = ctx["email"]
     if nome == "taskhs_eu":
         eu = await taskhs.chamar(em, bot, "GET", "/auth/me", dono=ctx["dono"])
-        return como_dado_externo(f"Nome: {eu.get('name') or eu.get('nome')}\nPapel: {eu.get('role')}")
+        return como_dado_externo_taskhs(f"Nome: {eu.get('name') or eu.get('nome')}\nPapel: {eu.get('role')}")
     if nome == "taskhs_minhas":
         abertas = args.get("abertas", True) is not False
         cards = await taskhs.chamar(em, bot, "GET", "/cards/minhas",
                                     params={"abertas": str(abertas).lower()}, dono=ctx["dono"])
-        return como_dado_externo("\n".join(_linha_card(c) for c in (cards or [])[:60]) or "(nenhuma)")
+        return como_dado_externo_taskhs("\n".join(_linha_card(c) for c in (cards or [])[:60]) or "(nenhuma)")
     if nome == "taskhs_quadros":
         qs = await taskhs.chamar(em, bot, "GET", "/boards", dono=ctx["dono"])
-        return como_dado_externo("\n".join(f"- quadro {q.get('id')} | {q.get('title')}"
+        return como_dado_externo_taskhs("\n".join(f"- quadro {q.get('id')} | {q.get('title')}"
                                            for q in (qs or []) if q.get("can_open")) or "(nenhum)")
     if nome == "taskhs_quadro":
         s = await taskhs.chamar(em, bot, "GET", f"/boards/{_int(args, 'board_id')}/snapshot", dono=ctx["dono"])
@@ -185,16 +189,16 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
                     break
                 n += 1
                 partes.append(f"  - card {c.get('id')} | {c.get('title')} | prazo {c.get('due_date') or '—'}")
-        return como_dado_externo("\n".join(partes) or "(vazio)")
+        return como_dado_externo_taskhs("\n".join(partes) or "(vazio)")
     if nome == "taskhs_tarefa":
         c = await taskhs.chamar(em, bot, "GET", f"/lists/{_int(args, 'list_id')}/cards/{_int(args, 'card_id')}",
                                 dono=ctx["dono"])
-        return como_dado_externo(f"{c.get('title')}\nPrazo: {c.get('due_date')}\nPrioridade: "
+        return como_dado_externo_taskhs(f"{c.get('title')}\nPrazo: {c.get('due_date')}\nPrioridade: "
                                  f"{c.get('priority')}\nConcluída: {c.get('done')}\n\n{c.get('description') or ''}")
     if nome == "taskhs_buscar":
         rs = await taskhs.chamar(em, bot, "GET", "/search", params={"q": str(args.get("q") or "")[:200]},
                                  dono=ctx["dono"])
-        return como_dado_externo("\n".join(
+        return como_dado_externo_taskhs("\n".join(
             f"- card {r.get('card_id')} (lista {r.get('list_id')}, quadro '{r.get('board_title')}') | "
             f"{r.get('title') or r.get('card_title')}" for r in (rs or [])[:30]) or "(nada)")
 
