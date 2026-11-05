@@ -717,8 +717,11 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   inventava "consigo ver na tabela de perfis"). Atualizar:
   `scripts/atualizar-time.py --todos-com-bloco --aplicar` (gente nova); sozinho
   quando alguém renomeia o bot.
-- **"Meu bot"** (Perfil, `routers/meu_bot.py`): a pessoa muda o NOME DE
-  EXIBIÇÃO e a foto. O `agent_id` não muda (é a chave da sessão). Renomear
+- **"Meu bot"** (Perfil, `routers/meu_bot.py`): a pessoa muda só o PREFIXO do nome de
+  exibição e a foto — o SUFIXO é da empresa (`SUFIXO_EXIBICAO`, hoje "-bot";
+  "-Safi" ou "-Guardi" em decisão). Trocar para todos:
+  `criar-bots-pessoais.py --trocar-sufixo=-Safi --aplicar` + mudar a constante e
+  deploy. O `agent_id` não muda (é a chave da sessão). Renomear
   regrava `IDENTITY.md`/`SOUL.md` e o bloco do time. ⚠️ Pendência antiga: o
   bucket `agent-files` aceita escrita de qualquer autenticado em qualquer
   caminho, inclusive `avatars/` de outro agente.

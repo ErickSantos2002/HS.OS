@@ -50,9 +50,18 @@ def id_do_bot(nome_completo: str) -> str:
     return f"{p}-bot"
 
 
+# O sufixo do nome de exibição é da EMPRESA, não da pessoa: ela escolhe só o
+# que vem antes ("Gugu" + sufixo). Hoje "-bot"; o Nicholson decide entre
+# "-Safi" (de safety) e "-Guardi" (de guardiões). Trocar: mudar aqui e rodar
+# `criar-bots-pessoais.py --trocar-sufixo=<novo> --aplicar` (com `=`: "-Safi" começa com hífen). O `agent_id`
+# (`gustavo-bot`) NÃO muda — é a chave da sessão.
+SUFIXO_EXIBICAO = "-bot"
+SUFIXOS_CONHECIDOS = ("-bot", "-Safi", "-Guardi")
+
+
 def nome_do_bot(nome_completo: str) -> str:
     """O nome exibido mantém o acento: `"André-bot"`."""
-    return f"{_primeiro_nome(nome_completo)}-bot"
+    return f"{_primeiro_nome(nome_completo)}{SUFIXO_EXIBICAO}"
 
 
 def motivo_inelegivel(perfil: dict) -> str | None:

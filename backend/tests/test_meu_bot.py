@@ -9,11 +9,21 @@ import pytest
 from app.routers import meu_bot as m
 
 
-def test_nome_valido():
-    assert m.validar_nome("  Gugu-bot ") == "Gugu-bot"
-    for ruim in ("", "a", "x" * 31, "Gugu\n## Limites", "<script>"):
+def test_so_o_prefixo_e_editavel():
+    """O sufixo é da empresa (hoje "-bot"; amanhã talvez "-Safi"/"-Guardi"): a
+    pessoa escolhe só o que vem antes."""
+    from app.bots_pessoais import SUFIXO_EXIBICAO
+    assert m.validar_prefixo("  Gugu ") == "Gugu"
+    assert m.nome_com_sufixo("Gugu") == "Gugu" + SUFIXO_EXIBICAO
+    for ruim in ("", "a", "x" * 21, "Gugu\n## Limites", "<script>", "Gugu-bot", "Gugu-Safi"):
         with pytest.raises(ValueError):
-            m.validar_nome(ruim)
+            m.validar_prefixo(ruim)
+
+
+def test_prefixo_do_nome_atual():
+    assert m.prefixo_de("Gugu-bot", "-bot") == "Gugu"
+    assert m.prefixo_de("Erick-bot", "-Safi") == "Erick"   # troca de sufixo: tira o antigo
+    assert m.prefixo_de("Erick", "-bot") == "Erick"
 
 
 def test_avatar_so_do_proprio_bot():
