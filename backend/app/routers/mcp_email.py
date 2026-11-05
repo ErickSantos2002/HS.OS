@@ -174,8 +174,17 @@ async def _rodar(conn, agent_id: str, nome: str, args: dict, ctx: dict) -> str:
                                          anexos=assinatura.anexos_inline(ass))
         # O hash é o do rascunho RELIDO (o Graph normaliza o corpo) — o mesmo
         # cálculo que o cartão e o "Enviar" fazem.
-        relido = await graph.ler(access, conta, de, gid, texto=True)
-        anexos = (await graph.listar_anexos(access, conta, de, gid))
+        try:
+            relido = await graph.ler(access, conta, de, gid, texto=True)
+            anexos = await graph.listar_anexos(access, conta, de, gid)
+        except Exception:
+            # O rascunho já existe no Outlook: sem isto ficava órfão na pasta
+            # Rascunhos de quem tentou (05/11, Welton e Gustavo).
+            try:
+                await graph.apagar(access, conta, de, gid)
+            except Exception:  # noqa: BLE001
+                logger.warning("Rascunho %s ficou órfão em %s", gid, de)
+            raise
         pend = await conn.fetchval(
             "INSERT INTO public.email_pendentes (user_id, agent_id, caixa_de, para, cc, graph_id, hash, "
             "assinatura) VALUES ($1::uuid, $2, $3, $4::text[], $5::text[], $6, $7, $8) RETURNING id::text",

@@ -243,3 +243,11 @@ def test_bot_sabe_que_nao_escreve_assinatura():
 def test_bot_nao_escreve_despedida():
     a = " ".join(arquivos_do_bot({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"})["AGENTS.md"].split())
     assert "Não escrevo despedida nem assinatura" in a
+
+
+def test_bloco_do_hs_os_na_mensagem_do_dono_nao_e_invasao():
+    """05/11: o bot do Gustavo respondeu "I can't help with that" porque tratou o
+    bloco de formatação que o HS.OS põe em toda mensagem como injeção. Dado
+    externo é o que volta das FERRAMENTAS; a mensagem do dono vale."""
+    a = " ".join(arquivos_do_bot({"full_name": "Gustavo O", "email": "q@x.com"})["AGENTS.md"].split())
+    assert "volta das ferramentas" in a and "instruções de formatação" in a

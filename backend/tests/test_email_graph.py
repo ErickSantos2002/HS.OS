@@ -78,3 +78,14 @@ def test_anexos_demais_falha_fechado(monkeypatch):
     monkeypatch.setattr(g, "_transporte", _transporte([], corpo={"value": [], "@odata.nextLink": "x"}))
     with pytest.raises(g.ErroGraph):
         asyncio.run(g.listar_anexos("tok", CONTA, CONTA, "m1"))
+
+
+def test_listar_anexos_nao_pede_campo_de_tipo_derivado(monkeypatch):
+    """05/11, 15:28: `$select=…contentId` em /attachments → Graph 400 "Could not
+    find a property named 'contentId' on type 'microsoft.graph.attachment'".
+    Nenhum e-mail saiu para ninguém depois do deploy. `contentId` é do
+    `fileAttachment` (tipo derivado): não pode ir no $select da base."""
+    reqs = []
+    monkeypatch.setattr(g, "_transporte", _transporte(reqs, corpo={"value": []}))
+    asyncio.run(g.listar_anexos("tok", CONTA, CONTA, "m1"))
+    assert "contentId" not in reqs[0].url.params.get("$select", "")

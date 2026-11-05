@@ -188,3 +188,19 @@ def test_preparar_usa_a_assinatura_da_pessoa(amb, monkeypatch):
     texto, erro = _run("email_preparar", {"de": "ti@healthsafety.com.br", "para": ["c@y.com"],
                                           "assunto": "P", "corpo": "Segue."})
     assert not erro and pedidos["html"] is True and pedidos["anexos"][0]["isInline"] is True
+
+
+def test_falha_depois_do_rascunho_apaga_o_rascunho(amb, monkeypatch):
+    """Quem tentou enviar em 05/11 ficou com rascunhos órfãos no Outlook: o
+    rascunho foi criado e o passo seguinte falhou."""
+    async def falha(*a, **k):
+        raise m.graph.ErroGraph(400, "BadRequest")
+    monkeypatch.setattr(m.graph, "listar_anexos", falha)
+    apagados = []
+
+    async def apagar(*a):
+        apagados.append(a)
+    monkeypatch.setattr(m.graph, "apagar", apagar)
+    texto, erro = _run("email_preparar", {"de": "ti@healthsafety.com.br", "para": ["c@y.com"],
+                                          "assunto": "x", "corpo": "y"})
+    assert erro and apagados and apagados[0][-1] == "graph-1"
