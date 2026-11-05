@@ -635,6 +635,49 @@ só do Nicholson — exceção: a Lidisay segue falando com o `bruce`. Spec e pl
   dono**, aceso só por conversa do PRÓPRIO dono — o SQL do feed descarta
   conversa de admin com bot alheio (estado, Fluxo e números).
 
+### E-mail dos bots pessoais — piloto no `erick-bot` (05/11/2026)
+
+Spec e plano: `docs/superpowers/{specs,plans}/2026-11-05-bot-email-piloto*`. O
+`erick-bot` é o laboratório: mudança vai nele primeiro (`--so`), os outros
+22 só quando o Erick disser.
+
+- **OAuth no app do LOGIN** (Entra "HS.OS"), mas os escopos de e-mail
+  (`Mail.ReadWrite[.Shared]`, `Mail.Send[.Shared]`, `offline_access`) são
+  pedidos SÓ no "Conectar e-mail" (`app/email/graph.py`). ⚠️ O `ESCOPOS` do
+  login não muda — teste tranca.
+- Refresh token **cifrado** (Fernet, `EMAIL_CHAVE_CIFRA`, a MESMA no `.env` e
+  no EasyPanel) em `email_contas`. ⚠️ O usuário de leitura da empresa enxerga
+  as tabelas `email_*` (privilégio padrão): por isso o state da OAuth é hash e
+  a `email_pendentes` não guarda assunto nem corpo.
+- ⚠️ O callback só grava a conta Microsoft com o **mesmo e-mail** do usuário
+  (CSRF de vínculo: A gera o link, B autoriza).
+- Servidor `hsos-email-<bot>` (`routers/mcp_email.py`): HMAC `"email:"+id` com o
+  `ANEXOS_MCP_SEGREDO`; **só no turno do dono** e **recusa se outra pessoa
+  tiver turno aberto com o bot** (o gateway não diz de que sessão veio a
+  chamada). Para terceiros só **prepara**: rascunho no Outlook + cartão
+  (`conversations.media[{type:"email_aprovacao"}]`); sai pelo clique, que
+  confere o hash do rascunho relido (cobre Cco, Responder-para e anexo).
+- Flag `agent_profiles.email_ligado` (admin). `tools_do_bot(..., email=True)`
+  dá ao bot só a PRÓPRIA entrada. Publicar: `backend/scripts/publicar-email-mcp.py`
+  — ⚠️ um patch que declara as entradas e recalcula o deny de TODOS (perfil
+  `coding` enxergaria `hsos-email-*`). Só depois do deploy: a URL é a de produção.
+- Caixas compartilhadas não se descobrem pelo Graph: `PUT /email/caixas/{user}`
+  (admin) com leitura de teste. Enviar pela compartilhada exige "Enviar como"
+  no Exchange — o do Erick funciona.
+- ⚠️ **Bot novo respondia `NO_REPLY`** (token de silêncio do OpenClaw) a
+  "teste": o chat dizia "terminou sem produzir texto". O `AGENTS.md` do
+  template manda sempre responder; levar a bot vivo:
+  `criar-bots-pessoais.py --reescrever-agents-md --aplicar --so <user_id>`.
+  Diagnóstico: o trace `~/.openclaw/agents/<id>/sessions/*.jsonl`
+  (`model.completed` → `assistantTexts`).
+- ⚠️ **Backend local fala com o banco de PRODUÇÃO.** Para testar sem rodar
+  vigia/coletores contra ele: `COLETOR_USO_SEGUNDOS=0 VIGIA_SESSOES_SEGUNDOS=0
+  COLETOR_METRICAS_SEGUNDOS=0 COLETOR_RESPOSTAS_SEGUNDOS=0
+  FRONTEND_URL=http://localhost:8080`. O `MS_EMAIL_REDIRECT_URI` local aponta
+  para o localhost (registrado no Entra).
+- Modelo segue DeepSeek por decisão do Erick (risco LGPD aceito no piloto;
+  reavaliar antes de abrir para outras pessoas).
+
 ### Feature flags — sobrou uma, e ela vem ligada
 
 ⚠️ **Revisadas em 31/08/2026, e o que estava escrito aqui não batia com o
