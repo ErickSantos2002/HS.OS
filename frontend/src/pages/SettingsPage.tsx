@@ -26,6 +26,7 @@ import EmpresaTab from "@/components/settings/EmpresaTab";
 import { Switch } from "@/components/ui/switch";
 import PreferenciaResumoEmAudio from "@/components/settings/PreferenciaResumoEmAudio";
 import ConectarEmail from "@/components/settings/ConectarEmail";
+import MemoriaDoBot from "@/components/settings/MemoriaDoBot";
 import { InstalarApp } from "@/components/InstalarApp";
 import MissionControlDossierPage from "@/pages/MissionControlDossierPage";
 import UsersPage from "@/pages/UsersPage";
@@ -591,6 +592,8 @@ export default function SettingsPage() {
               <PreferenciaResumoEmAudio />
 
               <ConectarEmail />
+
+              <MemoriaDoBot />
 
               {/* Entrada fixa do convite para instalar; some quando já é app. */}
               <InstalarApp variante="entrada" />

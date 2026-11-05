@@ -105,3 +105,47 @@ async def cancelar_acao(acao_id: str, usuario: Usuario = Depends(usuario_atual))
         await conn.execute("UPDATE public.acoes_pendentes SET status = 'cancelada', decidido_em = now() "
                            " WHERE id = $1::uuid AND status = 'pendente'", acao_id)
     return {"status": "cancelada"}
+
+
+# ── Memória do PRÓPRIO bot (tela "Memória do bot") ───────────────────────────
+
+from app.routers.mcp_bot import _gravar_memoria, _ler_memoria  # noqa: E402
+
+_CABECALHO = "# MEMORY.md"
+
+
+async def _meu_bot(usuario: Usuario) -> str:
+    async with sessao(role="service_role") as conn:
+        bot = await conn.fetchval(
+            "SELECT agent_id FROM public.agent_profiles WHERE dono_id = $1::uuid", usuario.id)
+    if not bot:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Você ainda não tem bot pessoal.")
+    return bot
+
+
+def _linhas(conteudo: str) -> list[str]:
+    return [l[2:] for l in conteudo.splitlines() if l.startswith("- ")]
+
+
+@router.get("/bots/memoria")
+async def ver_memoria(usuario: Usuario = Depends(usuario_atual)):
+    bot = await _meu_bot(usuario)
+    return {"bot": bot, "linhas": _linhas(await _ler_memoria(bot))}
+
+
+@router.delete("/bots/memoria/{indice}")
+async def apagar_linha_memoria(indice: int, usuario: Usuario = Depends(usuario_atual)):
+    bot = await _meu_bot(usuario)
+    linhas = _linhas(await _ler_memoria(bot))
+    if not 0 <= indice < len(linhas):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Linha não encontrada.")
+    del linhas[indice]
+    await _gravar_memoria(bot, _CABECALHO + "\n" + "".join(f"- {l}\n" for l in linhas))
+    return {"linhas": linhas}
+
+
+@router.delete("/bots/memoria")
+async def apagar_memoria(usuario: Usuario = Depends(usuario_atual)):
+    bot = await _meu_bot(usuario)
+    await _gravar_memoria(bot, _CABECALHO + "\n")
+    return {"linhas": []}
