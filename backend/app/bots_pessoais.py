@@ -69,7 +69,11 @@ def tools_do_bot(servidores: dict) -> dict:
     """O `tools` do bot no gateway: perfil mínimo, só o alerta, nega todo o resto."""
     return {
         "profile": PERFIL,
-        "alsoAllow": [ALERTA],
+        # ⚠️ `bundle-mcp` é o que deixa ferramenta MCP passar pelo `minimal`
+        # (só `coding`/`messaging` o trazem implícito). Sem ele o alerta não
+        # aparece — o `erick-bot` enxergava só `session_status` (05/11/2026).
+        # Quem limita O QUE passa continua sendo o deny: todo MCP menos o alerta.
+        "alsoAllow": [ALERTA, "bundle-mcp"],
         "deny": _deny_de_mcp([ALERTA], list(TRAVAS_DO_BOT), servidores),
     }
 

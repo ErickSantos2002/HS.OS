@@ -56,7 +56,10 @@ def test_tools_do_bot_nega_todo_mcp_menos_alerta():
     t = tools_do_bot(SERVIDORES)
     deny = set(t["deny"])
     assert t["profile"] == "minimal"
-    assert t["alsoAllow"] == [ALERTA]
+    # ⚠️ `minimal` não libera MCP sozinho — só `coding`/`messaging` trazem o
+    # `bundle-mcp` implícito. Sem ele o alerta some: conferido em 05/11/2026
+    # perguntando ao `erick-bot`, que só enxergava `session_status`.
+    assert t["alsoAllow"] == [ALERTA, "bundle-mcp"]
     assert "banco-hsos__query" in deny
     assert "hsos-anexos-iris__ler_anexo" in deny
     assert not any(d.startswith("hsos-alerta") for d in deny)
