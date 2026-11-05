@@ -28,7 +28,7 @@ load_dotenv()
 
 from app.bots_pessoais import (  # noqa: E402
     EMOJI, arquivos_do_bot, id_do_bot, motivo_inelegivel, nome_do_bot, tools_do_bot)
-from app.database import sessao  # noqa: E402
+from app.database import close_db, get_pool, init_db, sessao  # noqa: E402
 from app.routers.bots_pessoais import MODELO, _Deps, _servidores, _workspace, criar_bot  # noqa: E402
 
 # Decisão do Erick, 05/11/2026: o Nicholson segue só com os especialistas.
@@ -95,5 +95,17 @@ async def main() -> int:
     return 1 if falhas else 0
 
 
+async def _rodar() -> int:
+    # Fora do uvicorn ninguém abre o pool — sem isto, "banco indisponível".
+    await init_db()
+    if get_pool() is None:
+        print("Não conectei no banco (DATABASE_URL do backend/.env).")
+        return 1
+    try:
+        return await main()
+    finally:
+        await close_db()
+
+
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    sys.exit(asyncio.run(_rodar()))
