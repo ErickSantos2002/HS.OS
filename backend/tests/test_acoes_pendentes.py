@@ -46,7 +46,9 @@ class Conn:
     async def __aenter__(self):
         return self
 
-    async def __aexit__(self, *a):
+    async def __aexit__(self, tipo, *a):
+        # Registra se a transação terminou com exceção (= rollback de verdade).
+        self.saiu_com_erro = tipo is not None
         return False
 
 
@@ -103,3 +105,16 @@ def test_erro_do_sistema_fica_registrado(amb, monkeypatch):
 def test_cancelar(amb):
     asyncio.run(rota.cancelar_acao("a1", ERICK))
     assert amb["conn"].a["status"] == "cancelada" and amb["exec"] == []
+
+
+def test_erro_e_gravado_fora_do_rollback(amb, monkeypatch):
+    """O 502 era levantado DENTRO da transação: o rollback desfazia o
+    status='erro' e a ação voltava a 'pendente', pronta para rodar de novo.
+    Exceção qualquer (não só ErroSistema) também tem que virar 'erro'."""
+    async def explode(email, bot, payload):
+        raise RuntimeError("timeout de rede")
+    monkeypatch.setitem(acoes.EXECUTORES, ("taskhs", "comentar"), explode)
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(rota.confirmar_acao("a1", ERICK))
+    assert e.value.status_code == 502
+    assert amb["conn"].a["status"] == "erro" and amb["conn"].saiu_com_erro is False

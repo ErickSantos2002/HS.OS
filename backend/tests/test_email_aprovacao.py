@@ -54,7 +54,9 @@ class Conn:
     async def __aenter__(self):
         return self
 
-    async def __aexit__(self, *a):
+    async def __aexit__(self, tipo, *a):
+        # Registra se a transação terminou com exceção (= rollback de verdade).
+        self.saiu_com_erro = tipo is not None
         return False
 
 
@@ -141,3 +143,15 @@ def test_clique_duplo_trava_a_linha_e_nao_rebaixa_enviado():
     assert "FOR UPDATE" in fonte
     fonte_env = inspect.getsource(rota.enviar_pendente)
     assert fonte_env.count("AND status = 'pendente'") >= 2
+
+
+def test_erro_de_envio_e_gravado_fora_do_rollback(amb, monkeypatch):
+    h = asyncio.run(rota.ver_pendente("p1", ERICK))["hash"]
+
+    async def falha(*a):
+        raise rota.graph.ErroGraph(403, "ErrorSendAsDenied")
+    monkeypatch.setattr(rota.graph, "enviar_rascunho", falha)
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(rota.enviar_pendente("p1", rota.EnviarIn(hash=h), ERICK))
+    assert e.value.status_code == 502
+    assert amb["conn"].pend["status"] == "erro" and amb["conn"].saiu_com_erro is False

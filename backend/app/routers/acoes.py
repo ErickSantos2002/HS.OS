@@ -65,6 +65,10 @@ async def ver_acao(acao_id: str, usuario: Usuario = Depends(usuario_atual)):
 
 @router.post("/acoes/{acao_id}/confirmar")
 async def confirmar_acao(acao_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """⚠️ O erro é levantado FORA da transação: dentro dela, o rollback desfazia
+    o `status='erro'` e a ação voltava a 'pendente', pronta para rodar de novo
+    (revisão de segurança). Qualquer exceção do executor vira 'erro'."""
+    falha: str | None = None
     async with sessao(role="service_role") as conn:
         a = await _acao_do_dono(conn, acao_id, usuario)
         if a["status"] != "pendente":
@@ -75,13 +79,20 @@ async def confirmar_acao(acao_id: str, usuario: Usuario = Depends(usuario_atual)
         try:
             resultado = await executor(a["email"], a["agent_id"], a["payload"])
         except ErroSistema as e:
+            falha = str(e)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Ação %s falhou", acao_id)
+            falha = f"falha ao executar ({type(e).__name__})"
+        if falha:
             await conn.execute("UPDATE public.acoes_pendentes SET status = 'erro', erro = $2, "
                                "decidido_em = now() WHERE id = $1::uuid AND status = 'pendente'",
-                               acao_id, str(e)[:300])
-            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from e
-        await conn.execute("UPDATE public.acoes_pendentes SET status = 'feita', resultado = $2, "
-                           "decidido_em = now() WHERE id = $1::uuid AND status = 'pendente'",
-                           acao_id, resultado)
+                               acao_id, falha[:300])
+        else:
+            await conn.execute("UPDATE public.acoes_pendentes SET status = 'feita', resultado = $2, "
+                               "decidido_em = now() WHERE id = $1::uuid AND status = 'pendente'",
+                               acao_id, resultado)
+    if falha:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, falha)
     return {"status": "feita", "resultado": resultado}
 
 
