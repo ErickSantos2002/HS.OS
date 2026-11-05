@@ -205,7 +205,10 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
     else:
         cid = _int(args, "card_id")
         card = await taskhs.chamar(em, bot, "GET", f"/lists/{lid}/cards/{cid}")
-        titulo = card.get("title") or f"card {cid}"
+        # ⚠️ O título vem do TaskHS (dado externo) e entra no cartão que o dono
+        # confirma: uma linha, sem aspas próprias, cortado — o que manda no
+        # cartão são os campos do `payload` (revisão de segurança).
+        titulo = _linha(str(card.get("title") or f"card {cid}")).replace("'", "’")[:60]
         if nome == "taskhs_comentar":
             texto = str(args.get("texto") or "").strip()[:5000]
             if not texto:
