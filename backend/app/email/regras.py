@@ -116,8 +116,9 @@ def hash_rascunho(de: str, msg: dict, anexos: list[dict] | None = None) -> str:
     anexos (nome, contentId, inline, tamanho) — inclusive as imagens da
     assinatura: trocar uma delas no Outlook depois do cartão também conta."""
     c = conteudo_do_rascunho(msg, anexos)
-    todos = sorted((str(x.get("name")), str(x.get("contentId")), bool(x.get("isInline")),
-                    int(x.get("size") or 0)) for x in anexos or [])
+    todos = sorted((str(x.get("id")), str(x.get("name")), str(x.get("contentId")),
+                    bool(x.get("isInline")), int(x.get("size") or 0),
+                    str(x.get("lastModifiedDateTime"))) for x in anexos or [])
     extra = json.dumps({"cco": _norm(c["cco"]), "rp": _norm(c["responder_para"]), "anexos": todos},
                        sort_keys=True)
     return hash_email(de, c["para"], c["cc"], c["assunto"], c["corpo"] + "\x00" + extra)
