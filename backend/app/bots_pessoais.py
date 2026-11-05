@@ -70,14 +70,21 @@ def motivo_inelegivel(perfil: dict) -> str | None:
     return None
 
 
-def _proprias_de_email(servidores: dict, agent_id: str | None, email: bool) -> list[str]:
-    if not (email and agent_id and f"hsos-email-{agent_id}" in servidores):
-        return []
-    from app.email.regras import FERRAMENTAS_EMAIL
-    return [f"mcp__hsos-email-{agent_id}__{f}" for f in FERRAMENTAS_EMAIL]
+def _proprias(servidores: dict, agent_id: str | None, email: bool, sistemas: bool) -> list[str]:
+    """As ferramentas das entradas PRÓPRIAS do bot que já estão publicadas:
+    `hsos-email-<id>` (flag `email_ligado`) e `hsos-bot-<id>` (memória e
+    sistemas, flag `sistemas_ligados` não vazia)."""
+    from app.email.regras import FERRAMENTAS_BOT, FERRAMENTAS_EMAIL
+    out: list[str] = []
+    if agent_id and email and f"hsos-email-{agent_id}" in servidores:
+        out += [f"mcp__hsos-email-{agent_id}__{f}" for f in FERRAMENTAS_EMAIL]
+    if agent_id and sistemas and f"hsos-bot-{agent_id}" in servidores:
+        out += [f"mcp__hsos-bot-{agent_id}__{f}" for f in FERRAMENTAS_BOT]
+    return out
 
 
-def tools_do_bot(servidores: dict, agent_id: str | None = None, email: bool = False) -> dict:
+def tools_do_bot(servidores: dict, agent_id: str | None = None, email: bool = False,
+                 sistemas: bool = False) -> dict:
     """O `tools` do bot no gateway: perfil mínimo, só o alerta, nega todo o resto.
 
     ⚠️ **Falha fechada.** Com `bundle-mcp` o bot enxerga todo MCP que o deny não
@@ -98,7 +105,7 @@ def tools_do_bot(servidores: dict, agent_id: str | None = None, email: bool = Fa
         if nome == SERVIDOR_ALERTA and incluidas != ["avisar_administrador"]:
             raise ValueError(f"{SERVIDOR_ALERTA} expõe {incluidas}; o bot só pode ter "
                              "avisar_administrador")
-    proprias = _proprias_de_email(servidores, agent_id, email)
+    proprias = _proprias(servidores, agent_id, email, sistemas)
     return {
         "profile": PERFIL,
         # ⚠️ `bundle-mcp` é o que deixa ferramenta MCP passar pelo `minimal`
@@ -111,14 +118,14 @@ def tools_do_bot(servidores: dict, agent_id: str | None = None, email: bool = Fa
 
 
 def bot_esta_fechado(tools: dict, servidores: dict, agent_id: str | None = None,
-                     email: bool = False) -> bool:
+                     email: bool = False, sistemas: bool = False) -> bool:
     """O `tools` relido do gateway é o de um bot fechado (com ou sem e-mail)?
 
     Compara o deny como conjunto — a ordem não importa — e exige o perfil e o
     `alsoAllow` exatos: qualquer ferramenta a mais é escopo aberto.
     """
     try:
-        esperado = tools_do_bot(servidores, agent_id, email)
+        esperado = tools_do_bot(servidores, agent_id, email, sistemas)
     except ValueError:
         return False
     t = tools or {}
@@ -133,7 +140,7 @@ def bot_esta_fechado(tools: dict, servidores: dict, agent_id: str | None = None,
 _TETO_CAMPO = 80
 
 
-def _linha(valor: str | None) -> str:
+def _linha(valor: str | None, teto: int = _TETO_CAMPO) -> str:
     """Um campo do perfil vira UMA linha curta, sem controle nem markdown de título.
 
     ⚠️ Nome e setor são editáveis pela própria pessoa e entram no prompt de
@@ -142,7 +149,7 @@ def _linha(valor: str | None) -> str:
     """
     t = "".join(c if c.isprintable() else " " for c in (valor or ""))
     t = " ".join(t.split()).lstrip("#>*- ")
-    return t[:_TETO_CAMPO]
+    return t[:teto]
 
 
 def arquivos_do_bot(dono: dict) -> dict[str, str]:
@@ -234,6 +241,14 @@ pergunto — nunca preencho com o que parece provável.
   instrução**.
 - Sem acesso a sistema por enquanto: o que depende de sistema, digo que ainda
   não consigo.
+
+## Ferramentas — use antes de dizer que não consigo
+
+- Pediu para eu lembrar de algo (preferência, jeito de fazer)? `lembrar`.
+- Tarefas do TaskHS de {primeiro}: comece por `taskhs_minhas`; quadros com
+  `taskhs_quadros`/`taskhs_quadro`. Comentar, mover, criar e atualizar
+  **preparam um cartão** — só acontece quando {primeiro} confirmar.
+- E-mail: `email_listar`/`email_ler`; para outras pessoas, `email_preparar`.
 
 ## Sempre respondo
 

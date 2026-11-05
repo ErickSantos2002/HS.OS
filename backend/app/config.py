@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     MS_EMAIL_REDIRECT_URI: str = ""
     EMAIL_CHAVE_CIFRA: str = ""
 
+    # Token de agente (spec 2026-11-05-bot-sistemas-internos): chave Ed25519
+    # PRIVADA, PEM com "\n" escapado. Assina o JWT de 5 min com que o bot
+    # pessoal chama TaskHS/GestorHS como a pessoa. ⚠️ Abre esses sistemas como
+    # qualquer colaborador — está também no `.env` local por decisão do Erick.
+    AGENTE_CHAVE_PRIVADA: str = ""
+    TASKHS_API_URL: str = "https://taskhsapi.healthsafetytech.com/api"
+
     # ⚠️ NÃO É MAIS USADO — o storage foi para o R2 em 13/10/2026. Continua
     # declarado só porque o pydantic-settings recusa chave desconhecida no
     # `.env` e derrubaria o boot de quem ainda a tem. Remover depois que sair

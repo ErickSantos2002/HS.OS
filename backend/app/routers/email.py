@@ -201,18 +201,28 @@ async def enviar_pendente(pend_id: str, dados: EnviarIn, usuario: Usuario = Depe
             raise HTTPException(status.HTTP_409_CONFLICT,
                                 "O rascunho mudou desde que você abriu. Revise antes de enviar.")
         c = conteudo_do_rascunho(msg)
+        # ⚠️ O 502 sai FORA da transação: dentro dela o rollback desfazia o
+        # 'erro' e o e-mail voltava a 'pendente' (revisão de segurança).
+        falha: str | None = None
         try:
             await graph.enviar_rascunho(access, conta, p["caixa_de"], p["graph_id"])
         except graph.ErroGraph as e:
+            falha = f"A Microsoft recusou o envio: {e}"
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Envio %s falhou", pend_id)
+            falha = f"Falha ao enviar ({type(e).__name__})"
+        if falha:
             await conn.execute("UPDATE public.email_pendentes SET status = 'erro', erro = $2, "
                                "decidido_em = now() WHERE id = $1::uuid AND status = 'pendente'",
-                               pend_id, str(e)[:300])
+                               pend_id, falha[:300])
             await contas.evento(conn, p["user_id"], None, "enviar_erro", p["caixa_de"], p["graph_id"])
-            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"A Microsoft recusou o envio: {e}") from e
-        await conn.execute("UPDATE public.email_pendentes SET status = 'enviado', decidido_em = now() "
-                           " WHERE id = $1::uuid AND status = 'pendente'", pend_id)
-        await contas.evento(conn, p["user_id"], None, "enviar", p["caixa_de"], p["graph_id"],
-                            [*c["para"], *c["cc"]])
+        else:
+            await conn.execute("UPDATE public.email_pendentes SET status = 'enviado', decidido_em = now() "
+                               " WHERE id = $1::uuid AND status = 'pendente'", pend_id)
+            await contas.evento(conn, p["user_id"], None, "enviar", p["caixa_de"], p["graph_id"],
+                                [*c["para"], *c["cc"]])
+    if falha:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, falha)
     return {"status": "enviado"}
 
 
