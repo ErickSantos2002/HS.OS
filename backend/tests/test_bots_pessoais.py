@@ -231,3 +231,10 @@ def test_soul_nao_diz_mais_que_nao_tem_acesso():
 def test_agents_md_diz_que_ele_ve_a_propria_memoria():
     a = arquivos_do_bot({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"})["AGENTS.md"]
     assert "MEMORY.md" in a
+
+
+def test_bot_sabe_que_nao_escreve_assinatura():
+    """No teste de 05/11 o bot escreveu uma assinatura à mão no corpo; com a
+    do Perfil entrando automática, sairiam duas."""
+    a = " ".join(arquivos_do_bot({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"})["AGENTS.md"].split())
+    assert "assinatura" in a.lower() and "automaticamente" in a
