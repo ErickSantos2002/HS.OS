@@ -27,6 +27,7 @@ from app.routers.bots_pessoais import router as bots_pessoais_router
 from app.routers.email import router as email_router
 from app.routers.acoes import router as acoes_router
 from app.routers.mcp_email import router as mcp_email_router
+from app.routers.mcp_bot import router as mcp_bot_router
 from app.routers.anexos import router as anexos_router
 from app.routers.automacoes import router as automacoes_router
 from app.routers.artefatos import router as artefatos_router
@@ -237,6 +238,7 @@ app.include_router(agents_router)
 app.include_router(email_router)
 app.include_router(acoes_router)
 app.include_router(mcp_email_router)
+app.include_router(mcp_bot_router)
 app.include_router(anexos_router)
 app.include_router(arenas_router)
 app.include_router(artefatos_router)
