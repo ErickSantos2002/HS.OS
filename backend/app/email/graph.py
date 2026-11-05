@@ -142,14 +142,20 @@ def _destinos(lista) -> list[dict]:
     return [{"emailAddress": {"address": e}} for e in lista or []]
 
 
-def _mensagem(para, cc, assunto, corpo) -> dict:
-    return {"subject": assunto or "", "body": {"contentType": "Text", "content": corpo or ""},
+def _mensagem(para, cc, assunto, corpo, html: bool = False) -> dict:
+    return {"subject": assunto or "",
+            "body": {"contentType": "HTML" if html else "Text", "content": corpo or ""},
             "toRecipients": _destinos(para), "ccRecipients": _destinos(cc)}
 
 
-async def criar_rascunho(access, conta, de, para, cc, assunto, corpo) -> str:
-    r = await _pedir("POST", f"{_caixa(de, conta)}/messages", access,
-                     json=_mensagem(para, cc, assunto, corpo))
+async def criar_rascunho(access, conta, de, para, cc, assunto, corpo, html: bool = False,
+                         anexos: list | None = None) -> str:
+    """`html` + `anexos` (fileAttachment inline, `contentId`) = rascunho com a
+    assinatura da pessoa — ver `app/email/assinatura.py`."""
+    m = _mensagem(para, cc, assunto, corpo, html)
+    if anexos:
+        m["attachments"] = anexos
+    r = await _pedir("POST", f"{_caixa(de, conta)}/messages", access, json=m)
     if not r.get("id"):
         raise ErroGraph(0, "rascunho criado sem id")
     return r["id"]

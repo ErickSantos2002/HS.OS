@@ -16,9 +16,10 @@ describe("cartão de e-mail", () => {
 
   it("linhas extras só quando existem", () => {
     const base = { de: "ti@hs.com.br", para: ["a@y.com"], cc: [], cco: [], responder_para: [], tem_anexo: false };
-    expect(linhasDoCartao(base).map((l) => l.rotulo)).toEqual(["De", "Para"]);
+    expect(linhasDoCartao(base).map((l) => l.rotulo)).toEqual(["De", "Para", "Assinatura"]);
     const cheio = { ...base, cc: ["c@y.com"], cco: ["e@z.com"], responder_para: ["r@z.com"], tem_anexo: true };
-    expect(linhasDoCartao(cheio).map((l) => l.rotulo)).toEqual(["De", "Para", "Cc", "Cco", "Responder para", "Anexo"]);
+    expect(linhasDoCartao(cheio).map((l) => l.rotulo)).toEqual(["De", "Para", "Cc", "Cco", "Responder para", "Anexo", "Assinatura"]);
+    expect(linhasDoCartao({ ...cheio, assinatura: true }).map((l) => l.rotulo)).not.toContain("Anexo");
   });
 
   it("mensagem da volta da Microsoft", () => {

@@ -28,6 +28,13 @@ export interface Pendente {
   assunto?: string;
   corpo?: string;
   hash?: string;
+  assinatura?: boolean;
+}
+
+export interface Assinatura {
+  texto_antes: string;
+  texto_depois: string;
+  imagens: { ordem: number; mime: string; nome: string; tamanho: number }[];
 }
 
 export const estadoEmail = () => api<EstadoEmail>("/email/estado");
@@ -36,6 +43,16 @@ export const desconectarEmail = () => api("/email/conexao", { method: "DELETE" }
 export const verPendente = (id: string) => api<Pendente>(`/email/pendentes/${encodeURIComponent(id)}`);
 export const enviarPendente = (id: string, hash: string) =>
   api<{ status: string }>(`/email/pendentes/${encodeURIComponent(id)}/enviar`, { method: "POST", body: { hash } });
+export const verAssinatura = () => api<Assinatura>("/email/assinatura");
+export const salvarTextoAssinatura = (texto_antes: string, texto_depois: string) =>
+  api("/email/assinatura", { method: "PUT", body: { texto_antes, texto_depois } });
+export const enviarImagemAssinatura = (ordem: number, arquivo: File) => {
+  const f = new FormData();
+  f.append("arquivo", arquivo);
+  return api(`/email/assinatura/imagem/${ordem}`, { method: "POST", body: f });
+};
+export const apagarImagemAssinatura = (ordem: number) =>
+  api(`/email/assinatura/imagem/${ordem}`, { method: "DELETE" });
 export const descartarPendente = (id: string) =>
   api<{ status: string }>(`/email/pendentes/${encodeURIComponent(id)}/descartar`, { method: "POST" });
 
@@ -51,7 +68,7 @@ export function rotuloStatus(status: string): string {
   return STATUS[status] ?? status;
 }
 
-type Cabecalho = Pick<Pendente, "de" | "para" | "cc" | "cco" | "responder_para" | "tem_anexo">;
+type Cabecalho = Pick<Pendente, "de" | "para" | "cc" | "cco" | "responder_para" | "tem_anexo" | "assinatura">;
 
 /** As linhas de cabeçalho do cartão. Cco, Responder-para e Anexo só aparecem
  *  quando existem — e TÊM que aparecer: o hash do servidor os cobre. */
@@ -63,7 +80,9 @@ export function linhasDoCartao(p: Cabecalho): { rotulo: string; valor: string; d
   if (p.cc?.length) l.push({ rotulo: "Cc", valor: p.cc.join(", ") });
   if (p.cco?.length) l.push({ rotulo: "Cco", valor: p.cco.join(", "), destaque: true });
   if (p.responder_para?.length) l.push({ rotulo: "Responder para", valor: p.responder_para.join(", "), destaque: true });
-  if (p.tem_anexo) l.push({ rotulo: "Anexo", valor: "este e-mail tem anexo (veja no Outlook)", destaque: true });
+  // A assinatura entra como imagem embutida — o Graph pode contá-la como anexo.
+  if (p.tem_anexo && !p.assinatura) l.push({ rotulo: "Anexo", valor: "este e-mail tem anexo (veja no Outlook)", destaque: true });
+  l.push({ rotulo: "Assinatura", valor: p.assinatura ? "sim, a do seu Perfil" : "não (cadastre no Perfil)" });
   return l;
 }
 

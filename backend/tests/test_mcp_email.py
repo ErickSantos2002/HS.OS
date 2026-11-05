@@ -171,3 +171,19 @@ def test_outro_turno_aberto_consulta_runs_de_outras_pessoas():
     c = C()
     assert asyncio.run(m.outro_turno_aberto(c, "erick-bot", "u-erick")) is True
     assert "agent_runs" in c.sql and "user_id <>" in c.sql and "message_id IS NULL" in c.sql
+
+
+def test_preparar_usa_a_assinatura_da_pessoa(amb, monkeypatch):
+    async def carregar(conn, user_id):
+        return {"texto_antes": "Atenciosamente,", "texto_depois": "",
+                "imagens": [{"ordem": 1, "mime": "image/gif", "nome": "g.gif", "dados": b"y"}]}
+    monkeypatch.setattr(m.assinatura, "carregar", carregar)
+    pedidos = {}
+
+    async def criar(*a, **k):
+        pedidos.update(k)
+        return "graph-1"
+    monkeypatch.setattr(m.graph, "criar_rascunho", criar)
+    texto, erro = _run("email_preparar", {"de": "ti@healthsafety.com.br", "para": ["c@y.com"],
+                                          "assunto": "P", "corpo": "Segue."})
+    assert not erro and pedidos["html"] is True and pedidos["anexos"][0]["isInline"] is True

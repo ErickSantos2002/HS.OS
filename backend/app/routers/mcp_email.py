@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
-from app.email import contas, graph
+from app.email import assinatura, contas, graph
 from app.email.regras import (FERRAMENTAS_EMAIL, como_dado_externo, escolher_caixa, hash_rascunho, html_para_texto,
                               validar_enderecos)
 from app.integracoes import exige_segredo, ler_segredo
@@ -166,14 +166,18 @@ async def _rodar(conn, agent_id: str, nome: str, args: dict, ctx: dict) -> str:
         para = validar_enderecos(args.get("para"))
         cc = validar_enderecos(args.get("cc"), vazio_ok=True)
         assunto, corpo = str(args.get("assunto") or ""), str(args.get("corpo") or "")
-        gid = await graph.criar_rascunho(access, conta, de, para, cc, assunto, corpo)
+        # Assinatura da pessoa (Perfil): HTML com imagens embutidas.
+        ass = await assinatura.carregar(conn, dono)
+        gid = await graph.criar_rascunho(access, conta, de, para, cc, assunto,
+                                         assinatura.montar_html(corpo, ass), html=True,
+                                         anexos=assinatura.anexos_inline(ass))
         # O hash é o do rascunho RELIDO (o Graph normaliza o corpo) — o mesmo
         # cálculo que o cartão e o "Enviar" fazem.
         relido = await graph.ler(access, conta, de, gid, texto=True)
         pend = await conn.fetchval(
-            "INSERT INTO public.email_pendentes (user_id, agent_id, caixa_de, para, cc, graph_id, hash) "
-            "VALUES ($1::uuid, $2, $3, $4::text[], $5::text[], $6, $7) RETURNING id::text",
-            dono, agent_id, de, para, cc, gid, hash_rascunho(de, relido))
+            "INSERT INTO public.email_pendentes (user_id, agent_id, caixa_de, para, cc, graph_id, hash, "
+            "assinatura) VALUES ($1::uuid, $2, $3, $4::text[], $5::text[], $6, $7, $8) RETURNING id::text",
+            dono, agent_id, de, para, cc, gid, hash_rascunho(de, relido), ass is not None)
         # O cartão é uma mensagem do agente na conversa: push e tempo real vêm
         # dos triggers que já existem (`trg_push_pendente`, `trg_notificar_*`).
         conv = await conn.fetchval(
@@ -185,7 +189,8 @@ async def _rodar(conn, agent_id: str, nome: str, args: dict, ctx: dict) -> str:
         await conn.execute("UPDATE public.email_pendentes SET conversa_id = $2::uuid WHERE id = $1::uuid",
                            pend, conv)
         await contas.evento(conn, dono, agent_id, "preparar", de, gid, [*para, *cc])
-        return (f"Preparado (rascunho em {de}, para {', '.join(para)}). Só sai quando "
+        return (f"Preparado (rascunho em {de}, para {', '.join(para)}"
+                f"{', com a assinatura de ' + ctx['primeiro'] if ass else ', SEM assinatura — ela não cadastrou no Perfil'}). Só sai quando "
                 f"{ctx['primeiro']} aprovar no HS.OS — não diga que foi enviado.")
 
     if nome == "email_pendentes":
