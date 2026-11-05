@@ -204,3 +204,12 @@ mesma nos dois lados**, e se for perdida todo mundo precisa reconectar.
 - A forma visual do cartão de aprovação, dentro do padrão do chat.
 - O mecanismo de detecção de "rascunho mudou desde o cartão" (hash do
   conteúdo, `changeKey` ou `lastModifiedDateTime` do Graph).
+
+## Abertura para o time (05/11/2026, decisão do Erick)
+
+- **DeepSeek liberado para todos os bots**, com o risco de LGPD aceito pelo
+  Erick, que foi reavaliado antes de abrir, como pedia esta spec.
+- Caixas compartilhadas: lista do Erick gravada em `email_caixas_previstas`
+  (`031`) e conferida com o token de cada pessoa no "Conectar e-mail".
+- No mesmo dia em que os bots abrem para os donos, os especialistas fecham
+  para o Nicholson (e a Lidisay no `bruce`): `scripts/abrir-bots.py`.

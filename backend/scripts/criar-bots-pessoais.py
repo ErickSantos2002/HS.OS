@@ -55,6 +55,9 @@ async def main() -> int:
     ap.add_argument("--trocar-sufixo", metavar="NOVO",
                     help="renomeia TODOS os bots trocando o sufixo (ex.: -Safi), mantendo o "
                          "prefixo que cada pessoa escolheu; regrava IDENTITY/SOUL e o bloco do time")
+    ap.add_argument("--reescrever-identidade", action="store_true",
+                    help="regrava USER.md e IDENTITY.md dos bots (template atual; o USER.md "
+                         "ganha o bloco do time em seguida)")
     ap.add_argument("--reescrever-soul", action="store_true",
                     help="regrava SÓ o SOUL.md dos bots existentes com o template atual")
     a = ap.parse_args()
@@ -65,6 +68,10 @@ async def main() -> int:
         return await _reescrever_agents_md(a.aplicar, a.so)
     if a.reescrever_soul:
         return await _reescrever_agents_md(a.aplicar, a.so, arquivo="SOUL.md")
+    if a.reescrever_identidade:
+        r1 = await _reescrever_agents_md(a.aplicar, a.so, arquivo="IDENTITY.md")
+        r2 = await _reescrever_agents_md(a.aplicar, a.so, arquivo="USER.md")
+        return r1 or r2
 
     candidatos = await _candidatos()
     ids = [id_do_bot(c["full_name"]) for c in candidatos]
@@ -123,8 +130,16 @@ async def _reescrever_agents_md(aplicar: bool, so: str | None, arquivo: str = "A
     for l in linhas:
         r = await deps.chamar("agents.files.get", {"agentId": l["agent_id"], "name": arquivo})
         atual = ((r.get("file") or {}).get("content")) or ""
-        novo = (agents_md_novo(dict(l), atual) if arquivo == "AGENTS.md"
-                else arquivos_do_bot(dict(l), nome_bot=l["nome_bot"])[arquivo])
+        if arquivo == "AGENTS.md":
+            novo = agents_md_novo(dict(l), atual)
+        else:
+            novo = arquivos_do_bot(dict(l), nome_bot=l["nome_bot"])[arquivo]
+            if arquivo == "USER.md":
+                # O bloco do time continua: só o trecho do dono vem do template.
+                from app.time_da_empresa import MARCA_FIM, MARCA_INICIO
+                i, f = atual.find(MARCA_INICIO), atual.find(MARCA_FIM)
+                if i != -1 and f > i:
+                    novo = novo.rstrip() + "\n\n" + atual[i:f + len(MARCA_FIM)] + "\n"
         if excede_o_teto(novo):
             print(f"  {l['agent_id']:16} NÃO: passaria do teto")
             falhas += 1

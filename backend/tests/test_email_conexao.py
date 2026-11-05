@@ -141,3 +141,17 @@ def test_conta_de_outra_pessoa_nao_e_gravada(conn, monkeypatch):
 def test_url_leva_login_hint(conn):
     r = asyncio.run(rota.conectar(ERICK))
     assert "login_hint=ti%40healthsafetytech.com" in r["url"]
+
+
+def test_callback_confere_as_caixas_previstas(conn, monkeypatch):
+    """A lista do admin espera o token da pessoa: ao conectar, cada caixa
+    prevista é conferida com a leitura de teste e só as que abrem entram."""
+    _cb(conn, monkeypatch)
+    conferidas = []
+
+    async def conferir(user_id, access, conta):
+        conferidas.append((user_id, access, conta))
+        return 2
+    monkeypatch.setattr(rota.contas, "conferir_previstas", conferir)
+    asyncio.run(rota.callback(code="c", state="abc", error=None))
+    assert conferidas == [("u-erick", "a", "ti@healthsafetytech.com")]
