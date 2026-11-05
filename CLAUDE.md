@@ -658,7 +658,7 @@ Spec e plano: `docs/superpowers/{specs,plans}/2026-11-05-bot-email-piloto*`. O
   (`conversations.media[{type:"email_aprovacao"}]`); sai pelo clique, que
   confere o hash do rascunho relido (cobre Cco, Responder-para e anexo).
 - Flag `agent_profiles.email_ligado` (admin). `tools_do_bot(..., email=True)`
-  dá ao bot só a PRÓPRIA entrada. Publicar: `backend/scripts/publicar-email-mcp.py`
+  dá ao bot só a PRÓPRIA entrada. Publicar: `backend/scripts/publicar-bots-mcp.py` (e-mail e sistemas)
   — ⚠️ um patch que declara as entradas e recalcula o deny de TODOS (perfil
   `coding` enxergaria `hsos-email-*`). Só depois do deploy: a URL é a de produção.
 - Caixas compartilhadas não se descobrem pelo Graph: `PUT /email/caixas/{user}`

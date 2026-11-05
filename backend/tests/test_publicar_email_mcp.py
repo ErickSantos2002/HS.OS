@@ -12,7 +12,7 @@ from app.bots_pessoais import tools_do_bot
 from app.email.regras import FERRAMENTAS_EMAIL
 
 _spec = importlib.util.spec_from_file_location(
-    "publicar_email_mcp", pathlib.Path(__file__).resolve().parents[1] / "scripts" / "publicar-email-mcp.py")
+    "publicar_bots_mcp", pathlib.Path(__file__).resolve().parents[1] / "scripts" / "publicar-bots-mcp.py")
 pub = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(pub)
 
@@ -55,3 +55,14 @@ def test_url_nao_e_a_assinatura_do_anexos():
     from app.routers.mcp_anexos import assinatura_do_agente
     _, novos = pub.montar_patch(_conf(), "seg", "tok", bots={"erick-bot"}, com_email={"erick-bot"})
     assert assinatura_do_agente("seg", "erick-bot") not in novos["hsos-email-erick-bot"]["url"]
+
+
+def test_entrada_de_sistemas_e_negada_aos_outros():
+    from app.email.regras import FERRAMENTAS_BOT
+    patch, novos = pub.montar_patch(_conf(), "seg", "tok", bots={"erick-bot", "andre-bot"},
+                                    com_email=set(), com_sistemas={"erick-bot"})
+    assert set(novos) == {"hsos-bot-erick-bot"} and "/mcp/bot/erick-bot/" in novos["hsos-bot-erick-bot"]["url"]
+    lista = {a["id"]: a["tools"] for a in patch["agents"]["list"]}
+    alheias = {f"hsos-bot-erick-bot__{f}" for f in FERRAMENTAS_BOT}
+    assert alheias <= set(lista["nina"]["deny"]) and alheias <= set(lista["andre-bot"]["deny"])
+    assert {f"mcp__hsos-bot-erick-bot__{f}" for f in FERRAMENTAS_BOT} <= set(lista["erick-bot"]["alsoAllow"])
