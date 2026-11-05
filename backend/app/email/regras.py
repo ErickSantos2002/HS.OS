@@ -90,23 +90,30 @@ def escolher_caixa(pedida: str | None, conta: str, extras) -> str:
     return p
 
 
-def conteudo_do_rascunho(msg: dict) -> dict:
+def anexos_extras(anexos: list[dict]) -> list[str]:
+    """Os anexos do rascunho que NÃO são as imagens da assinatura (inline com
+    `contentId` assinatura-1/2). São esses que o cartão tem que mostrar."""
+    return [x.get("name") or "anexo" for x in anexos or []
+            if not (x.get("isInline") and str(x.get("contentId") or "").startswith("assinatura-"))]
+
+
+def conteudo_do_rascunho(msg: dict, extras: list[str] | None = None) -> dict:
     """Tudo o que o cartão mostra e o hash cobre, como o Graph devolve o
-    rascunho — inclusive Cco, "Responder para" e se há anexo, que alguém pode
-    acrescentar no Outlook depois do cartão (alerta da revisão de segurança)."""
+    rascunho — inclusive Cco, "Responder para" e os anexos que não são da
+    assinatura, que alguém pode acrescentar no Outlook depois do cartão."""
     def ends(chave):
         return [((r or {}).get("emailAddress") or {}).get("address", "") for r in msg.get(chave) or []]
     return {"para": ends("toRecipients"), "cc": ends("ccRecipients"),
             "cco": ends("bccRecipients"), "responder_para": ends("replyTo"),
-            "tem_anexo": bool(msg.get("hasAttachments")),
+            "anexos": list(extras or []), "tem_anexo": bool(extras),
             "assunto": msg.get("subject") or "",
             "corpo": ((msg.get("body") or {}).get("content") or "")}
 
 
-def hash_rascunho(de: str, msg: dict) -> str:
+def hash_rascunho(de: str, msg: dict, extras: list[str] | None = None) -> str:
     """⚠️ Sempre do rascunho RELIDO, nunca do que o bot mandou: o Graph normaliza
     o corpo, e comparar com a entrada daria "mudou" à toa."""
-    c = conteudo_do_rascunho(msg)
+    c = conteudo_do_rascunho(msg, extras)
     extra = json.dumps({"cco": _norm(c["cco"]), "rp": _norm(c["responder_para"]),
-                        "anexo": c["tem_anexo"]}, sort_keys=True)
+                        "anexos": sorted(c["anexos"])}, sort_keys=True)
     return hash_email(de, c["para"], c["cc"], c["assunto"], c["corpo"] + "\x00" + extra)

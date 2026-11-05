@@ -71,9 +71,10 @@ def test_hash_cobre_cco_responder_para_e_anexos():
             "body": {"content": "c"}}
     h = r.hash_rascunho("ti@x.com", base)
     for extra in ({"bccRecipients": [{"emailAddress": {"address": "espiao@z.com"}}]},
-                  {"replyTo": [{"emailAddress": {"address": "outro@z.com"}}]},
-                  {"hasAttachments": True}):
+                  {"replyTo": [{"emailAddress": {"address": "outro@z.com"}}]}):
         assert r.hash_rascunho("ti@x.com", {**base, **extra}) != h
+    # Anexo entra pela lista de anexos que NÃO são da assinatura.
+    assert r.hash_rascunho("ti@x.com", base, ["contrato.pdf"]) != h
     c = r.conteudo_do_rascunho({**base, "bccRecipients": [{"emailAddress": {"address": "e@z.com"}}]})
     assert c["cco"] == ["e@z.com"]
 
@@ -83,3 +84,15 @@ def test_rotulo_diz_a_origem():
     t = r.como_dado_externo("x", origem="TaskHS")
     assert t.startswith("<<<DADO_EXTERNO") and "TaskHS" in t.splitlines()[0]
     assert "e-mail" in r.como_dado_externo("x").splitlines()[0]
+
+
+def test_anexos_extras_ignora_so_os_da_assinatura():
+    """Com assinatura, o Graph conta as imagens embutidas como anexo. Esconder
+    o aviso inteiro por isso escondia também um anexo de verdade acrescentado
+    no Outlook depois do cartão."""
+    anexos = [{"name": "b.png", "isInline": True, "contentId": "assinatura-1"},
+              {"name": "contrato.pdf", "isInline": False, "contentId": None},
+              {"name": "x.png", "isInline": True, "contentId": "outra"}]
+    assert r.anexos_extras(anexos) == ["contrato.pdf", "x.png"]
+    msg = {"subject": "Oi", "toRecipients": [], "body": {"content": "c"}}
+    assert r.hash_rascunho("ti@x.com", msg, ["contrato.pdf"]) != r.hash_rascunho("ti@x.com", msg, [])

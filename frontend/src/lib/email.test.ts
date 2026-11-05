@@ -19,7 +19,8 @@ describe("cartão de e-mail", () => {
     expect(linhasDoCartao(base).map((l) => l.rotulo)).toEqual(["De", "Para", "Assinatura"]);
     const cheio = { ...base, cc: ["c@y.com"], cco: ["e@z.com"], responder_para: ["r@z.com"], tem_anexo: true };
     expect(linhasDoCartao(cheio).map((l) => l.rotulo)).toEqual(["De", "Para", "Cc", "Cco", "Responder para", "Anexo", "Assinatura"]);
-    expect(linhasDoCartao({ ...cheio, assinatura: true }).map((l) => l.rotulo)).not.toContain("Anexo");
+    // Com assinatura o aviso de anexo continua: o servidor já tirou as imagens dela.
+    expect(linhasDoCartao({ ...cheio, assinatura: true }).map((l) => l.rotulo)).toContain("Anexo");
   });
 
   it("mensagem da volta da Microsoft", () => {

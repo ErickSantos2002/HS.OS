@@ -84,6 +84,10 @@ def amb(monkeypatch):
     async def evento(*a, **k):
         pass
     monkeypatch.setattr(rota.contas, "evento", evento)
+
+    async def anexos(*a):
+        return estado.get("anexos", [])
+    monkeypatch.setattr(rota.graph, "listar_anexos", anexos)
     return estado
 
 

@@ -25,6 +25,7 @@ export interface Pendente {
   cco?: string[];
   responder_para?: string[];
   tem_anexo?: boolean;
+  anexos?: string[];
   assunto?: string;
   corpo?: string;
   hash?: string;
@@ -68,7 +69,7 @@ export function rotuloStatus(status: string): string {
   return STATUS[status] ?? status;
 }
 
-type Cabecalho = Pick<Pendente, "de" | "para" | "cc" | "cco" | "responder_para" | "tem_anexo" | "assinatura">;
+type Cabecalho = Pick<Pendente, "de" | "para" | "cc" | "cco" | "responder_para" | "tem_anexo" | "anexos" | "assinatura">;
 
 /** As linhas de cabeçalho do cartão. Cco, Responder-para e Anexo só aparecem
  *  quando existem — e TÊM que aparecer: o hash do servidor os cobre. */
@@ -80,8 +81,8 @@ export function linhasDoCartao(p: Cabecalho): { rotulo: string; valor: string; d
   if (p.cc?.length) l.push({ rotulo: "Cc", valor: p.cc.join(", ") });
   if (p.cco?.length) l.push({ rotulo: "Cco", valor: p.cco.join(", "), destaque: true });
   if (p.responder_para?.length) l.push({ rotulo: "Responder para", valor: p.responder_para.join(", "), destaque: true });
-  // A assinatura entra como imagem embutida — o Graph pode contá-la como anexo.
-  if (p.tem_anexo && !p.assinatura) l.push({ rotulo: "Anexo", valor: "este e-mail tem anexo (veja no Outlook)", destaque: true });
+  // O servidor já separa as imagens da assinatura: o que chega aqui é anexo de verdade.
+  if (p.tem_anexo) l.push({ rotulo: "Anexo", valor: (p.anexos?.length ? p.anexos.join(", ") : "este e-mail tem anexo") + " (veja no Outlook)", destaque: true });
   l.push({ rotulo: "Assinatura", valor: p.assinatura ? "sim, a do seu Perfil" : "não (cadastre no Perfil)" });
   return l;
 }
