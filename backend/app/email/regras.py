@@ -97,23 +97,27 @@ def anexos_extras(anexos: list[dict]) -> list[str]:
             if not (x.get("isInline") and str(x.get("contentId") or "").startswith("assinatura-"))]
 
 
-def conteudo_do_rascunho(msg: dict, extras: list[str] | None = None) -> dict:
-    """Tudo o que o cartão mostra e o hash cobre, como o Graph devolve o
-    rascunho — inclusive Cco, "Responder para" e os anexos que não são da
-    assinatura, que alguém pode acrescentar no Outlook depois do cartão."""
+def conteudo_do_rascunho(msg: dict, anexos: list[dict] | None = None) -> dict:
+    """Tudo o que o cartão mostra, como o Graph devolve o rascunho — inclusive
+    Cco, "Responder para" e os anexos que não são da assinatura."""
     def ends(chave):
         return [((r or {}).get("emailAddress") or {}).get("address", "") for r in msg.get(chave) or []]
+    extras = anexos_extras(anexos or [])
     return {"para": ends("toRecipients"), "cc": ends("ccRecipients"),
             "cco": ends("bccRecipients"), "responder_para": ends("replyTo"),
-            "anexos": list(extras or []), "tem_anexo": bool(extras),
+            "anexos": extras, "tem_anexo": bool(extras),
             "assunto": msg.get("subject") or "",
             "corpo": ((msg.get("body") or {}).get("content") or "")}
 
 
-def hash_rascunho(de: str, msg: dict, extras: list[str] | None = None) -> str:
+def hash_rascunho(de: str, msg: dict, anexos: list[dict] | None = None) -> str:
     """⚠️ Sempre do rascunho RELIDO, nunca do que o bot mandou: o Graph normaliza
-    o corpo, e comparar com a entrada daria "mudou" à toa."""
-    c = conteudo_do_rascunho(msg, extras)
-    extra = json.dumps({"cco": _norm(c["cco"]), "rp": _norm(c["responder_para"]),
-                        "anexos": sorted(c["anexos"])}, sort_keys=True)
+    o corpo, e comparar com a entrada daria "mudou" à toa. Cobre TODOS os
+    anexos (nome, contentId, inline, tamanho) — inclusive as imagens da
+    assinatura: trocar uma delas no Outlook depois do cartão também conta."""
+    c = conteudo_do_rascunho(msg, anexos)
+    todos = sorted((str(x.get("name")), str(x.get("contentId")), bool(x.get("isInline")),
+                    int(x.get("size") or 0)) for x in anexos or [])
+    extra = json.dumps({"cco": _norm(c["cco"]), "rp": _norm(c["responder_para"]), "anexos": todos},
+                       sort_keys=True)
     return hash_email(de, c["para"], c["cc"], c["assunto"], c["corpo"] + "\x00" + extra)

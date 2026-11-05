@@ -163,7 +163,7 @@ async def criar_rascunho(access, conta, de, para, cc, assunto, corpo, html: bool
 
 async def listar_anexos(access, conta, caixa, mensagem_id) -> list[dict]:
     r = await _pedir("GET", f"{_caixa(caixa, conta)}/messages/{quote(mensagem_id, safe='')}/attachments",
-                     access, params={"$select": "name,isInline,contentId"})
+                     access, params={"$select": "name,isInline,contentId,size", "$top": "100"})
     return r.get("value") or []
 
 

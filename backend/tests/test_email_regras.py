@@ -74,7 +74,7 @@ def test_hash_cobre_cco_responder_para_e_anexos():
                   {"replyTo": [{"emailAddress": {"address": "outro@z.com"}}]}):
         assert r.hash_rascunho("ti@x.com", {**base, **extra}) != h
     # Anexo entra pela lista de anexos que NÃO são da assinatura.
-    assert r.hash_rascunho("ti@x.com", base, ["contrato.pdf"]) != h
+    assert r.hash_rascunho("ti@x.com", base, [{"name": "contrato.pdf", "size": 1}]) != h
     c = r.conteudo_do_rascunho({**base, "bccRecipients": [{"emailAddress": {"address": "e@z.com"}}]})
     assert c["cco"] == ["e@z.com"]
 
@@ -95,4 +95,15 @@ def test_anexos_extras_ignora_so_os_da_assinatura():
               {"name": "x.png", "isInline": True, "contentId": "outra"}]
     assert r.anexos_extras(anexos) == ["contrato.pdf", "x.png"]
     msg = {"subject": "Oi", "toRecipients": [], "body": {"content": "c"}}
-    assert r.hash_rascunho("ti@x.com", msg, ["contrato.pdf"]) != r.hash_rascunho("ti@x.com", msg, [])
+    pdf = [{"name": "contrato.pdf", "isInline": False, "contentId": None, "size": 10}]
+    assert r.hash_rascunho("ti@x.com", msg, pdf) != r.hash_rascunho("ti@x.com", msg, [])
+
+
+def test_hash_cobre_tambem_as_imagens_da_assinatura():
+    """Trocar uma imagem da assinatura no Outlook (mesmo contentId) depois do
+    cartão também muda o hash — só a EXIBIÇÃO ignora as imagens da assinatura."""
+    msg = {"subject": "Oi", "toRecipients": [], "body": {"content": "c"}}
+    a = [{"name": "b.png", "isInline": True, "contentId": "assinatura-1", "size": 100}]
+    b = [{"name": "b.png", "isInline": True, "contentId": "assinatura-1", "size": 999}]
+    assert r.hash_rascunho("ti@x.com", msg, a) != r.hash_rascunho("ti@x.com", msg, b)
+    assert r.anexos_extras(a) == []
