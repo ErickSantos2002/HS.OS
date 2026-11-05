@@ -33,13 +33,16 @@ export interface Agente {
   /** Respondeu a esta pessoa há menos de 10 min — a linha fica, sem partícula. */
   recenteCom: string | null;
 }
+/** Bot pessoal (05/11/2026): satélite do nó do dono. Só a conversa do PRÓPRIO
+ *  dono o acende — o backend já filtra. */
+export interface Bot { id: string; donoId: string; estado: Estado }
 export interface ConversaTime { a: string; b: string; ultima: string }
 export interface Evento { ts: string; tipo: "entrega" | "agente" | "time"; texto: string }
 export interface Numeros { entregas: number; atendidas: number; pessoasAtivas: number; conversasTime: number }
 export interface Feed {
   ts: string; diasNoAr: number | null;
   setores: { nome: string; pessoas: string[] }[];
-  pessoas: Pessoa[]; agentes: Agente[]; conversasTime: ConversaTime[];
+  pessoas: Pessoa[]; agentes: Agente[]; bots: Bot[]; conversasTime: ConversaTime[];
   eventos: Evento[]; numeros: Numeros;
 }
 
@@ -103,6 +106,14 @@ export function normalizar(bruto: unknown): Feed {
         };
       })
       .filter((a) => a.id),
+    // Backend antigo não manda `bots`: lista vazia, a parede segue de pé.
+    bots: objetos(f.bots)
+      .map((b): Bot => {
+        const estado = texto(b.estado) as Estado;
+        return { id: texto(b.id), donoId: texto(b.donoId),
+                 estado: ESTADOS.includes(estado) ? estado : "ocioso" };
+      })
+      .filter((b) => b.id && ids.has(b.donoId)),
     conversasTime: objetos(f.conversasTime)
       .map((c) => ({ a: texto(c.a), b: texto(c.b), ultima: texto(c.ultima) }))
       .filter((c) => c.a && c.b),

@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 
 import { useAllAvatars, useResolvedAgentAvatar } from "@/hooks/use-agent-avatar";
 import { useAgents } from "@/hooks/use-agents";
+import { ehBotPessoal } from "@/lib/bots-pessoais";
 import { useChatMedia } from "@/hooks/use-chat-media";
 import { useAudioRecorder, getAudioFileExtension } from "@/hooks/use-audio-recorder";
 import { useAudioLevel } from "@/hooks/use-audio-level";
@@ -738,6 +739,7 @@ export default function ChatPage() {
   }, [anteriorParam, searchParams, setSearchParams]);
   const [createOpen, setCreateOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"dms" | "agentes" | "channels">("dms");
+  const [botsAbertos, setBotsAbertos] = useState(false);
   const [buscaPessoa, setBuscaPessoa] = useState("");
 
   // Persist sidebar tab selection and restore on mount
@@ -1850,7 +1852,8 @@ export default function ChatPage() {
   // Ordem e busca em `lib/lista-de-conversas.ts`.
   type DmItem =
     | ({ kind: "agent"; agent: typeof agents[0] } & ItemDaLista)
-    | ({ kind: "person"; person: Person } & ItemDaLista);
+    | ({ kind: "person"; person: Person } & ItemDaLista)
+    | ({ kind: "secao"; total: number } & ItemDaLista);
 
   const listaAgentes: DmItem[] = useMemo(() => ordenarConversas(agents.map((agent) => {
     const lastMsg = lastMessages[agent.id];
@@ -1892,8 +1895,22 @@ export default function ChatPage() {
   // e perdeu o acesso cai em DMs.
   const temAgentes = agents.length > 0;
   const abaAtual = sidebarTab === "agentes" && !temAgentes ? "dms" : sidebarTab;
+  // ⚠️ Bots pessoais (05/11/2026) num bloco recolhido, depois dos
+  // especialistas: são 23 e só o administrador os vê. Bot aberto mantém o
+  // bloco aberto — senão a conversa selecionada some da lista.
+  const especialistasDaLista = listaAgentes.filter((i) => i.kind === "agent" && !ehBotPessoal(i.agent));
+  const botsDaLista = listaAgentes.filter((i) => i.kind === "agent" && ehBotPessoal(i.agent));
+  const botAberto = botsDaLista.some((i) => i.kind === "agent" && selection?.type === "agent" && selection.id === i.agent.id);
+  const mostrarBots = botsAbertos || botAberto;
   const listaDaAba: DmItem[] = abaAtual === "agentes"
-    ? listaAgentes
+    ? [
+        ...especialistasDaLista,
+        ...(botsDaLista.length
+          ? [{ kind: "secao" as const, total: botsDaLista.length, nome: "", ultimaAtividade: 0,
+               naoLidas: botsDaLista.reduce((acc, i) => acc + i.naoLidas, 0) }]
+          : []),
+        ...(mostrarBots ? botsDaLista : []),
+      ]
     : listaPessoas.filter((i) => i.kind === "person" && casaBusca(
         [i.person.full_name, i.person.email, i.person.departamento, i.person.cargo], buscaPessoa,
       ));
@@ -2289,6 +2306,15 @@ export default function ChatPage() {
                 )}
                 {listaDaAba
                   .map((item) => {
+                  if (item.kind === "secao") {
+                    return (
+                      <button key="secao-bots" onClick={() => setBotsAbertos((v) => !v)}
+                        className="w-full flex items-center justify-between px-2 pt-3 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground/60 font-display hover:text-foreground">
+                        <span>{mostrarBots ? "▾" : "▸"} Bots pessoais ({item.total})</span>
+                        {item.naoLidas > 0 && <span className="text-destructive font-bold">{item.naoLidas}</span>}
+                      </button>
+                    );
+                  }
                   if (item.kind === "agent") {
                     const agent = item.agent;
                     const isActive = selection?.type === "agent" && selection.id === agent.id;

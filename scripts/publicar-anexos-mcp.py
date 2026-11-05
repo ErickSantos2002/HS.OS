@@ -122,7 +122,14 @@ def montar_patch(conf: dict, segredo: str, token: str = "") -> tuple[dict, dict]
     agentes = copy.deepcopy((conf.get("agents") or {}).get("list") or [])
     if not agentes:
         raise ValueError("agents.list vazio na config — sem agentes, não há o que publicar")
-    ids = [str(a["id"]) for a in agentes]
+    # ⚠️ Bot pessoal (`tools.profile: "minimal"`) não ganha entrada: nasceu sem
+    # ferramenta de arquivo, e a entrada é exatamente isso. Reconhecido pelo
+    # perfil, não pelo sufixo `-bot` — este script não lê o banco, e o perfil
+    # é o que de fato o separa (spec 2026-11-05-bots-pessoais-cascas). Ele
+    # continua na lista abaixo: o deny dele também tem que negar as entradas
+    # dos outros.
+    ids = [str(a["id"]) for a in agentes
+           if ((a.get("tools") or {}).get("profile")) != "minimal"]
     novos = montar_entradas(modelo, segredo, ids, token)
     depois = {**servidores, **novos}
     for a in agentes:

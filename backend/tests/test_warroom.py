@@ -363,3 +363,33 @@ def test_numeros_do_dia():
     dms = [{"channel_id": "c1", "author_id": "u-erick"}, {"channel_id": "c1", "author_id": "u-welton"}]
     n = w.montar_numeros(5, msgs, dms, {"c1": ("u-erick", "u-welton")}, DO_TIME)
     assert n == {"entregas": 5, "atendidas": 2, "pessoasAtivas": 3, "conversasTime": 1}
+
+
+# ── Bots pessoais (05/11/2026) ───────────────────────────────────────────────
+# ⚠️ O bot é da pessoa, não da central: fica fora do anel dos especialistas e
+# vira um satélite colado no nó do dono. E só a conversa DO DONO o acende —
+# senão um teste do administrador com o `andre-bot` poria "André" conversando
+# na TV pública, sem o André ter aberto nada.
+
+def test_bot_sai_do_anel_e_vira_satelite():
+    perfis = [{"agent_id": "iris", "name": "Iris", "dono_id": None},
+              {"agent_id": "andre-bot", "name": "André-bot", "dono_id": "u-andre"}]
+    especialistas, bots = w.separar_bots(perfis)
+    assert [p["agent_id"] for p in especialistas] == ["iris"]
+    assert [p["agent_id"] for p in bots] == ["andre-bot"]
+
+
+def test_satelite_acende_com_conversa_do_dono():
+    agora = datetime(2026, 11, 5, 12, tzinfo=timezone.utc)
+    bots = [{"agent_id": "andre-bot", "dono_id": "u-andre"}]
+    ultimas = {"andre-bot": {"role": "user", "user_id": "u-andre",
+                             "created_at": agora - timedelta(minutes=1)}}
+    r = w.montar_bots(bots, ultimas, agora, {"u-andre"})
+    assert r == [{"id": "andre-bot", "donoId": "u-andre", "estado": "pensando"}]
+    assert w.montar_bots(bots, {}, agora, {"u-andre"})[0]["estado"] == "ocioso"
+
+
+def test_satelite_de_quem_nao_esta_na_parede_nao_sai():
+    agora = datetime(2026, 11, 5, 12, tzinfo=timezone.utc)
+    bots = [{"agent_id": "claudia-bot", "dono_id": "u-inativa"}]
+    assert w.montar_bots(bots, {}, agora, {"u-andre"}) == []

@@ -17,6 +17,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useTeams, type Team } from "@/hooks/use-teams";
 import { useAgents } from "@/hooks/use-agents";
+import { soEspecialistas } from "@/lib/bots-pessoais";
 import { isOfficialAgentId } from "@/lib/active-agents";
 import { Plus, Users, Save, Trash2, UserPlus, UserMinus, Bot, LayoutGrid } from "lucide-react";
 
@@ -194,7 +195,9 @@ function buildGraph(
 
 export default function TeamsPage() {
   const { teams, createTeam, deleteTeam, addAgentToTeam, removeAgentFromTeam } = useTeams();
-  const { agents } = useAgents();
+  const { agents: todos } = useAgents();
+  // Times são de especialistas; bot pessoal não entra em time (05/11/2026).
+  const agents = useMemo(() => soEspecialistas(todos), [todos]);
   const navigate = useNavigate();
   // Salvar layout grava em `app_settings`, que é global: uma linha para a
   // instalação inteira. Arrastar é local e continua livre; gravar é de admin.

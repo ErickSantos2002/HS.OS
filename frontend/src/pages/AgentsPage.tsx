@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAgents, type GatewayAgent } from "@/hooks/use-agents";
+import { soEspecialistas } from "@/lib/bots-pessoais";
 import { useAllAvatars } from "@/hooks/use-agent-avatar";
 import { usePeople } from "@/hooks/use-people";
 import { Loader2, WifiOff, RefreshCw, AlertTriangle } from "lucide-react";
@@ -14,7 +15,10 @@ import AgentResumoPanel from "@/components/agents/AgentResumoPanel";
 import { useAuthContext } from "@/contexts/auth-context";
 
 export default function AgentsPage() {
-  const { agents, loading, error, connected, refetch } = useAgents();
+  const { agents: todos, loading, error, connected, refetch } = useAgents();
+  // Bots pessoais ficam fora do mapa da frota: são 23 e afogariam os cinco
+  // especialistas. O administrador os acha na lista do chat (05/11/2026).
+  const agents = useMemo(() => soEspecialistas(todos), [todos]);
   const avatars = useAllAvatars();
   const { people } = usePeople();
   // O mapa da frota é visão do time e fica aberto ao colaborador. O que é

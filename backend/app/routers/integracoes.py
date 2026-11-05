@@ -1767,6 +1767,15 @@ def _nome_mcp(nome: str) -> str:
 #   execuções nem prazo. Agendar é ato humano, pela tela de agendamentos.
 _DENY_NAO_MCP = ("sessions_send", "sessions_spawn", "skill_workshop", "cron")
 
+# ⚠️ O que o recálculo do deny PRESERVA é mais que a trava dos especialistas.
+# O bot pessoal roda com `tools.profile: "minimal"`, que traz a ferramenta
+# `gateway` (manutenção do próprio gateway); ele a nega, e sem estar aqui a
+# negação sumiria na próxima publicação de banco, que reescreve o deny de
+# todo agente do zero. Não entra em `_DENY_NAO_MCP` porque aquela tupla
+# também é a trava dos especialistas, e negar `gateway` a eles é outra
+# decisão, que esta mudança não toma (05/11/2026).
+_DENY_PRESERVADO = _DENY_NAO_MCP + ("gateway",)
+
 
 # O único servidor MCP que nunca entra no deny — ver `_deny_de_mcp`.
 SERVIDOR_ALERTA = "hsos-alerta"
@@ -1812,7 +1821,7 @@ def _deny_de_mcp(also_allow: list[str], deny_atual: list[str],
         for t in ((((cfg or {}).get("toolFilter") or {}).get("include")) or ["query"])
     }
     meus = {_sem_prefixo(x) for x in also_allow}
-    preservados = [x for x in deny_atual if x in _DENY_NAO_MCP]
+    preservados = [x for x in deny_atual if x in _DENY_PRESERVADO]
     return sorted(todas - meus) + preservados
 
 

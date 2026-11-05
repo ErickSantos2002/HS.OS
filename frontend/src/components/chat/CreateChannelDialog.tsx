@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { getAgentDisplayName } from "@/lib/channel-agents";
 import { useAgents } from "@/hooks/use-agents";
+import { soEspecialistas } from "@/lib/bots-pessoais";
 import { usePeople } from "@/hooks/use-people";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,7 +44,7 @@ export default function CreateChannelDialog({ open, onOpenChange, onCreate }: Pr
   const { agents: availableAgents } = useAgents();
 
   const sortedAgents = useMemo(
-    () => [...availableAgents].sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
+    () => soEspecialistas(availableAgents).sort((a, b) => a.name.localeCompare(b.name, "pt-BR")),
     [availableAgents],
   );
 

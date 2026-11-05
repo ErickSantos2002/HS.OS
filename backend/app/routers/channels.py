@@ -69,6 +69,23 @@ def traduzir_rls(erro: Exception) -> HTTPException | None:
     return None
 
 
+async def _bots_pessoais_entre(conn, agent_ids: list[str]) -> list[str]:
+    """Quais destes ids são bot pessoal (`agent_profiles.dono_id IS NOT NULL`).
+
+    ⚠️ Bot pessoal não entra em canal. Posto num canal, ele responde a quem
+    estiver lá — e o bot trabalha para uma pessoa só (por ora, só o
+    administrador conversa com ele). Spec 2026-11-05-bots-pessoais-cascas.
+    """
+    if not agent_ids:
+        return []
+    linhas = await conn.fetch(
+        "SELECT agent_id FROM public.agent_profiles "
+        " WHERE agent_id = ANY($1::text[]) AND dono_id IS NOT NULL",
+        list(dict.fromkeys(agent_ids)),
+    )
+    return [l["agent_id"] for l in linhas]
+
+
 async def _agentes_desconhecidos(conn, agent_ids: list[str]) -> list[str]:
     """Quais destes ids (já normalizados) não têm linha em `agent_profiles`.
 
@@ -436,6 +453,12 @@ async def criar(dados: CanalIn, usuario: Usuario = Depends(exige_papel("administ
             if desconhecidos:
                 raise HTTPException(
                     status.HTTP_404_NOT_FOUND, f"Agente {desconhecidos[0]} não existe."
+                )
+            bots = await _bots_pessoais_entre(conn, agentes_norm)
+            if bots:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"{bots[0]} é um bot pessoal e não entra em canal.",
                 )
 
             # O criador entra sempre e primeiro (`humanos`, acima): sem ele o
@@ -1638,6 +1661,12 @@ async def adicionar_membros(
         if desconhecidos:
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND, f"Agente {desconhecidos[0]} não existe."
+            )
+        bots = await _bots_pessoais_entre(conn, agentes_norm)
+        if bots:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"{bots[0]} é um bot pessoal e não entra em canal.",
             )
 
         await _recusar_desativados(conn, dados.user_ids)
