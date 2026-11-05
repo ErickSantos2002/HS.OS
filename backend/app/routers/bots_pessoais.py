@@ -138,6 +138,12 @@ async def criar_bot(user_id: str, deps=None) -> dict:
         return {**saida, "motivo": f"colisão: já existe o agente {aid} de outro dono"}
 
     conf, _ = await deps.config()
+    try:
+        # Antes de qualquer escrita: config que não permite fechar o bot recusa
+        # aqui, sem criar nada e sem desfazer bot que já existia.
+        tools_do_bot(_servidores(conf))
+    except ValueError as e:
+        return {**saida, "motivo": str(e)}
     no_gw = _no_gateway(conf, aid)
     if linha and no_gw and bot_esta_fechado(no_gw.get("tools") or {}, _servidores(conf)):
         return {**saida, "resultado": "já existia"}

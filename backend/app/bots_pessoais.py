@@ -66,7 +66,21 @@ def motivo_inelegivel(perfil: dict) -> str | None:
 
 
 def tools_do_bot(servidores: dict) -> dict:
-    """O `tools` do bot no gateway: perfil mínimo, só o alerta, nega todo o resto."""
+    """O `tools` do bot no gateway: perfil mínimo, só o alerta, nega todo o resto.
+
+    ⚠️ **Falha fechada.** Com `bundle-mcp` o bot enxerga todo MCP que o deny não
+    nomeia, e o deny só nomeia o que está no `toolFilter.include` de cada
+    servidor. Servidor sem filtro (ferramentas desconhecidas) ou `hsos-alerta`
+    expondo algo além do alerta: levanta, e a criação é desfeita.
+    """
+    for nome, cfg in servidores.items():
+        incluidas = (((cfg or {}).get("toolFilter") or {}).get("include")) or []
+        if not incluidas:
+            raise ValueError(f"servidor MCP {nome} sem toolFilter.include — o bot "
+                             "não nasce enxergando ferramentas que ninguém listou")
+        if nome == SERVIDOR_ALERTA and incluidas != ["avisar_administrador"]:
+            raise ValueError(f"{SERVIDOR_ALERTA} expõe {incluidas}; o bot só pode ter "
+                             "avisar_administrador")
     return {
         "profile": PERFIL,
         # ⚠️ `bundle-mcp` é o que deixa ferramenta MCP passar pelo `minimal`
@@ -84,7 +98,10 @@ def bot_esta_fechado(tools: dict, servidores: dict) -> bool:
     Compara o deny como conjunto — a ordem não importa — e exige o perfil e o
     `alsoAllow` exatos: qualquer ferramenta a mais é escopo aberto.
     """
-    esperado = tools_do_bot(servidores)
+    try:
+        esperado = tools_do_bot(servidores)
+    except ValueError:
+        return False
     t = tools or {}
     return (
         t.get("profile") == PERFIL

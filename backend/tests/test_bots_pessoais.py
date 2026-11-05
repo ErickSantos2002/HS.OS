@@ -125,3 +125,21 @@ def test_campos_do_perfil_nao_injetam_instrucao():
         assert "\x00" not in arq[nome]
     linha_setor = next(l for l in arq["USER.md"].splitlines() if "Setor" in l)
     assert len(linha_setor) < 120
+
+
+def test_servidor_sem_filtro_recusa_o_bot():
+    """Fail closed: com `bundle-mcp`, o bot vê todo MCP que o deny não nomeia, e
+    o deny só nomeia as ferramentas do `toolFilter.include`. Servidor sem filtro
+    tem ferramentas que ninguém sabe listar — o bot não nasce."""
+    import pytest
+    sem_filtro = {**SERVIDORES, "servidor-novo": {"url": "https://x"}}
+    with pytest.raises(ValueError, match="servidor-novo"):
+        tools_do_bot(sem_filtro)
+
+
+def test_alerta_com_ferramenta_a_mais_recusa_o_bot():
+    import pytest
+    alerta_largo = {**SERVIDORES,
+                    "hsos-alerta": {"toolFilter": {"include": ["avisar_administrador", "outra"]}}}
+    with pytest.raises(ValueError, match="hsos-alerta"):
+        tools_do_bot(alerta_largo)

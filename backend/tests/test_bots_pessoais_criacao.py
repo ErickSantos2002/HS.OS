@@ -144,3 +144,13 @@ def test_patch_leva_os_outros_agentes_intactos():
     asyncio.run(criar_bot("u-andre", f))
     lista = f.patches[-1]["agents"]["list"]
     assert next(a for a in lista if a["id"] == "nina") == nina
+
+
+def test_config_insegura_recusa_antes_de_escrever():
+    """Servidor sem filtro: nada é criado — e um bot que já existia não é
+    desfeito por causa disso (rodar o lote de novo não apaga ninguém)."""
+    f = Falso()
+    f.conf["mcp"]["servers"] = {**SERVIDORES, "novo": {"url": "x"}}
+    r = asyncio.run(criar_bot("u-andre", f))
+    assert r["resultado"] == "falhou" and "novo" in r["motivo"]
+    assert f.log == [] and f.desfeitos == []
