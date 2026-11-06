@@ -97,14 +97,23 @@ def test_despedida_repetida_sai_do_corpo():
     assert html.lower().count("atenciosamente") == 1
 
 
-def test_textos_sao_fixos_da_empresa_mesmo_sem_cadastro():
+def test_textos_tem_padrao_da_empresa_e_o_editado_vale():
     """06/11: duas pessoas mandaram e-mail sem "Atenciosamente," e sem o aviso
-    LGPD — uma não preencheu, a outra não clicou em salvar. Os textos passaram
-    a ser da empresa: saem sempre, com ou sem imagem, sem depender do Perfil."""
+    LGPD — uma não preencheu, a outra não clicou em salvar. Sem cadastro ou com
+    campo vazio, sai o padrão; o que a pessoa editou e salvou continua valendo
+    (a Qualidade pediu que seguisse editável)."""
     class Conn:
+        def __init__(self, linha):
+            self.linha = linha
+
+        async def fetchrow(self, *a):
+            return self.linha
+
         async def fetch(self, *a):
             return []
-    ass = asyncio.run(a.carregar(Conn(), "u"))
+    ass = asyncio.run(a.carregar(Conn(None), "u"))
     assert ass["texto_antes"] == "Atenciosamente," and "LGPD" in ass["texto_depois"]
     html = a.montar_html("Segue.", ass)
     assert "Atenciosamente," in html and "qualidade@healthsafety.com.br" in html and "cid:" not in html
+    ass = asyncio.run(a.carregar(Conn({"texto_antes": "Abraços,", "texto_depois": "  "}), "u"))
+    assert ass["texto_antes"] == "Abraços," and ass["texto_depois"] == a.TEXTO_DEPOIS

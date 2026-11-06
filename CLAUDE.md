@@ -678,8 +678,9 @@ Spec e plano: `docs/superpowers/{specs,plans}/2026-11-05-bot-email-piloto*`. O
 - **Assinatura** (`030`, `app/email/assinatura.py`): modelo do HSGrowth —
   texto antes, até 2 imagens (GIF animado incluso, ≤ 2 MB cada, ≤ 3 MB
   no total: o Graph recusa requisição > 4 MB) e texto depois (LGPD). ⚠️ Desde
-  06/11/2026 os dois textos são **fixos da empresa** (`TEXTO_ANTES`/`TEXTO_DEPOIS`)
-  — a pessoa esquecia de preencher ou de salvar; no Perfil ela só põe as imagens. O
+  06/11/2026 os dois textos têm **padrão da empresa** (`TEXTO_ANTES`/`TEXTO_DEPOIS`):
+  vazio ou nunca salvo vale o padrão, e o Perfil já mostra preenchido. Continuam
+  editáveis (pedido da Qualidade) — a pessoa esquecia de preencher ou de salvar. O
   `email_preparar` monta HTML com o corpo ESCAPADO e as imagens **embutidas**
   (`cid:`) — link externo não anima e o Outlook de quem recebe bloqueia. Uma
   por pessoa, nas duas caixas. O `enviar_para_mim` segue sem assinatura.
