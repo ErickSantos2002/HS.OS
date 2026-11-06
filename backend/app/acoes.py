@@ -70,7 +70,7 @@ async def _taskhs_criar(email, bot, p, dono=None) -> str:
 async def _taskhs_atualizar(email, bot, p, dono=None) -> str:
     lid, cid = int(p["list_id"]), int(p["card_id"])
     campos = {k: v for k, v in (p.get("campos") or {}).items()
-              if k in ("title", "priority", "due_date", "due_date_completed", "done")}
+              if k in ("title", "description", "priority", "due_date", "due_date_completed", "done")}
     feito = []
     if campos:
         await taskhs.chamar(email, bot, "PATCH", f"/lists/{lid}/cards/{cid}", json=campos, dono=dono)

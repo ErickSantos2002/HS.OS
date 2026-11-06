@@ -34,6 +34,11 @@ describe("cartão de ação", () => {
     expect(a.linhas).toEqual([["Concluída", "sim"]]);
     expect(a.checklists[0].itens).toEqual([{ texto: "Miguel", feito: true }]);
   });
+  it("atualizar descrição aparece no bloco de texto", () => {
+    const a = cartaoDaAcao("atualizar", { list_id: 3, card_id: 9, campos: { description: "" } });
+    expect(a.linhas).toEqual([]);
+    expect(a.texto?.valor).toBe("(apagar a descrição)");
+  });
   it("checklist novo e itens a marcar aparecem OS DOIS", () => {
     // Revisão de segurança: com `??`, o checklist novo escondia as marcações
     // — e o clique aprovava algo que o cartão não mostrou.

@@ -172,3 +172,11 @@ def test_marcar_item_que_nao_existe_e_recusado_antes_do_cartao(amb, monkeypatch)
     payload = amb["pendentes"][0][2]
     assert payload["marcar_itens"] == [{"checklist_id": 5, "item_id": 50, "checked": True}]
     assert payload["_exibir"]["itens"] == {"5:50": "Miguel"}
+
+
+def test_atualizar_troca_a_descricao(amb):
+    """06/11: o pip pôs o checklist de verdade mas não conseguiu tirar a lista
+    da descrição — `taskhs_atualizar` não aceitava descrição."""
+    texto, erro = _run("taskhs_atualizar", {"list_id": 3, "card_id": 9, "descricao": "Só o texto."})
+    assert not erro
+    assert amb["pendentes"][0][2]["campos"] == {"description": "Só o texto."}
