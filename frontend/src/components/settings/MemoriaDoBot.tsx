@@ -14,7 +14,7 @@ export default function MemoriaDoBot() {
   const [confirmar, setConfirmar] = useState(false);
 
   useEffect(() => {
-    verMemoria().then((r) => { setBot(r.bot); setLinhas(r.linhas); }).catch(() => setBot(null));
+    verMemoria().then((r) => { setBot(r.bot_nome || r.bot); setLinhas(r.linhas); }).catch(() => setBot(null));
   }, []);
   if (!bot) return null;
 

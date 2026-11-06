@@ -57,7 +57,7 @@ export default function ConectarEmail() {
   return (
     <div className="flex items-center justify-between gap-3 rounded-xl border border-border/30 bg-secondary/20 px-4 py-3">
       <div className="min-w-0">
-        <h3 className="text-sm font-display font-semibold text-foreground">E-mail do {estado.bot ?? "seu bot"}</h3>
+        <h3 className="text-sm font-display font-semibold text-foreground">E-mail do {estado.bot_nome ?? estado.bot ?? "seu bot"}</h3>
         {estado.conectado ? (
           <p className="mt-1 text-xs text-muted-foreground break-words">
             Conectado como <span className="text-foreground">{estado.conta}</span>

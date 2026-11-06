@@ -10,6 +10,8 @@ import { api } from "@/lib/api";
 export interface EstadoEmail {
   liberado: boolean;
   bot: string | null;
+  /** Nome de exibição ("Meu bot"); `bot` é o agent_id. */
+  bot_nome?: string | null;
   conectado: boolean;
   conta: string | null;
   caixas: string[];

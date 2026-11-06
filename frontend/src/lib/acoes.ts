@@ -21,7 +21,7 @@ export const confirmarAcao = (id: string) =>
   api<{ status: string; resultado?: string }>(`/acoes/${encodeURIComponent(id)}/confirmar`, { method: "POST" });
 export const cancelarAcao = (id: string) =>
   api<{ status: string }>(`/acoes/${encodeURIComponent(id)}/cancelar`, { method: "POST" });
-export const verMemoria = () => api<{ bot: string; linhas: string[] }>("/bots/memoria");
+export const verMemoria = () => api<{ bot: string; bot_nome?: string; linhas: string[] }>("/bots/memoria");
 export const apagarLinhaMemoria = (i: number) => api<{ linhas: string[] }>(`/bots/memoria/${i}`, { method: "DELETE" });
 export const apagarMemoria = () => api<{ linhas: string[] }>("/bots/memoria", { method: "DELETE" });
 
