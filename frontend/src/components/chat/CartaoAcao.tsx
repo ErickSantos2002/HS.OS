@@ -62,13 +62,13 @@ export default function CartaoAcao({ id }: { id: string }) {
                 <p className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg bg-secondary/30 p-2 text-xs text-foreground/90">{c.texto.valor}</p>
               </div>
             )}
-            {c.checklist && (
-              <div>
+            {c.checklists.map((cl, n) => (
+              <div key={n}>
                 <div className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {c.checklist.titulo} · {c.checklist.itens.length} {c.checklist.itens.length === 1 ? "item" : "itens"}
+                  {cl.titulo} · {cl.itens.length} {cl.itens.length === 1 ? "item" : "itens"}
                 </div>
                 <ul className="max-h-56 space-y-1 overflow-y-auto rounded-lg bg-secondary/30 p-2 text-xs">
-                  {c.checklist.itens.map((it, i) => (
+                  {cl.itens.map((it, i) => (
                     <li key={i} className="flex items-start gap-2">
                       {it.feito ? <CheckSquare className="mt-px h-3.5 w-3.5 shrink-0 text-success" /> : <Square className="mt-px h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                       <span className="min-w-0 break-words text-foreground/90">
@@ -78,7 +78,7 @@ export default function CartaoAcao({ id }: { id: string }) {
                   ))}
                 </ul>
               </div>
-            )}
+            ))}
             {a?.resultado && <p className="text-xs text-muted-foreground">{a.resultado}</p>}
             {a?.status === "erro" && a.erro && <p className="text-xs text-destructive">{a.erro}</p>}
           </>

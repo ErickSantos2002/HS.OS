@@ -54,7 +54,9 @@ export interface CartaoDaAcao {
   titulo: string;
   linhas: [string, string][];
   texto?: { rotulo: string; valor: string };
-  checklist?: { titulo: string; itens: { texto: string; feito?: boolean }[] };
+  /** Lista: um checklist novo E itens a marcar podem vir juntos, e o dono
+   *  tem que ver os dois — esconder um aprovaria o que não foi mostrado. */
+  checklists: { titulo: string; itens: { texto: string; feito?: boolean }[] }[];
 }
 
 export function cartaoDaAcao(acao: string, p: Record<string, unknown>): CartaoDaAcao {
@@ -62,20 +64,20 @@ export function cartaoDaAcao(acao: string, p: Record<string, unknown>): CartaoDa
   const lista = (id: unknown, nome: unknown) => (nome ? String(nome) : `lista ${v(id)}`);
   const tarefa = ex.tarefa ? String(ex.tarefa) : `card ${v(p.card_id)}`;
   const cl = p.checklist as { title?: string; items?: string[] } | undefined;
-  const checklist = cl?.items?.length
-    ? { titulo: cl.title || "Checklist", itens: cl.items.map((texto) => ({ texto })) }
-    : undefined;
+  const checklists = cl?.items?.length
+    ? [{ titulo: cl.title || "Checklist", itens: cl.items.map((texto) => ({ texto })) }]
+    : [];
   if (acao === "criar") {
     const linhas: [string, string][] = [["Lista", lista(p.list_id, ex.lista)], ["Membro", "você"]];
     if (p.priority) linhas.push(["Prioridade", legivel("priority", p.priority)]);
     if (p.due_date) linhas.push(["Prazo", legivel("due_date", p.due_date)]);
-    return { verbo: "Nova tarefa", titulo: v(p.title), linhas, checklist,
+    return { verbo: "Nova tarefa", titulo: v(p.title), linhas, checklists,
              texto: p.description ? { rotulo: "Descrição", valor: v(p.description) } : undefined };
   }
   if (acao === "mover")
-    return { verbo: "Mover tarefa", titulo: tarefa, linhas: [["Para", lista(p.para_list_id, ex.para_lista)]] };
+    return { verbo: "Mover tarefa", titulo: tarefa, linhas: [["Para", lista(p.para_list_id, ex.para_lista)]], checklists: [] };
   if (acao === "comentar")
-    return { verbo: "Comentar", titulo: tarefa, linhas: [], texto: { rotulo: "Comentário", valor: v(p.texto) } };
+    return { verbo: "Comentar", titulo: tarefa, linhas: [], checklists: [], texto: { rotulo: "Comentário", valor: v(p.texto) } };
   if (acao === "atualizar") {
     const linhas = Object.entries((p.campos as Record<string, unknown>) ?? {})
       .map(([k, x]) => [CAMPO[k] ?? k, legivel(k, x)] as [string, string]);
@@ -85,8 +87,9 @@ export function cartaoDaAcao(acao: string, p: Record<string, unknown>): CartaoDa
       texto: nomes[`${m.checklist_id}:${m.item_id}`] || `item ${m.item_id}`, feito: m.checked }));
     return {
       verbo: "Atualizar tarefa", titulo: tarefa, linhas,
-      checklist: checklist ?? (marcados.length ? { titulo: "Marcar no checklist", itens: marcados } : undefined),
+      checklists: [...checklists, ...(marcados.length ? [{ titulo: "Marcar no checklist", itens: marcados }] : [])],
     };
   }
-  return { verbo: acao, titulo: "", linhas: Object.entries(p).filter(([k]) => k !== "_exibir").map(([k, x]) => [k, v(x)]) };
+  return { verbo: acao, titulo: "", checklists: [],
+           linhas: Object.entries(p).filter(([k]) => k !== "_exibir").map(([k, x]) => [k, JSON.stringify(x)]) };
 }
