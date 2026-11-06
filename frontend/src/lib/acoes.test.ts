@@ -22,7 +22,7 @@ describe("cartão de ação", () => {
     expect(c.titulo).toBe("Nova");
     expect(c.linhas).toEqual([["Lista", "lista 3"], ["Membro", "você"], ["Prioridade", "Alta"], ["Prazo", "10/11/2026"]]);
     expect(c.texto).toEqual({ rotulo: "Descrição", valor: "d" });
-    expect(c.checklist?.itens.map((i) => i.texto)).toEqual(["a", "b"]);
+    expect(c.checklists[0].itens.map((i) => i.texto)).toEqual(["a", "b"]);
   });
   it("mover, comentar e atualizar", () => {
     expect(cartaoDaAcao("mover", { list_id: 3, card_id: 9, para_list_id: 4, _exibir: { tarefa: "X", para_lista: "Feito" } }))
@@ -32,6 +32,14 @@ describe("cartão de ação", () => {
     const a = cartaoDaAcao("atualizar", { list_id: 3, card_id: 9, campos: { done: true },
       marcar_itens: [{ checklist_id: 5, item_id: 50, checked: true }], _exibir: { itens: { "5:50": "Miguel" } } });
     expect(a.linhas).toEqual([["Concluída", "sim"]]);
-    expect(a.checklist?.itens).toEqual([{ texto: "Miguel", feito: true }]);
+    expect(a.checklists[0].itens).toEqual([{ texto: "Miguel", feito: true }]);
+  });
+  it("checklist novo e itens a marcar aparecem OS DOIS", () => {
+    // Revisão de segurança: com `??`, o checklist novo escondia as marcações
+    // — e o clique aprovava algo que o cartão não mostrou.
+    const a = cartaoDaAcao("atualizar", { list_id: 3, card_id: 9, campos: {},
+      checklist: { title: "Novo", items: ["x"] },
+      marcar_itens: [{ checklist_id: 5, item_id: 50, checked: true }] });
+    expect(a.checklists.map((c) => c.titulo)).toEqual(["Novo", "Marcar no checklist"]);
   });
 });
