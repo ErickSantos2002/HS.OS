@@ -1,13 +1,16 @@
 /**
  * Assinatura de e-mail (modelo do HSGrowth): texto antes, até 2 imagens (GIF
- * animado incluso) e texto depois (ex. aviso LGPD). Sai no fim de todo e-mail
+ * animado incluso) e texto depois (aviso LGPD). Sai no fim de todo e-mail
  * que o bot pessoal prepara, com as imagens embutidas.
+ *
+ * Os dois textos são fixos da empresa desde 06/11/2026 (vêm do servidor, só
+ * leitura): a pessoa esquecia de preencher ou de salvar. Aqui só as imagens.
  */
 import { useEffect, useState } from "react";
 import { Upload, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { ErroApi, lerToken } from "@/lib/api";
-import { apagarImagemAssinatura, enviarImagemAssinatura, salvarTextoAssinatura, verAssinatura, type Assinatura } from "@/lib/email";
+import { apagarImagemAssinatura, enviarImagemAssinatura, verAssinatura, type Assinatura } from "@/lib/email";
 
 async function urlDaImagem(ordem: number): Promise<string | null> {
   try {
@@ -21,14 +24,12 @@ async function urlDaImagem(ordem: number): Promise<string | null> {
 
 export default function AssinaturaEmail() {
   const [ass, setAss] = useState<Assinatura | null>(null);
-  const [antes, setAntes] = useState("");
-  const [depois, setDepois] = useState("");
   const [urls, setUrls] = useState<Record<number, string | null>>({});
   const [ocupado, setOcupado] = useState(false);
 
   const carregar = async () => {
     const a = await verAssinatura();
-    setAss(a); setAntes(a.texto_antes); setDepois(a.texto_depois);
+    setAss(a);
     const u: Record<number, string | null> = {};
     for (const i of a.imagens) u[i.ordem] = await urlDaImagem(i.ordem);
     setUrls(u);
@@ -36,12 +37,6 @@ export default function AssinaturaEmail() {
   useEffect(() => { void carregar().catch(() => setAss(null)); }, []);
   if (!ass) return null;
 
-  const salvar = async () => {
-    setOcupado(true);
-    try { await salvarTextoAssinatura(antes, depois); toast.success("Assinatura salva."); }
-    catch (e) { toast.error(e instanceof ErroApi ? e.message : "Não consegui salvar."); }
-    finally { setOcupado(false); }
-  };
   const enviar = async (ordem: number, f: File | undefined) => {
     if (!f) return;
     setOcupado(true);
@@ -57,11 +52,9 @@ export default function AssinaturaEmail() {
     <div className="rounded-xl border border-border/30 bg-secondary/20 px-4 py-3 space-y-3">
       <div>
         <h3 className="text-sm font-display font-semibold text-foreground">Assinatura de e-mail</h3>
-        <p className="text-xs text-muted-foreground mt-1">Vai no fim de todo e-mail que o seu bot preparar. Imagens: PNG, JPG, WEBP ou GIF animado, até 2 MB cada.</p>
+        <p className="text-xs text-muted-foreground mt-1">Vai no fim de todo e-mail que o seu bot preparar. O texto é o padrão da empresa e já entra sozinho — você só envia as imagens (PNG, JPG, WEBP ou GIF animado, até 2 MB cada).</p>
       </div>
-      <label className="block text-xs text-muted-foreground">Texto antes (ex.: Atenciosamente,)
-        <textarea value={antes} onChange={(e) => setAntes(e.target.value)} rows={2} className="mt-1 w-full rounded-md border border-border/40 bg-background p-2 text-sm text-foreground" />
-      </label>
+      <p className="text-sm text-foreground">{ass.texto_antes}</p>
       <div className="grid gap-2 sm:grid-cols-2">
         {[1, 2].map((o) => {
           const tem = ass.imagens.some((i) => i.ordem === o);
@@ -80,12 +73,7 @@ export default function AssinaturaEmail() {
           );
         })}
       </div>
-      <label className="block text-xs text-muted-foreground">Texto depois (ex.: aviso de confidencialidade / LGPD)
-        <textarea value={depois} onChange={(e) => setDepois(e.target.value)} rows={3} className="mt-1 w-full rounded-md border border-border/40 bg-background p-2 text-sm text-foreground" />
-      </label>
-      <div className="flex justify-end">
-        <button disabled={ocupado} onClick={() => void salvar()} className="rounded-full bg-primary px-3 py-1 text-xs text-primary-foreground">Salvar texto</button>
-      </div>
+      <p className="whitespace-pre-line text-[11px] italic text-muted-foreground">{ass.texto_depois}</p>
     </div>
   );
 }

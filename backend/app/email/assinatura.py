@@ -1,7 +1,13 @@
 """Assinatura de e-mail por pessoa — modelo do HSGrowth (05/11/2026).
 
-Texto antes + até 2 imagens (GIF animado incluso) + texto depois (ex. aviso
-LGPD). Todo e-mail que o bot PREPARA sai em HTML com ela no fim.
+Texto antes + até 2 imagens (GIF animado incluso) + texto depois (aviso LGPD).
+Todo e-mail que o bot PREPARA sai em HTML com ela no fim.
+
+⚠️ Os dois textos são da EMPRESA, fixos aqui, desde 06/11/2026 (decisão do
+Erick). Eram campos do Perfil, e em dois dias duas pessoas mandaram e-mail sem
+eles: uma não preencheu, outra preencheu e não clicou em "Salvar texto". Como
+são iguais para todos, a pessoa só cuida das imagens. As colunas
+`texto_antes`/`texto_depois` de `email_assinaturas` ficaram sem leitor.
 
 ⚠️ Imagens EMBUTIDAS (`cid:`), não link: link externo não anima e o Outlook de
 quem recebe bloqueia imagem remota por padrão. ⚠️ O corpo do bot é ESCAPADO:
@@ -15,6 +21,16 @@ import html as h
 MIMES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
 TETO_IMAGEM = 2_000_000
 TETO_TOTAL = 3_000_000   # o Graph recusa requisição acima de 4 MB (base64 incha ~33%)
+
+TEXTO_ANTES = "Atenciosamente,"
+TEXTO_DEPOIS = (
+    "Este e-mail e seus anexos são estritamente confidenciais, de acordo com a LGPD - Lei Geral de "
+    "Proteção de Dados (Lei nº 13.709/2018). Se você recebeu este e-mail por engano, por favor, "
+    "notifique o remetente imediatamente e evite divulgar, salvar ou copiar seu conteúdo, a menos que "
+    "autorizado por escrito pelo remetente ou conforme a lei aplicável. Para informações sobre direitos "
+    "de titulares, entre em contato pelo e-mail qualidade@healthsafety.com.br. Consulte nossa Política "
+    "de Privacidade em https://www.healthsafety.com.br/privacidade.cfm"
+)
 
 
 def validar_imagem(mime: str, tamanho: int, outras: int) -> None:
@@ -69,18 +85,10 @@ def anexos_inline(ass: dict | None) -> list[dict]:
             for i in sorted((ass or {}).get("imagens") or [], key=lambda i: i["ordem"])]
 
 
-async def carregar(conn, user_id: str) -> dict | None:
-    """A assinatura da pessoa, ou None se ela não cadastrou nada."""
-    linha = await conn.fetchrow(
-        "SELECT texto_antes, texto_depois FROM public.email_assinaturas WHERE user_id = $1::uuid", user_id)
+async def carregar(conn, user_id: str) -> dict:
+    """A assinatura da pessoa: os textos fixos da empresa + as imagens dela.
+    Sempre devolve — sem imagem, o e-mail sai com os dois textos."""
     imagens = await conn.fetch(
         "SELECT ordem, mime, nome, dados FROM public.email_assinatura_imagens WHERE user_id = $1::uuid "
         "ORDER BY ordem", user_id)
-    if not linha and not imagens:
-        return None
-    ass = {"texto_antes": (linha or {}).get("texto_antes", "") if linha else "",
-           "texto_depois": (linha or {}).get("texto_depois", "") if linha else "",
-           "imagens": [dict(i) for i in imagens]}
-    if not ass["texto_antes"].strip() and not ass["texto_depois"].strip() and not ass["imagens"]:
-        return None
-    return ass
+    return {"texto_antes": TEXTO_ANTES, "texto_depois": TEXTO_DEPOIS, "imagens": [dict(i) for i in imagens]}

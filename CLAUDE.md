@@ -676,8 +676,10 @@ Spec e plano: `docs/superpowers/{specs,plans}/2026-11-05-bot-email-piloto*`. O
   FRONTEND_URL=http://localhost:8080`. O `MS_EMAIL_REDIRECT_URI` local aponta
   para o localhost (registrado no Entra).
 - **Assinatura** (`030`, `app/email/assinatura.py`): modelo do HSGrowth —
-  Perfil → texto antes, até 2 imagens (GIF animado incluso, ≤ 2 MB cada, ≤ 3 MB
-  no total: o Graph recusa requisição > 4 MB) e texto depois (LGPD). O
+  texto antes, até 2 imagens (GIF animado incluso, ≤ 2 MB cada, ≤ 3 MB
+  no total: o Graph recusa requisição > 4 MB) e texto depois (LGPD). ⚠️ Desde
+  06/11/2026 os dois textos são **fixos da empresa** (`TEXTO_ANTES`/`TEXTO_DEPOIS`)
+  — a pessoa esquecia de preencher ou de salvar; no Perfil ela só põe as imagens. O
   `email_preparar` monta HTML com o corpo ESCAPADO e as imagens **embutidas**
   (`cid:`) — link externo não anima e o Outlook de quem recebe bloqueia. Uma
   por pessoa, nas duas caixas. O `enviar_para_mim` segue sem assinatura.
