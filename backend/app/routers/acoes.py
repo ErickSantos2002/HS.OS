@@ -127,12 +127,18 @@ _CABECALHO = "# MEMORY.md"
 
 
 async def _meu_bot(usuario: Usuario) -> str:
+    return (await _meu_bot_com_nome(usuario))[0]
+
+
+async def _meu_bot_com_nome(usuario: Usuario) -> tuple[str, str]:
+    """(agent_id, nome de exibição). O id é a chave; o nome é o que a pessoa
+    escolheu em "Meu bot" (o `pip` do Erick) — é ele que a tela mostra."""
     async with sessao(role="service_role") as conn:
-        bot = await conn.fetchval(
-            "SELECT agent_id FROM public.agent_profiles WHERE dono_id = $1::uuid", usuario.id)
-    if not bot:
+        linha = await conn.fetchrow(
+            "SELECT agent_id, name FROM public.agent_profiles WHERE dono_id = $1::uuid", usuario.id)
+    if not linha:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Você ainda não tem bot pessoal.")
-    return bot
+    return linha["agent_id"], (linha["name"] or linha["agent_id"])
 
 
 def _linhas(conteudo: str) -> list[str]:
@@ -141,8 +147,8 @@ def _linhas(conteudo: str) -> list[str]:
 
 @router.get("/bots/memoria")
 async def ver_memoria(usuario: Usuario = Depends(usuario_atual)):
-    bot = await _meu_bot(usuario)
-    return {"bot": bot, "linhas": _linhas(await _ler_memoria(bot))}
+    bot, nome = await _meu_bot_com_nome(usuario)
+    return {"bot": bot, "bot_nome": nome, "linhas": _linhas(await _ler_memoria(bot))}
 
 
 @router.delete("/bots/memoria/{indice}")

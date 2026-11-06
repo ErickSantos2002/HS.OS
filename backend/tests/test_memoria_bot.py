@@ -23,6 +23,9 @@ class Conn:
     async def fetchval(self, sql, *a):
         return self.bot
 
+    async def fetchrow(self, sql, *a):
+        return self.bot and {"agent_id": self.bot, "name": "pip-bot"}
+
     async def __aenter__(self):
         return self
 
@@ -65,3 +68,10 @@ def test_quem_nao_tem_bot_recebe_404(amb):
     with pytest.raises(HTTPException) as e:
         asyncio.run(rota.ver_memoria(ERICK))
     assert e.value.status_code == 404
+
+
+def test_titulo_usa_o_nome_escolhido_nao_o_id(amb):
+    """06/11: o Erick renomeou o bot para `pip` e o Perfil seguia dizendo
+    "Memória do erick-bot". O id é a chave; a tela mostra o nome."""
+    r = asyncio.run(rota.ver_memoria(ERICK))
+    assert r["bot"] == "erick-bot" and r["bot_nome"] == "pip-bot"

@@ -98,8 +98,11 @@ async def callback(code: str | None = Query(default=None), state: str | None = Q
 async def estado(usuario: Usuario = Depends(usuario_atual)):
     async with sessao(role="service_role") as conn:
         bot = await contas.bot_com_email_do(conn, usuario.id)
+        # O título mostra o nome escolhido em "Meu bot", não o agent_id.
+        nome = bot and await conn.fetchval(
+            "SELECT name FROM public.agent_profiles WHERE agent_id = $1", bot)
         conta, extras = await contas.caixas(conn, usuario.id)
-    return {"liberado": bool(bot), "bot": bot, "conectado": bool(conta),
+    return {"liberado": bool(bot), "bot": bot, "bot_nome": nome or bot, "conectado": bool(conta),
             "conta": conta, "caixas": extras}
 
 
