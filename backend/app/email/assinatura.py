@@ -3,11 +3,10 @@
 Texto antes + até 2 imagens (GIF animado incluso) + texto depois (aviso LGPD).
 Todo e-mail que o bot PREPARA sai em HTML com ela no fim.
 
-⚠️ Os dois textos são da EMPRESA, fixos aqui, desde 06/11/2026 (decisão do
-Erick). Eram campos do Perfil, e em dois dias duas pessoas mandaram e-mail sem
-eles: uma não preencheu, outra preencheu e não clicou em "Salvar texto". Como
-são iguais para todos, a pessoa só cuida das imagens. As colunas
-`texto_antes`/`texto_depois` de `email_assinaturas` ficaram sem leitor.
+⚠️ Os dois textos têm PADRÃO da empresa desde 06/11/2026. Em dois dias duas
+pessoas mandaram e-mail sem eles: uma não preencheu, outra preencheu e não
+clicou em "Salvar texto". Campo vazio (ou nunca salvo) vale o padrão; quem
+precisa de outro texto edita no Perfil (pedido da Qualidade: alguns precisam).
 
 ⚠️ Imagens EMBUTIDAS (`cid:`), não link: link externo não anima e o Outlook de
 quem recebe bloqueia imagem remota por padrão. ⚠️ O corpo do bot é ESCAPADO:
@@ -85,10 +84,19 @@ def anexos_inline(ass: dict | None) -> list[dict]:
             for i in sorted((ass or {}).get("imagens") or [], key=lambda i: i["ordem"])]
 
 
+def textos(linha) -> tuple[str, str]:
+    """Os textos valendo para a pessoa: o salvo, ou o padrão se vazio/ausente."""
+    antes = ((linha["texto_antes"] if linha else "") or "").strip() and linha["texto_antes"]
+    depois = ((linha["texto_depois"] if linha else "") or "").strip() and linha["texto_depois"]
+    return (antes or TEXTO_ANTES, depois or TEXTO_DEPOIS)
+
+
 async def carregar(conn, user_id: str) -> dict:
-    """A assinatura da pessoa: os textos fixos da empresa + as imagens dela.
-    Sempre devolve — sem imagem, o e-mail sai com os dois textos."""
+    """A assinatura da pessoa. Sempre devolve: sem cadastro, saem os textos padrão."""
+    linha = await conn.fetchrow(
+        "SELECT texto_antes, texto_depois FROM public.email_assinaturas WHERE user_id = $1::uuid", user_id)
     imagens = await conn.fetch(
         "SELECT ordem, mime, nome, dados FROM public.email_assinatura_imagens WHERE user_id = $1::uuid "
         "ORDER BY ordem", user_id)
-    return {"texto_antes": TEXTO_ANTES, "texto_depois": TEXTO_DEPOIS, "imagens": [dict(i) for i in imagens]}
+    antes, depois = textos(linha)
+    return {"texto_antes": antes, "texto_depois": depois, "imagens": [dict(i) for i in imagens]}

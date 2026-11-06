@@ -259,15 +259,36 @@ async def descartar_pendente(pend_id: str, usuario: Usuario = Depends(usuario_at
 from app.email import assinatura as ass_mod  # noqa: E402
 
 
+class AssinaturaTextoIn(BaseModel):
+    texto_antes: str = ""
+    texto_depois: str = ""
+
+
 @router.get("/assinatura")
 async def ver_assinatura(usuario: Usuario = Depends(usuario_atual)):
-    """Os textos são fixos da empresa (`assinatura.TEXTO_*`); só as imagens são da pessoa."""
     async with sessao(role="service_role") as conn:
+        linha = await conn.fetchrow("SELECT texto_antes, texto_depois FROM public.email_assinaturas "
+                                    " WHERE user_id = $1::uuid", usuario.id)
         imgs = await conn.fetch("SELECT ordem, mime, nome, length(dados) AS tamanho "
                                 "  FROM public.email_assinatura_imagens WHERE user_id = $1::uuid "
                                 " ORDER BY ordem", usuario.id)
-    return {"texto_antes": ass_mod.TEXTO_ANTES, "texto_depois": ass_mod.TEXTO_DEPOIS,
+    # Campo vazio ou nunca salvo já vem com o padrão da empresa preenchido.
+    antes, depois = ass_mod.textos(linha)
+    return {"texto_antes": antes, "texto_depois": depois,
             "imagens": [dict(i) for i in imgs]}
+
+
+@router.put("/assinatura")
+async def salvar_texto_assinatura(dados: AssinaturaTextoIn, usuario: Usuario = Depends(usuario_atual)):
+    if len(dados.texto_antes) > 1000 or len(dados.texto_depois) > 3000:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Texto da assinatura longo demais.")
+    async with sessao(role="service_role") as conn:
+        await conn.execute(
+            "INSERT INTO public.email_assinaturas (user_id, texto_antes, texto_depois) VALUES ($1::uuid, $2, $3) "
+            "ON CONFLICT (user_id) DO UPDATE SET texto_antes = EXCLUDED.texto_antes, "
+            "texto_depois = EXCLUDED.texto_depois, atualizado_em = now()",
+            usuario.id, dados.texto_antes, dados.texto_depois)
+    return {"ok": True}
 
 
 @router.post("/assinatura/imagem/{ordem}")
