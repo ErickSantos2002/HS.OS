@@ -139,3 +139,36 @@ def test_concluida_e_prazo_validados_antes_do_cartao(amb):
     assert erro and amb["pendentes"] == []
     texto, erro = _run("taskhs_atualizar", {"list_id": 3, "card_id": 9, "prazo": "amanhã"})
     assert erro and amb["pendentes"] == []
+
+
+def test_checklist_vai_no_campo_e_a_lista_pelo_nome(amb, monkeypatch):
+    """06/11: pedi ao pip um checklist e ele veio como "- [ ] …" na descrição,
+    e o cartão dizia "Na lista 368". O checklist é campo próprio (vira o
+    checklist do TaskHS) e o cartão leva o NOME da lista."""
+    async def chamar(email, bot, metodo, caminho, json=None, params=None, dono=None):
+        if caminho == "/boards/7/lists":
+            return [{"id": 368, "title": "EM ANDAMENTO - ERICK"}]
+        return []
+    monkeypatch.setattr(m.taskhs, "chamar", chamar)
+    texto, erro = _run("taskhs_criar", {"list_id": 368, "board_id": 7, "titulo": "Ajustar e-mails",
+                                        "checklist": {"itens": ["Miguel", " ", "André"]}})
+    assert not erro
+    _, acao, payload, resumo = amb["pendentes"][0]
+    assert acao == "criar" and "description" not in payload
+    assert payload["checklist"] == {"title": "Checklist", "items": ["Miguel", "André"]}
+    assert payload["_exibir"] == {"lista": "EM ANDAMENTO - ERICK"} and "EM ANDAMENTO" in resumo
+
+
+def test_marcar_item_que_nao_existe_e_recusado_antes_do_cartao(amb, monkeypatch):
+    async def chamar(email, bot, metodo, caminho, json=None, params=None, dono=None):
+        return {"id": 9, "title": "Card", "checklists": [{"id": 5, "items": [{"id": 50, "text": "Miguel"}]}]}
+    monkeypatch.setattr(m.taskhs, "chamar", chamar)
+    texto, erro = _run("taskhs_atualizar", {"list_id": 3, "card_id": 9,
+                                            "marcar_itens": [{"checklist_id": 5, "item_id": 99, "feito": True}]})
+    assert erro and amb["pendentes"] == []
+    texto, erro = _run("taskhs_atualizar", {"list_id": 3, "card_id": 9,
+                                            "marcar_itens": [{"checklist_id": 5, "item_id": 50, "feito": True}]})
+    assert not erro
+    payload = amb["pendentes"][0][2]
+    assert payload["marcar_itens"] == [{"checklist_id": 5, "item_id": 50, "checked": True}]
+    assert payload["_exibir"]["itens"] == {"5:50": "Miguel"}

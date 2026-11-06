@@ -145,3 +145,43 @@ def test_criar_tarefa_poe_o_dono_como_membro(monkeypatch):
     r = asyncio.run(acoes.EXECUTORES[("taskhs", "criar")]("ti@x.com", "erick-bot",
                                                            {"list_id": 368, "title": "T"}, dono="u"))
     assert ("POST", "/lists/368/cards/2534/members/22") in chamadas and "membro" in r
+
+
+def _gravar_chamadas(monkeypatch):
+    feitas = []
+
+    async def chamar(email, bot, metodo, caminho, json=None, params=None, dono=None):
+        feitas.append((metodo, caminho, json))
+        if caminho.endswith("/checklists"):
+            return {"id": 5}
+        if caminho == "/auth/me":
+            return {"id": 1}
+        if caminho.endswith("/cards") and metodo == "POST":
+            return {"id": 9}
+        return {}
+    monkeypatch.setattr(acoes.taskhs, "chamar", chamar)
+    return feitas
+
+
+def test_criar_com_checklist_cria_o_checklist_do_taskhs(monkeypatch):
+    feitas = _gravar_chamadas(monkeypatch)
+    r = asyncio.run(acoes._taskhs_criar("e", "b", {"list_id": 3, "title": "T", "_exibir": {"lista": "X"},
+                                                   "checklist": {"title": "Checklist", "items": ["a", "b"]}}))
+    assert ("POST", "/lists/3/cards", {"title": "T"}) in feitas      # _exibir não vai ao TaskHS
+    assert ("POST", "/lists/3/cards/9/checklists", {"title": "Checklist"}) in feitas
+    assert [f[2] for f in feitas if f[1].endswith("/items")] == [{"text": "a"}, {"text": "b"}]
+    assert "checklist com 2 itens" in r
+
+
+def test_mover_chama_o_taskhs(monkeypatch):
+    """`int(p["para_list_id"], dono=dono)` levantava TypeError: mover NUNCA funcionou."""
+    feitas = _gravar_chamadas(monkeypatch)
+    asyncio.run(acoes._taskhs_mover("e", "b", {"list_id": 3, "card_id": 9, "para_list_id": 4}))
+    assert feitas == [("PATCH", "/lists/3/cards/9", {"list_id": 4})]
+
+
+def test_atualizar_marca_item_sem_mexer_no_card(monkeypatch):
+    feitas = _gravar_chamadas(monkeypatch)
+    asyncio.run(acoes._taskhs_atualizar("e", "b", {"list_id": 3, "card_id": 9, "campos": {},
+                "marcar_itens": [{"checklist_id": 5, "item_id": 50, "checked": True}]}))
+    assert feitas == [("PATCH", "/lists/3/cards/9/checklists/5/items/50", {"checked": True})]
