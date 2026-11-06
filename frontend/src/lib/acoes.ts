@@ -79,14 +79,18 @@ export function cartaoDaAcao(acao: string, p: Record<string, unknown>): CartaoDa
   if (acao === "comentar")
     return { verbo: "Comentar", titulo: tarefa, linhas: [], checklists: [], texto: { rotulo: "Comentário", valor: v(p.texto) } };
   if (acao === "atualizar") {
-    const linhas = Object.entries((p.campos as Record<string, unknown>) ?? {})
+    const campos = (p.campos as Record<string, unknown>) ?? {};
+    const linhas = Object.entries(campos).filter(([k]) => k !== "description")
       .map(([k, x]) => [CAMPO[k] ?? k, legivel(k, x)] as [string, string]);
+    const texto = "description" in campos
+      ? { rotulo: "Nova descrição (substitui a atual)", valor: v(campos.description) || "(apagar a descrição)" }
+      : undefined;
     const nomes = (ex.itens as Record<string, string> | undefined) ?? {};
     const marcar = (p.marcar_itens as { checklist_id: number; item_id: number; checked: boolean }[] | undefined) ?? [];
     const marcados = marcar.map((m) => ({
       texto: nomes[`${m.checklist_id}:${m.item_id}`] || `item ${m.item_id}`, feito: m.checked }));
     return {
-      verbo: "Atualizar tarefa", titulo: tarefa, linhas,
+      verbo: "Atualizar tarefa", titulo: tarefa, linhas, texto,
       checklists: [...checklists, ...(marcados.length ? [{ titulo: "Marcar no checklist", itens: marcados }] : [])],
     };
   }

@@ -91,12 +91,13 @@ FERRAMENTAS = [
         "prioridade": {"type": "string", "enum": list(_PRIORIDADES)},
         "prazo": {"type": "string", "description": "AAAA-MM-DD"},
         "checklist": _CHECKLIST}, ("list_id", "titulo")),
-    _f("taskhs_atualizar", "Marcar concluída, mudar prazo, prioridade ou título; acrescentar um "
+    _f("taskhs_atualizar", "Marcar concluída, mudar prazo, prioridade, título ou descrição "
+       "(`descricao` SUBSTITUI a descrição inteira; \"\" apaga); acrescentar um "
        "checklist (`checklist`) ou marcar/desmarcar itens de checklist (`marcar_itens`, ids do "
        "taskhs_tarefa)." + _CONFIRMA,
        {"list_id": _INT, "card_id": _INT, "concluida": {"type": "boolean"},
         "prazo": {"type": "string"}, "prioridade": {"type": "string", "enum": list(_PRIORIDADES)},
-        "titulo": {"type": "string"}, "checklist": _CHECKLIST,
+        "titulo": {"type": "string"}, "descricao": {"type": "string"}, "checklist": _CHECKLIST,
         "marcar_itens": {"type": "array", "maxItems": _TETO_ITENS, "items": {
             "type": "object", "properties": {"checklist_id": _INT, "item_id": _INT,
                                              "feito": {"type": "boolean"}},
@@ -343,6 +344,8 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
                 campos["priority"] = args["prioridade"]
             if args.get("titulo"):
                 campos["title"] = str(args["titulo"])[:200]
+            if isinstance(args.get("descricao"), str):
+                campos["description"] = args["descricao"].strip()[:5000]
             payload = {"list_id": lid, "card_id": cid, "campos": campos}
             cl = _checklist(args.get("checklist"))
             if cl:
@@ -355,7 +358,7 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
                 raise _Recusa("Nada para atualizar.")
             payload["_exibir"] = exibir
             acao = "atualizar"
-            mudancas = [f"{k}={v}" for k, v in campos.items()]
+            mudancas = [("nova descrição" if k == "description" else f"{k}={v}") for k, v in campos.items()]
             if cl:
                 mudancas.append(f"checklist com {len(cl['items'])} itens")
             if marcar:
