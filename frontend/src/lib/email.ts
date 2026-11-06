@@ -45,8 +45,6 @@ export const verPendente = (id: string) => api<Pendente>(`/email/pendentes/${enc
 export const enviarPendente = (id: string, hash: string) =>
   api<{ status: string }>(`/email/pendentes/${encodeURIComponent(id)}/enviar`, { method: "POST", body: { hash } });
 export const verAssinatura = () => api<Assinatura>("/email/assinatura");
-export const salvarTextoAssinatura = (texto_antes: string, texto_depois: string) =>
-  api("/email/assinatura", { method: "PUT", body: { texto_antes, texto_depois } });
 export const enviarImagemAssinatura = (ordem: number, arquivo: File) => {
   const f = new FormData();
   f.append("arquivo", arquivo);

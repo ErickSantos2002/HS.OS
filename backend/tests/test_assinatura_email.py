@@ -95,3 +95,16 @@ def test_despedida_repetida_sai_do_corpo():
     assert html.count("Atenciosamente") == 1
     html = a.montar_html("Segue.\n\natenciosamente", ass)
     assert html.lower().count("atenciosamente") == 1
+
+
+def test_textos_sao_fixos_da_empresa_mesmo_sem_cadastro():
+    """06/11: duas pessoas mandaram e-mail sem "Atenciosamente," e sem o aviso
+    LGPD — uma não preencheu, a outra não clicou em salvar. Os textos passaram
+    a ser da empresa: saem sempre, com ou sem imagem, sem depender do Perfil."""
+    class Conn:
+        async def fetch(self, *a):
+            return []
+    ass = asyncio.run(a.carregar(Conn(), "u"))
+    assert ass["texto_antes"] == "Atenciosamente," and "LGPD" in ass["texto_depois"]
+    html = a.montar_html("Segue.", ass)
+    assert "Atenciosamente," in html and "qualidade@healthsafety.com.br" in html and "cid:" not in html

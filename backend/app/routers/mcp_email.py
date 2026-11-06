@@ -188,7 +188,7 @@ async def _rodar(conn, agent_id: str, nome: str, args: dict, ctx: dict) -> str:
         pend = await conn.fetchval(
             "INSERT INTO public.email_pendentes (user_id, agent_id, caixa_de, para, cc, graph_id, hash, "
             "assinatura) VALUES ($1::uuid, $2, $3, $4::text[], $5::text[], $6, $7, $8) RETURNING id::text",
-            dono, agent_id, de, para, cc, gid, hash_rascunho(de, relido, anexos), ass is not None)
+            dono, agent_id, de, para, cc, gid, hash_rascunho(de, relido, anexos), True)
         # O cartão é uma mensagem do agente na conversa: push e tempo real vêm
         # dos triggers que já existem (`trg_push_pendente`, `trg_notificar_*`).
         conv = await conn.fetchval(
@@ -201,7 +201,8 @@ async def _rodar(conn, agent_id: str, nome: str, args: dict, ctx: dict) -> str:
                            pend, conv)
         await contas.evento(conn, dono, agent_id, "preparar", de, gid, [*para, *cc])
         return (f"Preparado (rascunho em {de}, para {', '.join(para)}"
-                f"{', com a assinatura de ' + ctx['primeiro'] if ass else ', SEM assinatura — ela não cadastrou no Perfil'}). Só sai quando "
+                f", com a assinatura de {ctx['primeiro']}"
+                f"{'' if ass['imagens'] else ' (só os textos: as imagens não foram cadastradas no Perfil)'}). Só sai quando "
                 f"{ctx['primeiro']} aprovar no HS.OS — não diga que foi enviado.")
 
     if nome == "email_pendentes":
