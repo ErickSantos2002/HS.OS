@@ -180,3 +180,73 @@ def test_atualizar_troca_a_descricao(amb):
     texto, erro = _run("taskhs_atualizar", {"list_id": 3, "card_id": 9, "descricao": "Só o texto."})
     assert not erro
     assert amb["pendentes"][0][2]["campos"] == {"description": "Só o texto."}
+
+
+def _taskhs_membros(monkeypatch, amb, membros_card=({"id": 1, "name": "Erick Santos"},)):
+    async def chamar(email, bot, metodo, caminho, json=None, params=None, dono=None):
+        amb["chamadas"].append((email, metodo, caminho))
+        if caminho == "/boards/7/lists":
+            return [{"id": 3, "title": "A FAZER"}]
+        if caminho == "/boards/7/members":
+            return [{"id": 1, "name": "Erick Santos", "email": "ti@x"},
+                    {"id": 2, "name": "Ellen Souza", "email": "ellen@x"}]
+        if caminho == "/lists/3/cards/9":
+            return {"id": 9, "title": "Card", "members": list(membros_card)}
+        return []
+    monkeypatch.setattr(m.taskhs, "chamar", chamar)
+
+
+def test_membros_vira_cartao_com_nomes_e_ids(amb, monkeypatch):
+    """09/11/2026: o Guardi não conseguia se pôr nem se tirar de uma tarefa.
+    O payload leva os ids (o que executa); os nomes são só rótulo do cartão."""
+    _taskhs_membros(monkeypatch, amb)
+    texto, erro = _run("taskhs_membros", {"list_id": 3, "card_id": 9, "board_id": 7,
+                                          "adicionar": [2], "remover": [1]})
+    assert not erro, texto
+    assert all(metodo == "GET" for _, metodo, _ in amb["chamadas"])
+    _, acao, payload, resumo = amb["pendentes"][0]
+    assert acao == "membros"
+    assert payload["adicionar"] == [2] and payload["remover"] == [1]
+    assert payload["_exibir"]["adicionar"] == ["Ellen Souza"]
+    assert payload["_exibir"]["remover"] == ["Erick Santos"]
+    assert "Ellen Souza" in resumo
+
+
+def test_membros_so_quem_esta_no_quadro_entra(amb, monkeypatch):
+    """O TaskHS devolve 403 para quem não é do quadro — mas só DEPOIS do
+    clique do dono. Recusar antes do cartão evita aprovar o que vai falhar."""
+    _taskhs_membros(monkeypatch, amb)
+    texto, erro = _run("taskhs_membros", {"list_id": 3, "card_id": 9, "board_id": 7, "adicionar": [99]})
+    assert erro and amb["pendentes"] == []
+
+
+def test_membros_so_tira_quem_esta_na_tarefa(amb, monkeypatch):
+    _taskhs_membros(monkeypatch, amb)
+    texto, erro = _run("taskhs_membros", {"list_id": 3, "card_id": 9, "board_id": 7, "remover": [2]})
+    assert erro and amb["pendentes"] == []
+
+
+def test_membros_quadro_errado_e_recusado(amb, monkeypatch):
+    """O `board_id` decide quem pode entrar: um quadro que não tem a lista da
+    tarefa deixaria o cartão oferecer gente de outro quadro."""
+    _taskhs_membros(monkeypatch, amb)
+    texto, erro = _run("taskhs_membros", {"list_id": 4, "card_id": 9, "board_id": 7, "adicionar": [2]})
+    assert erro and amb["pendentes"] == []
+
+
+def test_membros_sem_mudanca_recusa(amb, monkeypatch):
+    _taskhs_membros(monkeypatch, amb)
+    texto, erro = _run("taskhs_membros", {"list_id": 3, "card_id": 9, "board_id": 7, "adicionar": [1]})
+    assert erro and amb["pendentes"] == []
+
+
+def test_tarefa_mostra_os_membros(amb, monkeypatch):
+    _taskhs_membros(monkeypatch, amb)
+    texto, erro = _run("taskhs_tarefa", {"list_id": 3, "card_id": 9})
+    assert not erro and "Erick Santos (user_id 1)" in texto
+
+
+def test_membros_quadro_lista_com_ids(amb, monkeypatch):
+    _taskhs_membros(monkeypatch, amb)
+    texto, erro = _run("taskhs_membros_quadro", {"board_id": 7})
+    assert not erro and "user_id 2 | Ellen Souza" in texto

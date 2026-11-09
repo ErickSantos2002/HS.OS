@@ -705,6 +705,10 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   direta; **escrita vira `acoes_pendentes` + cartão** (`acao_aprovacao`), e a
   confirmação executa o `payload` GRAVADO (`routers/acoes.py`), fora do
   rollback em caso de erro.
+- **Membros da tarefa** (`taskhs_membros`, 09/11/2026): pôr/tirar gente de um
+  card, via cartão. Valida antes do cartão: a lista é do `board_id` dado, quem
+  entra é membro do quadro, quem sai está no card. Membro de **quadro** o
+  TaskHS barra para token de agente (`bloquear_token_de_agente`), de propósito.
 - **`lembrar`** grava uma linha no `MEMORY.md` (teto de 6.000 caracteres),
   sem confirmação. A pessoa vê e apaga em Configurações → Perfil → "Memória
   do bot". ⚠️ O `MEMORY.md` entra em toda sessão, inclusive a do admin com o

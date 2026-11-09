@@ -60,6 +60,7 @@ _CONFIRMA = (" NÃO executa: prepara e mostra um cartão para o seu dono confirm
 _BOARD = {"type": "integer", "description": "o quadro da lista (do taskhs_quadro) — opcional, "
           "ajuda a mostrar o nome da lista no cartão"}
 _TETO_ITENS = 60
+_TETO_MEMBROS = 20
 _CHECKLIST = {"type": "object", "description": "Checklist do TaskHS (itens marcáveis).",
               "properties": {"titulo": {"type": "string", "description": "padrão: Checklist"},
                              "itens": {"type": "array", "items": {"type": "string"},
@@ -80,6 +81,8 @@ FERRAMENTAS = [
     _f("taskhs_tarefa", "Detalhe de uma tarefa, com os checklists e os ids dos itens." + _DADO, {"list_id": _INT, "card_id": _INT},
        ("list_id", "card_id")),
     _f("taskhs_buscar", "Busca tarefas pelo texto." + _DADO, {"q": {"type": "string"}}, ("q",)),
+    _f("taskhs_membros_quadro", "Quem é membro de um quadro, com o user_id de cada pessoa — só "
+       "elas podem entrar numa tarefa do quadro." + _DADO, {"board_id": _INT}, ("board_id",)),
     _f("taskhs_comentar", "Comentar numa tarefa." + _CONFIRMA,
        {"list_id": _INT, "card_id": _INT, "texto": {"type": "string"}}, ("list_id", "card_id", "texto")),
     _f("taskhs_mover", "Mover uma tarefa para outra lista (use taskhs_quadro para ver os ids)." + _CONFIRMA,
@@ -102,6 +105,16 @@ FERRAMENTAS = [
             "type": "object", "properties": {"checklist_id": _INT, "item_id": _INT,
                                              "feito": {"type": "boolean"}},
             "required": ["checklist_id", "item_id", "feito"]}}}, ("list_id", "card_id")),
+    _f("taskhs_membros", "Pôr ou tirar pessoas de uma tarefa (inclusive o seu dono: o user_id dele "
+       "vem do taskhs_eu). `adicionar` só aceita membros do quadro (taskhs_membros_quadro); "
+       "`remover`, só quem já está na tarefa (taskhs_tarefa)." + _CONFIRMA,
+       {"list_id": _INT, "card_id": _INT,
+        "board_id": {"type": "integer", "description": "o quadro da tarefa (taskhs_quadros/taskhs_minhas)"},
+        "adicionar": {"type": "array", "items": _INT, "maxItems": _TETO_MEMBROS,
+                      "description": "user_ids que entram"},
+        "remover": {"type": "array", "items": _INT, "maxItems": _TETO_MEMBROS,
+                    "description": "user_ids que saem"}},
+       ("list_id", "card_id", "board_id")),
 ]
 NOMES = tuple(f["name"] for f in FERRAMENTAS)
 assert NOMES == FERRAMENTAS_BOT, "FERRAMENTAS do servidor e FERRAMENTAS_BOT divergiram"
@@ -244,13 +257,64 @@ def _marcar_itens(v, card: dict) -> list[dict]:
     return out
 
 
+def _quem(u: dict) -> str:
+    return f"{_rotulo(u.get('name')) or 'sem nome'} (user_id {u.get('id')})"
+
+
+def _ids(v, campo: str) -> list[int]:
+    if v in (None, []):
+        return []
+    if not isinstance(v, list) or len(v) > _TETO_MEMBROS:
+        raise _Recusa(f"{campo} precisa ser uma lista de até {_TETO_MEMBROS} user_ids.")
+    try:
+        return list(dict.fromkeys(int(x) for x in v))
+    except (TypeError, ValueError) as e:
+        raise _Recusa(f"{campo} precisa ter só user_ids numéricos.") from e
+
+
+async def _preparar_membros(em, bot, dono, lid: int, cid: int, card: dict, args: dict) -> tuple[dict, str]:
+    """Valida ANTES do cartão — o 403 do TaskHS ("não é membro deste quadro")
+    só apareceria depois do clique do dono. Quem entra tem que ser do quadro
+    da tarefa; quem sai tem que estar nela. O payload leva só ids; os nomes
+    (dado do TaskHS) vão saneados no `_exibir`, que é rótulo."""
+    bid = _int(args, "board_id")
+    listas = await taskhs.chamar(em, bot, "GET", f"/boards/{bid}/lists", dono=dono) or []
+    if not any(int(l.get("id") or 0) == lid for l in listas):
+        raise _Recusa(f"A lista {lid} não é do quadro {bid} — confira o quadro da tarefa.")
+    entra, sai = _ids(args.get("adicionar"), "adicionar"), _ids(args.get("remover"), "remover")
+    if set(entra) & set(sai):
+        raise _Recusa("A mesma pessoa não pode entrar e sair ao mesmo tempo.")
+    atuais = {int(u["id"]): _rotulo(u.get("name")) for u in card.get("members") or [] if u.get("id")}
+    do_quadro = {int(u["id"]): _rotulo(u.get("name"))
+                 for u in await taskhs.chamar(em, bot, "GET", f"/boards/{bid}/members", dono=dono) or []
+                 if u.get("id")}
+    fora = [i for i in entra if i not in do_quadro]
+    if fora:
+        raise _Recusa(f"user_id {', '.join(map(str, fora))} não é membro do quadro — "
+                      "só membros do quadro entram na tarefa (taskhs_membros_quadro).")
+    nao_esta = [i for i in sai if i not in atuais]
+    if nao_esta:
+        raise _Recusa(f"user_id {', '.join(map(str, nao_esta))} não está na tarefa (confira com taskhs_tarefa).")
+    entra = [i for i in entra if i not in atuais]
+    if not entra and not sai:
+        raise _Recusa("Nada para mudar: quem você quer pôr já está na tarefa.")
+    nomes_entra = [do_quadro[i] or f"user_id {i}" for i in entra]
+    nomes_sai = [atuais[i] or f"user_id {i}" for i in sai]
+    partes = ([f"entram {', '.join(nomes_entra)}"] if entra else []) + \
+             ([f"saem {', '.join(nomes_sai)}"] if sai else [])
+    payload = {"list_id": lid, "card_id": cid, "adicionar": entra, "remover": sai,
+               "_exibir": {"adicionar": nomes_entra, "remover": nomes_sai}}
+    return payload, "; ".join(partes)
+
+
 async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
     if "taskhs" not in ctx["sistemas"]:
         raise _Recusa("O TaskHS ainda não está ligado para mim.")
     em = ctx["email"]
     if nome == "taskhs_eu":
         eu = await taskhs.chamar(em, bot, "GET", "/auth/me", dono=ctx["dono"])
-        return como_dado_externo_taskhs(f"Nome: {eu.get('name') or eu.get('nome')}\nPapel: {eu.get('role')}")
+        return como_dado_externo_taskhs(f"Nome: {eu.get('name') or eu.get('nome')}\nPapel: {eu.get('role')}"
+                                        f"\nuser_id: {eu.get('id')}")
     if nome == "taskhs_minhas":
         abertas = args.get("abertas", True) is not False
         cards = await taskhs.chamar(em, bot, "GET", "/cards/minhas",
@@ -276,7 +340,9 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
         c = await taskhs.chamar(em, bot, "GET", f"/lists/{_int(args, 'list_id')}/cards/{_int(args, 'card_id')}",
                                 dono=ctx["dono"])
         partes = [f"{c.get('title')}\nPrazo: {c.get('due_date')}\nPrioridade: "
-                  f"{c.get('priority')}\nConcluída: {c.get('done')}\n\n{c.get('description') or ''}"]
+                  f"{c.get('priority')}\nConcluída: {c.get('done')}\n"
+                  f"Membros: {', '.join(_quem(u) for u in c.get('members') or []) or 'ninguém'}"
+                  f"\n\n{c.get('description') or ''}"]
         for cl in c.get("checklists") or []:
             partes.append(f"\nChecklist {cl.get('id')} '{cl.get('title')}':")
             partes += [f"  [{'x' if i.get('checked') else ' '}] item {i.get('id')} | {i.get('text')}"
@@ -288,6 +354,12 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
         return como_dado_externo_taskhs("\n".join(
             f"- card {r.get('card_id')} (lista {r.get('list_id')}, quadro '{r.get('board_title')}') | "
             f"{r.get('title') or r.get('card_title')}" for r in (rs or [])[:30]) or "(nada)")
+
+    if nome == "taskhs_membros_quadro":
+        ms = await taskhs.chamar(em, bot, "GET", f"/boards/{_int(args, 'board_id')}/members", dono=ctx["dono"])
+        return como_dado_externo_taskhs("\n".join(
+            f"- user_id {u.get('id')} | {u.get('name')} | {u.get('email') or ''}"
+            for u in (ms or [])[:200]) or "(ninguém)")
 
     # ── escrita: prepara, nunca executa ─────────────────────────────────────
     lid = _int(args, "list_id")
@@ -325,6 +397,11 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
                 raise _Recusa("Informe o comentário.")
             payload, acao = {"list_id": lid, "card_id": cid, "texto": texto, "_exibir": exibir}, "comentar"
             resumo = f"Comentar em '{titulo}': {texto[:120]}"
+        elif nome == "taskhs_membros":
+            payload, resumo = await _preparar_membros(em, bot, ctx["dono"], lid, cid, card, args)
+            payload["_exibir"] = {**exibir, **payload["_exibir"]}
+            resumo = f"Membros de '{titulo}': {resumo}"
+            acao = "membros"
         elif nome == "taskhs_mover":
             para = _int(args, "para_list_id")
             nome_para = await _nome_da_lista(em, bot, ctx["dono"], para, args.get("board_id"))

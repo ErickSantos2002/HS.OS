@@ -86,11 +86,33 @@ async def _taskhs_atualizar(email, bot, p, dono=None) -> str:
     return ("; ".join(feito) or "nada mudou").capitalize() + "."
 
 
+async def _taskhs_membros(email, bot, p, dono=None) -> str:
+    """Um por pessoa e sem parar no primeiro erro: o dono precisa saber quem
+    entrou e quem não — "falhou" sozinho o faria repetir o que já deu certo."""
+    base = f"/lists/{int(p['list_id'])}/cards/{int(p['card_id'])}/members"
+    ex = p.get("_exibir") or {}
+    feito, falhou = [], []
+    for verbo, metodo, chave in (("entrou", "POST", "adicionar"), ("saiu", "DELETE", "remover")):
+        nomes = list(ex.get(chave) or [])
+        for n, uid in enumerate(p.get(chave) or []):
+            quem = nomes[n] if n < len(nomes) else f"user_id {uid}"
+            try:
+                await taskhs.chamar(email, bot, metodo, f"{base}/{int(uid)}", dono=dono)
+                feito.append(f"{quem} {verbo}")
+            except taskhs.ErroSistema as e:
+                falhou.append(f"{quem} não {verbo} ({e})")
+    # Sem `capitalize()`: ele baixa o resto da frase, e "Erick" virava "erick".
+    if not feito:
+        raise taskhs.ErroSistema(0, "; ".join(falhou))
+    return "; ".join(feito) + "." + (" " + "; ".join(falhou) + "." if falhou else "")
+
+
 EXECUTORES: dict[tuple[str, str], Executor] = {
     ("taskhs", "comentar"): _taskhs_comentar,
     ("taskhs", "mover"): _taskhs_mover,
     ("taskhs", "criar"): _taskhs_criar,
     ("taskhs", "atualizar"): _taskhs_atualizar,
+    ("taskhs", "membros"): _taskhs_membros,
 }
 
 
