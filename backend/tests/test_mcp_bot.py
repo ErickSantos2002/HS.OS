@@ -250,3 +250,57 @@ def test_membros_quadro_lista_com_ids(amb, monkeypatch):
     _taskhs_membros(monkeypatch, amb)
     texto, erro = _run("taskhs_membros_quadro", {"board_id": 7})
     assert not erro and "user_id 2 | Ellen Souza" in texto
+
+
+def _card_com_checklist(monkeypatch, amb):
+    async def chamar(email, bot, metodo, caminho, json=None, params=None, dono=None):
+        amb["chamadas"].append((email, metodo, caminho))
+        return {"id": 9, "title": "Mudanças HS.OS", "checklists": [
+            {"id": 5, "title": "Mudanças", "items": [{"id": 50, "text": "Renomear para Guardis"}]},
+            {"id": 6, "title": "Outra", "items": [{"id": 60, "text": "x"}, {"id": 61, "text": "y"}]}]}
+    monkeypatch.setattr(m.taskhs, "chamar", chamar)
+
+
+def test_checklist_com_titulo_que_ja_existe_e_recusado(amb, monkeypatch):
+    """09/11/2026: a cada pedido novo o Guardi criava OUTRO checklist "Mudanças"
+    no card do Erick, repetindo os itens antigos — não havia como acrescentar
+    item a um checklist existente. Agora há, e o duplicado é recusado."""
+    _card_com_checklist(monkeypatch, amb)
+    texto, erro = _run("taskhs_atualizar", {"list_id": 3, "card_id": 9,
+                                            "checklist": {"titulo": " mudanças ", "itens": ["Novo"]}})
+    assert erro and "adicionar_itens" in texto and "5" in texto and amb["pendentes"] == []
+
+
+def test_adicionar_itens_no_checklist_existente_pula_repetidos(amb, monkeypatch):
+    _card_com_checklist(monkeypatch, amb)
+    texto, erro = _run("taskhs_atualizar", {"list_id": 3, "card_id": 9, "adicionar_itens": {
+        "checklist_id": 5, "itens": ["renomear para guardis", "Membros de card"]}})
+    assert not erro, texto
+    payload = amb["pendentes"][0][2]
+    assert payload["adicionar_itens"] == {"checklist_id": 5, "items": ["Membros de card"]}
+    assert payload["_exibir"]["adicionar_em"] == "Mudanças"
+
+
+def test_adicionar_itens_so_repetidos_recusa(amb, monkeypatch):
+    _card_com_checklist(monkeypatch, amb)
+    texto, erro = _run("taskhs_atualizar", {"list_id": 3, "card_id": 9, "adicionar_itens": {
+        "checklist_id": 5, "itens": ["Renomear para Guardis"]}})
+    assert erro and amb["pendentes"] == []
+
+
+def test_adicionar_itens_em_checklist_inexistente_recusa(amb, monkeypatch):
+    _card_com_checklist(monkeypatch, amb)
+    texto, erro = _run("taskhs_atualizar", {"list_id": 3, "card_id": 9, "adicionar_itens": {
+        "checklist_id": 99, "itens": ["a"]}})
+    assert erro and amb["pendentes"] == []
+
+
+def test_excluir_checklist_mostra_titulo_e_tamanho(amb, monkeypatch):
+    _card_com_checklist(monkeypatch, amb)
+    texto, erro = _run("taskhs_atualizar", {"list_id": 3, "card_id": 9, "excluir_checklist": 6})
+    assert not erro, texto
+    payload = amb["pendentes"][0][2]
+    assert payload["excluir_checklist"] == 6
+    assert payload["_exibir"]["excluir"] == {"titulo": "Outra", "itens": 2}
+    texto, erro = _run("taskhs_atualizar", {"list_id": 3, "card_id": 9, "excluir_checklist": 99})
+    assert erro

@@ -54,4 +54,11 @@ describe("cartão de ação", () => {
     expect(c.titulo).toBe("Card");
     expect(c.linhas).toEqual([["Entram", "Ellen"], ["Saem", "Erick, user_id 5"]]);
   });
+  it("acrescentar itens e excluir checklist aparecem no cartão", () => {
+    const c = cartaoDaAcao("atualizar", { list_id: 3, card_id: 9, campos: {},
+      adicionar_itens: { checklist_id: 5, items: ["Membros de card"] }, excluir_checklist: 6,
+      _exibir: { tarefa: "Mudanças HS.OS", adicionar_em: "Mudanças", excluir: { titulo: "Mudanças", itens: 5 } } });
+    expect(c.checklists).toEqual([{ titulo: "Acrescentar em “Mudanças”", itens: [{ texto: "Membros de card" }] }]);
+    expect(c.linhas).toEqual([["Excluir checklist", "Mudanças (5 itens)"]]);
+  });
 });

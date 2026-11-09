@@ -83,6 +83,22 @@ async def _taskhs_atualizar(email, bot, p, dono=None) -> str:
         feito.append(f"{len(p['marcar_itens'])} item(ns) do checklist marcados")
     if p.get("checklist"):
         feito.append(await _criar_checklist(email, bot, lid, cid, p["checklist"], dono=dono))
+    add = p.get("adicionar_itens")
+    if add:
+        base = f"/lists/{lid}/cards/{cid}/checklists/{int(add['checklist_id'])}/items"
+        itens = list(add.get("items") or [])
+        for n, texto in enumerate(itens):
+            try:
+                await taskhs.chamar(email, bot, "POST", base, json={"text": texto}, dono=dono)
+            except taskhs.ErroSistema:
+                feito.append(f"{n} de {len(itens)} itens acrescentados — confira no TaskHS")
+                break
+        else:
+            feito.append(f"{len(itens)} item(ns) acrescentado(s) ao checklist")
+    if p.get("excluir_checklist"):
+        await taskhs.chamar(email, bot, "DELETE", f"/lists/{lid}/cards/{cid}/checklists/"
+                            f"{int(p['excluir_checklist'])}", dono=dono)
+        feito.append("checklist excluído")
     return ("; ".join(feito) or "nada mudou").capitalize() + "."
 
 
