@@ -76,6 +76,16 @@ export function cartaoDaAcao(acao: string, p: Record<string, unknown>): CartaoDa
   }
   if (acao === "mover")
     return { verbo: "Mover tarefa", titulo: tarefa, linhas: [["Para", lista(p.para_list_id, ex.para_lista)]], checklists: [] };
+  if (acao === "membros") {
+    // Os nomes vêm do `_exibir`, na mesma ordem dos ids do payload (o que executa).
+    const nomes = (ids: unknown, rot: unknown) => ((ids as number[] | undefined) ?? [])
+      .map((id, i) => ((rot as string[] | undefined) ?? [])[i] || `user_id ${id}`).join(", ");
+    const linhas: [string, string][] = [];
+    const entram = nomes(p.adicionar, ex.adicionar), saem = nomes(p.remover, ex.remover);
+    if (entram) linhas.push(["Entram", entram]);
+    if (saem) linhas.push(["Saem", saem]);
+    return { verbo: "Membros da tarefa", titulo: tarefa, linhas, checklists: [] };
+  }
   if (acao === "comentar")
     return { verbo: "Comentar", titulo: tarefa, linhas: [], checklists: [], texto: { rotulo: "Comentário", valor: v(p.texto) } };
   if (acao === "atualizar") {

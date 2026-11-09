@@ -18,8 +18,8 @@ FERRAMENTAS_EMAIL = ("email_caixas", "email_listar", "email_ler", "email_enviar_
                      "email_preparar", "email_pendentes")
 # As do servidor `hsos-bot-<bot>` (memória + sistemas internos).
 FERRAMENTAS_BOT = ("lembrar", "taskhs_eu", "taskhs_minhas", "taskhs_quadros", "taskhs_quadro",
-                   "taskhs_tarefa", "taskhs_buscar", "taskhs_comentar", "taskhs_mover",
-                   "taskhs_criar", "taskhs_atualizar")
+                   "taskhs_tarefa", "taskhs_buscar", "taskhs_membros_quadro", "taskhs_comentar",
+                   "taskhs_mover", "taskhs_criar", "taskhs_atualizar", "taskhs_membros")
 
 TETO_CORPO = 6000
 MAX_DESTINATARIOS = 20

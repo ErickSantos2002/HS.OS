@@ -47,4 +47,11 @@ describe("cartão de ação", () => {
       marcar_itens: [{ checklist_id: 5, item_id: 50, checked: true }] });
     expect(a.checklists.map((c) => c.titulo)).toEqual(["Novo", "Marcar no checklist"]);
   });
+  it("membros: quem entra e quem sai, pelo nome", () => {
+    const c = cartaoDaAcao("membros", { list_id: 3, card_id: 9, adicionar: [2], remover: [1, 5],
+      _exibir: { tarefa: "Card", adicionar: ["Ellen"], remover: ["Erick"] } });
+    expect(c.verbo).toBe("Membros da tarefa");
+    expect(c.titulo).toBe("Card");
+    expect(c.linhas).toEqual([["Entram", "Ellen"], ["Saem", "Erick, user_id 5"]]);
+  });
 });
