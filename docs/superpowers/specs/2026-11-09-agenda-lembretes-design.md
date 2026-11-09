@@ -184,13 +184,15 @@ Reescrever nos 23 com `--reescrever-agents-md`.
 
 - Pedir **`Calendars.Read.Shared`** no "Conectar/Reconectar e-mail" — e **só ali**.
   O login (`ESCOPOS` do SSO) **não muda**.
-- ⚠️ **O refresh renova com os escopos que a conta TEM, não com a constante.**
+- ⚠️ **O refresh renova com uma constante escolhida pelo que a conta concedeu (`ESCOPOS_CONECTAR` se concedeu calendário, senão `ESCOPOS_EMAIL`) — nunca com o `scope` cru da resposta.**
   Hoje `renovar` manda `scope: ESCOPOS_EMAIL` em todo refresh; com
   `Calendars.Read.Shared` na constante, quem conectou antes pediria um escopo não
   concedido e **o e-mail de todos quebraria no deploy** ("consent required").
   Guardar os escopos concedidos (vêm na resposta do token) em `email_contas`
   (coluna nova `escopos text[]` na mesma `032`); conta antiga (`escopos` nulo)
-  renova com os escopos de e-mail de hoje. Teste tranca isso.
+  renova com os escopos de e-mail de hoje. Motivo da constante: o `scope` da resposta v2
+  costuma vir sem `offline_access` (e com prefixo/minúsculas); reenviá-lo para a
+  rotação do refresh token em silêncio e o e-mail cai em ~90 dias. Teste tranca isso.
 - **Quem libera:** a página mostra o calendário a quem tem a conta conectada com
   o escopo (é a agenda da própria pessoa); as **ferramentas do Guardi** seguem a
   flag `email_ligado`, como o e-mail **(decisão do Claude)**.

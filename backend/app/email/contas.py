@@ -32,7 +32,7 @@ async def guardar_conta(conn, user_id: str, conta: str, refresh: str,
 async def tem_calendario(conn, user_id: str) -> bool:
     escopos = await conn.fetchval(
         "SELECT escopos FROM public.email_contas WHERE user_id = $1::uuid", user_id)
-    return graph.ESCOPO_CALENDARIO.lower() in [e.lower() for e in escopos or []]
+    return graph.concedeu_calendario(escopos)
 
 
 async def access_token(conn, user_id: str) -> tuple[str, str]:

@@ -107,10 +107,19 @@ async def trocar_code(code: str) -> dict:
             "escopos": (t.get("scope") or "").split()}
 
 
+def concedeu_calendario(escopos: list[str] | None) -> bool:
+    """O `scope` da resposta v2 vem com prefixo `https://graph.microsoft.com/` e
+    em minúsculas — normaliza antes de comparar."""
+    alvo = ESCOPO_CALENDARIO.lower()
+    return any(str(e).strip().lower().rsplit("/", 1)[-1] == alvo for e in escopos or [])
+
+
 async def renovar(refresh: str, escopos: list[str] | None = None) -> tuple[str, str]:
-    """Conta antiga (`escopos` nulo) renova com `ESCOPOS_EMAIL`, como sempre."""
+    """O `scope` enviado é SEMPRE uma constante. ⚠️ Nunca o `scope` cru da resposta:
+    ele não traz `offline_access`, e sem ele a rotação do refresh token para em
+    silêncio (o e-mail cai em ~90 dias). Conta antiga renova com `ESCOPOS_EMAIL`."""
     t = await _token({"grant_type": "refresh_token", "refresh_token": refresh},
-                     " ".join(escopos) if escopos else ESCOPOS_EMAIL)
+                     ESCOPOS_CONECTAR if concedeu_calendario(escopos) else ESCOPOS_EMAIL)
     return t["access_token"], t.get("refresh_token") or refresh
 
 
@@ -118,6 +127,9 @@ async def renovar(refresh: str, escopos: list[str] | None = None) -> tuple[str, 
 
 async def calendario(access, conta, de: datetime, ate: datetime) -> list[dict]:
     """Eventos da própria agenda entre `de` e `ate`, na hora de Brasília."""
+    if de.tzinfo is None or ate.tzinfo is None:
+        # Sem fuso o Graph lê como UTC: erro de 3 h em silêncio.
+        raise ValueError("de/ate precisam de fuso (tzinfo)")
     corpo = await _pedir(
         "GET", f"{GRAPH}/me/calendarView", access,
         params={"startDateTime": de.isoformat(), "endDateTime": ate.isoformat(),
