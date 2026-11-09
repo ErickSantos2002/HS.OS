@@ -32,7 +32,8 @@ load_dotenv()
 
 from app.bots_pessoais import tools_do_bot  # noqa: E402
 from app.email.regras import FERRAMENTAS_BOT, FERRAMENTAS_EMAIL  # noqa: E402
-from app.routers.integracoes import escopo_mcp_do_agente  # noqa: E402
+from app.routers.integracoes import escopo_mcp_do_agente, ferramentas_anexos  # noqa: E402
+from app.routers.mcp_anexos import assinatura_do_agente  # noqa: E402
 from app.routers.mcp_bot import assinatura_bot  # noqa: E402
 from app.routers.mcp_email import assinatura_email  # noqa: E402
 
@@ -68,6 +69,12 @@ def montar_patch(conf: dict, segredo: str, token: str, bots: set[str],
                                              FERRAMENTAS_EMAIL)
     for aid in sorted(com_sistemas):
         novos[f"hsos-bot-{aid}"] = entrada(f"bot/{aid}", assinatura_bot(segredo, aid), FERRAMENTAS_BOT)
+    # Anexos: todo bot, sem flag (09/11/2026). O `publicar-anexos-mcp.py` pula
+    # perfil `minimal` de propósito — a entrada do Guardi sai daqui, junto do
+    # `tools_do_bot` que a libera só para ele.
+    for aid in sorted(bots):
+        novos[f"hsos-anexos-{aid}"] = entrada(f"anexos/{aid}", assinatura_do_agente(segredo, aid),
+                                              ferramentas_anexos(aid))
     depois = {**servidores, **novos}
     agentes = copy.deepcopy((conf.get("agents") or {}).get("list") or [])
     for a in agentes:
@@ -94,9 +101,11 @@ def conferir(parsed: dict, novos: dict, bots: set[str], com_email: set[str],
             return False
         deny = set(t.get("deny") or [])
         for n in s:
-            for pref, ferr in (("hsos-email-", FERRAMENTAS_EMAIL), ("hsos-bot-", FERRAMENTAS_BOT)):
+            for pref, ferr in (("hsos-email-", FERRAMENTAS_EMAIL), ("hsos-bot-", FERRAMENTAS_BOT),
+                               ("hsos-anexos-", None)):
                 if n.startswith(pref) and n != f"{pref}{aid}":
-                    if not {f"{n}__{f}" for f in ferr} <= deny:
+                    nomes = ferr or ferramentas_anexos(n[len(pref):])
+                    if not {f"{n}__{f}" for f in nomes} <= deny:
                         return False
     return True
 

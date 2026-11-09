@@ -31,6 +31,7 @@ from app.dependencies import normalizar_agent_id
 from app.integracoes import exige_segredo, ler_segredo
 from app.relatorios import ponto
 from app.routers.anexos import buscar_anexo, membro_do_canal
+from app.routers.ia import VisaoIndisponivel, descrever_imagem_bytes
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/mcp", tags=["mcp"])
@@ -233,6 +234,15 @@ async def _ler_anexo(agent_id: str, args: dict) -> tuple[str, bool]:
         return "Falha interna ao ler o anexo; avise o administrador.", True
     if dados is None:
         return "O arquivo deste anexo não está mais no armazenamento.", True
+    if ax.tipo_legivel(anexo.nome, anexo.mime) == "imagem":
+        # Agente é de texto: a imagem chega como o que ela mostra (09/11/2026).
+        try:
+            texto = await descrever_imagem_bytes(dados, anexo.mime, anexo.nome)
+        except VisaoIndisponivel as e:
+            logger.warning("ler_anexo: imagem %s sem leitura: %s", anexo.id, e)
+            return f"Não consegui ler a imagem {anexo.nome}: {e}", True
+        logger.info("ler_anexo: %s leu a imagem %s", agent_id, anexo.id)
+        return f"{anexo.nome} (imagem — descrição e texto visível)\n{texto}", False
     try:
         # Numa thread: parsing de planilha é pesado e síncrono; no loop ele
         # travaria o worker (chat, /ws, /reply).

@@ -81,14 +81,19 @@ def motivo_inelegivel(perfil: dict) -> str | None:
 
 def _proprias(servidores: dict, agent_id: str | None, email: bool, sistemas: bool) -> list[str]:
     """As ferramentas das entradas PRÓPRIAS do bot que já estão publicadas:
-    `hsos-email-<id>` (flag `email_ligado`) e `hsos-bot-<id>` (memória e
-    sistemas, flag `sistemas_ligados` não vazia)."""
+    `hsos-email-<id>` (flag `email_ligado`), `hsos-bot-<id>` (memória e
+    sistemas, flag `sistemas_ligados` não vazia) e `hsos-anexos-<id>`."""
     from app.email.regras import FERRAMENTAS_BOT, FERRAMENTAS_EMAIL
     out: list[str] = []
     if agent_id and email and f"hsos-email-{agent_id}" in servidores:
         out += [f"mcp__hsos-email-{agent_id}__{f}" for f in FERRAMENTAS_EMAIL]
     if agent_id and sistemas and f"hsos-bot-{agent_id}" in servidores:
         out += [f"mcp__hsos-bot-{agent_id}__{f}" for f in FERRAMENTAS_BOT]
+    # Anexos (09/11/2026): sem flag — ler o que o próprio dono mandou é o
+    # básico. A entrada é a identidade do bot (HMAC do id na URL).
+    if agent_id and f"hsos-anexos-{agent_id}" in servidores:
+        from app.routers.integracoes import ferramentas_anexos
+        out += [f"mcp__hsos-anexos-{agent_id}__{f}" for f in ferramentas_anexos(agent_id)]
     return out
 
 
@@ -267,6 +272,10 @@ pergunto — nunca preencho com o que parece provável.
   **preparam um cartão** — só acontece quando {primeiro} confirmar.
 - Checklist que já existe na tarefa: item novo vai por `adicionar_itens`
   (só os novos). **Nunca** crio outro checklist repetindo o que já está lá.
+- Arquivo ou imagem que {primeiro} manda chega como `[anexo: … id=…]`: abro
+  com `ler_anexo` antes de responder (imagem volta como o texto que ela tem).
+  Proposta em PDF virando tarefa: leio, e monto o `taskhs_criar` com os dados
+  dela — sem inventar o que o arquivo não diz.
 - Pôr ou tirar alguém de uma tarefa (inclusive {primeiro}): `taskhs_membros`.
   Quem pode entrar vem de `taskhs_membros_quadro`; o user_id de {primeiro}, de
   `taskhs_eu`.

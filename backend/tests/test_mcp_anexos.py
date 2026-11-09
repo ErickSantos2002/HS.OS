@@ -593,3 +593,37 @@ def test_enviar_arquivo_com_erro_que_nao_e_valueerror_vira_resposta_mcp(monkeypa
     texto, erro = asyncio.run(m._enviar_arquivo("bruce", {
         "para": PESSOA, "nome": "x", "formato": "xlsx", "conteudo": "a\x01b;c"}))
     assert erro and "Falha interna" in texto and gravados == []
+
+
+def test_imagem_vira_descricao_pela_visao(isolado, monkeypatch):
+    """09/11/2026: o Guardi não via imagem. O `ler_anexo` devolvia "arquivo"
+    para `image/*` — agente de texto nenhum via. Agora a imagem passa pela
+    mesma visão do `/ia/descrever-imagem` e o agente recebe o que ela mostra."""
+    async def ler(chave):
+        return b"\x89PNG..."
+    vistos = []
+
+    async def descrever(dados, mime, nome):
+        vistos.append((dados, mime, nome))
+        return "Proposta nº 123 — cliente ACME, R$ 4.500,00"
+    isolado["anexo"] = _anexo(nome="proposta.png", mime="image/png", caminho="x/p.png",
+                              dono_conversa="00000000-0000-0000-0000-000000000001")
+    monkeypatch.setattr(m.arm, "ler", ler)
+    monkeypatch.setattr(m, "descrever_imagem_bytes", descrever)
+    texto, erro = asyncio.run(m._ler_anexo("bruce", {"id": "a1"}))
+    assert not erro and "ACME" in texto and "proposta.png" in texto
+    assert vistos == [(b"\x89PNG...", "image/png", "proposta.png")]
+
+
+def test_imagem_com_visao_fora_do_ar_diz_o_motivo(isolado, monkeypatch):
+    async def ler(chave):
+        return b"img"
+
+    async def descrever(dados, mime, nome):
+        raise m.VisaoIndisponivel("chave da OpenAI ausente")
+    isolado["anexo"] = _anexo(nome="foto.jpg", mime="image/jpeg",
+                              dono_conversa="00000000-0000-0000-0000-000000000001")
+    monkeypatch.setattr(m.arm, "ler", ler)
+    monkeypatch.setattr(m, "descrever_imagem_bytes", descrever)
+    texto, erro = asyncio.run(m._ler_anexo("bruce", {"id": "a1"}))
+    assert erro and "imagem" in texto.lower()
