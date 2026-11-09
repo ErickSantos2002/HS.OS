@@ -101,10 +101,16 @@ SQL_CONCLUIR = """
      WHERE id = $1::uuid
 """
 
-# Exceção inesperada: registra e solta a reserva — volta na próxima passada.
+# Exceção inesperada: registra e AVANÇA como numa conclusão, sem nova tentativa.
+# ⚠️ Soltar sem avançar fazia a passada seguinte regravar o recado a cada 30 s
+# por até 6 h. Melhor perder um disparo que entrar em laço.
 SQL_ERRO = """
     UPDATE public.lembretes
-       SET ultimo_status = 'erro', disparando_em = NULL, atualizado_em = now()
+       SET ultimo_status = 'erro',
+           proximo_em = $2,
+           turno_pendente_desde = NULL,
+           disparando_em = NULL,
+           atualizado_em = now()
      WHERE id = $1::uuid
 """
 
@@ -136,6 +142,11 @@ def decidir(l: dict, agora: datetime, turno_aberto: bool, turnos_hoje: int) -> D
             return Decisao(recado, False, agora + ADIAMENTO, None)
         return Decisao(recado, False, None, "entregue_sem_agente")
     return Decisao(recado, True, None, "entregue")
+
+
+def _seguinte(regra: dict, agora: datetime) -> datetime | None:
+    """Único encerra; recorrente vai para o próximo pela regra."""
+    return None if regra.get("tipo") == "unico" else proximo(regra, agora)
 
 
 def _primeiro_nome(full_name) -> str:
@@ -189,25 +200,33 @@ async def disparar_um(sessao_fn, l: dict, agora: datetime, disparar=None) -> Non
         args = (l["id"], dec.adiar_ate, l.get("turno_pendente_desde") or agora,
                 agora if dec.recado else None, None)
     else:
-        seguinte = None if l["regra"].get("tipo") == "unico" else proximo(l["regra"], agora)
+        seguinte = _seguinte(l["regra"], agora)
         args = (l["id"], seguinte, None, None if status == "perdido" else agora, status)
     async with sessao_fn(role="service_role") as conn:
         await conn.execute(SQL_CONCLUIR, *args)
 
 
-async def passada(sessao_fn, agora: datetime) -> int:
-    """Reserva e dispara. Um lembrete ruim não para os outros."""
+async def passada(sessao_fn, agora: datetime, disparar=None) -> int:
+    """Reserva e dispara. Um lembrete ruim não para os outros.
+
+    Exceção inesperada vira `erro` e avança — antes ou depois do recado: sem
+    nova tentativa, porque repetir regravaria o recado a cada passada.
+    """
     async with sessao_fn(role="service_role") as conn:
         lembretes = await conn.fetch(SQL_RESERVAR)
     for l in lembretes:
         l = dict(l)
         try:
-            await disparar_um(sessao_fn, l, agora)
+            await disparar_um(sessao_fn, l, agora, disparar=disparar)
         except Exception:  # noqa: BLE001 — um lembrete não derruba a passada
             logger.exception("Lembrete %s quebrou no disparo.", l["id"])
             try:
+                seguinte = _seguinte(l["regra"], agora)
+            except Exception:  # noqa: BLE001 — regra quebrada: encerra, não laça
+                seguinte = None
+            try:
                 async with sessao_fn(role="service_role") as conn:
-                    await conn.execute(SQL_ERRO, l["id"])
+                    await conn.execute(SQL_ERRO, l["id"], seguinte)
             except Exception as e:  # noqa: BLE001
                 logger.warning("Lembrete %s: não registrei o erro: %s", l["id"], e)
     return len(lembretes)

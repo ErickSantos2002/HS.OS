@@ -205,6 +205,7 @@ def test_lembrete_que_quebra_nao_para_a_passada(monkeypatch):
         async def execute(self, sql, *a):
             assert sql == d.SQL_ERRO
             erros.append(a[0])
+            return None
 
     @asynccontextmanager
     async def sessao_fn(**_):
@@ -219,6 +220,62 @@ def test_lembrete_que_quebra_nao_para_a_passada(monkeypatch):
     assert asyncio.run(d.passada(sessao_fn, AGORA)) == 2
     assert vistos == ["l-1", "l-2"] and erros == ["l-1"]
     assert "disparando_em = NULL" in " ".join(d.SQL_ERRO.split())
+
+
+def test_excecao_depois_do_recado_nao_regrava_o_recado():
+    """Defeito nosso depois do recado comitado: soltar a reserva sem avançar
+    fazia a passada seguinte (30 s) gravar outro recado — push a cada 30 s por
+    até 6 h, o laço que a spec proíbe. Erro avança como uma conclusão e não
+    tenta de novo: melhor perder um disparo que entrar em laço."""
+    log = []
+    conn = Conn(log)
+    erros = []
+
+    async def fetch(sql, *a):
+        assert sql == d.SQL_RESERVAR
+        return [_lembrete()] if not erros else []
+
+    async def execute(sql, *a, _orig=conn.execute):
+        if sql == d.SQL_ERRO:
+            erros.append(a)
+            return None
+        return await _orig(sql, *a)
+
+    conn.fetch, conn.execute = fetch, execute
+    asyncio.run(d.passada(_sessao(conn), AGORA, disparar=_disparar(log, RuntimeError("bug"))))
+    asyncio.run(d.passada(_sessao(conn), AGORA + timedelta(seconds=30)))
+
+    assert [e[0] for e in log].count("recado") == 1
+    [(lid, proximo_em)] = erros
+    assert lid == "l-1" and proximo_em == datetime(2026, 11, 11, 12, 0, tzinfo=timezone.utc)
+    sql = _sem_espaco(d.SQL_ERRO)
+    for trecho in ("ultimo_status = 'erro'", "proximo_em = $2", "turno_pendente_desde = NULL",
+                   "disparando_em = NULL", "atualizado_em = now()"):
+        assert trecho in sql
+
+
+def test_excecao_em_lembrete_unico_encerra(monkeypatch):
+    """Falha antes mesmo do recado (ex.: no INSERT): o único encerra igual."""
+    erros = []
+
+    class C:
+        async def fetch(self, sql, *a):
+            return [_lembrete(regra={"tipo": "unico", "em": "2026-11-10T09:00"})]
+
+        async def execute(self, sql, *a):
+            assert sql == d.SQL_ERRO
+            erros.append(a)
+
+    @asynccontextmanager
+    async def sessao_fn(**_):
+        yield C()
+
+    async def um(*a, **kw):
+        raise RuntimeError("bug antes do recado")
+
+    monkeypatch.setattr(d, "disparar_um", um)
+    asyncio.run(d.passada(sessao_fn, AGORA))
+    assert erros == [("l-1", None)]
 
 
 def _sem_espaco(sql):
