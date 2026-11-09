@@ -190,3 +190,26 @@ def test_reativar_usa_a_mesma_contagem_do_teto():
     c = Conn(linha=linha(ativo=False))
     run(d.editar(c, USER, "abc", AGORA, ativo=True))
     assert any("proximo_em IS NOT NULL" in q for q, _ in c.sqls if "count(*)" in q)
+
+
+def test_editar_regra_de_unico_encerrado_confere_o_teto():
+    """Único encerrado (ativo, proximo_em nulo) não conta; editar a regra para data futura o
+    faz contar. Sem conferir o teto, repetir isso passava de 30 lembretes que disparam, cada
+    um podendo rodar um turno de IA."""
+    c = Conn(ativos=30, linha=linha(ativo=True, regra={"tipo": "unico", "em": "2026-01-01T09:00"}))
+    with pytest.raises(RegraInvalida, match="30"):
+        run(d.editar(c, USER, "abc", AGORA, regra={"tipo": "diario", "hora": "09:00"}))
+    q = [(s, a) for s, a in c.sqls if "count(*)" in s][-1]
+    assert "id <> $2::uuid" in q[0] and q[1] == (USER, "abc")
+
+
+def test_editar_titulo_de_quem_ja_conta_nao_confere_teto():
+    """Quem já conta não pode ser barrado por mudar o título com 30 contando."""
+    c = Conn(ativos=30, linha=linha(ativo=True, proximo="2026-11-10T09:00:00-03:00"))
+    run(d.editar(c, USER, "abc", AGORA, titulo="novo"))
+    assert not any("count(*)" in s for s, _ in c.sqls)
+
+
+def test_reativar_com_30_contando_continua_recusado():
+    with pytest.raises(RegraInvalida, match="30"):
+        run(d.editar(Conn(ativos=30, linha=linha(ativo=False)), USER, "abc", AGORA, ativo=True))

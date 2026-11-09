@@ -48,17 +48,20 @@ def _linha(row) -> dict:
     return r
 
 
-async def _confere_teto(conn, user_id: str) -> None:
+async def _confere_teto(conn, user_id: str, exceto: str | None = None) -> None:
     """Teto de lembretes que ainda vão disparar.
 
     Único que já disparou segue `ativo` com `proximo_em` nulo; contá-lo faria quem
     usa lembretes de uma vez bater nos 30 depois de 30 disparos e o Guardi voltar
     a dizer que não tem onde guardar — o defeito que originou a feature.
     """
-    n = await conn.fetchval(
-        "SELECT count(*) FROM public.lembretes "
-        "WHERE user_id = $1::uuid AND ativo AND proximo_em IS NOT NULL", user_id
-    )
+    sql = ("SELECT count(*) FROM public.lembretes "
+           "WHERE user_id = $1::uuid AND ativo AND proximo_em IS NOT NULL")
+    args: list = [user_id]
+    if exceto is not None:
+        sql += " AND id <> $2::uuid"
+        args.append(exceto)
+    n = await conn.fetchval(sql, *args)
     if (n or 0) >= TETO_ATIVOS:
         raise RegraInvalida(
             f"Você já tem {TETO_ATIVOS} lembretes ativos, que é o limite. Apague ou pause algum antes."
@@ -128,13 +131,15 @@ async def editar(conn, user_id: str, id: str, agora: datetime, **campos) -> dict
         if type(campos["ativo"]) is not bool:
             raise ValueError("ativo deve ser bool")
         sets["ativo"] = campos["ativo"]
-    if reativando:
-        await _confere_teto(conn, user_id)
     if "regra" in campos or reativando:
         quando = proximo(regra, agora)
-        if quando is None and sets.get("ativo", atual["ativo"]):
+        ativo_final = sets.get("ativo", atual["ativo"])
+        if quando is None and ativo_final:
             raise RegraInvalida("Esse lembrete não tem próxima data: o horário já passou.")
         sets["proximo_em"] = quando
+        # passou de "não contava" para "conta" (reativado, ou único encerrado que ganhou data)
+        if ativo_final and quando is not None and (not atual["ativo"] or atual["proximo_em"] is None):
+            await _confere_teto(conn, user_id, exceto=id)
 
     if not sets:
         return atual
