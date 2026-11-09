@@ -138,3 +138,27 @@ def test_listar_com_intervalo_inclui_recorrentes():
     run(d.listar(c, USER, AGORA, AGORA + timedelta(days=7)))
     sql, args = c.sqls[-1]
     assert "user_id = $1" in sql and "<> 'unico'" in sql and len(args) == 3
+
+
+def _update(c):
+    [sql] = [q for q, _ in c.sqls if q.lstrip().upper().startswith("UPDATE")]
+    return " ".join(sql.split())
+
+
+def test_editar_horario_ou_ativo_solta_reserva_e_adiamento():
+    """Lembrete adiado (`turno_pendente_desde` preenchido) que a pessoa muda de
+    horário ou reativa: sem zerar, o novo horário sairia SEM recado — o
+    disparador acha que o recado já saiu. E zerar `disparando_em` faz a
+    conclusão de uma reserva em curso não pisar na edição (ela exige o carimbo)."""
+    for campos in ({"regra": {"tipo": "diario", "hora": "18:00"}}, {"ativo": False}, {"ativo": True}):
+        c = Conn(linha=linha(ativo=not campos.get("ativo", False) if "ativo" in campos else True))
+        run(d.editar(c, USER, "abc", AGORA, **campos))
+        sql = _update(c)
+        assert "turno_pendente_desde = NULL" in sql and "disparando_em = NULL" in sql, campos
+
+
+def test_editar_so_titulo_nao_mexe_na_reserva():
+    c = Conn(linha=linha())
+    run(d.editar(c, USER, "abc", AGORA, titulo="novo"))
+    sql = _update(c)
+    assert "disparando_em" not in sql and "turno_pendente_desde" not in sql

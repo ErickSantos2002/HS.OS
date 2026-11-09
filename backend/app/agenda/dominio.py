@@ -136,6 +136,12 @@ async def editar(conn, user_id: str, id: str, agora: datetime, **campos) -> dict
         valores.append(json.dumps(v) if nome == "regra" else v)
         cast = "::text::jsonb" if nome == "regra" else ""
         colunas.append(f"{nome} = ${len(valores) + 2}{cast}")
+    if "regra" in campos or "ativo" in campos:
+        # ⚠️ Lembrete adiado mantém `turno_pendente_desde`: sem zerar, o novo
+        # horário sairia sem recado (o disparador acharia que já saiu). Zerar
+        # `disparando_em` tira a posse de uma reserva em curso — a conclusão
+        # dela exige o carimbo e não grava por cima desta edição.
+        colunas += ["turno_pendente_desde = NULL", "disparando_em = NULL"]
     row = await conn.fetchrow(
         f"UPDATE public.lembretes SET {', '.join(colunas)}, atualizado_em = now() "
         f"WHERE id = $1::uuid AND user_id = $2::uuid RETURNING {_COLUNAS}",

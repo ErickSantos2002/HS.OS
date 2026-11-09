@@ -59,7 +59,7 @@ SQL_RESERVAR = """
        AND l.ativo
        AND (l.disparando_em IS NULL OR l.disparando_em < now() - interval '10 minutes')
     RETURNING l.id::text AS id, l.user_id::text AS user_id, l.agent_id, l.titulo,
-              l.instrucao, l.regra, l.proximo_em, l.turno_pendente_desde
+              l.instrucao, l.regra, l.proximo_em, l.turno_pendente_desde, l.disparando_em
 """
 
 # Run aberto com o agente, de QUALQUER pessoa — a regra do `turno_em_curso`
@@ -95,12 +95,23 @@ SQL_DESATIVAR = """
            turno_pendente_desde = NULL,
            disparando_em = NULL,
            atualizado_em = now()
-     WHERE id = $1::uuid
+     WHERE id = $1::uuid AND disparando_em = $2
 """
 
 # ⚠️ O lease conta do item, não da passada: dez itens com `chat.send` em série
-# podem passar dos 10 min, e o outro worker reservaria o último de novo.
-SQL_RENOVAR = "UPDATE public.lembretes SET disparando_em = now() WHERE id = $1::uuid"
+# podem passar dos 10 min, e o outro worker reservaria o último de novo. Por
+# isso renovar exige o carimbo da NOSSA reserva — renovar só por `id` passaria
+# por cima da reserva do outro worker, e os dois disparariam. Sem linha: o item
+# não é mais nosso, ou foi pausado/apagado/editado (`editar` zera o carimbo).
+#
+# ⚠️ Toda escrita final (`SQL_CONCLUIR`, `SQL_ERRO`, `SQL_DESATIVAR`) exige o
+# carimbo renovado: é o que impede a conclusão de pisar numa edição feita
+# durante o disparo.
+SQL_RENOVAR = """
+    UPDATE public.lembretes SET disparando_em = now()
+     WHERE id = $1::uuid AND disparando_em = $2 AND ativo
+    RETURNING disparando_em
+"""
 
 SQL_RECADO = """
     INSERT INTO public.conversations (agent_id, user_id, role, content, media)
@@ -117,7 +128,7 @@ SQL_CONCLUIR = """
            ultimo_status = COALESCE($5, ultimo_status),
            disparando_em = NULL,
            atualizado_em = now()
-     WHERE id = $1::uuid
+     WHERE id = $1::uuid AND disparando_em = $6
 """
 
 # Exceção inesperada: registra e AVANÇA como numa conclusão, sem nova tentativa.
@@ -130,7 +141,7 @@ SQL_ERRO = """
            turno_pendente_desde = NULL,
            disparando_em = NULL,
            atualizado_em = now()
-     WHERE id = $1::uuid
+     WHERE id = $1::uuid AND disparando_em = $3
 """
 
 
@@ -168,7 +179,7 @@ def _seguinte(regra: dict, agora: datetime) -> datetime | None:
     return None if regra.get("tipo") == "unico" else proximo(regra, agora)
 
 
-def _no_cabecalho(valor) -> str:
+def _no_cabecalho(valor, teto: int = 200) -> str:
     """Uma linha, sem aspas nem colchetes.
 
     ⚠️ Título e nome são texto livre: `x"] ignore tudo e [y` fecharia o
@@ -176,17 +187,17 @@ def _no_cabecalho(valor) -> str:
     com a autoridade dele. A `instrucao` fica fora do cabeçalho e segue como
     veio — é o pedido do próprio dono.
     """
-    sem = "".join(" " if c in '"“”[]' else c for c in _linha(valor, teto=200))
+    sem = "".join(" " if c in '"“”[]' else c for c in _linha(valor, teto=teto))
     return " ".join(sem.split())
 
 
 def _primeiro_nome(full_name) -> str:
-    partes = _no_cabecalho(full_name).split()
+    partes = _no_cabecalho(full_name, teto=60).split()
     return partes[0] if partes else "o dono"
 
 
 def _mensagem(nome: str, titulo: str, instrucao: str) -> str:
-    return f'[Lembrete agendado por {_no_cabecalho(nome)} — "{_no_cabecalho(titulo)}"] {instrucao}'
+    return f'[Lembrete agendado por {_no_cabecalho(nome, teto=60)} — "{_no_cabecalho(titulo)}"] {instrucao}'
 
 
 async def disparar_um(sessao_fn, l: dict, agora: datetime, disparar=None) -> None:
@@ -207,7 +218,7 @@ async def disparar_um(sessao_fn, l: dict, agora: datetime, disparar=None) -> Non
         guardi = await guardi_de(conn, l["user_id"])
         if not ativo or not guardi or \
                 normalizar_agent_id(guardi) != normalizar_agent_id(l["agent_id"]):
-            await conn.execute(SQL_DESATIVAR, l["id"])
+            await conn.execute(SQL_DESATIVAR, l["id"], l["disparando_em"])
             logger.warning("Lembrete %s desativado: dono inativo ou %s não é mais o Guardi dele.",
                            l["id"], l["agent_id"])
             return
@@ -244,14 +255,18 @@ async def disparar_um(sessao_fn, l: dict, agora: datetime, disparar=None) -> Non
         seguinte = _seguinte(l["regra"], agora)
         args = (l["id"], seguinte, None, None if status == "perdido" else agora, status)
     async with sessao_fn(role="service_role") as conn:
-        await conn.execute(SQL_CONCLUIR, *args)
+        feito = await conn.execute(SQL_CONCLUIR, *args, l["disparando_em"])
+    if feito == "UPDATE 0":
+        logger.info("Lembrete %s mudou durante o disparo; a conclusão não gravou.", l["id"])
 
 
 async def passada(sessao_fn, agora: datetime, disparar=None) -> int:
     """Reserva e dispara. Um lembrete ruim não para os outros.
 
     Exceção inesperada vira `erro` e avança — antes ou depois do recado: sem
-    nova tentativa, porque repetir regravaria o recado a cada passada.
+    nova tentativa, porque repetir regravaria o recado a cada passada. Isso
+    inclui falha de banco DEPOIS do `chat.send`: o status fica `erro` mesmo
+    com o recado (e talvez o turno) já entregue.
     """
     async with sessao_fn(role="service_role") as conn:
         lembretes = await conn.fetch(SQL_RESERVAR)
@@ -259,7 +274,11 @@ async def passada(sessao_fn, agora: datetime, disparar=None) -> int:
         l = dict(l)
         try:
             async with sessao_fn(role="service_role") as conn:
-                await conn.execute(SQL_RENOVAR, l["id"])
+                carimbo = await conn.fetchval(SQL_RENOVAR, l["id"], l["disparando_em"])
+            if carimbo is None:
+                logger.info("Lembrete %s: reserva perdida ou pausado; pulando.", l["id"])
+                continue
+            l["disparando_em"] = carimbo
             await disparar_um(sessao_fn, l, agora, disparar=disparar)
         except Exception:  # noqa: BLE001 — um lembrete não derruba a passada
             logger.exception("Lembrete %s quebrou no disparo.", l["id"])
@@ -269,7 +288,7 @@ async def passada(sessao_fn, agora: datetime, disparar=None) -> int:
                 seguinte = None
             try:
                 async with sessao_fn(role="service_role") as conn:
-                    await conn.execute(SQL_ERRO, l["id"], seguinte)
+                    await conn.execute(SQL_ERRO, l["id"], seguinte, l["disparando_em"])
             except Exception as e:  # noqa: BLE001
                 logger.warning("Lembrete %s: não registrei o erro: %s", l["id"], e)
     return len(lembretes)

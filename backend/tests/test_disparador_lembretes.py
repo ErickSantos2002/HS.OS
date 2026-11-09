@@ -15,6 +15,8 @@ from app.agenda.regras import ADIAMENTO, TETO_TURNOS_DIA
 from app.gateway.client import ErroGateway
 
 AGORA = datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)  # 09:00 em Brasília
+# O carimbo da reserva: a posse do item. Toda escrita final o exige.
+CARIMBO = AGORA - timedelta(seconds=5)
 
 
 def _lembrete(**kw):
@@ -23,6 +25,7 @@ def _lembrete(**kw):
         "titulo": "Ligar para a ACME", "instrucao": "Veja os e-mails da ACME e me resuma.",
         "regra": {"tipo": "diario", "hora": "09:00"},
         "proximo_em": AGORA, "turno_pendente_desde": None,
+        "disparando_em": CARIMBO,
     }
     base.update(kw)
     return base
@@ -81,16 +84,24 @@ def test_adiado_ha_30_min_desiste_do_turno():
 
 class Conn:
     def __init__(self, log, turno_aberto=False, turnos_hoje=0, nome="Erick Santos",
-                 ativo=True, guardi="erick-bot"):
+                 ativo=True, guardi="erick-bot", renovado=CARIMBO + timedelta(minutes=1)):
         self.log = log
         self.turno_aberto, self.turnos_hoje, self.nome = turno_aberto, turnos_hoje, nome
         self.ativo, self.guardi = ativo, guardi
         self.concluidos = []
         self.desativados = []
+        # Estado do banco: quem tem a posse é quem tem este carimbo.
+        self.carimbo, self.renovado = CARIMBO, renovado
 
     async def fetchval(self, sql, *a):
         if sql == d.SQL_DONO_ATIVO:
             return self.ativo
+        if sql == d.SQL_RENOVAR:
+            self.log.append(("renovar", a))
+            if self.renovado is None or a[1] != self.carimbo:
+                return None
+            self.carimbo = self.renovado
+            return self.carimbo
         if "agent_profiles" in sql and "dono_id" in sql:  # agenda.dominio.guardi_de
             return self.guardi
         if sql == d.SQL_TURNO_ABERTO:
@@ -105,12 +116,13 @@ class Conn:
         if sql == d.SQL_RECADO:
             self.log.append(("recado", a))
         elif sql == d.SQL_CONCLUIR:
+            if a[5] != self.carimbo:  # a guarda `AND disparando_em = $6`
+                self.log.append(("concluir_sem_posse", a))
+                return "UPDATE 0"
             self.log.append(("concluir", a))
             self.concluidos.append(a)
         elif sql == d.SQL_DESATIVAR:
             self.desativados.append(a)
-        elif sql == d.SQL_RENOVAR:
-            self.log.append(("renovar", a))
         else:
             raise AssertionError(sql)
 
@@ -166,11 +178,11 @@ def test_unico_encerra_recorrente_avanca():
     conn = Conn(log)
     unico = _lembrete(regra={"tipo": "unico", "em": "2026-11-10T09:00"}, instrucao=None)
     asyncio.run(d.disparar_um(_sessao(conn), unico, AGORA, disparar=_disparar(log)))
-    lid, proximo_em, pendente, ultimo_em, status = conn.concluidos[-1]
+    lid, proximo_em, pendente, ultimo_em, status = conn.concluidos[-1][:5]
     assert (lid, proximo_em, pendente, ultimo_em, status) == ("l-1", None, None, AGORA, "entregue")
 
     asyncio.run(d.disparar_um(_sessao(conn), _lembrete(), AGORA, disparar=_disparar(log)))
-    _, proximo_em, pendente, _, status = conn.concluidos[-1]
+    _, proximo_em, pendente, _, status = conn.concluidos[-1][:5]
     assert proximo_em == datetime(2026, 11, 11, 12, 0, tzinfo=timezone.utc)
     assert pendente is None and status == "entregue"
 
@@ -181,7 +193,7 @@ def test_adiado_guarda_o_instante_original_e_nao_repete_recado():
     asyncio.run(d.disparar_um(_sessao(conn), _lembrete(), AGORA, disparar=_disparar(log)))
     assert [e[0] for e in log].count("recado") == 1
     assert not any(e[0] == "chat.send" for e in log)
-    _, proximo_em, pendente, _, status = conn.concluidos[-1]
+    _, proximo_em, pendente, _, status = conn.concluidos[-1][:5]
     assert (proximo_em, pendente, status) == (AGORA + ADIAMENTO, AGORA, None)
 
     original = AGORA - timedelta(minutes=6)
@@ -198,7 +210,7 @@ def test_perdido_nao_grava_recado_e_avanca():
     asyncio.run(d.disparar_um(_sessao(conn), _lembrete(proximo_em=AGORA - timedelta(hours=7)),
                               AGORA, disparar=_disparar(log)))
     assert not any(e[0] in ("recado", "chat.send") for e in log)
-    _, proximo_em, _, _, status = conn.concluidos[-1]
+    _, proximo_em, _, _, status = conn.concluidos[-1][:5]
     assert status == "perdido" and proximo_em == datetime(2026, 11, 11, 12, 0, tzinfo=timezone.utc)
 
 
@@ -213,9 +225,11 @@ def test_lembrete_que_quebra_nao_para_a_passada(monkeypatch):
             assert sql == d.SQL_RESERVAR
             return [_lembrete(id="l-1"), _lembrete(id="l-2")]
 
+        async def fetchval(self, sql, *a):
+            assert sql == d.SQL_RENOVAR
+            return AGORA
+
         async def execute(self, sql, *a):
-            if sql == d.SQL_RENOVAR:
-                return None
             assert sql == d.SQL_ERRO
             erros.append(a[0])
             return None
@@ -259,8 +273,9 @@ def test_excecao_depois_do_recado_nao_regrava_o_recado():
     asyncio.run(d.passada(_sessao(conn), AGORA + timedelta(seconds=30)))
 
     assert [e[0] for e in log].count("recado") == 1
-    [(lid, proximo_em)] = erros
+    [(lid, proximo_em, carimbo)] = erros
     assert lid == "l-1" and proximo_em == datetime(2026, 11, 11, 12, 0, tzinfo=timezone.utc)
+    assert carimbo == conn.renovado
     sql = _sem_espaco(d.SQL_ERRO)
     for trecho in ("ultimo_status = 'erro'", "proximo_em = $2", "turno_pendente_desde = NULL",
                    "disparando_em = NULL", "atualizado_em = now()"):
@@ -275,9 +290,11 @@ def test_excecao_em_lembrete_unico_encerra(monkeypatch):
         async def fetch(self, sql, *a):
             return [_lembrete(regra={"tipo": "unico", "em": "2026-11-10T09:00"})]
 
+        async def fetchval(self, sql, *a):
+            assert sql == d.SQL_RENOVAR
+            return AGORA
+
         async def execute(self, sql, *a):
-            if sql == d.SQL_RENOVAR:
-                return None
             assert sql == d.SQL_ERRO
             erros.append(a)
 
@@ -290,7 +307,7 @@ def test_excecao_em_lembrete_unico_encerra(monkeypatch):
 
     monkeypatch.setattr(d, "disparar_um", um)
     asyncio.run(d.passada(sessao_fn, AGORA))
-    assert erros == [("l-1", None)]
+    assert erros == [("l-1", None, AGORA)]
 
 
 def _sem_espaco(sql):
@@ -329,7 +346,57 @@ def test_reserva_e_renovada_antes_de_cada_item():
     assert eventos[:2] == [("renovar", ("l-1",)[0]), ("recado", "erick-bot")]
     renovados = [e[1][0] for e in log if e[0] == "renovar"]
     assert renovados == ["l-1", "l-2"]
-    assert "disparando_em = now()" in _sem_espaco(d.SQL_RENOVAR)
+    renovar = _sem_espaco(d.SQL_RENOVAR)
+    for trecho in ("disparando_em = now()", "disparando_em = $2", "AND ativo",
+                   "RETURNING disparando_em"):
+        assert trecho in renovar
+    assert "l.disparando_em" in _sem_espaco(d.SQL_RESERVAR).split("RETURNING")[1]
+
+
+def test_renovacao_sem_linha_pula_o_item():
+    """Os 10 são reservados juntos. Se os primeiros levarem mais que o lease, o
+    outro worker reserva o último — e a renovação por `id` só renovaria por
+    cima, com os dois disparando. Renovar exige o carimbo da reserva e `ativo`:
+    sem linha, o item não é mais nosso (ou foi pausado/apagado) e é pulado."""
+    log = []
+    conn = Conn(log, renovado=None)
+
+    async def fetch(sql, *a):
+        return [_lembrete()]
+
+    conn.fetch = fetch
+    assert asyncio.run(d.passada(_sessao(conn), AGORA, disparar=_disparar(log))) == 1
+    assert not any(e[0] in ("recado", "chat.send", "concluir") for e in log)
+
+
+def test_edicao_durante_o_disparo_nao_e_pisada():
+    """A pessoa mudou o horário enquanto o turno rodava: `editar` zera o
+    `disparando_em`, e a conclusão da reserva antiga não grava por cima."""
+    log = []
+    conn = Conn(log)
+    disparar_original = _disparar(log)
+
+    async def disparar(*a, **kw):
+        conn.carimbo = None  # `editar` soltou a reserva
+        return await disparar_original(*a, **kw)
+
+    asyncio.run(d.disparar_um(_sessao(conn), _lembrete(), AGORA, disparar=disparar))
+    assert conn.concluidos == []
+    assert any(e[0] == "concluir_sem_posse" for e in log)
+
+
+def test_escritas_finais_exigem_a_posse():
+    assert "AND disparando_em = $6" in _sem_espaco(d.SQL_CONCLUIR)
+    assert "AND disparando_em = $3" in _sem_espaco(d.SQL_ERRO)
+    assert "AND disparando_em = $2" in _sem_espaco(d.SQL_DESATIVAR)
+
+
+def test_nome_no_cabecalho_tem_teto_proprio():
+    log = []
+    conn = Conn(log, nome="A" * 300)
+    asyncio.run(d.disparar_um(_sessao(conn), _lembrete(), AGORA, disparar=_disparar(log)))
+    [(_, _, _, mensagem, _)] = [e for e in log if e[0] == "chat.send"]
+    assert ("A" * 60 + " —") in mensagem and ("A" * 61) not in mensagem
 
 
 def test_guardi_trocado_de_dono_nao_dispara_e_desativa():
@@ -341,7 +408,7 @@ def test_guardi_trocado_de_dono_nao_dispara_e_desativa():
         log = conn.log
         asyncio.run(d.disparar_um(_sessao(conn), _lembrete(), AGORA, disparar=_disparar(log)))
         assert not any(e[0] in ("recado", "chat.send", "concluir") for e in log)
-        assert conn.desativados == [("l-1",)]
+        assert conn.desativados == [("l-1", CARIMBO)]
     sql = _sem_espaco(d.SQL_DESATIVAR)
     for trecho in ("ativo = false", "ultimo_status = 'erro'", "disparando_em = NULL"):
         assert trecho in sql
