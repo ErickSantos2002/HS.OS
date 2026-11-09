@@ -4,8 +4,12 @@ Funções recebem a conexão — quem chama escolhe a sessão (`service_role`).
 """
 from __future__ import annotations
 
+import logging
+
 from app.email import graph
 from app.email.cifra import cifrar, decifrar
+
+logger = logging.getLogger(__name__)
 
 
 class ErroConta(Exception):
@@ -35,6 +39,17 @@ async def tem_calendario(conn, user_id: str) -> bool:
     return graph.concedeu_calendario(escopos)
 
 
+async def ampliar_calendario(conn, user_id: str) -> bool:
+    """Tenta ganhar o calendário renovando o token; devolve se a conta tem agora.
+    Nunca levanta: falha aqui só quer dizer "ainda sem calendário"."""
+    try:
+        await access_token(conn, user_id)
+    except Exception as e:  # noqa: BLE001 — conta expirada, cifra, rede: segue sem calendário
+        logger.info("ampliar calendário de %s falhou: %s", user_id, type(e).__name__)
+        return False
+    return await tem_calendario(conn, user_id)
+
+
 async def access_token(conn, user_id: str) -> tuple[str, str]:
     """`(access, conta)`. Regrava o refresh quando a Microsoft devolve outro."""
     linha = await conn.fetchrow(
@@ -42,16 +57,34 @@ async def access_token(conn, user_id: str) -> tuple[str, str]:
     if not linha:
         raise ErroConta("e-mail não conectado — conecte em Configurações → Perfil")
     antigo = decifrar(linha["refresh_cifrado"])
+    if not graph.concedeu_calendario(linha["escopos"]):
+        # Conta de antes do calendário: tenta ganhar o escopo na renovação, sem
+        # a pessoa reconectar. Recusou? Segue só com e-mail — nunca perde o e-mail.
+        try:
+            access, novo, concedidos = await graph.ampliar_para_calendario(antigo)
+        except graph.ErroGraph as e:
+            logger.info("calendário não concedido no refresh de %s (%s); segue só e-mail",
+                        user_id, e.status)
+        else:
+            if graph.concedeu_calendario(concedidos):
+                await conn.execute(
+                    "UPDATE public.email_contas SET escopos = $2::text[], atualizado_em = now() "
+                    " WHERE user_id = $1::uuid", user_id, concedidos)
+            return await _guardar_refresh(conn, user_id, antigo, novo, access, linha["conta"])
     try:
         access, novo = await graph.renovar(antigo, linha["escopos"])
     except graph.ErroGraph as e:
         raise ErroConta(f"a conexão com a Microsoft expirou — reconecte em Configurações "
                         f"({e.status})") from e
+    return await _guardar_refresh(conn, user_id, antigo, novo, access, linha["conta"])
+
+
+async def _guardar_refresh(conn, user_id, antigo, novo, access, conta) -> tuple[str, str]:
     if novo != antigo:
         await conn.execute(
             "UPDATE public.email_contas SET refresh_cifrado = $2, atualizado_em = now() "
             " WHERE user_id = $1::uuid", user_id, cifrar(novo))
-    return access, linha["conta"]
+    return access, conta
 
 
 async def caixas(conn, user_id: str) -> tuple[str | None, list[str]]:

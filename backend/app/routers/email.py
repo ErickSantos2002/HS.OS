@@ -104,6 +104,9 @@ async def estado(usuario: Usuario = Depends(usuario_atual)):
             "SELECT name FROM public.agent_profiles WHERE agent_id = $1", bot)
         conta, extras = await contas.caixas(conn, usuario.id)
         calendario = await contas.tem_calendario(conn, usuario.id)
+        if conta and not calendario:
+            # Quem conectou antes do calendário ganha o escopo na renovação.
+            calendario = await contas.ampliar_calendario(conn, usuario.id)
     return {"liberado": bool(bot), "bot": bot, "bot_nome": nome or bot, "conectado": bool(conta),
             "conta": conta, "caixas": extras,
             "calendario": calendario}

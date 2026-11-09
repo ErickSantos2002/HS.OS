@@ -123,6 +123,16 @@ async def renovar(refresh: str, escopos: list[str] | None = None) -> tuple[str, 
     return t["access_token"], t.get("refresh_token") or refresh
 
 
+async def ampliar_para_calendario(refresh: str) -> tuple[str, str, list[str]]:
+    """Renova pedindo também o calendário: `(access, refresh, escopos concedidos)`.
+
+    Conta conectada antes do calendário existir ganha o escopo SEM reconectar —
+    o consentimento de administrador no Entra (09/11/2026) vale para o refresh.
+    Levanta `ErroGraph` se a Microsoft recusar; quem chama volta ao e-mail só."""
+    t = await _token({"grant_type": "refresh_token", "refresh_token": refresh}, ESCOPOS_CONECTAR)
+    return t["access_token"], t.get("refresh_token") or refresh, (t.get("scope") or "").split()
+
+
 # ── Calendário ───────────────────────────────────────────────────────────────
 
 async def calendario(access, conta, de: datetime, ate: datetime) -> list[dict]:

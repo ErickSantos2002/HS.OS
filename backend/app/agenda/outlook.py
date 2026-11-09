@@ -45,7 +45,10 @@ async def eventos(conn, user_id: str, de: datetime, ate: datetime) -> tuple[str,
     if not conta:
         return "sem_conta", []
     if not await contas.tem_calendario(conn, user_id):
-        return "sem_permissao", []
+        # Conta de antes do calendário: a renovação tenta ganhar o escopo sem
+        # reconectar (`contas.access_token`). Só então decide "sem permissão".
+        if not await contas.ampliar_calendario(conn, user_id):
+            return "sem_permissao", []
     try:
         access, endereco = await contas.access_token(conn, user_id)
         brutos = await graph.calendario(access, endereco, de, ate)
