@@ -91,7 +91,7 @@ export default function AgendaPage() {
   const grupos = useMemo(() => agruparPorPeriodo(lista, hoje), [lista, hoje]);
   const eventosProximos = useMemo(() => outlookProximos.data?.eventos ?? [], [outlookProximos.data]);
   const eventosPorPeriodo = useMemo(() => {
-    const por: Record<string, EventoOutlook[]> = { hoje: [], amanha: [], semana: [] };
+    const por: Record<string, EventoOutlook[]> = { hoje: [], amanha: [], semana: [], depois: [] };
     for (const e of eventosProximos) {
       const p = periodoDoDia(e.inicio.slice(0, 10), hoje);
       // Evento que começou antes e ainda está em curso conta como de hoje.
@@ -158,7 +158,7 @@ export default function AgendaPage() {
         {secao("Hoje", grupos.hoje, eventosPorPeriodo.hoje)}
         {secao("Amanhã", grupos.amanha, eventosPorPeriodo.amanha)}
         {secao("Esta semana", grupos.semana, eventosPorPeriodo.semana)}
-        {secao("Depois", grupos.depois)}
+        {secao("Depois", grupos.depois, eventosPorPeriodo.depois)}
         {secao("Recorrentes", grupos.recorrentes)}
         {secao("Já passaram", grupos.passados)}
         {secao("Pausados", grupos.pausados)}

@@ -49,8 +49,15 @@ def _linha(row) -> dict:
 
 
 async def _confere_teto(conn, user_id: str) -> None:
+    """Teto de lembretes que ainda vão disparar.
+
+    Único que já disparou segue `ativo` com `proximo_em` nulo; contá-lo faria quem
+    usa lembretes de uma vez bater nos 30 depois de 30 disparos e o Guardi voltar
+    a dizer que não tem onde guardar — o defeito que originou a feature.
+    """
     n = await conn.fetchval(
-        "SELECT count(*) FROM public.lembretes WHERE user_id = $1::uuid AND ativo", user_id
+        "SELECT count(*) FROM public.lembretes "
+        "WHERE user_id = $1::uuid AND ativo AND proximo_em IS NOT NULL", user_id
     )
     if (n or 0) >= TETO_ATIVOS:
         raise RegraInvalida(

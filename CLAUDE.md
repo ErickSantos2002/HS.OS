@@ -616,6 +616,9 @@ só do Nicholson — exceção: a Lidisay segue falando com o `bruce`. Spec e pl
   pela metade) via `backend/scripts/criar-bots-pessoais.py` (ensaio por
   padrão; `--aplicar --so <user_id>` / `--todos`; o Nicholson fica fora por
   `FORA_POR_DECISAO`, que a rota também confere). Os sete arquivos são template do backend (`app/bots_pessoais.py`).
+  ⚠️ **Depois de criar bot novo, rode `publicar-bots-mcp.py --aplicar`** para ligar agenda,
+  memória e anexos a ele: sem isso nasce sem `hsos-bot` (logo sem `agenda_*`) com o
+  `AGENTS.md` já prometendo `agenda_criar`. O script de criação avisa no fim.
 - ⚠️ **Ferramentas: `profile: "minimal"` + `alsoAllow: [alerta, "bundle-mcp"]`
   + deny de todo MCP menos o alerta + `gateway`, `sessions_*`, `skill_workshop`,
   `cron`.** O perfil `coding` daria shell no host, ao lado do `openclaw.json`.
@@ -783,6 +786,12 @@ continua negado aos Guardis (os 560 disparos da `nina`); a agenda é do HS.OS.
   lido). Mitigação: o turno só lê e prepara cartões, tetos acima, selo "criado pelo
   Guardi" na página, título saneado no cabeçalho. Exigir cartão em todo lembrete com
   instrução tiraria o caso de uso pedido.
+- ⚠️ **Risco conhecido, a exercitar no `erick-bot` antes de abrir para todos:** se a
+  pessoa responde ao recado enquanto o turno do lembrete ainda roda, o run novo vira
+  fronteira no coletor (`SQL_RESERVAR_RUNS`) e as duas respostas podem sair coladas
+  numa bolha, ou a do lembrete só aparecer no `/recuperar`.
+- ⚠️ **O teto de 30 conta só lembrete que ainda vai disparar** (`ativo AND proximo_em IS
+  NOT NULL`): único já disparado fica `ativo` com `proximo_em` nulo e não ocupa vaga.
 - **Produção, só depois do deploy** (migração `032` antes): `publicar-bots-mcp.py`
   (ensaio primeiro, depois `--aplicar`); `criar-bots-pessoais.py
   --reescrever-agents-md --aplicar --todos`; o Erick reconecta o e-mail para a página

@@ -172,3 +172,21 @@ def test_editar_ativo_sem_mudanca_nao_solta_a_reserva():
     run(d.editar(c, USER, "abc", AGORA, ativo=True))
     sql = _update(c)
     assert "disparando_em" not in sql and "turno_pendente_desde" not in sql
+
+
+def test_unicos_encerrados_nao_contam_no_teto():
+    """Lembrete único que já disparou fica `ativo` com `proximo_em` nulo. Se contasse,
+    30 disparos bastariam para a pessoa não poder criar mais nenhum e o Guardi voltaria
+    a dizer que não tem onde guardar. A consulta do teto tem que excluí-los."""
+    c = Conn(ativos=0)
+    regra = {"tipo": "diario", "hora": "09:00"}
+    run(d.criar(c, USER, "erick-bot", "t", regra, None, "pessoa", AGORA))
+    sql = c.sqls[0][0]
+    assert "proximo_em IS NOT NULL" in sql and "ativo" in sql
+
+
+def test_reativar_usa_a_mesma_contagem_do_teto():
+    """A reativação passa pela mesma função; se contasse encerrados, o teto falsearia aqui também."""
+    c = Conn(linha=linha(ativo=False))
+    run(d.editar(c, USER, "abc", AGORA, ativo=True))
+    assert any("proximo_em IS NOT NULL" in q for q, _ in c.sqls if "count(*)" in q)
