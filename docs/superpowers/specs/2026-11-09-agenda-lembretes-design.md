@@ -182,11 +182,11 @@ Reescrever nos 23 com `--reescrever-agents-md`.
 
 ### Outlook — leitura do calendário
 
-- Pedir **`Calendars.Read`** no "Conectar/Reconectar e-mail" — e **só ali**.
+- Pedir **`Calendars.Read.Shared`** no "Conectar/Reconectar e-mail" — e **só ali**.
   O login (`ESCOPOS` do SSO) **não muda**.
 - ⚠️ **O refresh renova com os escopos que a conta TEM, não com a constante.**
   Hoje `renovar` manda `scope: ESCOPOS_EMAIL` em todo refresh; com
-  `Calendars.Read` na constante, quem conectou antes pediria um escopo não
+  `Calendars.Read.Shared` na constante, quem conectou antes pediria um escopo não
   concedido e **o e-mail de todos quebraria no deploy** ("consent required").
   Guardar os escopos concedidos (vêm na resposta do token) em `email_contas`
   (coluna nova `escopos text[]` na mesma `032`); conta antiga (`escopos` nulo)
@@ -194,7 +194,7 @@ Reescrever nos 23 com `--reescrever-agents-md`.
 - **Quem libera:** a página mostra o calendário a quem tem a conta conectada com
   o escopo (é a agenda da própria pessoa); as **ferramentas do Guardi** seguem a
   flag `email_ligado`, como o e-mail **(decisão do Claude)**.
-- Quem conectou antes não tem o escopo. Sem `Calendars.Read`: ferramentas e página seguem só com os lembretes e
+- Quem conectou antes não tem o escopo. Sem `Calendars.Read.Shared`: ferramentas e página seguem só com os lembretes e
   dizem "reconecte o e-mail em Perfil para eu ver sua agenda do Outlook"; o Perfil
   mostra o botão "Reconectar".
 - Leitura por `GET /me/calendarView?startDateTime&endDateTime` com
@@ -246,10 +246,12 @@ resposta normal do agente.
 
 ## Entrega e conferência
 
-- **Passo manual do Erick no Entra (antes de testar o Outlook):** app "HS.OS" →
-  Permissões de API → Microsoft Graph → Delegada → `Calendars.Read`; se o tenant
-  exigir, "Conceder consentimento de administrador". Sem isso, o "Reconectar" volta
-  com erro de consentimento — o resto da agenda funciona igual.
+- **Entra — feito pelo Erick em 09/11/2026:** o app "HS.OS" tem
+  `Calendars.Read.Shared` e `Calendars.ReadWrite.Shared` (delegadas), com
+  consentimento de administrador. O código pede **só `Calendars.Read.Shared`**
+  (lê o calendário da própria pessoa e os compartilhados com ela) — a de escrita
+  fica registrada para a fase "criar evento no Outlook", e nada a pede antes
+  disso.
 
 - Migração aplicada por mim com o script admin (`~/aplicar-hsos-032.py`), que
   confere a tabela e a coluna nova ao final.
