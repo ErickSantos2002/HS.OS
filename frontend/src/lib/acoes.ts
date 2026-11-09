@@ -99,9 +99,20 @@ export function cartaoDaAcao(acao: string, p: Record<string, unknown>): CartaoDa
     const marcar = (p.marcar_itens as { checklist_id: number; item_id: number; checked: boolean }[] | undefined) ?? [];
     const marcados = marcar.map((m) => ({
       texto: nomes[`${m.checklist_id}:${m.item_id}`] || `item ${m.item_id}`, feito: m.checked }));
+    const add = p.adicionar_itens as { items?: string[] } | undefined;
+    const acrescentar = add?.items?.length
+      ? [{ titulo: `Acrescentar em ${ex.adicionar_em ? `“${String(ex.adicionar_em)}”` : "checklist"}`,
+           itens: add.items.map((texto) => ({ texto })) }]
+      : [];
+    const excluir = ex.excluir as { titulo?: string; itens?: number } | undefined;
+    if (p.excluir_checklist != null)
+      linhas.push(["Excluir checklist", excluir?.titulo
+        ? `${excluir.titulo} (${excluir.itens ?? 0} ${excluir.itens === 1 ? "item" : "itens"})`
+        : `checklist ${v(p.excluir_checklist)}`]);
     return {
       verbo: "Atualizar tarefa", titulo: tarefa, linhas, texto,
-      checklists: [...checklists, ...(marcados.length ? [{ titulo: "Marcar no checklist", itens: marcados }] : [])],
+      checklists: [...checklists, ...acrescentar,
+                   ...(marcados.length ? [{ titulo: "Marcar no checklist", itens: marcados }] : [])],
     };
   }
   return { verbo: acao, titulo: "", checklists: [],

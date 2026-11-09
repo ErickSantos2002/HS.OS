@@ -95,16 +95,25 @@ FERRAMENTAS = [
         "prazo": {"type": "string", "description": "AAAA-MM-DD"},
         "checklist": _CHECKLIST}, ("list_id", "titulo")),
     _f("taskhs_atualizar", "Marcar concluída, mudar prazo, prioridade, título ou descrição "
-       "(`descricao` SUBSTITUI a descrição inteira; \"\" apaga); acrescentar um "
-       "checklist (`checklist`) ou marcar/desmarcar itens de checklist (`marcar_itens`, ids do "
-       "taskhs_tarefa)." + _CONFIRMA,
+       "(`descricao` SUBSTITUI a descrição inteira; \"\" apaga); marcar/desmarcar itens de "
+       "checklist (`marcar_itens`, ids do taskhs_tarefa). Item novo num checklist que JÁ existe vai "
+       "em `adicionar_itens` (só os itens novos) — NUNCA crie outro checklist repetindo os antigos; "
+       "`checklist` é só para um checklist de assunto novo. `excluir_checklist` apaga um "
+       "checklist inteiro (ex.: um duplicado)." + _CONFIRMA,
        {"list_id": _INT, "card_id": _INT, "concluida": {"type": "boolean"},
         "prazo": {"type": "string"}, "prioridade": {"type": "string", "enum": list(_PRIORIDADES)},
         "titulo": {"type": "string"}, "descricao": {"type": "string"}, "checklist": _CHECKLIST,
         "marcar_itens": {"type": "array", "maxItems": _TETO_ITENS, "items": {
             "type": "object", "properties": {"checklist_id": _INT, "item_id": _INT,
                                              "feito": {"type": "boolean"}},
-            "required": ["checklist_id", "item_id", "feito"]}}}, ("list_id", "card_id")),
+            "required": ["checklist_id", "item_id", "feito"]}},
+        "adicionar_itens": {"type": "object", "description": "itens novos num checklist existente",
+                            "properties": {"checklist_id": _INT,
+                                           "itens": {"type": "array", "items": {"type": "string"},
+                                                     "minItems": 1, "maxItems": _TETO_ITENS}},
+                            "required": ["checklist_id", "itens"]},
+        "excluir_checklist": {"type": "integer", "description": "id do checklist a apagar"}},
+       ("list_id", "card_id")),
     _f("taskhs_membros", "Pôr ou tirar pessoas de uma tarefa (inclusive o seu dono: o user_id dele "
        "vem do taskhs_eu). `adicionar` só aceita membros do quadro (taskhs_membros_quadro); "
        "`remover`, só quem já está na tarefa (taskhs_tarefa)." + _CONFIRMA,
@@ -200,6 +209,39 @@ def _checklist(v) -> dict | None:
     if len(itens) > _TETO_ITENS:
         raise _Recusa(f"No máximo {_TETO_ITENS} itens por checklist.")
     return {"title": _linha(str(v.get("titulo") or "Checklist"), 120) or "Checklist", "items": itens}
+
+
+def _chave_texto(s) -> str:
+    return " ".join(str(s or "").split()).casefold()
+
+
+def _checklists_do_card(card: dict) -> dict[int, dict]:
+    return {int(cl["id"]): cl for cl in card.get("checklists") or [] if cl.get("id")}
+
+
+def _adicionar_itens(v, card: dict) -> tuple[dict, str] | None:
+    """Itens novos num checklist que EXISTE no card; o que já está lá (mesmo
+    texto, ignorando caixa e espaços) é pulado — o pedido costuma vir com a
+    lista inteira de novo."""
+    if not v:
+        return None
+    if not isinstance(v, dict) or not isinstance(v.get("itens"), list):
+        raise _Recusa("adicionar_itens precisa ser {checklist_id, itens: [texto, …]}.")
+    cl = _checklists_do_card(card).get(_int(v, "checklist_id"))
+    if cl is None:
+        raise _Recusa(f"O checklist {v.get('checklist_id')} não está nesta tarefa — confira com taskhs_tarefa.")
+    ja = {_chave_texto(i.get("text")) for i in cl.get("items") or []}
+    novos = []
+    for i in v["itens"]:
+        texto = _linha(str(i or ""), 300)
+        if texto and _chave_texto(texto) not in ja:
+            ja.add(_chave_texto(texto))
+            novos.append(texto)
+    if len(novos) > _TETO_ITENS:
+        raise _Recusa(f"No máximo {_TETO_ITENS} itens por vez.")
+    if not novos:
+        raise _Recusa("Esses itens já estão no checklist — nada para acrescentar.")
+    return {"checklist_id": int(cl["id"]), "items": novos}, _rotulo(cl.get("title")) or "Checklist"
 
 
 def _rotulo(t) -> str:
@@ -426,12 +468,32 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
             payload = {"list_id": lid, "card_id": cid, "campos": campos}
             cl = _checklist(args.get("checklist"))
             if cl:
+                # ⚠️ 09/11/2026: o Guardi criava um segundo "Mudanças" a cada pedido.
+                mesmo = [c for c in _checklists_do_card(card).values()
+                         if _chave_texto(c.get("title")) == _chave_texto(cl["title"])]
+                if mesmo:
+                    raise _Recusa(f"Esta tarefa já tem o checklist '{_rotulo(mesmo[0].get('title'))}' "
+                                  f"(id {mesmo[0]['id']}). Para acrescentar, use adicionar_itens com "
+                                  f"checklist_id {mesmo[0]['id']} e só os itens novos.")
                 payload["checklist"] = cl
+            add = _adicionar_itens(args.get("adicionar_itens"), card)
+            if add:
+                payload["adicionar_itens"], exibir["adicionar_em"] = add
+            excluir = args.get("excluir_checklist")
+            if excluir is not None:
+                alvo = _checklists_do_card(card).get(_int(args, "excluir_checklist"))
+                if alvo is None:
+                    raise _Recusa(f"O checklist {excluir} não está nesta tarefa — confira com taskhs_tarefa.")
+                if add and add[0]["checklist_id"] == int(alvo["id"]):
+                    raise _Recusa("Não dá para acrescentar itens e excluir o mesmo checklist.")
+                payload["excluir_checklist"] = int(alvo["id"])
+                exibir["excluir"] = {"titulo": _rotulo(alvo.get("title")) or "Checklist",
+                                     "itens": len(alvo.get("items") or [])}
             marcar = _marcar_itens(args.get("marcar_itens"), card)
             if marcar:
                 payload["marcar_itens"] = marcar
                 exibir["itens"] = {f"{m['checklist_id']}:{m['item_id']}": m.pop("_texto") for m in marcar}
-            if not campos and not cl and not marcar:
+            if not campos and not cl and not marcar and not add and "excluir_checklist" not in payload:
                 raise _Recusa("Nada para atualizar.")
             payload["_exibir"] = exibir
             acao = "atualizar"
@@ -440,6 +502,10 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
                 mudancas.append(f"checklist com {len(cl['items'])} itens")
             if marcar:
                 mudancas.append(f"{len(marcar)} item(ns) de checklist")
+            if add:
+                mudancas.append(f"{len(add[0]['items'])} item(ns) novo(s) em '{add[1]}'")
+            if "excluir_checklist" in payload:
+                mudancas.append(f"excluir o checklist '{exibir['excluir']['titulo']}'")
             resumo = f"Atualizar '{titulo}': " + ", ".join(mudancas)
     await acoes.criar_pendente(conn, ctx["dono"], bot, "taskhs", acao, payload, resumo)
     return (f"Preparado: {resumo}. Aguardando {ctx['primeiro']} confirmar no HS.OS — "
