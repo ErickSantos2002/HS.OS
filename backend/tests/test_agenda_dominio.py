@@ -162,3 +162,13 @@ def test_editar_so_titulo_nao_mexe_na_reserva():
     run(d.editar(c, USER, "abc", AGORA, titulo="novo"))
     sql = _update(c)
     assert "disparando_em" not in sql and "turno_pendente_desde" not in sql
+
+
+def test_editar_ativo_sem_mudanca_nao_solta_a_reserva():
+    """`ativo: true` num lembrete que já está ativo é no-op: zerar
+    `disparando_em` ali reabriria um disparo em curso — o disparador
+    pegaria o mesmo lembrete de novo e o recado sairia duas vezes."""
+    c = Conn(linha=linha(ativo=True))
+    run(d.editar(c, USER, "abc", AGORA, ativo=True))
+    sql = _update(c)
+    assert "disparando_em" not in sql and "turno_pendente_desde" not in sql

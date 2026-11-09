@@ -32,7 +32,7 @@ def _conf():
 def test_entrada_so_para_bot_com_email_e_deny_em_todos():
     patch, novos = pub.montar_patch(_conf(), "seg", "tok", bots={"erick-bot", "andre-bot"},
                                     com_email={"erick-bot"})
-    assert {n for n in novos if not n.startswith("hsos-anexos-")} == {"hsos-email-erick-bot"}
+    assert {n for n in novos if n.startswith("hsos-email-")} == {"hsos-email-erick-bot"}
     e = novos["hsos-email-erick-bot"]
     assert "/mcp/email/erick-bot/" in e["url"] and e["toolFilter"]["include"] == list(FERRAMENTAS_EMAIL)
     assert e["headers"] == {"Authorization": "Bearer tok"}
@@ -57,11 +57,11 @@ def test_url_nao_e_a_assinatura_do_anexos():
     assert assinatura_do_agente("seg", "erick-bot") not in novos["hsos-email-erick-bot"]["url"]
 
 
-def test_entrada_de_sistemas_e_negada_aos_outros():
+def test_entrada_hsos_bot_e_negada_aos_outros():
     from app.email.regras import FERRAMENTAS_BOT
     patch, novos = pub.montar_patch(_conf(), "seg", "tok", bots={"erick-bot", "andre-bot"},
-                                    com_email=set(), com_sistemas={"erick-bot"})
-    assert {n for n in novos if not n.startswith("hsos-anexos-")} == {"hsos-bot-erick-bot"} and "/mcp/bot/erick-bot/" in novos["hsos-bot-erick-bot"]["url"]
+                                    com_email=set())
+    assert "/mcp/bot/erick-bot/" in novos["hsos-bot-erick-bot"]["url"]
     lista = {a["id"]: a["tools"] for a in patch["agents"]["list"]}
     alheias = {f"hsos-bot-erick-bot__{f}" for f in FERRAMENTAS_BOT}
     assert alheias <= set(lista["nina"]["deny"]) and alheias <= set(lista["andre-bot"]["deny"])
@@ -92,4 +92,19 @@ def test_todo_bot_ganha_a_propria_entrada_de_anexos():
     assert "mcp__hsos-anexos-erick-bot__ler_anexo" in lista["erick-bot"]["alsoAllow"]
     assert "hsos-anexos-andre-bot__ler_anexo" in lista["erick-bot"]["deny"]
     assert "hsos-anexos-erick-bot__ler_anexo" in lista["nina"]["deny"]
+    assert pub.conferir(patch_aplicado(patch), novos, {"erick-bot", "andre-bot"}, set())
+
+
+def test_hsos_bot_publicado_para_bot_sem_sistemas():
+    """A agenda mora no `hsos-bot-<id>`: publicado só para quem tem sistema
+    ligado, o Guardi dos outros nunca ganharia `agenda_criar`."""
+    from app.email.regras import FERRAMENTAS_BOT
+    patch, novos = pub.montar_patch(_conf(), "seg", "tok", bots={"erick-bot", "andre-bot"},
+                                    com_email=set())
+    assert {"hsos-bot-erick-bot", "hsos-bot-andre-bot"} <= set(novos)
+    assert novos["hsos-bot-andre-bot"]["toolFilter"]["include"] == list(FERRAMENTAS_BOT)
+    lista = {a["id"]: a["tools"] for a in patch["agents"]["list"]}
+    assert "mcp__hsos-bot-andre-bot__agenda_criar" in lista["andre-bot"]["alsoAllow"]
+    assert "hsos-bot-erick-bot__agenda_criar" in lista["andre-bot"]["deny"]
+    assert "hsos-bot-andre-bot__agenda_criar" in lista["nina"]["deny"]
     assert pub.conferir(patch_aplicado(patch), novos, {"erick-bot", "andre-bot"}, set())

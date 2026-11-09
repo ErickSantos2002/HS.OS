@@ -16,10 +16,11 @@ import secrets
 # `toolFilter` fez com a `relatorio_ponto` do bruce em outubro).
 FERRAMENTAS_EMAIL = ("email_caixas", "email_listar", "email_ler", "email_enviar_para_mim",
                      "email_preparar", "email_pendentes", "email_marcar_lido")
-# As do servidor `hsos-bot-<bot>` (memória + sistemas internos).
+# As do servidor `hsos-bot-<bot>` (memória, sistemas internos e agenda).
 FERRAMENTAS_BOT = ("lembrar", "taskhs_eu", "taskhs_minhas", "taskhs_quadros", "taskhs_quadro",
                    "taskhs_tarefa", "taskhs_buscar", "taskhs_membros_quadro", "taskhs_comentar",
-                   "taskhs_mover", "taskhs_criar", "taskhs_atualizar", "taskhs_membros")
+                   "taskhs_mover", "taskhs_criar", "taskhs_atualizar", "taskhs_membros",
+                   "agenda_criar", "agenda_listar", "agenda_editar", "agenda_apagar")
 
 TETO_CORPO = 6000
 MAX_DESTINATARIOS = 20

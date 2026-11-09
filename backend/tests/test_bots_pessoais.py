@@ -204,13 +204,13 @@ COM_BOT = {**COM_EMAIL,
 
 
 def test_bot_com_sistemas_ve_so_a_propria_entrada():
-    t = tools_do_bot(COM_BOT, "erick-bot", email=True, sistemas=True)
+    t = tools_do_bot(COM_BOT, "erick-bot", email=True)
     also = set(t["alsoAllow"])
     assert {f"mcp__hsos-bot-erick-bot__{f}" for f in FERRAMENTAS_BOT} <= also
     assert {f"mcp__hsos-email-erick-bot__{f}" for f in FERRAMENTAS_EMAIL} <= also
     assert {f"hsos-bot-andre-bot__{f}" for f in FERRAMENTAS_BOT} <= set(t["deny"])
-    assert bot_esta_fechado(t, COM_BOT, "erick-bot", email=True, sistemas=True)
-    assert not bot_esta_fechado(t, COM_BOT, "erick-bot", email=True, sistemas=False)
+    assert bot_esta_fechado(t, COM_BOT, "erick-bot", email=True)
+    assert not bot_esta_fechado(t, COM_BOT, "erick-bot", email=False)
 
 
 def test_agents_md_aponta_para_as_ferramentas():
@@ -260,3 +260,22 @@ def test_portugues_inclusive_para_recusar():
     a = " ".join(arq["AGENTS.md"].split())
     s = " ".join(arq["SOUL.md"].split())
     assert "inclusive para recusar" in s and "window.hsos" in a
+
+
+def test_bot_sem_sistemas_tem_agenda_no_also_allow():
+    """A agenda não depende do TaskHS: a entrada `hsos-bot-<id>` publicada
+    basta. Amarrada a `sistemas_ligados`, o Guardi de quem não usa o TaskHS
+    seguiria dizendo que não tem onde guardar um lembrete."""
+    t = tools_do_bot(COM_BOT, "andre-bot")
+    assert "mcp__hsos-bot-andre-bot__agenda_criar" in t["alsoAllow"]
+    assert "hsos-bot-erick-bot__agenda_criar" in t["deny"]
+    assert bot_esta_fechado(t, COM_BOT, "andre-bot")
+
+
+def test_agents_md_aponta_para_a_agenda_e_cabe_no_teto():
+    """O template dizia "não agendo nada" — com a agenda no ar, isso faria o
+    Guardi recusar o que agora sabe fazer. E o arquivo tem teto de 20.000
+    caracteres que o gateway corta em silêncio."""
+    a = arquivos_do_bot({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"})["AGENTS.md"]
+    assert "agenda_criar" in a and "agenda_listar" in a and "Não agendo nada" not in a
+    assert len(a) < 20000

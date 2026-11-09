@@ -1,5 +1,7 @@
 """Publica no gateway as entradas dos bots pessoais: `hsos-email-<bot>` (flag
-`email_ligado`) e `hsos-bot-<bot>` (memória + sistemas, `sistemas_ligados`).
+`email_ligado`), `hsos-bot-<bot>` (memória, agenda e sistemas — todo bot desde
+09/11/2026; o servidor trava os `taskhs_*` sem `sistemas_ligados`) e
+`hsos-anexos-<bot>` (todo bot).
 
     cd backend
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py                                  # ensaio
@@ -46,7 +48,7 @@ def _cabecalhos(modelo: dict, token: str) -> dict:
 
 
 def montar_patch(conf: dict, segredo: str, token: str, bots: set[str],
-                 com_email: set[str], com_sistemas: set[str] = frozenset()) -> tuple[dict, dict]:
+                 com_email: set[str]) -> tuple[dict, dict]:
     servidores = (conf.get("mcp") or {}).get("servers") or {}
     modelo = servidores.get("hsos-relatorios")
     if not modelo:
@@ -67,12 +69,13 @@ def montar_patch(conf: dict, segredo: str, token: str, bots: set[str],
     for aid in sorted(com_email):
         novos[f"hsos-email-{aid}"] = entrada(f"email/{aid}", assinatura_email(segredo, aid),
                                              FERRAMENTAS_EMAIL)
-    for aid in sorted(com_sistemas):
-        novos[f"hsos-bot-{aid}"] = entrada(f"bot/{aid}", assinatura_bot(segredo, aid), FERRAMENTAS_BOT)
-    # Anexos: todo bot, sem flag (09/11/2026). O `publicar-anexos-mcp.py` pula
-    # perfil `minimal` de propósito — a entrada do Guardi sai daqui, junto do
+    # `hsos-bot` e anexos: todo bot, sem flag (09/11/2026). A agenda mora no
+    # `hsos-bot`; publicado só para quem tinha sistema ligado, o Guardi dos
+    # outros nunca teria `agenda_criar`. O `publicar-anexos-mcp.py` pula perfil
+    # `minimal` de propósito — a entrada do Guardi sai daqui, junto do
     # `tools_do_bot` que a libera só para ele.
     for aid in sorted(bots):
+        novos[f"hsos-bot-{aid}"] = entrada(f"bot/{aid}", assinatura_bot(segredo, aid), FERRAMENTAS_BOT)
         novos[f"hsos-anexos-{aid}"] = entrada(f"anexos/{aid}", assinatura_do_agente(segredo, aid),
                                               ferramentas_anexos(aid))
     depois = {**servidores, **novos}
@@ -80,15 +83,13 @@ def montar_patch(conf: dict, segredo: str, token: str, bots: set[str],
     for a in agentes:
         aid = str(a.get("id"))
         if aid in bots:
-            a["tools"] = tools_do_bot(depois, aid, email=aid in com_email,
-                                      sistemas=aid in com_sistemas)
+            a["tools"] = tools_do_bot(depois, aid, email=aid in com_email)
         else:
             a["tools"] = escopo_mcp_do_agente(aid, a.get("tools") or {}, depois)
     return {"mcp": {"servers": novos}, "agents": {"list": agentes}}, novos
 
 
-def conferir(parsed: dict, novos: dict, bots: set[str], com_email: set[str],
-             com_sistemas: set[str] = frozenset()) -> bool:
+def conferir(parsed: dict, novos: dict, bots: set[str], com_email: set[str]) -> bool:
     """Na config RELIDA: entradas com a URL certa; bot com e-mail fechado COM
     e-mail; todo o resto nega todas as entradas de e-mail que não são suas."""
     from app.bots_pessoais import bot_esta_fechado
@@ -97,7 +98,7 @@ def conferir(parsed: dict, novos: dict, bots: set[str], com_email: set[str],
         return False
     for a in (parsed.get("agents") or {}).get("list") or []:
         aid, t = str(a.get("id")), a.get("tools") or {}
-        if aid in bots and not bot_esta_fechado(t, s, aid, aid in com_email, aid in com_sistemas):
+        if aid in bots and not bot_esta_fechado(t, s, aid, aid in com_email):
             return False
         deny = set(t.get("deny") or [])
         for n in s:
@@ -160,30 +161,28 @@ async def main() -> int:
                     " WHERE agent_id = $1 AND dono_id IS NOT NULL RETURNING agent_id", bot, sistema)
                 print(f"{sistema} em {bot}: {'ok' if ok else 'NÃO (não é bot pessoal?)'}")
                 return 0 if ok else 1
-            linhas = await conn.fetch("SELECT agent_id, email_ligado, sistemas_ligados "
+            linhas = await conn.fetch("SELECT agent_id, email_ligado "
                                       "  FROM public.agent_profiles WHERE dono_id IS NOT NULL")
         bots = {l["agent_id"] for l in linhas}
         com_email = {l["agent_id"] for l in linhas if l["email_ligado"]}
-        com_sistemas = {l["agent_id"] for l in linhas if l["sistemas_ligados"]}
         conf, base_hash = await config_do_gateway()
         # Como a produção lê: `integration_secrets` primeiro, depois o ambiente.
         from app.integracoes import ler_segredo
         segredo = await ler_segredo("ANEXOS_MCP_SEGREDO") or os.environ.get("ANEXOS_MCP_SEGREDO", "")
         token = await ler_segredo("GUARDRAILS_API_TOKEN") or os.environ.get("GUARDRAILS_API_TOKEN", "")
         try:
-            patch, novos = montar_patch(conf, segredo, token, bots, com_email, com_sistemas)
+            patch, novos = montar_patch(conf, segredo, token, bots, com_email)
         except ValueError as e:
             print("❌", e)
             return 1
         print("Bots com e-mail:", sorted(com_email) or "(nenhum)")
-        print("Bots com sistemas:", sorted(com_sistemas) or "(nenhum)")
         print("Entradas:", json.dumps(_mascarar(novos), ensure_ascii=False, indent=1))
         print(f"agents.list reescrito: {len(patch['agents']['list'])} agentes")
         if not a.aplicar:
             print("(ensaio — nada foi escrito)")
             return 0
         await aplicar_patch(patch, base_hash,
-                            conferir=lambda c: conferir(c, novos, bots, com_email, com_sistemas))
+                            conferir=lambda c: conferir(c, novos, bots, com_email))
         print("✅ aplicado e conferido na releitura")
         return 0
     finally:
