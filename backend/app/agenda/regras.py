@@ -20,7 +20,7 @@ ADIAMENTO = timedelta(minutes=2)
 ADIAMENTO_MAX = timedelta(minutes=30)
 
 _FORMATO_EM = "%Y-%m-%dT%H:%M"
-_HORA = re.compile(r"^(\d{1,2}):(\d{2})$")
+_HORA = re.compile(r"^([0-9]{1,2}):([0-9]{2})\Z")
 
 
 class RegraInvalida(ValueError):
@@ -139,4 +139,5 @@ def regra_de(quando: str | None, repetir: dict | None) -> dict:
         raise RegraInvalida("Informe só um: 'quando' (lembrete único) ou 'repetir' (recorrente).")
     if quando is not None:
         return {"tipo": "unico", "em": quando}
-    return dict(repetir)
+    # Não-dict segue como veio: `validar_regra` o recusa com RegraInvalida.
+    return dict(repetir) if isinstance(repetir, dict) else repetir

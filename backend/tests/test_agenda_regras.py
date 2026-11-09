@@ -121,3 +121,34 @@ def test_regra_de_exige_exatamente_um():
         regra_de("2026-11-10T09:00", rec)
     with pytest.raises(RegraInvalida, match="só um"):
         regra_de(None, None)
+
+
+@pytest.mark.parametrize("repetir", ["diario", ["diario"], 5])
+def test_regra_de_nao_dict_vira_regra_invalida(repetir):
+    """Um erro cru (ValueError/TypeError) escaparia de quem captura só RegraInvalida."""
+    agora = datetime(2026, 11, 9, 12, 0, tzinfo=FUSO)
+    with pytest.raises(RegraInvalida):
+        validar_regra(regra_de(None, repetir), agora)
+
+
+def test_mensal_no_mesmo_dia_com_hora_passada_vai_para_o_mes_seguinte():
+    agora = datetime(2026, 11, 15, 10, 0, tzinfo=FUSO)
+    assert proximo({"tipo": "mensal", "dia": 15, "hora": "09:00"}, agora) == _utc(2026, 12, 15, 9, 0)
+
+
+def test_semanal_no_mesmo_dia_depois_da_hora_vai_para_a_semana_seguinte():
+    agora = datetime(2026, 11, 9, 9, 0, tzinfo=FUSO)  # segunda, depois das 08h
+    assert proximo({"tipo": "semanal", "dias": [0], "hora": "08:00"}, agora) == _utc(2026, 11, 16, 8, 0)
+
+
+def test_mensal_dia_31_em_fevereiro_bissexto_e_mes_de_30_dias():
+    assert proximo({"tipo": "mensal", "dia": 31, "hora": "09:00"},
+                   datetime(2028, 2, 1, 9, 0, tzinfo=FUSO)) == _utc(2028, 2, 29, 9, 0)
+    assert proximo({"tipo": "mensal", "dia": 31, "hora": "09:00"},
+                   datetime(2026, 4, 1, 9, 0, tzinfo=FUSO)) == _utc(2026, 4, 30, 9, 0)
+
+
+def test_hora_com_quebra_de_linha_final_e_recusada():
+    agora = datetime(2026, 11, 9, 12, 0, tzinfo=FUSO)
+    with pytest.raises(RegraInvalida):
+        validar_regra({"tipo": "diario", "hora": "08:00\n"}, agora)
