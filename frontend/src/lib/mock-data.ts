@@ -14,7 +14,8 @@ export interface Agent {
 
 export interface MediaAttachment {
   /** `email_aprovacao`: cartão do e-mail que o bot pessoal preparou (`id` = pendente). */
-  type: "image" | "audio" | "file" | "email_aprovacao" | "acao_aprovacao";
+  /** `lembrete`: recado do Guardi na hora de um lembrete (`id` = lembrete, `name` = título). */
+  type: "image" | "audio" | "file" | "email_aprovacao" | "acao_aprovacao" | "lembrete";
   mimeType: string;
   base64: string; // data URI or public URL for files
   name?: string;

@@ -1,7 +1,8 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { BookOpen, Bot, MessageSquare, Settings, Zap } from "lucide-react";
+import { BookOpen, Bot, CalendarClock, MessageSquare, Settings, Zap } from "lucide-react";
 import { useAuthContext } from "@/contexts/auth-context";
 import { useNotificationsContext } from "@/components/NotificationsProvider";
+import { useTemGuardi } from "@/hooks/use-tem-guardi";
 
 interface BottomTab {
   label: string;
@@ -27,13 +28,18 @@ const memberTabs: BottomTab[] = [
   { label: "Conhecimento", icon: BookOpen, path: "/base-de-conhecimento", matchPaths: ["/base-de-conhecimento"] },
 ];
 
+const AGENDA: BottomTab = { label: "Agenda", icon: CalendarClock, path: "/agenda", matchPaths: ["/agenda"] };
+
 export function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
   const { role } = useAuthContext();
   const { unreadCount } = useNotificationsContext();
 
-  const tabs = role === "administrador" ? adminTabs : memberTabs;
+  const temGuardi = useTemGuardi();
+  const base = role === "administrador" ? adminTabs : memberTabs;
+  // "Agenda" só para quem tem Guardi, logo depois do Chat.
+  const tabs = temGuardi ? [base[0], AGENDA, ...base.slice(1)] : base;
 
   const isActive = (tab: BottomTab) =>
     tab.matchPaths.some((p) =>

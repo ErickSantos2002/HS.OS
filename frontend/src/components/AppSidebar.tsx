@@ -48,6 +48,7 @@ import {
   X as XIcon,
   ListChecks,
   Building2,
+  CalendarClock,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useNotificationsContext } from "@/components/NotificationsProvider";
@@ -55,6 +56,7 @@ import { useUserStatus } from "@/hooks/use-user-status";
 import { UserStatusBadge } from "@/components/UserStatusBadge";
 import { USER_STATUS_PRESETS } from "@/lib/user-status";
 import { ESCRITORIO_URL } from "@/lib/escritorio";
+import { useTemGuardi } from "@/hooks/use-tem-guardi";
 
 interface NavItem {
   title: string;
@@ -143,7 +145,15 @@ export function AppSidebar() {
 
   const navigate = useNavigate();
 
-  const groups: NavGroup[] = role === "administrador" ? adminGroups : memberGroups;
+  const temGuardi = useTemGuardi();
+  // "Agenda" é dos lembretes do Guardi: só aparece para quem tem um. Entra
+  // depois de Chat e Escritório (o Escritório logo depois do Chat é trancado
+  // por teste), no primeiro grupo dos dois menus.
+  const groups: NavGroup[] = (role === "administrador" ? adminGroups : memberGroups).map((g, i) =>
+    i === 0 && temGuardi
+      ? { ...g, items: [...g.items.slice(0, 2), { title: "Agenda", url: "/agenda", icon: CalendarClock }, ...g.items.slice(2)] }
+      : g,
+  );
 
   const handleSignOut = async () => {
     await signOut();

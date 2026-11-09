@@ -113,6 +113,7 @@ import { useEscritorioPresenca } from "@/hooks/use-escritorio-presenca";
 import { InstalarApp } from "@/components/InstalarApp";
 import CartaoAprovacaoEmail from "@/components/chat/CartaoAprovacaoEmail";
 import CartaoAcao from "@/components/chat/CartaoAcao";
+import RecadoLembrete from "@/components/chat/RecadoLembrete";
 
 /** Strip markdown formatting for sidebar preview */
 function stripMarkdown(text: string): string {
@@ -539,6 +540,8 @@ export const AgentMessageList = React.memo(function AgentMessageList({
                         <CartaoAprovacaoEmail key={i} id={att.id} />
                       ) : att.type === "acao_aprovacao" && att.id ? (
                         <CartaoAcao key={i} id={att.id} />
+                      ) : att.type === "lembrete" ? (
+                        <RecadoLembrete key={i} titulo={att.name} />
                       ) : (
                         <AnexoResolvido key={i} id={att.base64?.startsWith("data:") ? undefined : att.id} url={att.base64?.startsWith("data:") ? att.base64 : (att.url || att.base64)}>
                           {(url, renovar, urlAgora) => <MediaBubble attachment={{ ...att, url, base64: att.base64 || url }} onImageClick={onSetLightboxSrc} onErroImagem={renovar} urlAgora={urlAgora} />}
