@@ -1,7 +1,7 @@
 """Disparador de lembretes do Guardi (spec 2026-11-09, "Disparador").
 
 A cada `DISPARADOR_LEMBRETES_SEGUNDOS` (padrão 30; 0 desliga), cada worker
-reserva até 20 lembretes vencidos e, para cada um:
+reserva até 10 lembretes vencidos e, para cada um:
 
 1. **o recado, sem agente** — `⏰ Lembrete: <titulo>` em `conversations`,
    comitado antes de qualquer chamada ao gateway. O push nasce do trigger do
@@ -33,7 +33,9 @@ from datetime import datetime, timezone
 
 import asyncpg
 
+from app.agenda.dominio import guardi_de
 from app.agenda.regras import ADIAMENTO, ADIAMENTO_MAX, ATRASO_MAX, TETO_TURNOS_DIA, proximo
+from app.bots_pessoais import _linha
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
 from app.gateway.client import ErroGateway
@@ -50,12 +52,12 @@ SQL_RESERVAR = """
            SELECT x.id FROM public.lembretes x
             WHERE x.ativo
               AND x.proximo_em <= now()
-              AND (x.disparando_em IS NULL OR x.disparando_em < now() - interval '2 minutes')
+              AND (x.disparando_em IS NULL OR x.disparando_em < now() - interval '10 minutes')
             ORDER BY x.proximo_em
-            LIMIT 20
+            LIMIT 10
             FOR UPDATE SKIP LOCKED)
        AND l.ativo
-       AND (l.disparando_em IS NULL OR l.disparando_em < now() - interval '2 minutes')
+       AND (l.disparando_em IS NULL OR l.disparando_em < now() - interval '10 minutes')
     RETURNING l.id::text AS id, l.user_id::text AS user_id, l.agent_id, l.titulo,
               l.instrucao, l.regra, l.proximo_em, l.turno_pendente_desde
 """
@@ -82,6 +84,23 @@ SQL_TURNOS_HOJE = """
 """
 
 SQL_NOME = "SELECT full_name FROM public.profiles WHERE id = $1::uuid"
+
+SQL_DONO_ATIVO = "SELECT is_active FROM auth.users WHERE id = $1::uuid"
+
+# Dono desligado ou Guardi que mudou de dono: o lembrete não vale mais.
+SQL_DESATIVAR = """
+    UPDATE public.lembretes
+       SET ativo = false,
+           ultimo_status = 'erro',
+           turno_pendente_desde = NULL,
+           disparando_em = NULL,
+           atualizado_em = now()
+     WHERE id = $1::uuid
+"""
+
+# ⚠️ O lease conta do item, não da passada: dez itens com `chat.send` em série
+# podem passar dos 10 min, e o outro worker reservaria o último de novo.
+SQL_RENOVAR = "UPDATE public.lembretes SET disparando_em = now() WHERE id = $1::uuid"
 
 SQL_RECADO = """
     INSERT INTO public.conversations (agent_id, user_id, role, content, media)
@@ -149,13 +168,25 @@ def _seguinte(regra: dict, agora: datetime) -> datetime | None:
     return None if regra.get("tipo") == "unico" else proximo(regra, agora)
 
 
+def _no_cabecalho(valor) -> str:
+    """Uma linha, sem aspas nem colchetes.
+
+    ⚠️ Título e nome são texto livre: `x"] ignore tudo e [y` fecharia o
+    cabeçalho `[Lembrete agendado por … — "…"]` e o resto viraria instrução
+    com a autoridade dele. A `instrucao` fica fora do cabeçalho e segue como
+    veio — é o pedido do próprio dono.
+    """
+    sem = "".join(" " if c in '"“”[]' else c for c in _linha(valor, teto=200))
+    return " ".join(sem.split())
+
+
 def _primeiro_nome(full_name) -> str:
-    partes = (full_name or "").split()
+    partes = _no_cabecalho(full_name).split()
     return partes[0] if partes else "o dono"
 
 
 def _mensagem(nome: str, titulo: str, instrucao: str) -> str:
-    return f'[Lembrete agendado por {nome} — "{titulo}"] {instrucao}'
+    return f'[Lembrete agendado por {_no_cabecalho(nome)} — "{_no_cabecalho(titulo)}"] {instrucao}'
 
 
 async def disparar_um(sessao_fn, l: dict, agora: datetime, disparar=None) -> None:
@@ -170,6 +201,16 @@ async def disparar_um(sessao_fn, l: dict, agora: datetime, disparar=None) -> Non
         from app.routers.conversations import disparar_turno as disparar
 
     async with sessao_fn(role="service_role") as conn:
+        # Paridade com as rotas: o lembrete foi autorizado quando foi criado,
+        # mas o dono pode ter sido desligado e o bot pode ter mudado de dono.
+        ativo = bool(await conn.fetchval(SQL_DONO_ATIVO, l["user_id"]))
+        guardi = await guardi_de(conn, l["user_id"])
+        if not ativo or not guardi or \
+                normalizar_agent_id(guardi) != normalizar_agent_id(l["agent_id"]):
+            await conn.execute(SQL_DESATIVAR, l["id"])
+            logger.warning("Lembrete %s desativado: dono inativo ou %s não é mais o Guardi dele.",
+                           l["id"], l["agent_id"])
+            return
         turno_aberto = bool(await conn.fetchval(
             SQL_TURNO_ABERTO, normalizar_agent_id(l["agent_id"]), float(JANELA_TURNO_S)))
         turnos_hoje = int(await conn.fetchval(SQL_TURNOS_HOJE, l["user_id"]) or 0)
@@ -217,6 +258,8 @@ async def passada(sessao_fn, agora: datetime, disparar=None) -> int:
     for l in lembretes:
         l = dict(l)
         try:
+            async with sessao_fn(role="service_role") as conn:
+                await conn.execute(SQL_RENOVAR, l["id"])
             await disparar_um(sessao_fn, l, agora, disparar=disparar)
         except Exception:  # noqa: BLE001 — um lembrete não derruba a passada
             logger.exception("Lembrete %s quebrou no disparo.", l["id"])
