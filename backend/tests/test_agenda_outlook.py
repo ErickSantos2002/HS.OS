@@ -60,10 +60,38 @@ def test_sem_permissao_nao_chama_graph(monkeypatch):
     async def sem_cal(conn, uid):
         return False
 
+    async def nao_ampliou(conn, uid):
+        return False
+
     monkeypatch.setattr(graph, "calendario", explode)
     monkeypatch.setattr(contas, "access_token", explode)
     monkeypatch.setattr(contas, "tem_calendario", sem_cal)
+    monkeypatch.setattr(contas, "ampliar_calendario", nao_ampliou)
     assert asyncio.run(outlook.eventos(_Conn(), "u", _em(0), _em(23))) == ("sem_permissao", [])
+
+
+def test_conta_antiga_ganha_calendario_na_hora(monkeypatch):
+    """09/11/2026: sem isto, quem conectou antes do calendário via "sem permissão"
+    para sempre — a ampliação na renovação nunca era tentada por aqui."""
+    estado = {"cal": False}
+
+    async def tem(conn, uid):
+        return estado["cal"]
+
+    async def ampliou(conn, uid):
+        estado["cal"] = True
+        return True
+
+    async def token(conn, uid):
+        return "t", "a@b.com"
+
+    async def cal(access, conta, de, ate):
+        return []
+    monkeypatch.setattr(contas, "tem_calendario", tem)
+    monkeypatch.setattr(contas, "ampliar_calendario", ampliou)
+    monkeypatch.setattr(contas, "access_token", token)
+    monkeypatch.setattr(graph, "calendario", cal)
+    assert asyncio.run(outlook.eventos(_Conn(), "u", _em(0), _em(23))) == ("ok", [])
 
 
 def test_sem_conta(monkeypatch):

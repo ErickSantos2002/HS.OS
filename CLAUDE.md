@@ -794,8 +794,14 @@ continua negado aos Guardis (os 560 disparos da `nina`); a agenda é do HS.OS.
   NOT NULL`): único já disparado fica `ativo` com `proximo_em` nulo e não ocupa vaga.
 - **Produção, só depois do deploy** (migração `032` antes): `publicar-bots-mcp.py`
   (ensaio primeiro, depois `--aplicar`); `criar-bots-pessoais.py
-  --reescrever-agents-md --aplicar --todos`; o Erick reconecta o e-mail para a página
-  e o Guardi verem o Outlook. Conferência no navegador da `/agenda` ainda pendente.
+  --reescrever-agents-md --aplicar --todos`. Conferência no navegador da `/agenda`
+  ainda pendente.
+- ⚠️ **Ninguém precisa reconectar o e-mail para o Outlook.** Conta conectada antes do
+  calendário ganha o escopo na própria renovação (`contas.access_token` →
+  `graph.ampliar_para_calendario`), porque o Erick deu consentimento de administrador
+  no Entra (09/11/2026). A Microsoft recusou? Renova só com e-mail — a pessoa nunca
+  perde o e-mail por causa do calendário. `/email/estado` e `outlook.eventos` tentam a
+  ampliação antes de dizer "sem permissão".
 
 ### Feature flags — sobrou uma, e ela vem ligada
 

@@ -94,3 +94,59 @@ class _Conn:
 def test_tem_calendario_sem_caixa(escopos, esperado):
     """Comparação sem caixa: a Microsoft devolve a caixa que quiser."""
     assert asyncio.run(contas.tem_calendario(_Conn(escopos), "u")) is esperado
+
+
+class _ConnConta:
+    def __init__(self, escopos):
+        self.escopos, self.updates = escopos, []
+
+    async def fetchrow(self, sql, *a):
+        return {"conta": "ti@x", "refresh_cifrado": contas.cifrar("velho"), "escopos": self.escopos}
+
+    async def execute(self, sql, *a):
+        self.updates.append((sql, a))
+
+
+def _graph_falso(monkeypatch, calendario_ok=True):
+    pedidos = []
+
+    async def token(dados, escopo):
+        pedidos.append(escopo)
+        if escopo == graph.ESCOPOS_CONECTAR and not calendario_ok:
+            raise graph.ErroGraph(400, "invalid_grant AADSTS65001")
+        scope = "https://graph.microsoft.com/Mail.ReadWrite"
+        if escopo == graph.ESCOPOS_CONECTAR:
+            scope += " https://graph.microsoft.com/Calendars.Read.Shared"
+        return {"access_token": "a", "refresh_token": "novo", "scope": scope}
+    monkeypatch.setattr(graph, "_token", token)
+    return pedidos
+
+
+def test_conta_antiga_ganha_calendario_sem_reconectar(monkeypatch):
+    """09/11/2026: o Erick conectou o e-mail pessoa por pessoa; pedir que todos
+    reconectassem só para o calendário jogaria esse trabalho fora. Com o
+    consentimento de administrador dado no Entra, a própria renovação devolve o
+    escopo de calendário — e ele passa a ficar gravado na conta."""
+    pedidos = _graph_falso(monkeypatch)
+    conn = _ConnConta(None)
+    access, conta = asyncio.run(contas.access_token(conn, "00000000-0000-0000-0000-000000000001"))
+    assert access == "a" and pedidos == [graph.ESCOPOS_CONECTAR]
+    gravou = [a for sql, a in conn.updates if "escopos" in sql]
+    assert gravou and graph.concedeu_calendario(gravou[0][-1])
+
+
+def test_microsoft_recusa_calendario_e_o_email_continua(monkeypatch):
+    """Se a ampliação for recusada (consentimento revogado, política do tenant),
+    a pessoa NÃO pode perder o e-mail: renova só com os escopos de sempre."""
+    pedidos = _graph_falso(monkeypatch, calendario_ok=False)
+    conn = _ConnConta(None)
+    access, _ = asyncio.run(contas.access_token(conn, "00000000-0000-0000-0000-000000000001"))
+    assert access == "a" and pedidos == [graph.ESCOPOS_CONECTAR, graph.ESCOPOS_EMAIL]
+    assert not [a for sql, a in conn.updates if "escopos" in sql]
+
+
+def test_conta_com_calendario_nao_tenta_ampliar(monkeypatch):
+    pedidos = _graph_falso(monkeypatch)
+    conn = _ConnConta(["Calendars.Read.Shared"])
+    asyncio.run(contas.access_token(conn, "00000000-0000-0000-0000-000000000001"))
+    assert pedidos == [graph.ESCOPOS_CONECTAR]
