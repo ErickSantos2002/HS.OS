@@ -246,6 +246,29 @@ SELECT extract(year FROM data_emissao)::int AS ano,
 - **Mês corrente é parcial.** Ao comparar com o ano anterior, corte o ano anterior
   no mesmo dia. Mês cheio contra mês pela metade não é comparação.
 
+### O espelho do Tiny NÃO está corrompido — três coisas que parecem defeito e não são
+
+⚠️ **Em 08/11/2026 um alerta à diretoria afirmou "13% das notas não fecham, quantidade
+corrompida em março, linhas replicadas" e que contagem de produto "não é apurável".**
+Era tudo leitura errada, e o CEO recebeu 161 e 366 Phoebus como "dois números
+errados" — 161 era o certo.
+
+- **A soma dos itens fecha com `valor_produtos`, não com `valor_nota`.** O
+  `valor_nota` inclui frete, IPI, ST e desconto. Nas 519 notas de venda de 2026
+  (até 09/11) a soma dos itens bate com `valor_produtos` em **todas**. Diferença
+  contra `valor_nota` é imposto e frete, não item faltando.
+- **Março/2026 com ~10 mil unidades é venda real**: 10.000 `BOCAL - BAF 300` a
+  R$ 1,19 (nota 007870). "Unidades" sem filtrar o item soma bocal descartável com
+  aparelho — por isso a régua filtra pelo nome exato.
+- **Linhas iguais na mesma nota são um aparelho por linha.** A 008616 tem 13 linhas
+  de `BAFÔMETRO PHOEBUS` a R$ 23.900 = R$ 310.700 = `valor_produtos` da nota: são
+  13 Phoebus, não duplicata.
+- **A linha de item tem chave**: `gold.fato_vendas.sk_venda_item = tiny.itens_nota.id`
+  (é o JOIN do bloco acima). Não invente hash para deduplicar.
+
+Achou algo que parece defeito na base? **Confira contra estes três pontos antes de
+alertar** — alerta falso à diretoria custa mais que um número atrasado.
+
 ### Compradores — agrupar por raiz de CNPJ
 
 ⚠️ **Lista de compradores se pede à ferramenta `compradores_produto`, não se
@@ -407,6 +430,7 @@ A âncora dela é o Phoebus, que exercita justamente o filtro de CFOP sobre os i
 | 2025 jan–set · out–dez | **138** · 79 | | |
 | 2024 inteiro | **194** | R$ 3.919.607,00 | 74 |
 | 2026 até 29/09 | **134** | | |
+| 2026 até 09/11 | **161** | | 57 |
 
 Se a sua consulta der **485** para 2025, você somou do `tiny` sem a régua. Se der
 257, usou `ILIKE` e pegou acessório. Se der 204 para 2024, está usando a régua
