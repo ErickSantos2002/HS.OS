@@ -673,7 +673,7 @@ Spec e plano: `docs/superpowers/{specs,plans}/2026-11-05-bot-email-piloto*`. O
 - ⚠️ **Backend local fala com o banco de PRODUÇÃO.** Para testar sem rodar
   vigia/coletores contra ele: `COLETOR_USO_SEGUNDOS=0 VIGIA_SESSOES_SEGUNDOS=0
   COLETOR_METRICAS_SEGUNDOS=0 COLETOR_RESPOSTAS_SEGUNDOS=0
-  FRONTEND_URL=http://localhost:8080`. O `MS_EMAIL_REDIRECT_URI` local aponta
+  DISPARADOR_LEMBRETES_SEGUNDOS=0 FRONTEND_URL=http://localhost:8080`. O `MS_EMAIL_REDIRECT_URI` local aponta
   para o localhost (registrado no Entra).
 - **Assinatura** (`030`, `app/email/assinatura.py`): modelo do HSGrowth —
   texto antes, até 2 imagens (GIF animado incluso, ≤ 2 MB cada, ≤ 3 MB

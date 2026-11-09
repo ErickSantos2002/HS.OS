@@ -17,6 +17,7 @@ from app.escritorio.log_sem_query import instalar as instalar_log_sem_query
 from app.escritorio.presenca import vigiar as vigiar_escritorio
 from app.coletor_metricas import rodar as rodar_metricas
 from app.coletor_respostas import rodar as rodar_coletor_respostas
+from app.disparador_lembretes import rodar as rodar_disparador_lembretes
 from app.coletor_uso import rodar as rodar_coletor
 from app.vigia_sessoes import rodar as rodar_vigia
 from app.database import close_db, init_db
@@ -115,8 +116,16 @@ async def lifespan(app: FastAPI):
     parar_respostas = asyncio.Event()
     respostas = asyncio.create_task(rodar_coletor_respostas(parar_respostas))
 
+    # Lembretes do Guardi: o recado sai mesmo com o gateway fora, e o turno do
+    # agente entra por `disparar_turno`. Ver `app/disparador_lembretes.py`.
+    # Desligar: `DISPARADOR_LEMBRETES_SEGUNDOS=0`.
+    parar_lembretes = asyncio.Event()
+    lembretes = asyncio.create_task(rodar_disparador_lembretes(parar_lembretes))
+
     yield
 
+    parar_lembretes.set()
+    lembretes.cancel()
     parar_respostas.set()
     respostas.cancel()
     parar_escuta.set()
