@@ -12,6 +12,7 @@ resumidos, para o agente.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from urllib.parse import quote, urlencode
 
 import httpx
@@ -20,6 +21,10 @@ from app.config import settings
 
 ESCOPOS_EMAIL = ("offline_access User.Read Mail.ReadWrite Mail.Send "
                  "Mail.ReadWrite.Shared Mail.Send.Shared")
+# Calendário só entra no authorize/troca de code ("Conectar e-mail"). ⚠️ NUNCA em
+# ESCOPOS_EMAIL: o refresh de quem conectou antes pediria escopo não concedido.
+ESCOPO_CALENDARIO = "Calendars.Read.Shared"
+ESCOPOS_CONECTAR = ESCOPOS_EMAIL + " " + ESCOPO_CALENDARIO
 GRAPH = "https://graph.microsoft.com/v1.0"
 TIMEOUT = 15
 
@@ -76,16 +81,16 @@ async def _pedir(metodo: str, url: str, access: str | None = None, **kw) -> dict
 def url_autorizacao(state: str, login_hint: str | None = None) -> str:
     p = {"client_id": settings.MS_CLIENT_ID, "response_type": "code",
          "redirect_uri": settings.redirect_email, "response_mode": "query",
-         "scope": ESCOPOS_EMAIL, "state": state, "prompt": "select_account"}
+         "scope": ESCOPOS_CONECTAR, "state": state, "prompt": "select_account"}
     if login_hint:
         p["login_hint"] = login_hint
     return f"{_base_login()}/authorize?" + urlencode(p)
 
 
-async def _token(dados: dict) -> dict:
+async def _token(dados: dict, escopo: str = ESCOPOS_EMAIL) -> dict:
     corpo = await _pedir("POST", f"{_base_login()}/token", data={
         "client_id": settings.MS_CLIENT_ID, "client_secret": settings.MS_CLIENT_SECRET,
-        "scope": ESCOPOS_EMAIL, **dados})
+        "scope": escopo, **dados})
     if not corpo.get("access_token"):
         raise ErroGraph(0, "token: resposta sem access_token")
     return corpo
@@ -93,17 +98,33 @@ async def _token(dados: dict) -> dict:
 
 async def trocar_code(code: str) -> dict:
     t = await _token({"grant_type": "authorization_code", "code": code,
-                      "redirect_uri": settings.redirect_email})
+                      "redirect_uri": settings.redirect_email}, ESCOPOS_CONECTAR)
     if not t.get("refresh_token"):
         raise ErroGraph(0, "token: sem refresh_token (offline_access concedido?)")
     eu = await _pedir("GET", f"{GRAPH}/me?$select=mail,userPrincipalName", t["access_token"])
     conta = (eu.get("mail") or eu.get("userPrincipalName") or "").lower()
-    return {"access": t["access_token"], "refresh": t["refresh_token"], "conta": conta}
+    return {"access": t["access_token"], "refresh": t["refresh_token"], "conta": conta,
+            "escopos": (t.get("scope") or "").split()}
 
 
-async def renovar(refresh: str) -> tuple[str, str]:
-    t = await _token({"grant_type": "refresh_token", "refresh_token": refresh})
+async def renovar(refresh: str, escopos: list[str] | None = None) -> tuple[str, str]:
+    """Conta antiga (`escopos` nulo) renova com `ESCOPOS_EMAIL`, como sempre."""
+    t = await _token({"grant_type": "refresh_token", "refresh_token": refresh},
+                     " ".join(escopos) if escopos else ESCOPOS_EMAIL)
     return t["access_token"], t.get("refresh_token") or refresh
+
+
+# ── Calendário ───────────────────────────────────────────────────────────────
+
+async def calendario(access, conta, de: datetime, ate: datetime) -> list[dict]:
+    """Eventos da própria agenda entre `de` e `ate`, na hora de Brasília."""
+    corpo = await _pedir(
+        "GET", f"{GRAPH}/me/calendarView", access,
+        params={"startDateTime": de.isoformat(), "endDateTime": ate.isoformat(),
+                "$select": "subject,start,end,location,isAllDay,showAs",
+                "$orderby": "start/dateTime", "$top": "100"},
+        headers={"Prefer": 'outlook.timezone="E. South America Standard Time"'})
+    return corpo.get("value") or []
 
 
 # ── Caixa ────────────────────────────────────────────────────────────────────
