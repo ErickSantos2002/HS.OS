@@ -700,7 +700,8 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   permissões que JÁ tem. ⚠️ A chave privada está também no `.env` local, por
   decisão do Erick: ela abre os sistemas como qualquer colaborador. ⚠️ O
   TaskHS recusa `exp` a mais de 600 s e compara o e-mail exatamente.
-- **Servidor `hsos-bot-<bot>`** (`routers/mcp_bot.py`): `lembrar` + `taskhs_*`.
+- **Servidor `hsos-bot-<bot>`** (`routers/mcp_bot.py`): `lembrar`, `agenda_*` (todo Guardi) e `taskhs_*` (só com
+  `sistemas_ligados`).
   Mesmas guardas do e-mail (turno do dono, turno de outra pessoa). Leitura
   direta; **escrita vira `acoes_pendentes` + cartão** (`acao_aprovacao`), e a
   confirmação executa o `payload` GRAVADO (`routers/acoes.py`), fora do
@@ -736,6 +737,56 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
 - **Território:** a mudança em cada sistema é feita na sessão daquele repo,
   a partir da seção "Para os outros repositórios" da spec. O TaskHS já está
   pronto (`48832b0`, v2.13.0, sem deploy).
+
+### Agenda e lembretes do Guardi — 09/11/2026
+
+Spec: `docs/superpowers/specs/2026-11-09-agenda-lembretes-design.md`. Nasceu de um
+Guardi que prometeu "te lembro em 2 dias" sem ter onde guardar. O `cron` do gateway
+continua negado aos Guardis (os 560 disparos da `nina`); a agenda é do HS.OS.
+
+- Tabela `lembretes` (`032`), página `/agenda`, ferramentas `agenda_criar|listar|
+  editar|apagar` no `hsos-bot-<bot>`. Regra de recorrência e tetos em
+  `app/agenda/regras.py` (puro, testado); fuso fixo America/Sao_Paulo, banco em UTC.
+- **Tetos no servidor:** 30 ativos por pessoa · recorrência mínima diária · único
+  entre 5 min e 1 ano à frente · 12 turnos de agente por pessoa por dia (acima, sai
+  só o recado) · `titulo` ≤ 200, `instrucao` ≤ 2000.
+- ⚠️ **`app/disparador_lembretes.py` é a PORTA ÚNICA do trabalho autônomo do
+  Guardi** (`DISPARADOR_LEMBRETES_SEGUNDOS`, 30; 0 desliga — use ao testar local,
+  que fala com o banco de produção). Trabalho que o Guardi faça sozinho no futuro
+  entra por `disparar_turno`, em nome do dono; não crie caminho paralelo.
+- ⚠️ **O recado é gravado e COMITADO antes do `chat.send`** (por isso `disparar_um`
+  recebe `sessao_fn`, não `conn`): com o gateway fora, o lembrete chega mesmo assim.
+  O turno aberto conta como turno do dono (`turno_em_curso`), o que faz as
+  ferramentas funcionarem; **escrita externa continua virando cartão**.
+- ⚠️ **Atraso, adiamento e erro:** atraso > 6 h = `perdido` (avança, não dispara
+  velho). Run aberto com o Guardi adia só o turno, em passos de 2 min até 30 min;
+  depois fica `entregue_sem_agente`. **Exceção inesperada = `erro` E AVANÇA**
+  (único encerra, recorrente vai ao próximo), sem nova tentativa: soltar sem avançar
+  regravaria o recado a cada 30 s por até 6 h.
+- ⚠️ **Posse da reserva por carimbo (`disparando_em`), não por booleano:** são 2
+  workers. Lease de 10 min, até 10 itens por passada, carimbo renovado antes de cada
+  item — lease de 2 min era menor que o trabalho de uma passada com `chat.send`.
+  Antes do recado confere que o dono está ativo e que `agent_id` ainda é o Guardi
+  dele; senão desativa sem disparar.
+- ⚠️ **Refresh do e-mail usa constante escolhida por `concedeu_calendario`
+  (`email/graph.py`), NUNCA o `scope` cru da resposta.** Esse vem sem
+  `offline_access`; reenviá-lo para a rotação do refresh token em silêncio e o
+  e-mail cai em ~90 dias. `Calendars.Read.Shared` é pedido só no "Conectar e-mail";
+  conta antiga (`escopos` nulo) renova com `ESCOPOS_EMAIL`. Evento do Outlook nunca
+  vai para o banco; volta ao agente por `como_dado_externo`.
+- ⚠️ **`hsos-bot-<bot>` agora é declarado para TODO Guardi**, com ou sem
+  `sistemas_ligados` — senão o `AGENTS.md` promete ferramenta que ele não tem, o
+  defeito original. As `taskhs_*` seguem recusadas sem `taskhs` ligado. O Outlook
+  nas ferramentas segue `email_ligado`.
+- **Risco aceito, decisão revisável (09/11/2026):** instrução criada pelo Guardi
+  roda depois como turno do dono (injeção atrasada: instrução plantada por e-mail
+  lido). Mitigação: o turno só lê e prepara cartões, tetos acima, selo "criado pelo
+  Guardi" na página, título saneado no cabeçalho. Exigir cartão em todo lembrete com
+  instrução tiraria o caso de uso pedido.
+- **Produção, só depois do deploy** (migração `032` antes): `publicar-bots-mcp.py`
+  (ensaio primeiro, depois `--aplicar`); `criar-bots-pessoais.py
+  --reescrever-agents-md --aplicar --todos`; o Erick reconecta o e-mail para a página
+  e o Guardi verem o Outlook. Conferência no navegador da `/agenda` ainda pendente.
 
 ### Feature flags — sobrou uma, e ela vem ligada
 
