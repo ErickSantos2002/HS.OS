@@ -158,6 +158,53 @@ _PROMPT_VISAO = (
 )
 
 
+# A OpenAI recusa imagem acima de 20 MB; em base64 ela cresce ~33%.
+TETO_IMAGEM = 15 * 1024 * 1024
+_MIMES_VISAO = ("image/png", "image/jpeg", "image/webp", "image/gif")
+
+
+class VisaoIndisponivel(Exception):
+    """A imagem não pôde ser lida — o motivo vai ao agente, em vez de 500."""
+
+
+async def descrever_imagem_bytes(dados: bytes, mime: str, nome: str = "") -> str:
+    """A mesma leitura do `/descrever-imagem`, a partir dos bytes do anexo.
+
+    Usada pelo `ler_anexo` (09/11/2026): o Guardi recebia o anexo de imagem e
+    não tinha como ver — o vendedor mandava a foto da proposta e nada. Aqui o
+    texto visível vem PRIMEIRO e fiel (número, valor, nome), porque é dele que
+    o agente monta a tarefa.
+    """
+    m = (mime or "").lower().split(";")[0].strip()
+    if m not in _MIMES_VISAO:
+        # O mime do anexo pode vir vazio ou genérico; a extensão decide.
+        ext = nome.rsplit(".", 1)[-1].lower() if "." in (nome or "") else ""
+        m = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+             "webp": "image/webp", "gif": "image/gif"}.get(ext, m)
+    if m == "image/jpg":
+        m = "image/jpeg"
+    if m not in _MIMES_VISAO:
+        raise VisaoIndisponivel(f"formato {m or 'desconhecido'} não é lido; peça a imagem em PNG ou JPG")
+    if len(dados) > TETO_IMAGEM:
+        raise VisaoIndisponivel("imagem grande demais (acima de 15 MB); peça uma menor")
+    url = f"data:{m};base64,{base64.b64encode(dados).decode()}"
+    rotulo = f" ({nome})" if nome else ""
+    try:
+        texto = await _completar([
+            {"role": "system", "content": _PROMPT_VISAO},
+            {"role": "user", "content": [
+                {"type": "text", "text":
+                    f"Analise esta imagem{rotulo}. Retorne em 2 partes: 1) Todo o texto "
+                    "visível, transcrito fielmente — números, valores, datas e nomes "
+                    "exatamente como aparecem; 2) O que a imagem mostra."},
+                {"type": "image_url", "image_url": {"url": url}},
+            ]},
+        ])
+    except HTTPException as e:
+        raise VisaoIndisponivel(str(e.detail)) from e
+    return texto.strip()
+
+
 class ImagemIn(BaseModel):
     image_data_url: str = Field(description="`data:image/…;base64,…`")
     file_name: str | None = None

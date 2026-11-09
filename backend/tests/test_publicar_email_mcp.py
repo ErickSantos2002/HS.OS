@@ -32,7 +32,7 @@ def _conf():
 def test_entrada_so_para_bot_com_email_e_deny_em_todos():
     patch, novos = pub.montar_patch(_conf(), "seg", "tok", bots={"erick-bot", "andre-bot"},
                                     com_email={"erick-bot"})
-    assert set(novos) == {"hsos-email-erick-bot"}
+    assert {n for n in novos if not n.startswith("hsos-anexos-")} == {"hsos-email-erick-bot"}
     e = novos["hsos-email-erick-bot"]
     assert "/mcp/email/erick-bot/" in e["url"] and e["toolFilter"]["include"] == list(FERRAMENTAS_EMAIL)
     assert e["headers"] == {"Authorization": "Bearer tok"}
@@ -61,7 +61,7 @@ def test_entrada_de_sistemas_e_negada_aos_outros():
     from app.email.regras import FERRAMENTAS_BOT
     patch, novos = pub.montar_patch(_conf(), "seg", "tok", bots={"erick-bot", "andre-bot"},
                                     com_email=set(), com_sistemas={"erick-bot"})
-    assert set(novos) == {"hsos-bot-erick-bot"} and "/mcp/bot/erick-bot/" in novos["hsos-bot-erick-bot"]["url"]
+    assert {n for n in novos if not n.startswith("hsos-anexos-")} == {"hsos-bot-erick-bot"} and "/mcp/bot/erick-bot/" in novos["hsos-bot-erick-bot"]["url"]
     lista = {a["id"]: a["tools"] for a in patch["agents"]["list"]}
     alheias = {f"hsos-bot-erick-bot__{f}" for f in FERRAMENTAS_BOT}
     assert alheias <= set(lista["nina"]["deny"]) and alheias <= set(lista["andre-bot"]["deny"])
@@ -74,3 +74,22 @@ def test_segredo_vazio_recusa():
     import pytest
     with pytest.raises(ValueError, match="ANEXOS_MCP_SEGREDO"):
         pub.montar_patch(_conf(), "", "tok", bots={"erick-bot"}, com_email={"erick-bot"})
+
+
+def test_todo_bot_ganha_a_propria_entrada_de_anexos():
+    """09/11/2026: o `publicar-anexos-mcp.py` pula perfil `minimal`, e o Guardi
+    ficava sem `ler_anexo` — o vendedor mandava o PDF da proposta e ele não
+    abria. A entrada sai daqui, uma por bot, e cada um nega a dos outros."""
+    from app.routers.integracoes import ferramentas_anexos
+    from app.routers.mcp_anexos import assinatura_do_agente
+    patch, novos = pub.montar_patch(_conf(), "seg", "tok", bots={"erick-bot", "andre-bot"},
+                                    com_email=set())
+    assert {"hsos-anexos-erick-bot", "hsos-anexos-andre-bot"} <= set(novos)
+    e = novos["hsos-anexos-erick-bot"]
+    assert e["url"].endswith(f"/mcp/anexos/erick-bot/{assinatura_do_agente('seg', 'erick-bot')}")
+    assert e["toolFilter"]["include"] == list(ferramentas_anexos("erick-bot"))
+    lista = {a["id"]: a["tools"] for a in patch["agents"]["list"]}
+    assert "mcp__hsos-anexos-erick-bot__ler_anexo" in lista["erick-bot"]["alsoAllow"]
+    assert "hsos-anexos-andre-bot__ler_anexo" in lista["erick-bot"]["deny"]
+    assert "hsos-anexos-erick-bot__ler_anexo" in lista["nina"]["deny"]
+    assert pub.conferir(patch_aplicado(patch), novos, {"erick-bot", "andre-bot"}, set())
