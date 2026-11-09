@@ -112,22 +112,33 @@ _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}
 _CAMPOS_LISTA = "id,subject,from,receivedDateTime,bodyPreview,isRead,hasAttachments"
 
 
-async def listar(access, conta, caixa, pasta="inbox", desde=None, busca=None, limite=10) -> list[dict]:
+async def listar(access, conta, caixa, pasta="inbox", desde=None, busca=None, limite=10,
+                 nao_lidos=False) -> list[dict]:
     params = {"$top": str(max(1, min(int(limite or 10), 25))), "$select": _CAMPOS_LISTA}
+    lido = ' isRead:false' if nao_lidos else ""
     if busca:
         # Aspas quebrariam a sintaxe KQL do $search — e erro repetido pausa o MCP.
-        params["$search"] = '"' + str(busca).replace('"', "").replace("\\", "")[:200] + '"'
+        # O Graph não junta $search com $filter: "não lido" vai dentro da KQL.
+        params["$search"] = '"' + str(busca).replace('"', "").replace("\\", "")[:200] + lido + '"'
     else:
         params["$orderby"] = "receivedDateTime desc"
+        filtros = ["isRead eq false"] if nao_lidos else []
         if desde:
             # Argumento do agente dentro do $filter: só data ISO, nada mais.
             if not _ISO.match(str(desde)):
                 raise ValueError("desde deve ser uma data ISO, ex.: 2026-11-01 ou 2026-11-01T00:00:00Z")
-            params["$filter"] = f"receivedDateTime ge {desde if 'T' in str(desde) else str(desde) + 'T00:00:00Z'}"
+            filtros.append(f"receivedDateTime ge {desde if 'T' in str(desde) else str(desde) + 'T00:00:00Z'}")
+        if filtros:
+            params["$filter"] = " and ".join(filtros)
     corpo = await _pedir("GET", f"{_caixa(caixa, conta)}/mailFolders/{quote(pasta or 'inbox', safe='')}/messages",
                          access, params=params,
                          headers={"ConsistencyLevel": "eventual"} if busca else {})
     return corpo.get("value") or []
+
+
+async def marcar_lido(access, conta, caixa, mensagem_id, lido: bool = True) -> None:
+    await _pedir("PATCH", f"{_caixa(caixa, conta)}/messages/{quote(mensagem_id, safe='')}", access,
+                 json={"isRead": bool(lido)})
 
 
 async def ler(access, conta, caixa, mensagem_id, texto: bool = False) -> dict:
