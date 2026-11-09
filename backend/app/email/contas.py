@@ -18,24 +18,32 @@ async def bot_com_email_do(conn, user_id: str) -> str | None:
         " WHERE dono_id = $1::uuid AND email_ligado", user_id)
 
 
-async def guardar_conta(conn, user_id: str, conta: str, refresh: str) -> None:
+async def guardar_conta(conn, user_id: str, conta: str, refresh: str,
+                        escopos: list[str] | None = None) -> None:
     await conn.execute(
-        """INSERT INTO public.email_contas (user_id, conta, refresh_cifrado)
-           VALUES ($1::uuid, $2, $3)
+        """INSERT INTO public.email_contas (user_id, conta, refresh_cifrado, escopos)
+           VALUES ($1::uuid, $2, $3, $4::text[])
            ON CONFLICT (user_id) DO UPDATE SET conta = EXCLUDED.conta,
-               refresh_cifrado = EXCLUDED.refresh_cifrado, atualizado_em = now()""",
-        user_id, conta, cifrar(refresh))
+               refresh_cifrado = EXCLUDED.refresh_cifrado, escopos = EXCLUDED.escopos,
+               atualizado_em = now()""",
+        user_id, conta, cifrar(refresh), escopos or None)
+
+
+async def tem_calendario(conn, user_id: str) -> bool:
+    escopos = await conn.fetchval(
+        "SELECT escopos FROM public.email_contas WHERE user_id = $1::uuid", user_id)
+    return graph.concedeu_calendario(escopos)
 
 
 async def access_token(conn, user_id: str) -> tuple[str, str]:
     """`(access, conta)`. Regrava o refresh quando a Microsoft devolve outro."""
     linha = await conn.fetchrow(
-        "SELECT conta, refresh_cifrado FROM public.email_contas WHERE user_id = $1::uuid", user_id)
+        "SELECT conta, refresh_cifrado, escopos FROM public.email_contas WHERE user_id = $1::uuid", user_id)
     if not linha:
         raise ErroConta("e-mail não conectado — conecte em Configurações → Perfil")
     antigo = decifrar(linha["refresh_cifrado"])
     try:
-        access, novo = await graph.renovar(antigo)
+        access, novo = await graph.renovar(antigo, linha["escopos"])
     except graph.ErroGraph as e:
         raise ErroConta(f"a conexão com a Microsoft expirou — reconecte em Configurações "
                         f"({e.status})") from e

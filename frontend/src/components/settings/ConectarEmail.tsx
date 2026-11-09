@@ -70,7 +70,14 @@ export default function ConectarEmail() {
         )}
       </div>
       {estado.conectado ? (
-        <button disabled={ocupado} onClick={() => void desconectar()} className="shrink-0 rounded-full border border-border/40 px-3 py-1 text-xs hover:bg-secondary/50">Desconectar</button>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          {/* Conta ligada antes da Agenda não tem a permissão do calendário:
+              reconectar passa pela Microsoft de novo e pede a leitura. */}
+          {estado.calendario === false && (
+            <button disabled={ocupado} onClick={() => void conectar()} className="rounded-full bg-primary px-3 py-1 text-xs text-primary-foreground">Reconectar para ver a agenda do Outlook</button>
+          )}
+          <button disabled={ocupado} onClick={() => void desconectar()} className="rounded-full border border-border/40 px-3 py-1 text-xs hover:bg-secondary/50">Desconectar</button>
+        </div>
       ) : (
         <button disabled={ocupado} onClick={() => void conectar()} className="shrink-0 rounded-full bg-primary px-3 py-1 text-xs text-primary-foreground">Conectar e-mail Microsoft</button>
       )}

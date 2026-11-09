@@ -82,7 +82,8 @@ async def callback(code: str | None = Query(default=None), state: str | None = Q
             logger.warning("E-mail: conta Microsoft de outra pessoa recusada para %s",
                            linha["user_id"])
             return _voltar("erro_conta")
-        await contas.guardar_conta(conn, linha["user_id"], t["conta"], t["refresh"])
+        await contas.guardar_conta(conn, linha["user_id"], t["conta"], t["refresh"],
+                                  t.get("escopos"))
         await contas.evento(conn, linha["user_id"], None, "conectar", t["conta"])
     # As caixas compartilhadas que o admin previu para a pessoa: conferidas
     # agora, com o token dela. Falha aqui não desfaz a conexão.
@@ -102,8 +103,10 @@ async def estado(usuario: Usuario = Depends(usuario_atual)):
         nome = bot and await conn.fetchval(
             "SELECT name FROM public.agent_profiles WHERE agent_id = $1", bot)
         conta, extras = await contas.caixas(conn, usuario.id)
+        calendario = await contas.tem_calendario(conn, usuario.id)
     return {"liberado": bool(bot), "bot": bot, "bot_nome": nome or bot, "conectado": bool(conta),
-            "conta": conta, "caixas": extras}
+            "conta": conta, "caixas": extras,
+            "calendario": calendario}
 
 
 @router.delete("/conexao", status_code=status.HTTP_204_NO_CONTENT)

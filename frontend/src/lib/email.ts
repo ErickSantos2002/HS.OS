@@ -15,6 +15,9 @@ export interface EstadoEmail {
   conectado: boolean;
   conta: string | null;
   caixas: string[];
+  /** A conta concedeu a leitura do calendário? Conta ligada antes da Agenda
+   *  (09/11/2026) não concedeu e precisa reconectar. */
+  calendario?: boolean;
 }
 
 export interface Pendente {

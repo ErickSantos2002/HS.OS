@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ESCRITORIO_URL } from "@/lib/escritorio";
 
 const papel = vi.hoisted(() => ({ atual: "colaborador" as string }));
+const guardi = vi.hoisted(() => ({ tem: false }));
 
 vi.mock("@/contexts/auth-context", () => ({
   useAuthContext: () => ({ role: papel.atual, profile: null, user: { id: "u", email: "a@x.com" }, signOut: async () => {} }),
@@ -26,6 +27,7 @@ vi.mock("@/hooks/use-branding", () => ({
   useThemedLogo: () => null,
   useThemedMark: () => null,
 }));
+vi.mock("@/hooks/use-tem-guardi", () => ({ useTemGuardi: () => guardi.tem }));
 vi.mock("next-themes", () => ({ useTheme: () => ({ resolvedTheme: "dark" }) }));
 
 import { AppSidebar } from "@/components/AppSidebar";
@@ -43,6 +45,7 @@ function montar() {
 
 beforeEach(() => {
   papel.atual = "colaborador";
+  guardi.tem = false;
 });
 
 describe.each(["colaborador", "administrador"])("menu do %s", (role) => {
@@ -60,5 +63,26 @@ describe.each(["colaborador", "administrador"])("menu do %s", (role) => {
     montar();
     const nomes = screen.getAllByRole("link").map((l) => l.textContent?.trim());
     expect(nomes[nomes.indexOf("Chat") + 1]).toBe("Escritório");
+  });
+});
+
+/**
+ * "Agenda" (09/11/2026) é dos lembretes do Guardi: no menu de quem não tem
+ * Guardi ela abriria só para dizer "Você ainda não tem Guardi.". E entrar
+ * no menu não pode empurrar o Escritório de perto do Chat.
+ */
+describe.each(["colaborador", "administrador"])("Agenda no menu do %s", (role) => {
+  it("aparece só para quem tem Guardi, sem tirar o Escritório do lado do Chat", () => {
+    papel.atual = role;
+    guardi.tem = true;
+    montar();
+    const nomes = screen.getAllByRole("link").map((l) => l.textContent?.trim());
+    expect(nomes.slice(nomes.indexOf("Chat"), nomes.indexOf("Chat") + 3)).toEqual(["Chat", "Escritório", "Agenda"]);
+  });
+
+  it("some para quem não tem Guardi", () => {
+    papel.atual = role;
+    montar();
+    expect(screen.queryByRole("link", { name: /Agenda/ })).toBeNull();
   });
 });

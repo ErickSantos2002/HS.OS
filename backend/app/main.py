@@ -17,6 +17,7 @@ from app.escritorio.log_sem_query import instalar as instalar_log_sem_query
 from app.escritorio.presenca import vigiar as vigiar_escritorio
 from app.coletor_metricas import rodar as rodar_metricas
 from app.coletor_respostas import rodar as rodar_coletor_respostas
+from app.disparador_lembretes import rodar as rodar_disparador_lembretes
 from app.coletor_uso import rodar as rodar_coletor
 from app.vigia_sessoes import rodar as rodar_vigia
 from app.database import close_db, init_db
@@ -27,6 +28,7 @@ from app.routers.bots_pessoais import router as bots_pessoais_router
 from app.routers.email import router as email_router
 from app.routers.acoes import router as acoes_router
 from app.routers.meu_bot import router as meu_bot_router
+from app.routers.agenda import router as agenda_router
 from app.routers.mcp_email import router as mcp_email_router
 from app.routers.mcp_bot import router as mcp_bot_router
 from app.routers.anexos import router as anexos_router
@@ -115,8 +117,16 @@ async def lifespan(app: FastAPI):
     parar_respostas = asyncio.Event()
     respostas = asyncio.create_task(rodar_coletor_respostas(parar_respostas))
 
+    # Lembretes do Guardi: o recado sai mesmo com o gateway fora, e o turno do
+    # agente entra por `disparar_turno`. Ver `app/disparador_lembretes.py`.
+    # Desligar: `DISPARADOR_LEMBRETES_SEGUNDOS=0`.
+    parar_lembretes = asyncio.Event()
+    lembretes = asyncio.create_task(rodar_disparador_lembretes(parar_lembretes))
+
     yield
 
+    parar_lembretes.set()
+    lembretes.cancel()
     parar_respostas.set()
     respostas.cancel()
     parar_escuta.set()
@@ -239,6 +249,7 @@ app.include_router(agents_router)
 app.include_router(email_router)
 app.include_router(acoes_router)
 app.include_router(meu_bot_router)
+app.include_router(agenda_router)
 app.include_router(mcp_email_router)
 app.include_router(mcp_bot_router)
 app.include_router(anexos_router)

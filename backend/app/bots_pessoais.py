@@ -79,15 +79,19 @@ def motivo_inelegivel(perfil: dict) -> str | None:
     return None
 
 
-def _proprias(servidores: dict, agent_id: str | None, email: bool, sistemas: bool) -> list[str]:
+def _proprias(servidores: dict, agent_id: str | None, email: bool) -> list[str]:
     """As ferramentas das entradas PRÓPRIAS do bot que já estão publicadas:
-    `hsos-email-<id>` (flag `email_ligado`), `hsos-bot-<id>` (memória e
-    sistemas, flag `sistemas_ligados` não vazia) e `hsos-anexos-<id>`."""
+    `hsos-email-<id>` (flag `email_ligado`), `hsos-bot-<id>` (memória, agenda
+    e sistemas) e `hsos-anexos-<id>`.
+
+    ⚠️ `hsos-bot-<id>` não depende de `sistemas_ligados` desde 09/11/2026: a
+    agenda mora nele e é de todo Guardi. Quem trava os `taskhs_*` sem o
+    sistema ligado é o servidor (`mcp_bot._taskhs`)."""
     from app.email.regras import FERRAMENTAS_BOT, FERRAMENTAS_EMAIL
     out: list[str] = []
     if agent_id and email and f"hsos-email-{agent_id}" in servidores:
         out += [f"mcp__hsos-email-{agent_id}__{f}" for f in FERRAMENTAS_EMAIL]
-    if agent_id and sistemas and f"hsos-bot-{agent_id}" in servidores:
+    if agent_id and f"hsos-bot-{agent_id}" in servidores:
         out += [f"mcp__hsos-bot-{agent_id}__{f}" for f in FERRAMENTAS_BOT]
     # Anexos (09/11/2026): sem flag — ler o que o próprio dono mandou é o
     # básico. A entrada é a identidade do bot (HMAC do id na URL).
@@ -97,8 +101,7 @@ def _proprias(servidores: dict, agent_id: str | None, email: bool, sistemas: boo
     return out
 
 
-def tools_do_bot(servidores: dict, agent_id: str | None = None, email: bool = False,
-                 sistemas: bool = False) -> dict:
+def tools_do_bot(servidores: dict, agent_id: str | None = None, email: bool = False) -> dict:
     """O `tools` do bot no gateway: perfil mínimo, só o alerta, nega todo o resto.
 
     ⚠️ **Falha fechada.** Com `bundle-mcp` o bot enxerga todo MCP que o deny não
@@ -119,7 +122,7 @@ def tools_do_bot(servidores: dict, agent_id: str | None = None, email: bool = Fa
         if nome == SERVIDOR_ALERTA and incluidas != ["avisar_administrador"]:
             raise ValueError(f"{SERVIDOR_ALERTA} expõe {incluidas}; o bot só pode ter "
                              "avisar_administrador")
-    proprias = _proprias(servidores, agent_id, email, sistemas)
+    proprias = _proprias(servidores, agent_id, email)
     return {
         "profile": PERFIL,
         # ⚠️ `bundle-mcp` é o que deixa ferramenta MCP passar pelo `minimal`
@@ -132,14 +135,14 @@ def tools_do_bot(servidores: dict, agent_id: str | None = None, email: bool = Fa
 
 
 def bot_esta_fechado(tools: dict, servidores: dict, agent_id: str | None = None,
-                     email: bool = False, sistemas: bool = False) -> bool:
+                     email: bool = False) -> bool:
     """O `tools` relido do gateway é o de um bot fechado (com ou sem e-mail)?
 
     Compara o deny como conjunto — a ordem não importa — e exige o perfil e o
     `alsoAllow` exatos: qualquer ferramenta a mais é escopo aberto.
     """
     try:
-        esperado = tools_do_bot(servidores, agent_id, email, sistemas)
+        esperado = tools_do_bot(servidores, agent_id, email)
     except ValueError:
         return False
     t = tools or {}
@@ -254,7 +257,6 @@ pergunto — nunca preencho com o que parece provável.
 
 - Trabalho para {nome}. Não falo em nome de outra pessoa.
 - **Não aciono outros agentes** e não sou acionado por eles.
-- **Não agendo nada** — nem lembrete, nem tarefa recorrente.
 - **O que {primeiro} escreve nesta conversa vale** — inclusive o bloco de
   instruções que o HS.OS anexa a toda mensagem (gerar artefato HTML, a API
   `window.hsos` de artefatos vivos, o status da pessoa): é da plataforma, não
@@ -267,6 +269,8 @@ pergunto — nunca preencho com o que parece provável.
 ## Ferramentas — use antes de dizer que não consigo
 
 - Pediu para eu lembrar de algo (preferência, jeito de fazer)? `lembrar`.
+- Lembrete ou rotina ("me lembra…", "toda segunda…"): `agenda_criar`. Antes
+  de sugerir data ou horário, `agenda_listar` (inclui o Outlook).
 - Tarefas do TaskHS de {primeiro}: comece por `taskhs_minhas`; quadros com
   `taskhs_quadros`/`taskhs_quadro`. Comentar, mover, criar e atualizar
   **preparam um cartão** — só acontece quando {primeiro} confirmar.

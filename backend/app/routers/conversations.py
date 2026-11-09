@@ -1220,6 +1220,68 @@ async def recuperar(
     return recuperadas
 
 
+class GatewayNaoConfigurado(ErroGateway):
+    """Não há gateway configurado (nem no `.env`, nem em `vps_config`).
+
+    É `ErroGateway` de propósito: quem dispara sem tela (o disparador de
+    lembretes) trata tudo o que impede o turno num `except` só, e o `/send`
+    distingue esta para responder 503 em vez de 502, como sempre respondeu.
+    """
+
+
+async def disparar_turno(agent_id: str, user_id: str, mensagem: str,
+                         pergunta_id: str | None = None,
+                         prefixo: str = "hsos-") -> str:
+    """Manda `mensagem` ao agente na sessão de `user_id` e devolve o `run_id`.
+
+    ⚠️ **É a porta única do trabalho autônomo do Guardi.** O disparador de
+    lembretes chama isto sem tela nenhuma, e o run gravado aqui — no nome do
+    DONO — é o que o `turno_em_curso` reconhece como "o dono está conversando".
+    É por isso que as ferramentas do bot (e-mail, sistemas, anexos) funcionam no
+    disparo. Não crie outro caminho até o `chat.send`: ele não gravaria o run, e
+    as ferramentas recusariam em silêncio.
+
+    `mensagem` já vem pronta (com as linhas de anexo, se houver). Levanta
+    `ErroGateway` — `GatewayNaoConfigurado` quando não há gateway —, nunca
+    `HTTPException`: traduzir para HTTP é assunto de quem tem tela. Se o
+    `chat.send` falhar, nenhum run é gravado.
+
+    `prefixo` deixa o disparador marcar os runs dele (`hsos-lembrete-`) para
+    contar os turnos do dia sem coluna nova.
+    """
+    c = await cfg.carregar()
+    if not c.configurado:
+        raise GatewayNaoConfigurado("Gateway não configurado.")
+
+    chave = _chave_sessao(agent_id, user_id)
+    cliente = obter_cliente(c.url, c.token)
+    seq_antes = await _ultimo_seq(
+        cliente, chave, piso=await _piso_do_seq(chave, user_id)
+    )
+
+    # O `runId` volta igual ao `idempotencyKey` e é o que a espera usa depois.
+    # Precisa ser único por envio: reaproveitar faria o gateway deduplicar e a
+    # segunda mensagem sumiria em silêncio.
+    run_id = f"{prefixo}{uuid4()}"
+
+    await cliente.chamar(
+        "chat.send",
+        {
+            # Explícito e obrigatório na prática: sem `agentId` o gateway
+            # manda para o agente padrão, sem avisar.
+            "agentId": agent_id,
+            "sessionKey": chave,
+            "message": mensagem,
+            "idempotencyKey": run_id,
+        },
+    )
+
+    await _guardar_run(run_id, agent_id, chave, seq_antes, user_id,
+                       pergunta_id=pergunta_id)
+    _podar(_TRAVA_DO_RUN)
+    return run_id
+
+
 @router.post("/{agent_id}/send", response_model=EnvioOut, status_code=status.HTTP_201_CREATED)
 async def enviar(
     agent_id: str,
@@ -1235,24 +1297,10 @@ async def enviar(
     A ordem importa e é a que a tela já usava: persistir primeiro, disparar
     depois. Se o gateway estiver fora, o que a pessoa escreveu continua lá para
     reenviar.
+
+    O disparo em si é `disparar_turno`; aqui fica só o que é da tela — os
+    anexos do `media` e a tradução do erro para HTTP.
     """
-    c = await cfg.carregar()
-    if not c.configurado:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado."
-        )
-
-    chave = _chave_sessao(agent_id, usuario.id)
-    cliente = obter_cliente(c.url, c.token)
-    seq_antes = await _ultimo_seq(
-        cliente, chave, piso=await _piso_do_seq(chave, usuario.id)
-    )
-
-    # O `runId` volta igual ao `idempotencyKey` e é o que a espera usa depois.
-    # Precisa ser único por envio: reaproveitar faria o gateway deduplicar e a
-    # segunda mensagem sumiria em silêncio.
-    run_id = f"hsos-{uuid4()}"
-
     ids = _ids_validos(dados.media)
     anexos: list[Anexo] = []
     if ids:
@@ -1266,25 +1314,19 @@ async def enviar(
     mensagem = mensagem_com_anexos(dados.content, anexos)
 
     try:
-        await cliente.chamar(
-            "chat.send",
-            {
-                # Explícito e obrigatório na prática: sem `agentId` o gateway
-                # manda para o agente padrão, sem avisar.
-                "agentId": agent_id,
-                "sessionKey": chave,
-                "message": mensagem,
-                "idempotencyKey": run_id,
-            },
+        run_id = await disparar_turno(
+            agent_id, usuario.id, mensagem,
+            pergunta_id=dados.pergunta_id if eh_uuid(dados.pergunta_id) else None,
+        )
+    except GatewayNaoConfigurado:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "Gateway não configurado."
         )
     except ErroGateway as e:
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY, f"O agente não pôde ser acionado: {e}"
         )
 
-    await _guardar_run(run_id, agent_id, chave, seq_antes, usuario.id,
-                       pergunta_id=dados.pergunta_id if eh_uuid(dados.pergunta_id) else None)
-    _podar(_TRAVA_DO_RUN)
     logger.info("Envio para %s por %s: run %s", agent_id, usuario.id, run_id)
     return EnvioOut(run_id=run_id)
 

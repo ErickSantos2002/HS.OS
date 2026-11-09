@@ -47,6 +47,7 @@ import KnowledgeBasePage from "./pages/KnowledgeBasePage";
 import DashboardPage from "./pages/DashboardPage";
 import TasksPage from "./pages/TasksPage";
 import AutomacoesPage from "./pages/AutomacoesPage";
+import AgendaPage from "./pages/AgendaPage";
 import { useIsMobile } from "@/hooks/use-mobile";
 import WikiHtmlPreviewPage from "./pages/WikiHtmlPreviewPage";
 import MonitoringPage from "./pages/MonitoringPage";
@@ -226,6 +227,14 @@ const App = () => {
                             element={
                               <ProtectedRoute>
                                 <AutomacoesPage />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/agenda"
+                            element={
+                              <ProtectedRoute>
+                                <AgendaPage />
                               </ProtectedRoute>
                             }
                           />

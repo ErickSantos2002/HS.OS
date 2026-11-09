@@ -108,10 +108,18 @@ async def main() -> int:
         print("--aplicar exige --so <user_id> ou --todos")
         return 2
     falhas = 0
+    criados = 0
     for u in alvos:
         r = await criar_bot(u)
         falhas += r["resultado"] == "falhou"
         print(f"  {r['agent_id'] or '?':16} {r['resultado']:11} {r['motivo'] or ''}")
+        criados += r["resultado"] in ("criado", "adotado")
+    if criados:
+        print("\n" + "=" * 70)
+        print("⚠️  PRÓXIMO PASSO: rode `publicar-bots-mcp.py --aplicar` para ligar agenda,")
+        print("    memória e anexos ao bot novo. Sem isso ele nasce sem `hsos-bot` (logo sem")
+        print("    `agenda_*`) enquanto o AGENTS.md já promete `agenda_criar`.")
+        print("=" * 70)
     return 1 if falhas else 0
 
 
