@@ -1,5 +1,27 @@
 # Continuar aqui
 
+## ▶ Retomar em 10/11/2026 (sessão de 09/11)
+
+No ar e publicado em 09/11: Guardi (renomeação), membros de tarefa no TaskHS,
+acrescentar itens a checklist existente, anexo e imagem no `ler_anexo`, e-mail
+marcar como lido e **agenda e lembretes** (`/agenda`, migração `032`, disparador).
+Ferramentas publicadas no gateway e `AGENTS.md` dos 23 Guardis reescritos.
+
+Pendente, em ordem:
+1. **Iris → Inadimplência do DataCore.** Spec das duas pontas: no DataCore, a API
+   de Inadimplência aceita o token de agente (como o TaskHS); aqui, ferramenta
+   da Iris que monta a lista no servidor (planilha/link). **Não** copiar a régua
+   de `DataCore/backend/app/core/inadimplencia.py` para cá. Prometido ao
+   Nicholson em 09/11.
+2. **Conferir a agenda** com o Erick: o lembrete de teste das 12:29 de 09/11 no
+   `erick-bot`; a página `/agenda` no navegador (nunca vista); e o risco
+   documentado — responder ao recado enquanto o turno do lembrete roda (bolhas
+   coladas?).
+3. **Celular sem atalho para a Agenda** (o `AppCelular` não tem menu inferior) —
+   decidir com o Erick.
+4. Risco aceito e revisável: instrução de lembrete plantada por e-mail lido roda
+   depois no turno autônomo (ver a seção da agenda no `CLAUDE.md`).
+
 Ponto de retomada da portagem. Atualizado em **03/09/2026**. Leia isto, depois
 `CLAUDE.md` e `docs/ROADMAP.md`.
 
