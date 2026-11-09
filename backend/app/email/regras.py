@@ -15,7 +15,7 @@ import secrets
 # concordar sobre elas — divergir tira ferramenta em silêncio (foi o que o
 # `toolFilter` fez com a `relatorio_ponto` do bruce em outubro).
 FERRAMENTAS_EMAIL = ("email_caixas", "email_listar", "email_ler", "email_enviar_para_mim",
-                     "email_preparar", "email_pendentes")
+                     "email_preparar", "email_pendentes", "email_marcar_lido")
 # As do servidor `hsos-bot-<bot>` (memória + sistemas internos).
 FERRAMENTAS_BOT = ("lembrar", "taskhs_eu", "taskhs_minhas", "taskhs_quadros", "taskhs_quadro",
                    "taskhs_tarefa", "taskhs_buscar", "taskhs_membros_quadro", "taskhs_comentar",

@@ -204,3 +204,43 @@ def test_falha_depois_do_rascunho_apaga_o_rascunho(amb, monkeypatch):
     texto, erro = _run("email_preparar", {"de": "ti@healthsafety.com.br", "para": ["c@y.com"],
                                           "assunto": "x", "corpo": "y"})
     assert erro and apagados and apagados[0][-1] == "graph-1"
+
+
+def test_marcar_lido_marca_cada_id_na_caixa_escolhida(amb):
+    """09/11/2026: a Letícia pediu ao Guardi para marcar um grupo de e-mails
+    como lido e ele disse que não conseguia — não havia ferramenta, embora o
+    `Mail.ReadWrite` já estivesse concedido. É a caixa da própria pessoa e se
+    desfaz com `lido: false`: sai direto, sem cartão."""
+    marcados = []
+
+    async def marcar(access, conta, caixa, mensagem_id, lido=True):
+        marcados.append((caixa, mensagem_id, lido))
+    m.graph.marcar_lido = marcar
+    texto, erro = _run("email_marcar_lido", {"ids": ["a", "b", "a"], "caixa": "ti@healthsafety.com.br"})
+    assert not erro and "2" in texto
+    assert sorted(marcados) == [("ti@healthsafety.com.br", "a", True), ("ti@healthsafety.com.br", "b", True)]
+
+
+def test_marcar_lido_conta_o_que_falhou(amb):
+    async def marcar(access, conta, caixa, mensagem_id, lido=True):
+        if mensagem_id == "ruim":
+            raise m.graph.ErroGraph(404, "ErrorItemNotFound")
+    m.graph.marcar_lido = marcar
+    texto, erro = _run("email_marcar_lido", {"ids": ["a", "ruim"], "lido": False})
+    assert not erro and "1 de 2" in texto and "não lido" in texto
+
+
+def test_marcar_lido_recusa_lista_vazia_ou_grande(amb):
+    assert _run("email_marcar_lido", {"ids": []})[1]
+    assert _run("email_marcar_lido", {"ids": [str(i) for i in range(m._TETO_MARCAR + 1)]})[1]
+
+
+def test_marcar_lido_em_caixa_alheia_recusa(amb):
+    texto, erro = _run("email_marcar_lido", {"ids": ["a"], "caixa": "ceo@healthsafetytech.com"})
+    assert erro
+
+
+def test_listar_so_nao_lidos(amb):
+    _run("email_listar", {"so_nao_lidos": True})
+    nome, args = amb["chamadas"][0]
+    assert nome == "listar" and args[-1] is True

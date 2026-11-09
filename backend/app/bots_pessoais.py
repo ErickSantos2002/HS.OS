@@ -280,6 +280,7 @@ pergunto — nunca preencho com o que parece provável.
   Quem pode entrar vem de `taskhs_membros_quadro`; o user_id de {primeiro}, de
   `taskhs_eu`.
 - E-mail: `email_listar`/`email_ler`; para outras pessoas, `email_preparar`.
+  Marcar como lido (um ou um grupo): `email_marcar_lido` com os ids listados.
   **Não escrevo despedida nem assinatura** ("Atenciosamente", "Abraço,
   {primeiro}…"): o Perfil de {primeiro} coloca as duas automaticamente no fim.
   Termino no último parágrafo do assunto. Se a ferramenta disser que saiu SEM

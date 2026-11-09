@@ -16,6 +16,7 @@ Spec: docs/superpowers/specs/2026-11-05-bot-email-piloto-design.md. Molde do
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -48,6 +49,7 @@ def _ferr(nome, descricao, props=None, obrig=()):
             "inputSchema": {"type": "object", "properties": props or {}, "required": list(obrig)}}
 
 
+_TETO_MARCAR = 50
 _CAIXA = {"type": "string", "description": "Endereço da caixa (veja email_caixas). Vazio = a conta principal."}
 _LISTA = {"type": "array", "items": {"type": "string"}}
 
@@ -59,6 +61,7 @@ FERRAMENTAS = [
               "pasta": {"type": "string", "description": "inbox (padrão), sentitems, drafts…"},
               "desde": {"type": "string", "description": "Data ISO, ex.: 2026-11-01T00:00:00Z"},
               "busca": {"type": "string", "description": "Texto para procurar"},
+              "so_nao_lidos": {"type": "boolean", "description": "true: só os não lidos"},
               "limite": {"type": "integer", "minimum": 1, "maximum": 25}}),
     _ferr("email_ler", "Lê um e-mail pelo id (corpo em texto, cortado se longo)." + _AVISO_DADO,
           {"caixa": _CAIXA, "id": {"type": "string"}}, ("id",)),
@@ -75,6 +78,13 @@ FERRAMENTAS = [
            "corpo": {"type": "string"}}, ("de", "para", "assunto", "corpo")),
     _ferr("email_pendentes", "Os últimos e-mails que você preparou e o que aconteceu com cada um "
           "(pendente, enviado, descartado, vencido, erro)."),
+    _ferr("email_marcar_lido", "Marca e-mails do seu dono como lidos (ou não lidos, com "
+          "lido=false) — os ids vêm do email_listar. Sai na hora, sem cartão. Para um grupo "
+          "(\"todos do fulano\", \"os do assunto X\"), liste com busca/so_nao_lidos, confira que "
+          "são esses e marque os ids; mais de 25, repita a listagem.",
+          {"caixa": _CAIXA, "ids": {**_LISTA, "maxItems": _TETO_MARCAR, "minItems": 1},
+           "lido": {"type": "boolean", "description": "true (padrão): lido; false: não lido"}},
+          ("ids",)),
 ]
 NOMES = tuple(f["name"] for f in FERRAMENTAS)
 assert NOMES == FERRAMENTAS_EMAIL, "FERRAMENTAS do servidor e FERRAMENTAS_EMAIL divergiram"
@@ -135,9 +145,11 @@ async def _rodar(conn, agent_id: str, nome: str, args: dict, ctx: dict) -> str:
     if nome == "email_listar":
         caixa = escolher_caixa(args.get("caixa"), conta, ctx["extras"])
         itens = await graph.listar(access, conta, caixa, args.get("pasta") or "inbox",
-                                   args.get("desde"), args.get("busca"), args.get("limite") or 10)
+                                   args.get("desde"), args.get("busca"), args.get("limite") or 10,
+                                   args.get("so_nao_lidos") is True)
         await contas.evento(conn, dono, agent_id, "listar", caixa)
-        linhas = [f"- id={i.get('id')} | {i.get('receivedDateTime', '')[:16]} | {_remetente(i)} | "
+        linhas = [f"- id={i.get('id')} | {'' if i.get('isRead') else '[NÃO LIDO] '}"
+                  f"{i.get('receivedDateTime', '')[:16]} | {_remetente(i)} | "
                   f"{i.get('subject') or '(sem assunto)'} | {(i.get('bodyPreview') or '')[:160]}"
                   for i in itens]
         return como_dado_externo("\n".join(linhas) or "(nenhum e-mail)")
@@ -151,6 +163,33 @@ async def _rodar(conn, agent_id: str, nome: str, args: dict, ctx: dict) -> str:
             else html_para_texto(corpo.replace("<", "&lt;"))
         return como_dado_externo(f"De: {_remetente(msg)}\nAssunto: {msg.get('subject')}\n"
                                  f"Data: {msg.get('receivedDateTime')}\n\n{texto}")
+
+    if nome == "email_marcar_lido":
+        caixa = escolher_caixa(args.get("caixa"), conta, ctx["extras"])
+        ids = args.get("ids")
+        if not isinstance(ids, list) or not ids:
+            raise _Recusa("Informe os ids (do email_listar).")
+        ids = list(dict.fromkeys(str(i).strip() for i in ids if str(i or "").strip()))
+        if not ids or len(ids) > _TETO_MARCAR:
+            raise _Recusa(f"De 1 a {_TETO_MARCAR} ids por vez.")
+        lido = args.get("lido") is not False
+        sem = asyncio.Semaphore(5)
+
+        async def um(gid):
+            async with sem:
+                try:
+                    await graph.marcar_lido(access, conta, caixa, gid, lido)
+                    return True
+                except graph.ErroGraph as e:
+                    logger.warning("marcar_lido %s em %s: %s", gid[:12], caixa, e)
+                    return False
+        ok = sum(await asyncio.gather(*(um(g) for g in ids)))
+        await contas.evento(conn, dono, agent_id, "marcar_lido" if lido else "marcar_nao_lido", caixa)
+        estado = "lido" if lido else "não lido"
+        if ok == len(ids):
+            return f"{ok} e-mail(s) marcado(s) como {estado}."
+        return (f"{ok} de {len(ids)} marcado(s) como {estado}; os outros não foram achados nesta "
+                "caixa (confira os ids com email_listar).")
 
     if nome == "email_enviar_para_mim":
         # ⚠️ Destinatário FIXO: a conta do dono. Qualquer `para` que chegue é ignorado.
