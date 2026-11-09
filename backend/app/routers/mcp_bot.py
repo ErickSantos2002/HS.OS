@@ -117,7 +117,7 @@ async def _contexto(conn, agent_id: str) -> dict:
         "  FROM public.agent_profiles a JOIN public.profiles pr ON pr.id = a.dono_id "
         " WHERE a.agent_id = $1", agent_id)
     if not p or not p["dono_id"]:
-        raise _Recusa("Não sou bot pessoal de ninguém.")
+        raise _Recusa("Não sou o Guardi de ninguém.")
     primeiro = ((p["full_name"] or "").split() or ["seu dono"])[0]
     if not await turno_em_curso(conn, agent_id, p["dono_id"]):
         raise _Recusa(f"Só uso essas ferramentas enquanto {primeiro} está conversando comigo.")

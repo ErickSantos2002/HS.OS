@@ -2321,7 +2321,7 @@ export default function ChatPage() {
                     return (
                       <button key="secao-bots" onClick={() => setBotsAbertos((v) => !v)}
                         className="w-full flex items-center justify-between px-2 pt-3 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground/60 font-display hover:text-foreground">
-                        <span>{mostrarBots ? "▾" : "▸"} Bots do time ({item.total})</span>
+                        <span>{mostrarBots ? "▾" : "▸"} Guardis do time ({item.total})</span>
                         {item.naoLidas > 0 && <span className="text-destructive font-bold">{item.naoLidas}</span>}
                       </button>
                     );

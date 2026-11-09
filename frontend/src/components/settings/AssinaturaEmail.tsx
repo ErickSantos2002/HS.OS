@@ -64,7 +64,7 @@ export default function AssinaturaEmail() {
     <div className="rounded-xl border border-border/30 bg-secondary/20 px-4 py-3 space-y-3">
       <div>
         <h3 className="text-sm font-display font-semibold text-foreground">Assinatura de e-mail</h3>
-        <p className="text-xs text-muted-foreground mt-1">Vai no fim de todo e-mail que o seu bot preparar. Imagens: PNG, JPG, WEBP ou GIF animado, até 2 MB cada.</p>
+        <p className="text-xs text-muted-foreground mt-1">Vai no fim de todo e-mail que o seu Guardi preparar. Imagens: PNG, JPG, WEBP ou GIF animado, até 2 MB cada.</p>
       </div>
       <label className="block text-xs text-muted-foreground">Texto antes (já vem com o padrão da empresa; edite se precisar)
         <textarea value={antes} onChange={(e) => setAntes(e.target.value)} rows={2} className="mt-1 w-full rounded-md border border-border/40 bg-background p-2 text-sm text-foreground" />

@@ -137,7 +137,7 @@ async def _meu_bot_com_nome(usuario: Usuario) -> tuple[str, str]:
         linha = await conn.fetchrow(
             "SELECT agent_id, name FROM public.agent_profiles WHERE dono_id = $1::uuid", usuario.id)
     if not linha:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Você ainda não tem bot pessoal.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Você ainda não tem Guardi.")
     return linha["agent_id"], (linha["name"] or linha["agent_id"])
 
 

@@ -39,7 +39,7 @@ def test_id_sem_acento_e_minusculo():
 
 
 def test_nome_exibido_mantem_acento():
-    assert nome_do_bot("André Luiz") == "André-bot"
+    assert nome_do_bot("André Luiz") == "André-Guardi"
 
 
 def test_inelegivel():
@@ -93,7 +93,7 @@ def test_arquivos_do_bot():
         assert not excede_o_teto(conteudo), nome
     assert "André Luiz Neri de Medeiros" in arq["USER.md"]
     assert "servicos03@healthsafetytech.com" in arq["USER.md"]
-    assert "André-bot" in arq["IDENTITY.md"]
+    assert "André-Guardi" in arq["IDENTITY.md"]
     assert "Não tenho acesso a nada além delas" in " ".join(arq["SOUL.md"].split())
     assert "avisar_administrador" in arq["SOUL.md"]
     assert "Não afirmo o que não sei" in arq["SOUL.md"]

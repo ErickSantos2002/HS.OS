@@ -2008,7 +2008,7 @@ async def publicar_banco(
     if bots:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"{bots[0]} é um bot pessoal e não recebe banco. Desmarque-o no conector.",
+            f"{bots[0]} é um Guardi (assistente pessoal) e não recebe banco. Desmarque-o no conector.",
         )
 
     parsed, base_hash = await patch_gw.config_do_gateway()

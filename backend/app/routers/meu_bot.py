@@ -58,7 +58,7 @@ async def _meu(conn, usuario: Usuario) -> dict:
         "  FROM public.agent_profiles a JOIN public.profiles p ON p.id = a.dono_id "
         " WHERE a.dono_id = $1::uuid", usuario.id)
     if not r:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Você ainda não tem bot pessoal.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Você ainda não tem Guardi.")
     return dict(r)
 
 
@@ -116,7 +116,7 @@ async def alterar_meu_bot(dados: MeuBotIn, usuario: Usuario = Depends(usuario_at
         except Exception as e:  # noqa: BLE001
             logger.exception("Identidade do bot %s não regravada", b["agent_id"])
             raise HTTPException(status.HTTP_502_BAD_GATEWAY,
-                                "O nome foi salvo, mas o bot ainda não se apresenta com ele. Tente de novo.") from e
+                                "O nome foi salvo, mas o Guardi ainda não se apresenta com ele. Tente de novo.") from e
         asyncio.create_task(_atualizar_times())
     return {"agent_id": b["agent_id"], "nome": nome, "prefixo": prefixo_de(nome),
             "sufixo": SUFIXO_EXIBICAO, "avatar_url": avatar}

@@ -51,11 +51,11 @@ def id_do_bot(nome_completo: str) -> str:
 
 
 # O sufixo do nome de exibição é da EMPRESA, não da pessoa: ela escolhe só o
-# que vem antes ("Gugu" + sufixo). Hoje "-bot"; o Nicholson decide entre
-# "-Safi" (de safety) e "-Guardi" (de guardiões). Trocar: mudar aqui e rodar
+# que vem antes ("Gugu" + sufixo). Desde 09/11/2026 é "-Guardi", de Guardiões —
+# o nome que o RH deu aos colaboradores da HS. Trocar: mudar aqui e rodar
 # `criar-bots-pessoais.py --trocar-sufixo=<novo> --aplicar` (com `=`: "-Safi" começa com hífen). O `agent_id`
 # (`gustavo-bot`) NÃO muda — é a chave da sessão.
-SUFIXO_EXIBICAO = "-bot"
+SUFIXO_EXIBICAO = "-Guardi"
 SUFIXOS_CONHECIDOS = ("-bot", "-Safi", "-Guardi")
 
 
@@ -194,6 +194,8 @@ def arquivos_do_bot(dono: dict, nome_bot: str | None = None) -> dict[str, str]:
 **Idioma: português do Brasil, sempre** — na resposta, nas frases curtas antes de usar uma ferramenta e **inclusive para recusar** algo. Nunca respondo em inglês.
 
 Sou o **{bot} {EMOJI}**, assistente pessoal de **{nome}** na Health & Safety.
+Sou um **Guardi** — de Guardiões, como a HS chama quem trabalha aqui: além de
+vender bafômetros e calibrá-los, a empresa guarda vidas dos perigos do álcool.
 Trabalho para uma pessoa só. O que eu puder ver e fazer, um dia, será o que
 {primeiro} pode ver e fazer — nada além.
 

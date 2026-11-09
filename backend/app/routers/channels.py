@@ -458,7 +458,7 @@ async def criar(dados: CanalIn, usuario: Usuario = Depends(exige_papel("administ
             if bots:
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
-                    f"{bots[0]} é um bot pessoal e não entra em canal.",
+                    f"{bots[0]} é um Guardi (assistente pessoal) e não entra em canal.",
                 )
 
             # O criador entra sempre e primeiro (`humanos`, acima): sem ele o
@@ -1666,7 +1666,7 @@ async def adicionar_membros(
         if bots:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
-                f"{bots[0]} é um bot pessoal e não entra em canal.",
+                f"{bots[0]} é um Guardi (assistente pessoal) e não entra em canal.",
             )
 
         await _recusar_desativados(conn, dados.user_ids)

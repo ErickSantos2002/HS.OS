@@ -30,7 +30,7 @@ export default function MeuBot() {
     setOcupado(true);
     try {
       const d = await api<MeuBotDados>("/bots/meu", { method: "PATCH", body: corpo });
-      setB(d); setNome(d.prefixo); toast.success("Seu bot foi atualizado.");
+      setB(d); setNome(d.prefixo); toast.success("Seu Guardi foi atualizado.");
     } catch (e) {
       toast.error(e instanceof ErroApi ? e.message : "Não consegui salvar.");
     } finally {
@@ -72,7 +72,7 @@ export default function MeuBot() {
         <input type="file" accept="image/*" className="hidden" disabled={ocupado} onChange={(e) => { escolher(e.target.files?.[0]); e.target.value = ""; }} />
       </label>
       <div className="min-w-0 flex-1">
-        <h3 className="text-sm font-display font-semibold text-foreground">Meu bot</h3>
+        <h3 className="text-sm font-display font-semibold text-foreground">Meu Guardi</h3>
         <div className="mt-1 flex gap-2">
           {/* Só o prefixo é da pessoa; o sufixo é da empresa e fica fixo ao lado. */}
           <div className="flex min-w-0 flex-1 items-center rounded-md border border-border/40 bg-background">
@@ -87,7 +87,7 @@ export default function MeuBot() {
         open={!!fotoEmAjuste}
         onOpenChange={(aberto) => { if (!aberto) setFotoEmAjuste(null); }}
         initialImage={fotoEmAjuste}
-        title="Ajustar foto do bot"
+        title="Ajustar foto do Guardi"
         onConfirm={enviarAjustada}
       />
     </div>

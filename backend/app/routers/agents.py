@@ -2778,7 +2778,7 @@ async def _recusar_cron_em_bot(agent_id: str) -> None:
             "SELECT dono_id::text FROM public.agent_profiles WHERE agent_id = $1", agent_id)
     if dono:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
-                            "Bot pessoal não tem agendamento.")
+                            "Guardi não tem agendamento.")
 
 
 @router.post("/{agent_id}/crons", status_code=status.HTTP_201_CREATED)

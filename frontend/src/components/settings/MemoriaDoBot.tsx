@@ -39,7 +39,7 @@ export default function MemoriaDoBot() {
           <button onClick={() => setConfirmar(true)} className="text-xs text-muted-foreground hover:text-destructive">Apagar tudo</button>
         ))}
       </div>
-      <p className="mt-1 text-xs text-muted-foreground">O que o seu bot guardou para lembrar sempre. Apague o que não estiver certo.</p>
+      <p className="mt-1 text-xs text-muted-foreground">O que o seu Guardi guardou para lembrar sempre. Apague o que não estiver certo.</p>
       {linhas.length === 0 ? (
         <p className="mt-2 text-xs text-muted-foreground italic">Nada guardado ainda.</p>
       ) : (

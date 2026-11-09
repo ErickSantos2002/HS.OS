@@ -38,7 +38,7 @@ def montar_bloco(pessoas: list[dict], especialistas: list[dict], bots: list[dict
         for e in especialistas:
             linhas.append(f"- {_linha(e.get('name'))} (`{e['agent_id']}`) — {_linha(e.get('specialty'))}")
     if bots:
-        linhas += ["", "### Bots pessoais (cada um trabalha para uma pessoa)"]
+        linhas += ["", "### Guardis — assistentes pessoais (cada um trabalha para uma pessoa)"]
         for b in sorted(bots, key=lambda b: b.get("dono") or ""):
             linhas.append(f"- {_linha(b.get('name'))} (`{b['agent_id']}`) — de {_linha(b.get('dono'))}")
     linhas.append(MARCA_FIM)

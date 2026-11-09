@@ -1472,7 +1472,7 @@ async def _so_o_dono_aciona_bot(agent_id: str, usuario: Usuario) -> None:
             normalizar_agent_id(agent_id))
     if dono and dono != usuario.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN,
-                            "Este é o bot pessoal de outra pessoa; só ela o aciona por aqui.")
+                            "Este é o Guardi de outra pessoa; só ela o aciona por aqui.")
 
 
 @router.post("/{agent_id}/comando", status_code=status.HTTP_202_ACCEPTED)
