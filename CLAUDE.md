@@ -1404,6 +1404,19 @@ antiga levaria alguém a procurar a resolução no lugar errado.
 
 ## Convenções
 
+- **Changelog é OBRIGATÓRIO (desde 10/11/2026):** toda mudança que alguém
+  perceba no sistema termina com uma entrada em `frontend/src/data/changelog.ts`,
+  **no topo** do array (mais recente primeiro), com `version`, `date` ISO e os
+  `changes` (`novidade` | `melhoria` | `correcao`), escritos para quem USA o
+  sistema, não para quem o programa. Semver: correção → patch, novidade ou
+  melhoria → minor. A versão do rodapé da sidebar e das Configurações sai de
+  `CHANGELOG[0]` — não há outra string de versão para mexer; o build
+  (data + commit, `lib/app-version.ts`) fica no `title`. Clicar na versão abre o
+  "O que há de novo?" (`components/novidades/`), que também **abre sozinho uma
+  vez por versão nova**, por navegador (`lib/novidades.ts`). ⚠️ Entrada no fim
+  da lista não aparece para ninguém — teste em `src/test/novidades.test.ts`.
+  Mesmo padrão do HSGrowth e do TaskHS. Várias mudanças do mesmo dia podem
+  dividir uma versão.
 - **Fim de branch: merge local na `main` e depois `git push`.** É o fluxo padrão — nem PR,
   nem branch parado. **O push não dispara deploy**: o deploy no EasyPanel é manual, então não
   há o que conferir antes de empurrar. Passos de produção (migração, R2, gateway) são separados.

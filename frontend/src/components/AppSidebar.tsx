@@ -8,6 +8,8 @@ import marcaEscura from "@/assets/hs-mark.png";
 import { useAuthContext } from "@/contexts/auth-context";
 import type { AppRole } from "@/hooks/use-auth";
 import { APP_VERSION, formatBuildDate } from "@/lib/app-version";
+import { VERSAO_ATUAL } from "@/data/changelog";
+import { useNovidades } from "@/components/novidades/NovidadesProvider";
 
 import {
   Sidebar,
@@ -144,6 +146,7 @@ export function AppSidebar() {
   const { status: userStatus, setUserStatus, clearUserStatus } = useUserStatus();
 
   const navigate = useNavigate();
+  const { abrirNovidades } = useNovidades();
 
   const temGuardi = useTemGuardi();
   // "Agenda" é dos lembretes do Guardi: só aparece para quem tem um. Entra
@@ -345,13 +348,17 @@ export function AppSidebar() {
               </div>
               <span className="text-[10px] text-muted-foreground font-mono">Gateway Online</span>
             </div>
-            <div
-              className="px-3 py-1 flex items-center justify-between text-[10px] text-muted-foreground/70 font-mono"
-              title={`Build: ${formatBuildDate()}`}
+            {/* Versão clicável — abre o "O que há de novo?". A versão é a do
+                changelog; o build (data + commit) fica no title. */}
+            <button
+              type="button"
+              onClick={abrirNovidades}
+              className="w-full px-3 py-1 flex items-center justify-between rounded-md text-[10px] text-muted-foreground/70 font-mono hover:text-foreground hover:bg-muted/40 transition-colors"
+              title={`Ver novidades · build ${APP_VERSION} · ${formatBuildDate()}`}
             >
               <span>HS.OS</span>
-              <span className="truncate">{APP_VERSION}</span>
-            </div>
+              <span className="truncate">v{VERSAO_ATUAL}</span>
+            </button>
           </div>
         )}
       </SidebarFooter>
