@@ -55,7 +55,7 @@ describe("mensagem de canal estilo WhatsApp", () => {
     montar("eu");
     abrirMenu();
     const menu = await screen.findByRole("menu");
-    for (const r of ["Responder em thread", "Copiar", "Marcar como não lida", "Editar", "Apagar"]) {
+    for (const r of ["Responder", "Copiar", "Marcar como não lida", "Editar", "Apagar"]) {
       expect(within(menu).getByRole("menuitem", { name: r })).toBeInTheDocument();
     }
   });

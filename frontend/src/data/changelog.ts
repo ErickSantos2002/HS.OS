@@ -37,6 +37,14 @@ export const CHANGELOG: ChangelogVersion[] = [
         kind: "novidade",
         text: "\"O que há de novo?\": clique na versão, no rodapé do menu, para ver o que mudou no HS.OS. Quando sai versão nova, a janela abre sozinha uma vez.",
       },
+      {
+        kind: "novidade",
+        text: "Responder uma mensagem, como no WhatsApp: pela seta da mensagem, escolha \"Responder\". A mensagem citada aparece em cima da sua resposta; no computador, clicar nela leva até a original.",
+      },
+      {
+        kind: "melhoria",
+        text: "O \"Responder em thread\" saiu para dar lugar ao Responder. As threads que já existiam continuam abrindo pelo \"respostas\" embaixo da mensagem.",
+      },
     ],
   },
   {

@@ -46,7 +46,7 @@ import { canalNaoResolve } from "@/lib/tela-cheia";
 import { estadoNoCanal } from "@/lib/vistos";
 import { AudioDoAnexo, Bolha, Pensando, type ReacaoNaBolha } from "./Bolha";
 import { Cabecalho, Sobreposta } from "./Cabecalho";
-import { autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "./citacao";
+import { autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "@/lib/citacao";
 import { Composer } from "./Composer";
 import { FolhaDeAcoes, FolhaDeAnexo, FolhaDeEmoji } from "./Folhas";
 import { Ampliada, MidiaDoCanal } from "./Midia";
@@ -232,7 +232,7 @@ export function TelaConversaCanal({
 
   const acoesDaMensagem = (m: ChannelMessage) => acoesDaMensagemDoCanal(m, {
     souAutor: m.author_id === user?.id,
-    aoResponderThread: () => aoAbrir({ tipo: "thread", canal: canalId, raiz: m.id }),
+    aoResponder: podeEscrever ? () => responder(m) : undefined,
     aoMarcarNaoLida: () => markMessageAsUnread({ messageId: m.id, channelId: canalId, authorName: nomeDoAutor(m), contentPreview: (m.content || "").slice(0, 100) }),
     aoEditar: () => { setResposta(null); setEditando(m); setRascunho(m.content); requestAnimationFrame(() => campoRef.current?.focus()); },
     aoApagar: () => setApagar(m),

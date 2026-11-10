@@ -4,7 +4,7 @@ import { acoesDaMensagemDoAgente, acoesDaMensagemDoCanal, acoesDaRespostaNaThrea
 
 const ctx = () => ({
   souAutor: false,
-  aoResponderThread: vi.fn(), aoMarcarNaoLida: vi.fn(() => true), aoEditar: vi.fn(), aoApagar: vi.fn(),
+  aoResponder: vi.fn(), aoMarcarNaoLida: vi.fn(() => true), aoEditar: vi.fn(), aoApagar: vi.fn(),
   aoApagarParaMim: vi.fn(), depois: vi.fn(),
 });
 const msg = { id: "m1", content: "oi", deleted_at: null };
@@ -12,14 +12,14 @@ const msg = { id: "m1", content: "oi", deleted_at: null };
 describe("acoesDaMensagemDoCanal", () => {
   it("mensagem dos outros: responder, copiar, não lida e apagar para mim — sem editar nem apagar", () => {
     expect(acoesDaMensagemDoCanal(msg, ctx()).map((a) => a.rotulo)).toEqual([
-      "Responder em thread", "Copiar", "Marcar como não lida", "Apagar para mim",
+      "Responder", "Copiar", "Marcar como não lida", "Apagar para mim",
     ]);
   });
 
   it("minha: ganha dados, editar e apagar, e o apagar é perigo", () => {
     const acoes = acoesDaMensagemDoCanal(msg, { ...ctx(), souAutor: true, aoDados: vi.fn() });
     expect(acoes.map((a) => a.rotulo)).toEqual([
-      "Responder em thread", "Copiar", "Marcar como não lida", "Dados da mensagem", "Editar", "Apagar", "Apagar para mim",
+      "Responder", "Copiar", "Marcar como não lida", "Dados da mensagem", "Editar", "Apagar", "Apagar para mim",
     ]);
     expect(acoes.find((a) => a.rotulo === "Apagar")?.perigo).toBe(true);
   });
@@ -36,8 +36,12 @@ describe("acoesDaMensagemDoCanal", () => {
   it("escolher chama o handler e depois o fechamento", () => {
     const c = ctx();
     acoesDaMensagemDoCanal(msg, c)[0].aoEscolher();
-    expect(c.aoResponderThread).toHaveBeenCalled();
+    expect(c.aoResponder).toHaveBeenCalled();
     expect(c.depois).toHaveBeenCalled();
+  });
+
+  it("sem aoResponder (canal em que a pessoa não escreve), sem a opção Responder", () => {
+    expect(acoesDaMensagemDoCanal(msg, { ...ctx(), aoResponder: undefined }).map((a) => a.rotulo)).not.toContain("Responder");
   });
 });
 

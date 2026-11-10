@@ -11,7 +11,7 @@ vi.mock("@/lib/channel-notifications", () => avisos);
 vi.mock("@/lib/channel-agents", () => agentes);
 
 import { publicarNaThread, publicarNoCanal, type ContextoDeEnvio } from "./envio-no-canal";
-import { autorDaCitacao, montarResposta } from "@/celular/citacao";
+import { autorDaCitacao, montarResposta } from "@/lib/citacao";
 
 const ctx = (): ContextoDeEnvio => ({
   canal: { id: "c1", type: "public" },

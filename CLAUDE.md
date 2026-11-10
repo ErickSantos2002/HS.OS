@@ -587,8 +587,12 @@ aprovado (`…-app-celular-prototipo.html`) é a fonte da verdade visual. Em tel
 - Painéis do ⋮ são o conteúdo do desktop embutido (`PainelEmbutido`), não
   cópia. Prévia da lista: `GET /channels/previas` (`app/previas.py`); as não
   lidas continuam sendo as do sininho.
-- Responder citando (deslizar a bolha) vai no texto, `> **Autor:** trecho`
-  (`celular/citacao.ts`) — sem coluna nova; no desktop aparece como citação.
+- Responder citando (deslizar a bolha, ou "Responder" nas ações) vai no texto,
+  `> **Autor:** trecho` (`lib/citacao.ts`) — sem coluna nova. Desde 10/11/2026
+  é também o "Responder" do desktop (barra acima do campo, cartão na bolha,
+  clique leva à citada por `acharCitada`), e **substituiu o "Responder em
+  thread"**, que ninguém usava (4 de 1.076 mensagens). Threads antigas seguem
+  abrindo pelo "N respostas"; não há mais como criar uma nova.
   Aviso e agente recebem só o texto novo (`textoNovo`), não a citação.
 - ⚠️ **Segurança: nada se envia a partir da query string.** `?prefill=` é no
   máximo rascunho; `?autosend=1` não existe mais (um link forjado fazia a
