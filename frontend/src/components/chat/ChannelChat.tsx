@@ -19,6 +19,7 @@ import FileAttachmentCard from "./FileAttachmentCard";
 import AudioDaMensagem from "./AudioDaMensagem";
 import MenuDaMensagem, { type AcaoDaMensagem } from "./MenuDaMensagem";
 import { acoesDaMensagemDoCanal } from "@/lib/acoes-da-mensagem";
+import { ehPessoal, nomeDaConversaPessoal, PLACEHOLDER_PESSOAL } from "@/lib/conversa-pessoal";
 import { acharCitada, autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "@/lib/citacao";
 import { abrirCacheDeRespostas, consumirResposta } from "@/lib/resposta-rapida";
 import {
@@ -37,7 +38,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Hash, Lock, MessageCircle, MessageSquare, Reply, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Type } from "lucide-react";
+import { Hash, Lock, MessageCircle, MessageSquare, NotebookPen, Reply, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Type } from "lucide-react";
 import { useCanaisSilenciados } from "@/hooks/use-canais-silenciados";
 import { format } from "date-fns";
 import ChannelMembersPanel from "./ChannelMembersPanel";
@@ -119,6 +120,7 @@ function AgentIcon({ agentId, className }: { agentId: string; className?: string
 export function ChannelIcon({ type }: { type: Channel["type"] }) {
   if (type === "private") return <Lock className="h-4 w-4 shrink-0" />;
   if (type === "dm") return <MessageCircle className="h-4 w-4 shrink-0" />;
+  if (type === "pessoal") return <NotebookPen className="h-4 w-4 shrink-0" />;
   return <Hash className="h-4 w-4 shrink-0" />;
 }
 
@@ -1220,10 +1222,15 @@ export default function ChannelChat({
 
   useEffect(() => { setMentionIndex(0); }, [mentionQuery]);
   const isDm = channel.type === "dm";
+  // Conversa consigo mesmo (10/11/2026): sem membros, vistos, "digitando" nem
+  // silenciar — não há outra pessoa. Título em `nomeDaConversaPessoal`.
+  const isPessoal = ehPessoal(channel);
   const { estaSilenciado, alternar: alternarSilencio } = useCanaisSilenciados();
   const canalSilenciado = estaSilenciado(channel.id);
-  const canEdit = !isDm && (role === "administrador" || user?.id === channel.created_by);
-  const displayName = isDm && dmPeerName ? dmPeerName : channel.name;
+  const canEdit = !isDm && !isPessoal && (role === "administrador" || user?.id === channel.created_by);
+  const displayName = isPessoal
+    ? nomeDaConversaPessoal(profile?.full_name, user?.email)
+    : isDm && dmPeerName ? dmPeerName : channel.name;
 
   const agentMembers = useMemo(
     () => members.filter((m) => (m as any).member_type === "agent").map((m) => m.user_id),
@@ -1559,7 +1566,7 @@ export default function ChannelChat({
       inputLocalRef.current = markdown;
       const trimmed = plain.trim().length > 0;
       setHasComposerText(trimmed);
-      if (trimmed) notifyTyping();
+      if (trimmed && !isPessoal) notifyTyping();
       plainTextRef.current = plain;
       caretOffsetRef.current = caret;
       syncToDraft(markdown);
@@ -1572,7 +1579,7 @@ export default function ChannelChat({
         setMentionVisible(false);
       }
     },
-    [notifyTyping, syncToDraft],
+    [notifyTyping, syncToDraft, isPessoal],
   );
 
 
@@ -1741,7 +1748,7 @@ export default function ChannelChat({
           {agentMembers.length > 0 && (
             <div className="flex items-center gap-1"><Bot className="h-3.5 w-3.5" /><span className="text-[10px]">{agentMembers.length}</span></div>
           )}
-          <BotaoSilenciarCanal channelId={channel.id} />
+          {!isPessoal && <BotaoSilenciarCanal channelId={channel.id} />}
           <button
             className="flex items-center gap-1.5 rounded-full border border-border/50 bg-card/60 backdrop-blur-sm px-2 py-1 hover:border-primary/40 hover:text-foreground transition-colors text-xs font-medium"
             onClick={() => setFilesOpen(true)}
@@ -1751,6 +1758,7 @@ export default function ChannelChat({
             <Paperclip className="h-3.5 w-3.5" />
             <span className="hidden md:inline">Arquivos</span>
           </button>
+          {!isPessoal && (
           <button
             className="flex items-center gap-2 rounded-full border border-border/50 bg-card/60 backdrop-blur-sm pl-1 pr-2.5 py-1 hover:border-primary/40 hover:text-foreground transition-colors"
             onClick={() => setMembersOpen(true)}
@@ -1784,6 +1792,7 @@ export default function ChannelChat({
             </div>
             <span className="text-xs font-medium">{members.length}</span>
           </button>
+          )}
         </div>
       </div>
 
@@ -1885,7 +1894,7 @@ export default function ChannelChat({
                       }
                       userNameById={userNameById}
                       authorStatus={statusByUserId.get(msg.author_id) ?? null}
-                      visto={msg.author_id === user?.id ? estadoNoCanal(msg.id, recibos) : undefined}
+                      visto={msg.author_id === user?.id && !isPessoal ? estadoNoCanal(msg.id, recibos) : undefined}
                       onDadosDaMensagem={() => setDadosDaMensagemId(msg.id)}
                       onApagarParaMim={() => { void apagarParaMim(msg); }}
                       continuacao={continuacao}
@@ -1949,7 +1958,7 @@ export default function ChannelChat({
       <div
         className="mobile-chat-composer relative shrink-0 border-t border-border/40 p-3 bg-background/95 backdrop-blur-sm"
       >
-        {typingLabel && pendingAgentIds.length === 0 && (
+        {typingLabel && !isPessoal && pendingAgentIds.length === 0 && (
           <div className="pointer-events-none absolute -top-7 left-4 flex items-center gap-2 rounded-full bg-background/90 px-3 py-1 text-xs italic text-muted-foreground shadow-sm backdrop-blur-sm border border-border/40">
             <span className="truncate">{typingLabel.replace(/[…]+\s*$/, '').replace(/\.{3,}\s*$/, '')}</span>
             <TypingDots />
@@ -2104,7 +2113,7 @@ export default function ChannelChat({
                     void handleSend();
                   }
                 }}
-                placeholder={`Mensagem em #${channel.name}...`}
+                placeholder={isPessoal ? PLACEHOLDER_PESSOAL : `Mensagem em #${channel.name}...`}
                 disabled={isBusy}
                 className="flex-1 text-sm py-1"
               />

@@ -114,6 +114,8 @@ import { InstalarApp } from "@/components/InstalarApp";
 import CartaoAprovacaoEmail from "@/components/chat/CartaoAprovacaoEmail";
 import CartaoAcao from "@/components/chat/CartaoAcao";
 import RecadoLembrete from "@/components/chat/RecadoLembrete";
+import { useConversaPessoal } from "@/hooks/use-conversa-pessoal";
+import { nomeDaConversaPessoal } from "@/lib/conversa-pessoal";
 
 /** Strip markdown formatting for sidebar preview */
 function stripMarkdown(text: string): string {
@@ -1898,6 +1900,14 @@ export default function ChatPage() {
     }),
   ), [people, user?.id, peerIdToChannelId, dmLastActivity, selection, unreadByChannel]);
 
+  // Conversa consigo mesmo (10/11/2026): fixa no topo das DMs, fora da
+  // ordenação e sem contador. `lib/conversa-pessoal.ts`.
+  const { canalId: canalPessoalId } = useConversaPessoal(
+    useMemo(() => channels.map((c) => c.id), [channels]), refetchChannels,
+  );
+  const canalPessoal = canalPessoalId ? channels.find((c) => c.id === canalPessoalId) ?? null : null;
+  const nomePessoal = nomeDaConversaPessoal(profile?.full_name, user?.email);
+
   const pessoasNaoLidas = listaPessoas.reduce((acc, i) => acc + i.naoLidas, 0);
   const agentesNaoLidas = listaAgentes.reduce((acc, i) => acc + i.naoLidas, 0);
   // A aba some para quem não tem agente liberado; quem a tinha como última
@@ -2318,6 +2328,27 @@ export default function ChatPage() {
                 {error && (
                   <div className="p-2 text-xs text-destructive flex items-center gap-1"><WifiOff className="h-3 w-3" /> {error}</div>
                 )}
+                {abaAtual === "dms" && canalPessoal && casaBusca([nomePessoal, profile?.email], buscaPessoa) && (() => {
+                  const ativo = selection?.type === "channel" && selection.channel.id === canalPessoal.id;
+                  const quando = dmLastActivity[canalPessoal.id];
+                  return (
+                    <button key="pessoal" onClick={() => setSelection({ type: "channel", channel: canalPessoal })}
+                      className={`w-full max-w-full text-left px-2 py-2 rounded-xl mb-0.5 transition-all duration-200 overflow-hidden box-border ${ativo ? "bg-primary/12 backdrop-blur-md ring-1 ring-primary/20" : "hover:bg-card/60 hover:backdrop-blur-md"}`}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="h-9 w-9 shrink-0 rounded-lg bg-secondary flex items-center justify-center overflow-hidden">
+                          {profile?.avatar_url ? <img src={profile.avatar_url} alt="" className="h-full w-full object-cover" /> : <span className="text-[11px] font-bold text-foreground">{nomePessoal.charAt(0).toUpperCase()}</span>}
+                        </div>
+                        <div className="min-w-0 flex-1 overflow-hidden">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-sm truncate font-medium text-foreground">{nomePessoal}</span>
+                            {quando && <span className="text-[10px] text-muted-foreground/60 shrink-0">{getRelativeTime(quando)}</span>}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground truncate">Suas anotações</div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })()}
                 {listaDaAba
                   .map((item) => {
                   if (item.kind === "secao") {
