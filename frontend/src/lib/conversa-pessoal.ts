@@ -20,3 +20,13 @@ export function nomeDaConversaPessoal(fullName: string | null | undefined, email
   const nome = (fullName ?? "").trim() || (email ?? "").split("@")[0].trim();
   return nome ? `${nome} (você)` : "Você";
 }
+
+/** Título de qualquer canal: o `name`, ou "Fulano (você)" na conversa pessoal.
+ *  Use onde o título sai do `name` cru — senão aparece "#Anotações". */
+export function tituloDoCanal(
+  c: { type: string; name: string },
+  fullName: string | null | undefined,
+  email: string | null | undefined,
+): string {
+  return ehPessoal(c) ? nomeDaConversaPessoal(fullName, email) : c.name;
+}
