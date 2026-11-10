@@ -30,7 +30,7 @@ import { anexosDoCanal, nomeDeQuemEscreve, apagarNoCanal, editarNoCanal, enviarA
 import { estadoNoCanal } from "@/lib/vistos";
 import { AudioDoAnexo, Bolha, type ReacaoNaBolha } from "./Bolha";
 import { Cabecalho } from "./Cabecalho";
-import { autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "./citacao";
+import { autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "@/lib/citacao";
 import { Composer } from "./Composer";
 import { FolhaDeAcoes, FolhaDeEmoji } from "./Folhas";
 import { Ampliada, MidiaDoCanal } from "./Midia";

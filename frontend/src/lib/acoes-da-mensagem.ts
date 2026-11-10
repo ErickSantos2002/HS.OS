@@ -7,7 +7,7 @@
  * "Apagar para mim" em qualquer mensagem, nada em mensagem otimista ou
  * apagada. Mudou uma regra, muda aqui, e os dois lados acompanham.
  */
-import { BellDot, Copy, EyeOff, Info, MessageSquare, Pencil, Trash2 } from "lucide-react";
+import { BellDot, Copy, EyeOff, Info, Pencil, Reply, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
@@ -34,14 +34,15 @@ export function acoesDaMensagemDoAgente(msg: ChatMessage, effectiveAgentId: stri
 
 export interface ContextoDaMensagemDoCanal {
   souAutor: boolean;
-  aoResponderThread: () => void;
+  /** Responder citando — substituiu o "Responder em thread" em 10/11/2026. */
+  aoResponder?: () => void;
   aoMarcarNaoLida: () => Promise<boolean> | boolean;
   aoEditar: () => void;
   aoApagar: () => void;
   aoDados?: () => void;
   /** "Apagar para mim": some só para quem está vendo (30/10/2026). */
   aoApagarParaMim?: () => void;
-  /** Depois de thread, dados, editar, apagar e apagar-para-mim — o desktop
+  /** Depois de responder, dados, editar, apagar e apagar-para-mim — o desktop
    *  usa para fechar o menu de toque antigo. */
   depois?: () => void;
 }
@@ -54,7 +55,8 @@ export function acoesDaMensagemDoCanal(
   if (msg.id.startsWith("optimistic-") || msg.deleted_at) return [];
   const e = (fn: () => void) => () => { fn(); ctx.depois?.(); };
   return [
-    { rotulo: "Responder em thread", icone: MessageSquare, aoEscolher: e(ctx.aoResponderThread) },
+    // Sem `aoResponder` (canal em que a pessoa não escreve), sem a opção.
+    ...(ctx.aoResponder ? [{ rotulo: "Responder", icone: Reply, aoEscolher: e(ctx.aoResponder) }] : []),
     ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => copiar(msg.content) }] : []),
     { rotulo: "Marcar como não lida", icone: BellDot, aoEscolher: () => {
       void Promise.resolve(ctx.aoMarcarNaoLida()).then(

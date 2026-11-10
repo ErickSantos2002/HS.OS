@@ -19,6 +19,7 @@ import FileAttachmentCard from "./FileAttachmentCard";
 import AudioDaMensagem from "./AudioDaMensagem";
 import MenuDaMensagem, { type AcaoDaMensagem } from "./MenuDaMensagem";
 import { acoesDaMensagemDoCanal } from "@/lib/acoes-da-mensagem";
+import { acharCitada, autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "@/lib/citacao";
 import { abrirCacheDeRespostas, consumirResposta } from "@/lib/resposta-rapida";
 import {
   anexosDoCanal, apagarNoCanal, apagarParaMimNoCanal, editarNoCanal, enviarAudioNoCanal, publicarAudioNaThread,
@@ -36,7 +37,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Hash, Lock, MessageCircle, MessageSquare, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Type } from "lucide-react";
+import { Hash, Lock, MessageCircle, MessageSquare, Reply, Send, Users, Bot, Mic, X, Loader2, Pencil, MoreHorizontal, Smile, Check, Paperclip, FileText, ChevronDown, ChevronUp, Bold, Italic, Strikethrough, Link as LinkIcon, List, ListOrdered, Code, AtSign, BellDot, Type } from "lucide-react";
 import { useCanaisSilenciados } from "@/hooks/use-canais-silenciados";
 import { format } from "date-fns";
 import ChannelMembersPanel from "./ChannelMembersPanel";
@@ -224,6 +225,7 @@ export const MessageBubble = memo(function MessageBubble({
   onDadosDaMensagem,
   onApagarParaMim,
   continuacao = false,
+  onCitacaoClick,
 }: {
   msg: ChannelMessage;
   currentUserId: string;
@@ -231,7 +233,8 @@ export const MessageBubble = memo(function MessageBubble({
   onToggleReaction: (emoji: string) => void;
   onEdit: () => void;
   onDelete: () => void;
-  onReply: () => void;
+  /** Responder citando. Ausente onde a pessoa não escreve. */
+  onReply?: () => void;
   onMarkUnread: () => Promise<boolean> | boolean;
   onMarkRead?: () => void;
   onImageClick: (src: string, alt: string) => void;
@@ -250,6 +253,8 @@ export const MessageBubble = memo(function MessageBubble({
   onApagarParaMim?: () => void;
   /** Segue a mensagem anterior do mesmo autor: sai sem foto e sem nome. */
   continuacao?: boolean;
+  /** Clique no cartão da citação: leva até a mensagem citada. */
+  onCitacaoClick?: (citacao: Citacao) => void;
 }) {
   const isAgent = msg.author_type === "agent";
   const agentIdForAvatar = isAgent ? normalizeAgentId(msg.author_id || "") : "";
@@ -384,7 +389,7 @@ export const MessageBubble = memo(function MessageBubble({
 
   const acoesDoMenu: AcaoDaMensagem[] = acoesDaMensagemDoCanal(msg, {
     souAutor: isOwn,
-    aoResponderThread: onReply,
+    aoResponder: onReply,
     aoMarcarNaoLida: onMarkUnread,
     aoEditar: onEdit,
     aoApagar: onDelete,
@@ -544,13 +549,27 @@ export const MessageBubble = memo(function MessageBubble({
             {temTexto && (
             <div ref={bubbleRef} className={`relative mt-1 inline-block w-fit max-w-full pr-7 text-left ${bubbleClass}`}>
               {(() => {
+                // Resposta citando (`lib/citacao.ts`): o bloco `> **Autor:** trecho`
+                // vira cartão clicável, e o texto segue embaixo.
+                const { citacao, resto } = separarCitacao(msg.content);
                 // Strip @todos prefix from rendered text when the "Aviso para todos" badge is already shown
                 const displayContent = mentionsEveryone
-                  ? msg.content.replace(/(^|\s)@todos\b[ \t]*/iu, "$1").replace(/^\s+/, "")
-                  : msg.content;
-                if (audioDePessoa) return <CollapsibleTranscription text={displayContent} />;
-                if (isAgent) return <MarkdownMessageContent text={displayContent} className="" />;
-                return <MarkdownMessageContent text={displayContent} highlightMentions={hasMention} className="text-sm text-foreground/90" />;
+                  ? resto.replace(/(^|\s)@todos\b[ \t]*/iu, "$1").replace(/^\s+/, "")
+                  : resto;
+                const cartao = citacao && (
+                  <button
+                    type="button"
+                    onClick={() => onCitacaoClick?.(citacao)}
+                    className="mb-1.5 block w-full min-w-[160px] rounded-md border-l-4 border-primary bg-background/40 px-2.5 py-1.5 text-left hover:bg-background/60 transition-colors"
+                    title="Ir para a mensagem"
+                  >
+                    <span className="block text-xs font-semibold text-primary">{citacao.autor}</span>
+                    <span className="block text-xs text-muted-foreground line-clamp-2">{citacao.texto}</span>
+                  </button>
+                );
+                if (audioDePessoa) return <>{cartao}<CollapsibleTranscription text={displayContent} /></>;
+                if (isAgent) return <>{cartao}<MarkdownMessageContent text={displayContent} className="" /></>;
+                return <>{cartao}<MarkdownMessageContent text={displayContent} highlightMentions={hasMention} className="text-sm text-foreground/90" /></>;
               })()}
 
               {renderReagir()}
@@ -1106,6 +1125,35 @@ export default function ChannelChat({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  // Responder citando (10/11/2026) — substituiu o "Responder em thread", que
+  // ninguém usava (4 de 1.076 mensagens). A citação vai no texto
+  // (`lib/citacao.ts`), o mesmo formato do celular.
+  const [resposta, setResposta] = useState<Citacao | null>(null);
+  useEffect(() => setResposta(null), [channel.id]);
+  const responder = useCallback((m: ChannelMessage) => {
+    const nomeDoAutor = m.author_type === "agent"
+      ? getAgentDisplayName(normalizeAgentId(m.author_id || ""))
+      : userNameById.get(m.author_id) || m.author_name || "Alguém";
+    const meuNome = (profile?.full_name && profile.full_name.trim()) || user?.email?.split("@")[0] || "Alguém";
+    setEditingId(null);
+    setResposta({
+      autor: autorDaCitacao(m.author_id === user?.id, meuNome, nomeDoAutor),
+      texto: trechoParaCitar(m.content || "") || "📎 anexo",
+    });
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [userNameById, profile?.full_name, user?.email, user?.id]);
+  const irParaCitada = useCallback((idDaResposta: string, citacao: Citacao) => {
+    const alvo = acharCitada(messages, idDaResposta, citacao);
+    const el = alvo ? scrollRef.current?.querySelector<HTMLElement>(`[data-message-id="${alvo}"]`) : null;
+    if (!el) {
+      toast.info("A mensagem citada não está mais na conversa carregada.");
+      return;
+    }
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("ring-2", "ring-primary");
+    setTimeout(() => el.classList.remove("ring-2", "ring-primary"), 1800);
+  }, [messages]);
+
   // Panel / dialog state
   const [membersOpen, setMembersOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
@@ -1376,6 +1424,8 @@ export default function ChannelChat({
 
     // Snapshot composer state so we can restore it if the send fails.
     const snapshotMarkdown = currentInput;
+    const respostaAntes = resposta;
+    setResposta(null);
 
     // Clear composer IMMEDIATELY (synchronously) — before any await — so a
     // second Enter cannot resubmit the same text while the first insert is
@@ -1404,12 +1454,15 @@ export default function ChannelChat({
           inputLocalRef.current = snapshotMarkdown;
           inputRef.current?.setMarkdown(snapshotMarkdown);
           setHasComposerText(snapshotMarkdown.trim().length > 0);
+          setResposta(respostaAntes);
           return;
         }
         setUploadingFiles(false);
       }
 
-      if (ctxEnvio) await publicarNoCanal(ctxEnvio, msg, attachments);
+      // A citação vai na mensagem; aviso e agente recebem só o texto novo
+      // (`textoNovo`) — senão a menção citada acordaria o agente de novo.
+      if (ctxEnvio) await publicarNoCanal(ctxEnvio, montarResposta(respostaAntes, msg), attachments, { textoNovo: msg });
     } finally {
       sendingRef.current = false;
     }
@@ -1814,7 +1867,8 @@ export default function ChannelChat({
                       onToggleReaction={(emoji) => user && toggleReaction(msg.id, emoji, user.id)}
                       onEdit={() => setEditingId(msg.id)}
                       onDelete={() => setDeleteConfirmId(msg.id)}
-                      onReply={() => setActiveThreadMessage(msg)}
+                      onReply={podeEscrever ? () => responder(msg) : undefined}
+                      onCitacaoClick={(c) => irParaCitada(msg.id, c)}
                       onMarkUnread={() =>
                         handleMarkUnread(msg.id, msg.author_name, msg.content || "")
                       }
@@ -1959,6 +2013,24 @@ export default function ChannelChat({
           </div>
         ) : (
           <div className="flex flex-col gap-1">
+            {resposta && (
+              <div className="flex items-start gap-2 rounded-lg border-l-4 border-primary bg-muted/30 px-3 py-2">
+                <Reply className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-primary">Respondendo a {resposta.autor}</p>
+                  <p className="text-xs text-muted-foreground truncate">{resposta.texto}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setResposta(null)}
+                  className="shrink-0 rounded-full p-1 text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+                  aria-label="Cancelar resposta"
+                  title="Cancelar resposta (Esc)"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
             {/* Compact input row: field grows as the user types. */}
             <div className="glass-input flex gap-1.5 px-2 py-2 items-center">
               <Popover>
@@ -1992,6 +2064,13 @@ export default function ChannelChat({
                   }
                 }}
                 onKeyDown={(e) => {
+                  // Esc com resposta aberta cancela a resposta, não fecha a
+                  // conversa (o ChatPage respeita o `defaultPrevented`).
+                  if (e.key === "Escape" && resposta && !(mentionVisible && filteredMentions.length > 0)) {
+                    e.preventDefault();
+                    setResposta(null);
+                    return;
+                  }
                   if (mentionVisible && filteredMentions.length > 0) {
                     if (e.key === "Enter" || e.key === "Tab") {
                       e.preventDefault();

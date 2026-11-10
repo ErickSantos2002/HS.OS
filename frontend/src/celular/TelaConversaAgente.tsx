@@ -32,7 +32,7 @@ import type { ChatMessage } from "@/lib/mock-data";
 import { estadoNoAgente } from "@/lib/vistos";
 import { Bolha, Pensando } from "./Bolha";
 import { Cabecalho, Sobreposta } from "./Cabecalho";
-import { autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "./citacao";
+import { autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "@/lib/citacao";
 import { Composer } from "./Composer";
 import { FolhaDeAcoes, FolhaDeAnexo, FolhaDeEmoji } from "./Folhas";
 import { Ampliada, MidiaDoAgente } from "./Midia";
