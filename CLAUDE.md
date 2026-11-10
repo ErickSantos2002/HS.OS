@@ -603,6 +603,25 @@ aprovado (`…-app-celular-prototipo.html`) é a fonte da verdade visual. Em tel
 - `useConversaAtivaNasNotificacoes` recebe `ativa`: tela inativa não mexe no
   estado global, e quem zera é só o dono (duas telas convivem na animação).
 
+### Conversa consigo mesmo — 10/11/2026
+
+O "chat comigo mesmo" do Teams. Spec e plano:
+`docs/superpowers/{specs,plans}/2026-11-10-conversa-consigo-mesmo*`.
+
+- Canal do tipo **`pessoal`** (035), não DM com uma pessoa: tudo que filtra
+  `dm`/`public`/`private` não o vê, de propósito. Um por pessoa (índice único em
+  `created_by`); nasce em `minha_conversa_pessoal()` via `GET /channels/pessoal`,
+  que a lista chama ao carregar e que **repõe a membresia** de quem foi
+  desativado e voltou.
+- ⚠️ O `name` no banco é "Anotações" e nunca vai para a tela: todo título passa
+  por `nomeDaConversaPessoal` (`lib/conversa-pessoal.ts`) → "Fulano (você)".
+- Só a dona lê; o **administrador não renomeia, não apaga e não mexe nos
+  membros** dela (policies da 035). Broadcast não a acha pelo nome.
+- Sem vistos, "digitando", membros, silenciar. Fixa no topo das DMs (desktop) e
+  de Pessoas (celular).
+- `POST /conversations/dm/abrir` recusa alvo = quem chama: o `find_or_create_dm`
+  devolveria uma DM qualquer da pessoa.
+
 ### Bots pessoais — um agente por pessoa (05/11/2026)
 
 Decisão do Erick com o Nicholson: em vez de liberar os cinco especialistas aos

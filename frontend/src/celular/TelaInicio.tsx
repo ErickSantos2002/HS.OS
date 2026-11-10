@@ -116,7 +116,7 @@ function ListaDeConversas({ itens, aoAbrir }: { itens: ItemCelular[]; aoAbrir: (
           const nova = i.naoLidas > 0 && !i.silenciado;
           return (
             <button key={i.chave} type="button" className="cel-item" onClick={() => void abrir(i)} aria-busy={abrindo === i.id}>
-              <Avatar tipo={i.tipo} nome={i.nome} chave={i.id} />
+              <Avatar tipo={i.tipo === "pessoal" ? "pessoa" : i.tipo} nome={i.nome} chave={i.id} foto={i.foto} />
               <span className="cel-meio">
                 <span className="cel-l1">
                   <span className="cel-nome">{i.tipo === "canal" ? "#" : ""}{i.nome}</span>
@@ -127,7 +127,7 @@ function ListaDeConversas({ itens, aoAbrir }: { itens: ItemCelular[]; aoAbrir: (
                     <span className="cel-prev vivo">pensando…</span>
                   ) : (
                     <span className="cel-prev">
-                      {i.previa?.minha && <CheckCheck className="cel-mini" style={{ display: "inline", verticalAlign: "-3px", marginRight: 2 }} />}
+                      {i.previa?.minha && i.tipo !== "pessoal" && <CheckCheck className="cel-mini" style={{ display: "inline", verticalAlign: "-3px", marginRight: 2 }} />}
                       {autor && <b>{autor}: </b>}
                       {texto || (i.tipo === "pessoa" && !i.canalId ? i.subtitulo : "")}
                     </span>

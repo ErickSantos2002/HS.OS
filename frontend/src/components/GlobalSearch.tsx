@@ -2,7 +2,8 @@ import { api } from "@/lib/api";
 import { destinoDaBusca } from "@/lib/conversas-anteriores";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { Search, Bot, Hash, MessageSquare, X } from "lucide-react";
+import { Search, Bot, Hash, MessageSquare, NotebookPen, X } from "lucide-react";
+import { ehPessoal, tituloDoCanal } from "@/lib/conversa-pessoal";
 import { useAgents, type GatewayAgent } from "@/hooks/use-agents";
 import { useChannels } from "@/hooks/use-channels";
 import { useAuthContext } from "@/contexts/auth-context";
@@ -15,7 +16,7 @@ type SearchResult = {
   subtitle: string;
   preview: string;
   target: string;
-  icon: "bot" | "channel";
+  icon: "bot" | "channel" | "pessoal";
   createdAt: string;
 };
 
@@ -30,7 +31,7 @@ export function GlobalSearch({ compact = false }: { compact?: boolean }) {
   const [loading, setLoading] = useState(false);
   const { agents } = useAgents();
   const { channels } = useChannels();
-  const { user, role } = useAuthContext();
+  const { user, profile, role } = useAuthContext();
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -40,8 +41,8 @@ export function GlobalSearch({ compact = false }: { compact?: boolean }) {
   );
 
   const channelNameById = useMemo(
-    () => new Map(channels.map((channel) => [channel.id, channel.name])),
-    [channels],
+    () => new Map(channels.map((channel) => [channel.id, tituloDoCanal(channel, profile?.full_name, user?.email)])),
+    [channels, profile?.full_name, user?.email],
   );
 
   useEffect(() => {
@@ -113,7 +114,7 @@ export function GlobalSearch({ compact = false }: { compact?: boolean }) {
           subtitle: item.autor ?? "",
           preview: normalizePreview(item.content ?? ""),
           target: `/chat?channel=${encodeURIComponent(item.origem)}&message=${encodeURIComponent(item.id)}`,
-          icon: "channel",
+          icon: ehPessoal(channels.find((c) => c.id === item.origem)) ? "pessoal" : "channel",
           createdAt: item.created_at,
         }));
 
@@ -209,7 +210,7 @@ export function GlobalSearch({ compact = false }: { compact?: boolean }) {
                       className="w-full flex items-start gap-3 px-3 py-3 rounded-xl text-left hover:bg-secondary/60 transition-colors duration-150"
                     >
                       <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center shrink-0">
-                        {result.icon === "bot" ? <Bot className="h-4 w-4 text-foreground" /> : <Hash className="h-4 w-4 text-foreground" />}
+                        {result.icon === "bot" ? <Bot className="h-4 w-4 text-foreground" /> : result.icon === "pessoal" ? <NotebookPen className="h-4 w-4 text-foreground" /> : <Hash className="h-4 w-4 text-foreground" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 min-w-0">

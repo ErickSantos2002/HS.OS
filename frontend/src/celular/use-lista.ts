@@ -26,6 +26,8 @@ import {
 import { naoLidasDoAgente } from "@/lib/nao-lidas-do-agente";
 import { semMarkdown } from "@/lib/previa-da-mensagem";
 import { assinar } from "@/lib/realtime";
+import { useConversaPessoal } from "@/hooks/use-conversa-pessoal";
+import { ehPessoal, nomeDaConversaPessoal } from "@/lib/conversa-pessoal";
 import type { ItemCelular } from "./lista";
 
 export interface PreviaDoCanal {
@@ -58,9 +60,12 @@ export function useMapaDmDoAgente(): Record<string, string> {
 }
 
 export function useListaDoCelular() {
-  const { user } = useAuthContext();
+  const { user, profile } = useAuthContext();
   const { agents } = useAgents();
   const { channels, refetch: recarregarCanais } = useChannels();
+  const { canalId: canalPessoalId } = useConversaPessoal(
+    useMemo(() => channels.map((c) => c.id), [channels]), recarregarCanais,
+  );
   const { people } = usePeople();
   const { peerIdToChannelId } = useDmPeers(channels, user?.id);
   const { notifications, unreadByChannel, unreadByAgentOnly } = useNotificationsContext();
@@ -172,8 +177,19 @@ export function useListaDoCelular() {
         pensando: false,
       });
     }
+    // Conversa consigo mesmo (10/11/2026): item próprio, fixo no topo de
+    // Pessoas (`montarLista`); nunca como canal "#Anotações".
+    const pessoal = canalPessoalId ? channels.find((c) => c.id === canalPessoalId) : undefined;
+    if (pessoal && user?.id) {
+      lista.push({
+        chave: "pessoal", tipo: "pessoal", id: user.id, canalId: pessoal.id,
+        nome: nomeDaConversaPessoal(profile?.full_name, user.email),
+        subtitulo: "Suas anotações", previa: previaDe(pessoal.id),
+        naoLidas: 0, silenciado: false, pensando: false, foto: profile?.avatar_url ?? null,
+      });
+    }
     for (const c of channels) {
-      if (c.type === "dm") continue;
+      if (c.type === "dm" || ehPessoal(c)) continue;
       const m = membrosPorCanal.get(c.id);
       const n = m ? m.humans.length + m.agents.length : 0;
       lista.push({
@@ -187,7 +203,8 @@ export function useListaDoCelular() {
     }
     return lista;
   }, [agents, people, channels, previas.data, membros.data, ultimasDoAgente, mapaDm, unreadByChannel, unreadByAgentOnly,
-    naoLidasLocais, pendentes, peerIdToChannelId, estaSilenciado, silenciadosVersao, user?.id]);
+    naoLidasLocais, pendentes, peerIdToChannelId, estaSilenciado, silenciadosVersao, user?.id,
+    canalPessoalId, profile?.full_name, profile?.avatar_url, user?.email]);
 
   return { itens, mapaDm, recarregarCanais, carregando: previas.isLoading };
 }

@@ -42,6 +42,14 @@ export const CHANGELOG: ChangelogVersion[] = [
         text: "Responder uma mensagem, como no WhatsApp: pela seta da mensagem, escolha \"Responder\". A mensagem citada aparece em cima da sua resposta; no computador, clicar nela leva até a original.",
       },
       {
+        kind: "novidade",
+        text: "Conversa com você mesmo, fixa no topo das conversas: anote, guarde links e arquivos, como no Teams. Só você vê.",
+      },
+      {
+        kind: "correcao",
+        text: "Segurança: os agentes deixaram de ter acesso às conversas entre pessoas.",
+      },
+      {
         kind: "melhoria",
         text: "O \"Responder em thread\" saiu para dar lugar ao Responder. As threads que já existiam continuam abrindo pelo \"respostas\" embaixo da mensagem.",
       },

@@ -10,6 +10,8 @@
 import { casaBusca } from "@/lib/lista-de-conversas";
 
 export type TipoItem = "pessoa" | "agente" | "canal";
+/** `pessoal`: a conversa consigo mesmo (10/11/2026), fixa no topo de Pessoas. */
+export type TipoDoItem = TipoItem | "pessoal";
 
 export interface PreviaCelular {
   texto: string;
@@ -24,7 +26,7 @@ export interface PreviaCelular {
 
 export interface ItemCelular {
   chave: string;
-  tipo: TipoItem;
+  tipo: TipoDoItem;
   /** agent_id, id da pessoa ou id do canal. */
   id: string;
   /** Canal da conversa: DM da pessoa, o próprio canal; agente fica `null`. */
@@ -36,12 +38,17 @@ export interface ItemCelular {
   naoLidas: number;
   silenciado: boolean;
   pensando: boolean;
+  /** Foto — hoje só a da conversa pessoal (a própria). */
+  foto?: string | null;
 }
 
 export function montarLista(itens: ItemCelular[], filtro: TipoItem, busca: string): ItemCelular[] {
+  const doFiltro = (i: ItemCelular) => i.tipo === filtro || (i.tipo === "pessoal" && filtro === "pessoa");
   return itens
-    .filter((i) => i.tipo === filtro && casaBusca([i.nome, i.previa?.texto], busca))
+    .filter((i) => doFiltro(i) && casaBusca([i.nome, i.previa?.texto], busca))
     .sort((a, b) => {
+      // A conversa consigo mesmo não desce com a ordem do WhatsApp.
+      if ((a.tipo === "pessoal") !== (b.tipo === "pessoal")) return a.tipo === "pessoal" ? -1 : 1;
       const qa = a.previa?.quando ?? 0;
       const qb = b.previa?.quando ?? 0;
       if (qa !== qb) return qb - qa;

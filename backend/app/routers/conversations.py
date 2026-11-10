@@ -2028,6 +2028,20 @@ async def pergunta_avulsa(
     return PerguntaAvulsaOut(resposta=resposta)
 
 
+def conferir_alvo_da_dm(alvo: str, eu: str) -> None:
+    """Recusa DM consigo mesmo (10/11/2026).
+
+    ⚠️ O `find_or_create_dm` casa `cm1` e `cm2` na MESMA linha quando o alvo é
+    quem chama, e devolveria uma DM qualquer da pessoa. A conversa consigo
+    mesmo é outra coisa: `GET /channels/pessoal`.
+    """
+    if str(alvo) == str(eu):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Para anotar para você, use a sua conversa pessoal, no topo da lista.",
+        )
+
+
 class DmIn(BaseModel):
     target_user_id: str
     target_name: str = ""
@@ -2052,6 +2066,7 @@ async def abrir_dm(dados: DmIn, usuario: Usuario = Depends(usuario_atual)):
     # `import app.routers.conversations` sozinho, antes de qualquer rota).
     from app.routers.channels import traduzir_hs001
 
+    conferir_alvo_da_dm(dados.target_user_id, usuario.id)
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         try:
             canal = await conn.fetchval(

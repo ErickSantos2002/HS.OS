@@ -6,6 +6,7 @@
  */
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { ehPessoal } from "@/lib/conversa-pessoal";
 
 import { MarkdownMessageContent } from "@/components/chat/MessageContent";
 import { useAuthContext } from "@/contexts/auth-context";
@@ -202,7 +203,7 @@ export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: stri
 
   return (
     <>
-      <Cabecalho aoVoltar={aoVoltar} titulo="Thread" sub={canal ? (canal.type === "dm" ? "Conversa" : `#${canal.name}`) : ""} />
+      <Cabecalho aoVoltar={aoVoltar} titulo="Thread" sub={canal ? (ehPessoal(canal) ? "Suas anotações" : canal.type === "dm" ? "Conversa" : `#${canal.name}`) : ""} />
       <div ref={fundoRef} className="cel-fundo">
         {raiz && <div style={{ padding: "4px 0 10px", borderBottom: "1px solid var(--line)", marginBottom: 6 }}>{bolha(raiz, 0, [raiz], true)}</div>}
         {respostas.length === 0 && raiz && <div className="cel-vazio" style={{ padding: 24 }}>Nenhuma resposta ainda.</div>}
