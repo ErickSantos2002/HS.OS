@@ -760,6 +760,19 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   regrava `IDENTITY.md`/`SOUL.md` e o bloco do time. ⚠️ Pendência antiga: o
   bucket `agent-files` aceita escrita de qualquer autenticado em qualquer
   caminho, inclusive `avatars/` de outro agente.
+- **DataCore (10/11/2026):** `datacore_consultas` / `datacore_consultar` no
+  `hsos-bot-<bot>` (com `datacore` em `sistemas_ligados`; ligar todos:
+  `publicar-bots-mcp.py --ligar-datacore-todos`). Decisão do Erick: o Guardi vê
+  o que o login do DONO vê lá — o DataCore aplica o papel. ⚠️ O agente escolhe
+  uma **consulta do catálogo** (`app/datacore_consultas.py`), nunca um
+  caminho; filtros só como query; retorno com teto de 12 mil caracteres. Rota
+  nova do DataCore só chega ao Guardi entrando no catálogo **e** no allowlist
+  de agente de lá. Os filtros saem do `/openapi.json` público do DataCore.
+- **A `iris` lê a Inadimplência como o Nicholson** (`np@`, `admin` no
+  DataCore; decisão do Erick, 10/11/2026): ferramenta `inadimplencia` no
+  `hsos-relatorios`, só dela. Quem pergunta à `iris` não é identificado — se
+  outra pessoa passar a falar com ela, rever. Spec
+  `docs/superpowers/specs/2026-11-10-iris-inadimplencia-design.md`.
 - **Território:** a mudança em cada sistema é feita na sessão daquele repo,
   a partir da seção "Para os outros repositórios" da spec. O TaskHS já está
   pronto (`48832b0`, v2.13.0, sem deploy).

@@ -128,7 +128,9 @@ async def main() -> int:
     ap.add_argument("--ligar-todos", action="store_true",
                     help="liga e-mail e TaskHS em TODOS os bots pessoais (só banco)")
     ap.add_argument("--ligar-sistema", nargs=2, metavar=("BOT", "SISTEMA"),
-                    help="acrescenta um sistema (taskhs) a sistemas_ligados de UM bot (só banco)")
+                    help="acrescenta um sistema (taskhs, datacore) a sistemas_ligados de UM bot (só banco)")
+    ap.add_argument("--ligar-datacore-todos", action="store_true",
+                    help="acrescenta datacore a sistemas_ligados de TODOS os bots pessoais (só banco)")
     a = ap.parse_args()
 
     await init_db()
@@ -144,6 +146,13 @@ async def main() -> int:
                     "  '{taskhs}'::text[]) x) WHERE dono_id IS NOT NULL RETURNING 1) SELECT count(*) FROM u")
                 print(f"e-mail e TaskHS ligados em {n} bots")
                 return 0
+            if a.ligar_datacore_todos:
+                n = await conn.fetchval(
+                    "WITH u AS (UPDATE public.agent_profiles SET sistemas_ligados = (SELECT "
+                    "  array_agg(DISTINCT x) FROM unnest(sistemas_ligados || '{datacore}'::text[]) x) "
+                    "  WHERE dono_id IS NOT NULL RETURNING 1) SELECT count(*) FROM u")
+                print(f"DataCore ligado em {n} bots")
+                return 0
             if a.ligar_email:
                 ok = await conn.fetchval(
                     "UPDATE public.agent_profiles SET email_ligado = true "
@@ -152,8 +161,8 @@ async def main() -> int:
                 return 0 if ok else 1
             if a.ligar_sistema:
                 bot, sistema = a.ligar_sistema
-                if sistema not in ("taskhs",):
-                    print("sistema desconhecido (por ora: taskhs)")
+                if sistema not in ("taskhs", "datacore"):
+                    print("sistema desconhecido (por ora: taskhs, datacore)")
                     return 1
                 ok = await conn.fetchval(
                     "UPDATE public.agent_profiles SET sistemas_ligados = "

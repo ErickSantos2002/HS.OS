@@ -17,7 +17,7 @@ import secrets
 FERRAMENTAS_EMAIL = ("email_caixas", "email_listar", "email_ler", "email_enviar_para_mim",
                      "email_preparar", "email_pendentes", "email_marcar_lido")
 # As do servidor `hsos-bot-<bot>` (memória, sistemas internos e agenda).
-FERRAMENTAS_BOT = ("lembrar", "taskhs_eu", "taskhs_minhas", "taskhs_quadros", "taskhs_quadro",
+FERRAMENTAS_BOT = ("lembrar", "taskhs_eu", "datacore_consultas", "datacore_consultar", "taskhs_minhas", "taskhs_quadros", "taskhs_quadro",
                    "taskhs_tarefa", "taskhs_buscar", "taskhs_membros_quadro", "taskhs_comentar",
                    "taskhs_mover", "taskhs_criar", "taskhs_atualizar", "taskhs_membros",
                    "agenda_criar", "agenda_listar", "agenda_editar", "agenda_apagar")
