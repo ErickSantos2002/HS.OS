@@ -45,17 +45,17 @@ Ficam de fora de propósito: `profiles` (a `diretorio` é a vista estreita), `ac
 **Interfaces:**
 - Produces: role `hsos_agente` (LOGIN, sem senha na migração), `default_transaction_read_only = on`, `CONNECT`/`USAGE public`, `SELECT` exatamente na allowlist.
 
-- [ ] **Step 1:** Escrever a migração no estilo da `006` (cabeçalho explicando o porquê com o levantamento acima; `CREATE ROLE` em `DO $$ IF NOT EXISTS`; `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM hsos_agente` antes dos `GRANT`; `GRANT SELECT (col, …) ON public.integrations`). Idempotente.
-- [ ] **Step 2:** Script `~/aplicar-hsos-033.py`: aplica o SQL, gera senha (`secrets.token_urlsafe(32)`), `ALTER ROLE hsos_agente PASSWORD %s`, e atualiza em `integrations` (linha `name = 'HsOs'`, `db_base = 'hsos'`) os pares `ro_usuario = 'hsos_agente'` e `ro_senha = <senha>` dentro do array `credentials`, tudo numa transação. **Confere o efeito:** para cada uma das 91 relações de `public`, `has_table_privilege('hsos_agente', 'public.'||t, 'SELECT')` tem que ser verdadeiro **exatamente** na allowlist; `has_column_privilege('hsos_agente','public.integrations','credentials','SELECT')` falso; conecta como `hsos_agente` (lendo a URL montada da própria linha, sem imprimir) e roda `SELECT count(*) FROM public.diretorio` (ok) e `SELECT 1 FROM public.channel_messages LIMIT 1` (tem que dar `permission denied`). Sai com erro se qualquer conferência falhar.
-- [ ] **Step 3:** Rodar: `~/projetos/bancos/.venv/bin/python ~/aplicar-hsos-033.py`. Esperado: `ok` e nenhuma linha de divergência.
-- [ ] **Step 4:** Commit da migração.
+- [x] **Step 1:** Escrever a migração no estilo da `006` (cabeçalho explicando o porquê com o levantamento acima; `CREATE ROLE` em `DO $$ IF NOT EXISTS`; `REVOKE ALL ON ALL TABLES IN SCHEMA public FROM hsos_agente` antes dos `GRANT`; `GRANT SELECT (col, …) ON public.integrations`). Idempotente.
+- [x] **Step 2:** Script `~/aplicar-hsos-033.py`: aplica o SQL, gera senha (`secrets.token_urlsafe(32)`), `ALTER ROLE hsos_agente PASSWORD %s`, e atualiza em `integrations` (linha `name = 'HsOs'`, `db_base = 'hsos'`) os pares `ro_usuario = 'hsos_agente'` e `ro_senha = <senha>` dentro do array `credentials`, tudo numa transação. **Confere o efeito:** para cada uma das 91 relações de `public`, `has_table_privilege('hsos_agente', 'public.'||t, 'SELECT')` tem que ser verdadeiro **exatamente** na allowlist; `has_column_privilege('hsos_agente','public.integrations','credentials','SELECT')` falso; conecta como `hsos_agente` (lendo a URL montada da própria linha, sem imprimir) e roda `SELECT count(*) FROM public.diretorio` (ok) e `SELECT 1 FROM public.channel_messages LIMIT 1` (tem que dar `permission denied`). Sai com erro se qualquer conferência falhar.
+- [x] **Step 3:** Rodar: `~/projetos/bancos/.venv/bin/python ~/aplicar-hsos-033.py`. Esperado: `ok` e nenhuma linha de divergência.
+- [x] **Step 4:** Commit da migração.
 
 ### Task 2: Republicar o conector e conferir
 
 **Files:** nenhum no repo (operação).
 
-- [ ] **Step 1:** Mostrar ao Erick o que muda no gateway: só a URL de `mcp.servers.banco-hsos` (usuário `leitura` → `hsos_agente`) e o recálculo de `deny`. Aguardar o ok.
-- [ ] **Step 2:** Chamar `publicar_banco(<id do HsOs>)` do backend (script local com o `.env` do backend, túnel aberto, coletores desligados — ver `CLAUDE.md`).
-- [ ] **Step 3:** Reler `config.get`: `mcp.servers.banco-hsos` aponta para `hsos_agente` (imprimir só o usuário da URL) e o `alsoAllow` dos 5 especialistas segue igual.
-- [ ] **Step 4:** Conferência que vale: perguntar à `nina` (com ok do Erick) para rodar no `banco-hsos` uma leitura de `channel_messages` (espera recusa por permissão) e uma de `agent_profiles` (espera funcionar).
-- [ ] **Step 5:** Registrar no `CLAUDE.md` (seção de escopo de banco por agente): o `banco-hsos` usa `hsos_agente`, allowlist na `033`, tabela nova nasce fora; e o porquê.
+- [x] **Step 1:** Mostrar ao Erick o que muda no gateway: só a URL de `mcp.servers.banco-hsos` (usuário `leitura` → `hsos_agente`) e o recálculo de `deny`. Aguardar o ok.
+- [x] **Step 2:** Chamar `publicar_banco(<id do HsOs>)` do backend (script local com o `.env` do backend, túnel aberto, coletores desligados — ver `CLAUDE.md`).
+- [x] **Step 3:** Reler `config.get`: `mcp.servers.banco-hsos` aponta para `hsos_agente` (imprimir só o usuário da URL) e o `alsoAllow` dos 5 especialistas segue igual.
+- [ ] **Step 4:** Conferência que vale (não feita — o Erick preferiu não mandar mensagem à `nina`; conferido pelo log do reload e conectando como `hsos_agente`): perguntar à `nina` (com ok do Erick) para rodar no `banco-hsos` uma leitura de `channel_messages` (espera recusa por permissão) e uma de `agent_profiles` (espera funcionar).
+- [x] **Step 5:** Registrar no `CLAUDE.md` (seção de escopo de banco por agente): o `banco-hsos` usa `hsos_agente`, allowlist na `033`, tabela nova nasce fora; e o porquê.

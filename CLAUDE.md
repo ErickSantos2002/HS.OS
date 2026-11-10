@@ -1201,6 +1201,20 @@ agente contradizer os próprios arquivos, que os citam nominalmente.
 | `flow` | `banco-gestorhs`, `banco-taskhs`, `banco-chamadoshs` |
 | `bruce` | `banco-talenths`, `banco-pessoas-hs` |
 
+⚠️ **O `banco-hsos` da `nina` entra com `hsos_agente`, não com `leitura`
+(10/11/2026).** O `leitura` tem `pg_read_all_data` + BYPASSRLS — por ele a
+`nina` lia toda DM, as `email_*` e `integrations.credentials` (senhas dos
+conectores). O `hsos_agente` lê uma **allowlist** de 26 relações
+(`033_usuario_agente.sql`, tirada de 2.004 consultas reais dela) e as
+funções SECURITY DEFINER não lhe são executáveis (`034`). Consequências:
+
+- **Tabela nova nasce invisível à `nina`.** Se ela precisar, acrescente na
+  allowlist (nova migração) — e pergunte antes se é dado de pessoa.
+- ⚠️ **Função SECURITY DEFINER nova nasce com EXECUTE para PUBLIC** e
+  atravessa a allowlist: repita nela o `REVOKE … FROM PUBLIC` + grants da
+  `034` e rode `~/aplicar-hsos-034.py` de novo, que confere todas.
+- O `leitura` continua sendo o usuário do Erick (e do Claude) para consulta.
+
 ⚠️ **`agents.list` (RPC) NÃO devolve o `tools` declarado na config.** Ele veio com
 `deny: []` para os cinco enquanto a config tinha `sessions_send`, `sessions_spawn`
 e `skill_workshop` negados — foi o que me fez concluir que o escopo nunca tinha
