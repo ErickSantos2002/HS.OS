@@ -8,7 +8,7 @@ export interface Channel {
   id: string;
   name: string;
   description: string | null;
-  type: "public" | "private" | "dm";
+  type: "public" | "private" | "dm" | "pessoal";
   created_by: string;
   created_at: string;
   /** Canal de avisos: só os escolhidos e o administrador enviam. */
