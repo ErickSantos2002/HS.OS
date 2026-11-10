@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { createElement } from "react";
 import { RefreshCw, Check, AlertCircle } from "lucide-react";
 import { cancelamentoRealLigado, gravarChave, lerChave } from "@/lib/chaves-locais";
+import { levaInstrucoesDeArtefato } from "@/lib/bots-pessoais";
 
 const RESET_COMMANDS = new Set(["/new", "/reset"]);
 function isResetCommand(text: string) {
@@ -430,7 +431,11 @@ function capMessage(text: string, maxBytes = 2048): string {
  * plataforma, e chega como a primeira coisa que a pessoa "diz".
  */
 async function montarInstrucoesDaSessao(agentId?: string): Promise<string> {
-  const blocos: string[] = [ARTIFACT_SYSTEM_PROMPT];
+  // Guardi não recebe o bloco de artefatos — ver `levaInstrucoesDeArtefato`.
+  const agentes = (_queryClient?.getQueriesData<Array<{ id: string }>>({ queryKey: ["gateway-agents"] }) ?? [])
+    .flatMap(([, dados]) => dados ?? []);
+  const comArtefatos = !agentId || levaInstrucoesDeArtefato(agentes, agentId);
+  const blocos: string[] = comArtefatos ? [ARTIFACT_SYSTEM_PROMPT] : [];
 
   if (agentId) {
     try {
@@ -452,10 +457,12 @@ async function montarInstrucoesDaSessao(agentId?: string): Promise<string> {
     if (folder) blocos.push(buildLocalFolderSystemPrompt(folder));
   } catch { /* pasta local é extra */ }
 
-  try {
-    const { buildLiveArtifactsSystemBlocks } = await import("@/lib/live-artifacts-context");
-    blocos.push(...(await buildLiveArtifactsSystemBlocks()));
-  } catch { /* artefatos vivos são extra */ }
+  if (comArtefatos) {
+    try {
+      const { buildLiveArtifactsSystemBlocks } = await import("@/lib/live-artifacts-context");
+      blocos.push(...(await buildLiveArtifactsSystemBlocks()));
+    } catch { /* artefatos vivos são extra */ }
+  }
 
   return blocos.filter(Boolean).join("\n\n");
 }

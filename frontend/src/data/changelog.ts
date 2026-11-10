@@ -54,6 +54,14 @@ export const CHANGELOG: ChangelogVersion[] = [
         text: "Mensagem editada ou apagada aparece atualizada na hora para todos, sem precisar sair e voltar na conversa.",
       },
       {
+        kind: "correcao",
+        text: "Guardi: a primeira mensagem da conversa não leva mais as instruções de painéis HTML, que ele confundia com uma tentativa de mudar o comportamento dele.",
+      },
+      {
+        kind: "melhoria",
+        text: "Guardi no TaskHS: quando não há tarefa aberta, ele diz quantas estão em listas marcadas como \"de concluído\" no quadro, em vez de achar que a busca falhou.",
+      },
+      {
         kind: "melhoria",
         text: "O \"Responder em thread\" saiu para dar lugar ao Responder. As threads que já existiam continuam abrindo pelo \"respostas\" embaixo da mensagem.",
       },

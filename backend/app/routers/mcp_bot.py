@@ -475,6 +475,24 @@ def _linha_card(c: dict) -> str:
             f"'{c.get('board_title', '')}') | {c.get('title')} | prazo {prazo} | {c.get('priority', '')}")
 
 
+def texto_minhas(abertas: list[dict], fechadas: int) -> str:
+    """O retorno do `taskhs_minhas`. Vazio diz quantos cards ficaram de fora.
+
+    ⚠️ 10/11/2026: só "(nenhuma)" fazia o bot concluir que a ferramenta estava
+    quebrada. "Aberta" é a regra do TaskHS: card não concluído, numa lista que o
+    quadro NÃO marca como "de concluído" (Dashboard → listas de concluído) — e
+    há quadro com todas as listas marcadas.
+    """
+    if abertas:
+        return "\n".join(_linha_card(c) for c in abertas[:60])
+    if not fechadas:
+        return "(nenhuma)"
+    return (f"(nenhuma aberta) Há {fechadas} tarefa(s) suas que o TaskHS considera fechadas: "
+            "concluídas, ou numa lista que o quadro marca como \"de concluído\" no Dashboard. "
+            "Para vê-las, chame de novo com abertas=false. Se uma lista em andamento aparece "
+            "como de concluído, quem corrige é o dono do quadro, no TaskHS.")
+
+
 def _marcar_itens(v, card: dict) -> list[dict]:
     """Só item que EXISTE no card relido — o cartão mostra o texto dele, e um
     id inventado viraria 404 depois do clique do dono."""
@@ -562,7 +580,14 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
         abertas = args.get("abertas", True) is not False
         cards = await taskhs.chamar(em, bot, "GET", "/cards/minhas",
                                     params={"abertas": str(abertas).lower()}, dono=ctx["dono"])
-        return como_dado_externo_taskhs("\n".join(_linha_card(c) for c in (cards or [])[:60]) or "(nenhuma)")
+        if not abertas:
+            return como_dado_externo_taskhs("\n".join(_linha_card(c) for c in (cards or [])[:60]) or "(nenhuma)")
+        fechadas = 0
+        if not cards:
+            todas = await taskhs.chamar(em, bot, "GET", "/cards/minhas",
+                                        params={"abertas": "false"}, dono=ctx["dono"])
+            fechadas = len(todas or [])
+        return como_dado_externo_taskhs(texto_minhas(cards or [], fechadas))
     if nome == "taskhs_quadros":
         qs = await taskhs.chamar(em, bot, "GET", "/boards", dono=ctx["dono"])
         return como_dado_externo_taskhs("\n".join(f"- quadro {q.get('id')} | {q.get('title')}"
