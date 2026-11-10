@@ -50,6 +50,10 @@ export const CHANGELOG: ChangelogVersion[] = [
         text: "Segurança: os agentes deixaram de ter acesso às conversas entre pessoas.",
       },
       {
+        kind: "correcao",
+        text: "Mensagem editada ou apagada aparece atualizada na hora para todos, sem precisar sair e voltar na conversa.",
+      },
+      {
         kind: "melhoria",
         text: "O \"Responder em thread\" saiu para dar lugar ao Responder. As threads que já existiam continuam abrindo pelo \"respostas\" embaixo da mensagem.",
       },
