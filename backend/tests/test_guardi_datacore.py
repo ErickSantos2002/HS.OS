@@ -32,6 +32,9 @@ def test_caminho_vem_do_catalogo():
         dc.caminho_da_consulta("cliente", "1/../../auth/users")
     with pytest.raises(ValueError):
         dc.caminho_da_consulta("clientes", "9")           # consulta sem id não leva id
+    for ponto in (".", "..", "..."):                       # /clientes/.. sobe para /
+        with pytest.raises(ValueError):
+            dc.caminho_da_consulta("cliente", ponto)
 
 
 def test_filtros_viram_query_string_com_teto():

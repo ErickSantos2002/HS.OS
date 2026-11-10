@@ -16,7 +16,8 @@ TETO_RETORNO = 12_000
 _MAX_FILTROS = 20
 _MAX_VALOR = 200
 _CHAVE = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
-_ID = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
+# Só pontos (`..`) subiria um nível no caminho: `/clientes/..` vira `/`.
+_ID = re.compile(r"^(?!\.+$)[A-Za-z0-9._-]{1,80}$")
 
 # chave → (caminho no DataCore, o que é). `{id}` marca a consulta que pede `id`.
 CONSULTAS: dict[str, tuple[str, str]] = {
