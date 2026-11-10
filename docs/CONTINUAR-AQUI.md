@@ -13,6 +13,13 @@ apareceu na `/agenda` e o Guardi mandou a mensagem. Entrou o changelog
 em `frontend/src/data/changelog.ts`. Celular e Iris ficam para depois, por
 decisão dele (o celular vai ganhar uma rodada de ajustes de uma vez).
 
+**Deploy pendente (10/11)** — v2.2.0: changelog, Responder citando e conversa
+consigo mesmo. As migrações **033, 034 e 035 já estão aplicadas** em produção
+(a tela nova chama `GET /channels/pessoal` ao carregar, então a 035 tinha que
+vir antes). O `banco-hsos` da `nina` já foi republicado com `hsos_agente`.
+Depois do deploy: conferir no navegador a conversa pessoal (desktop e celular)
+e o Responder.
+
 Pendente, em ordem:
 1. **Iris → Inadimplência do DataCore.** Spec das duas pontas: no DataCore, a API
    de Inadimplência aceita o token de agente (como o TaskHS); aqui, ferramenta
