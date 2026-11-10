@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     # pydantic-settings recusa chave desconhecida — mostrando o valor no erro.
     ANEXOS_MCP_SEGREDO: str = ""
     TASKHS_API_URL: str = "https://taskhsapi.healthsafetytech.com/api"
+    DATACORE_API_URL: str = "https://tinyapi.healthsafetytech.com"
 
     # ⚠️ NÃO É MAIS USADO — o storage foi para o R2 em 13/10/2026. Continua
     # declarado só porque o pydantic-settings recusa chave desconhecida no

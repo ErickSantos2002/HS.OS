@@ -27,6 +27,8 @@ from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
 from app.integracoes import exige_segredo
 from app.relatorios import compradores
+from app.relatorios import inadimplencia as inad
+from app.sistemas import datacore
 from app.relatorios import vendedores as gerador
 from app.routers.integracoes import _url_do_banco
 from app import armazenamento as arm
@@ -245,6 +247,110 @@ _FERRAMENTAS.append({
         "required": ["produto", "inicio"],
     },
 })
+
+
+_FERRAMENTAS.append({
+    "name": "inadimplencia",
+    "description": (
+        "Inadimplência e recebíveis vencidos, com os números do DataCoreHS (a mesma "
+        "régua da tela Inadimplência: até 30 dias é atraso, depois inadimplência; "
+        "faixas; status de cobrança). USE SEMPRE que perguntarem de inadimplência, "
+        "inadimplentes, atraso de clientes ou cobrança — NÃO calcule do banco "
+        "(tiny.contas_receber não tem a régua) e não recalcule o que voltar. "
+        "modo=resumo: totais, faixas, cobrança e a taxa mensal. modo=lista: todas as "
+        "empresas numa planilha em Documentos; você recebe totais e as 10 maiores — "
+        "não escreva a lista você mesmo."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "modo": {"type": "string", "enum": ["resumo", "lista"]},
+            "faixa": {"type": "string", "enum": ["atraso", "31_60", "61_90", "90_mais"],
+                      "description": "Só uma faixa de atraso. Sem ela, todas."},
+            "status": {"type": "array", "items": {"type": "string"},
+                       "description": "Status de cobrança: sem_contato, em_contato, respondeu, "
+                                      "promessa, quebrada, negociacao, contestado, juridico, perda."},
+            "busca": {"type": "string", "description": "Nome ou CNPJ do cliente (só no modo lista)."},
+            "incluir_atraso": {"type": "boolean",
+                               "description": "Lista também quem está só em atraso (1 a 30 dias). "
+                                              "Padrão: não, só inadimplentes."},
+            "publicar_link": {"type": "boolean",
+                              "description": "Também publica a lista como página com link PÚBLICO "
+                                             "(tem nome de cliente e valor). Só quando pedirem link."},
+            "dias_de_validade": {"type": "integer", "minimum": 1, "maximum": 30,
+                                 "description": "Validade do link. Padrão 7."},
+            "solicitante": {"type": "string",
+                            "description": "Id de quem pediu: o `hsos-<id>` da sua chave de sessão, "
+                                           "sem o prefixo."},
+        },
+        "required": ["modo"],
+    },
+})
+
+
+def _filtros_de_inadimplencia(args: dict) -> list[tuple[str, str]]:
+    """Os filtros como a API do DataCore aceita (`status` repetido)."""
+    p: list[tuple[str, str]] = []
+    if args.get("faixa"):
+        p.append(("faixa", str(args["faixa"])))
+    for st in args.get("status") or []:
+        p.append(("status", str(st)))
+    return p
+
+
+async def _inadimplencia(dono_id: str, args: dict) -> str:
+    filtros = _filtros_de_inadimplencia(args)
+    if (args.get("modo") or "resumo") == "resumo":
+        r = await datacore.chamar_como_iris("GET", "/inadimplencia/resumo", params=filtros, dono=dono_id)
+        ind = await datacore.chamar_como_iris("GET", "/inadimplencia/indicadores", dono=dono_id)
+        return inad.texto_do_resumo(r, ind)
+
+    extra = list(filtros)
+    if args.get("busca"):
+        extra.append(("busca", str(args["busca"])[:120]))
+    if args.get("incluir_atraso"):
+        extra.append(("incluir_atraso", "true"))
+
+    async def pagina(offset: int) -> dict:
+        return await datacore.chamar_como_iris(
+            "GET", "/inadimplencia/empresas",
+            params=extra + [("limite", str(inad.PAGINA)), ("offset", str(offset))], dono=dono_id)
+
+    empresas = await inad.todas_as_empresas(pagina)
+    if not empresas:
+        return "Nenhuma empresa com esses filtros no DataCoreHS.\n\n" + inad.RODAPE
+
+    import anyio
+    dados = await anyio.to_thread.run_sync(inad.planilha, empresas)
+    hoje = datetime.now(timezone.utc)
+    titulo = f"Inadimplência — {hoje:%d/%m/%Y}"
+    doc_id = str(uuid4())
+    caminho = f"{dono_id}/{doc_id}.xlsx"
+    k = arm.chave("generated-documents", caminho)
+    await arm.gravar(k, dados, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    try:
+        async with sessao(role="service_role") as conn:
+            await conn.execute(
+                """INSERT INTO public.generated_documents
+                       (id, user_id, agent_id, title, doc_type, storage_path, size_bytes)
+                   VALUES ($1::uuid, $2::uuid, 'iris', $3, 'xlsx', $4, $5)""",
+                doc_id, dono_id, titulo, caminho, len(dados))
+    except Exception:
+        await arm.apagar(k)
+        raise
+
+    texto = inad.texto_da_lista(empresas, f"{titulo}.xlsx")
+    if args.get("publicar_link"):
+        dias = max(1, min(30, int(args.get("dias_de_validade") or 7)))
+        async with sessao(role="service_role") as conn:
+            art = await conn.fetchval(
+                """INSERT INTO public.artifacts_published (title, html_content, created_by, is_public, expires_at)
+                   VALUES ($1, $2, $3::uuid, true, $4) RETURNING id::text""",
+                titulo, inad.pagina_html(empresas), dono_id, hoje + timedelta(days=dias))
+        base = (settings.FRONTEND_URL or "").split(",")[0].strip().rstrip("/")
+        texto += (f"\n\nLink da lista (público, expira em {dias} dias — tem nome de cliente e "
+                  f"valor): {base}/artifact/{art}")
+    return texto
 
 
 def _data(valor, campo: str):
@@ -483,6 +589,20 @@ async def mcp_relatorios(
 
     if nome == "publicar_pagina":
         return await _publicar_pagina(ident, args)
+
+    if nome == "inadimplencia":
+        async with sessao(role="service_role") as conn:
+            dono = await _dono_do_pedido(conn, args.get("solicitante"))
+        if not dono:
+            return _resposta(ident, {"content": [{"type": "text",
+                "text": "Não há administrador cadastrado para guardar o arquivo."}], "isError": True})
+        try:
+            texto = await _inadimplencia(dono, args)
+        except datacore.ErroSistema as e:
+            return _resposta(ident, {"content": [{"type": "text",
+                "text": f"Não consegui ler a inadimplência: {e}. Não estime por conta própria."}],
+                "isError": True})
+        return _resposta(ident, {"content": [{"type": "text", "text": texto}]})
 
     if nome == "compradores_produto":
         async with sessao(role="service_role") as conn:
