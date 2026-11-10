@@ -473,3 +473,18 @@ def test_taskhs_continua_exigindo_o_sistema_ligado(amb, agenda):
     amb["conn"].sistemas = []
     texto, erro = _run("taskhs_minhas", {})
     assert erro and amb["chamadas"] == []
+
+
+def test_minhas_vazia_explica_o_que_ficou_de_fora():
+    """10/11/2026: o `erick-bot` concluiu que `taskhs_minhas` estava "quebrado"
+    porque recebia só "(nenhuma)" — e o Erick tinha 37 cards. Estavam todos em
+    listas que o quadro marca como "de concluído" (no T.I. 2, até as "EM
+    ANDAMENTO"): a ferramenta seguia a regra do TaskHS, o bot não tinha como
+    saber. Vazio com cards fechados tem que dizer quantos e por quê."""
+    from app.routers.mcp_bot import texto_minhas
+
+    assert texto_minhas([], 0) == "(nenhuma)"
+    vazio = texto_minhas([], 37)
+    assert "37" in vazio and "concluído" in vazio and "abertas=false" in vazio
+    cheio = texto_minhas([{"id": 1, "title": "x", "list_id": 2}], 37)
+    assert cheio.startswith("- card 1") and "37" not in cheio
