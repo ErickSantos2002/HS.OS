@@ -44,28 +44,37 @@ async def _registrar(dono, bot, sistema, metodo, caminho, st, jti) -> None:
 
 async def chamar(email: str, bot: str, metodo: str, caminho: str, json: Any = None,
                  params: dict | None = None, dono: str | None = None) -> Any:
-    url = settings.TASKHS_API_URL.rstrip("/") + caminho
-    token, jti = token_e_jti(AUD, email, bot)
+    return await chamar_sistema(AUD, "TaskHS", settings.TASKHS_API_URL, _transporte, _MSG,
+                                email, bot, metodo, caminho, json=json, params=params, dono=dono)
+
+
+async def chamar_sistema(aud: str, nome: str, base: str, transporte, mensagens: dict,
+                         email: str, bot: str, metodo: str, caminho: str, json: Any = None,
+                         params: dict | None = None, dono: str | None = None) -> Any:
+    """O miolo comum a todo sistema interno: token do `aud`, auditoria, erro legível.
+    Usado pelo TaskHS e pelo DataCore (`app/sistemas/datacore.py`)."""
+    url = base.rstrip("/") + caminho
+    token, jti = token_e_jti(aud, email, bot)
     headers = {"Authorization": f"Bearer {token}"}
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT, transport=_transporte) as c:
+        async with httpx.AsyncClient(timeout=TIMEOUT, transport=transporte) as c:
             r = await c.request(metodo, url, headers=headers, json=json, params=params)
     except httpx.HTTPError as e:
         if dono:
-            await _registrar(dono, bot, AUD, metodo, caminho, 0, jti)
+            await _registrar(dono, bot, aud, metodo, caminho, 0, jti)
         # ⚠️ Sem resposta não dá para afirmar que NÃO foi feito: o TaskHS pode ter
         # gravado antes de o tempo acabar. Num "criar", repetir duplicaria.
-        msg = f"o TaskHS não respondeu ({type(e).__name__}) — confira no TaskHS"
+        msg = f"o {nome} não respondeu ({type(e).__name__}) — confira no {nome}"
         if metodo != "GET":
             msg += " antes de repetir: não sei se foi feito"
         raise ErroSistema(0, msg) from e
     if dono:
-        await _registrar(dono, bot, AUD, metodo, caminho, r.status_code, jti)
+        await _registrar(dono, bot, aud, metodo, caminho, r.status_code, jti)
     if r.status_code >= 400:
         detalhe = ""
         try:
             detalhe = str((r.json() or {}).get("detail") or "")[:200]
         except ValueError:
             pass
-        raise ErroSistema(r.status_code, _MSG.get(r.status_code) or f"o TaskHS recusou ({r.status_code}) {detalhe}".strip())
+        raise ErroSistema(r.status_code, mensagens.get(r.status_code) or f"o {nome} recusou ({r.status_code}) {detalhe}".strip())
     return r.json() if r.content else None
