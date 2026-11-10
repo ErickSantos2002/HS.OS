@@ -4,14 +4,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { getContextWindowFor, getModelLabel } from "@/lib/model-pricing";
-import { useGatewayModels } from "@/hooks/use-gateway-models";
-import { getModelOverride, MODEL_OVERRIDE_EVENT } from "@/lib/agent-model-override";
 
 interface Props {
   agentId: string;
   /**
    * Slot renderizado à esquerda do badge, na mesma linha (usado pelo
-   * ModelSelector). Fica aqui, e não como irmão no ChatPage, porque este
+   * SeloDoModelo). Fica aqui, e não como irmão no ChatPage, porque este
    * componente é `w-full` e dono do próprio espaçamento — compor por fora
    * duplicaria o padding e desalinharia a barra de progresso.
    */
@@ -54,21 +52,6 @@ function timeAgo(iso: string | null): string {
 export function ContextWindowIndicator({ agentId, actions }: Props) {
   const isMobile = useIsMobile();
   const [data, setData] = useState<CtxData | null>(null);
-  // O snapshot reporta o modelo PADRÃO do agente. Se esta conversa escolheu
-  // outro (ModelSelector), o modelo e a janela mudam — sem isso, os dois badges
-  // do cabeçalho se contradiriam e o % seria calculado contra a janela errada.
-  const { models: gatewayModels } = useGatewayModels();
-  const [override, setOverride] = useState<string | null>(() => getModelOverride(agentId));
-
-  useEffect(() => {
-    setOverride(getModelOverride(agentId));
-    const onChange = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
-      if (!detail?.agentId || detail.agentId === agentId) setOverride(getModelOverride(agentId));
-    };
-    window.addEventListener(MODEL_OVERRIDE_EVENT, onChange);
-    return () => window.removeEventListener(MODEL_OVERRIDE_EVENT, onChange);
-  }, [agentId]);
 
   useEffect(() => {
     if (!agentId) return;
@@ -133,12 +116,9 @@ export function ContextWindowIndicator({ agentId, actions }: Props) {
     ) : null;
   }
 
-  // O override manda: é o modelo que esta conversa está de fato usando.
-  const overrideModel = override ? gatewayModels.find((m) => m.qualifiedId === override) : null;
-  const effectiveWindow = overrideModel?.contextWindow ?? data.contextWindow;
-  const pct = Math.min(100, Math.round((data.contextTokens / effectiveWindow) * 100));
+  const pct = Math.min(100, Math.round((data.contextTokens / data.contextWindow) * 100));
   const c = colorFor(pct);
-  const modelLabel = overrideModel?.label ?? getModelLabel(data.model);
+  const modelLabel = getModelLabel(data.model);
   const cost = Number.isFinite(data.estimatedCost) ? data.estimatedCost : 0;
 
   const botaoContexto = (
@@ -146,8 +126,8 @@ export function ContextWindowIndicator({ agentId, actions }: Props) {
                 type="button"
                 className="inline-flex items-center gap-2 rounded-full border border-border/40 bg-secondary/30 px-2.5 py-0.5 text-[10px] font-mono text-muted-foreground hover:bg-secondary/50 transition-colors"
               >
-                {/* O nome do modelo saiu daqui: quem mostra (e deixa trocar) é
-                    o ModelSelector, ao lado. Dois badges repetindo o modelo
+                {/* O nome do modelo saiu daqui: quem mostra é
+                    o SeloDoModelo, ao lado. Dois badges repetindo o modelo
                     seria ruído — e, pior, poderiam divergir. Continua no
                     tooltip abaixo. */}
                 <span className="text-foreground/80">contexto {pct}%</span>
@@ -165,7 +145,7 @@ export function ContextWindowIndicator({ agentId, actions }: Props) {
                 <div className="space-y-1 pt-1 border-t border-border/40">
                   <div className="flex justify-between text-[11px]">
                     <span className="text-muted-foreground">Tokens usados</span>
-                    <span className="font-mono text-foreground">{fmtK(data.contextTokens)} / {fmtK(effectiveWindow)}</span>
+                    <span className="font-mono text-foreground">{fmtK(data.contextTokens)} / {fmtK(data.contextWindow)}</span>
                   </div>
                   <div className="flex justify-between text-[11px]">
                     <span className="text-muted-foreground">Cache hit</span>
