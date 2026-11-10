@@ -104,6 +104,12 @@ export function threadDepoisDeApagar(
 export function mudancaPedeRecarga(prev: ChannelMessage[], tipo: string, dados: unknown): boolean {
   if (tipo !== "mudanca") return false;
   const d = dados as { tabela?: string; op?: string; id?: string | null } | null;
-  if (d?.tabela !== "channel_messages" || d.op !== "INSERT" || !d.id) return false;
-  return !prev.some((m) => m.id === d.id);
+  if (d?.tabela !== "channel_messages" || !d.id) return false;
+  const naTela = prev.some((m) => m.id === d.id);
+  // INSERT: mensagem que a tela ainda não tem. UPDATE (editar, apagar, o áudio
+  // do resumo chegando): mensagem que a tela tem e mostra desatualizada — o
+  // `"mensagem-editada"` só sai pelo worker que atendeu o PATCH (10/11/2026).
+  if (d.op === "INSERT") return !naTela;
+  if (d.op === "UPDATE") return naTela;
+  return false;
 }

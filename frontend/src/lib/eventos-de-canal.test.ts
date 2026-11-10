@@ -129,6 +129,12 @@ describe("mudancaPedeRecarga (vistos, 14/10/2026)", () => {
   it("mensagem que a tela já tem não pede", () => {
     expect(mudancaPedeRecarga([msg("m1")], "mudanca", { tabela: "channel_messages", op: "INSERT", id: "m1" })).toBe(false);
   });
+  // ⚠️ 10/11/2026: o mesmo buraco, na EDIÇÃO. O `"mensagem-editada"` sai só
+  // pelo worker que atendeu o PATCH; quem estava no outro — inclusive quem
+  // editou — só via o texto novo ao sair e voltar na conversa.
+  it("UPDATE de mensagem que a tela tem pede recarga (editar e apagar)", () => {
+    expect(mudancaPedeRecarga([msg("m1")], "mudanca", { tabela: "channel_messages", op: "UPDATE", id: "m1" })).toBe(true);
+  });
   it("outras tabelas, outras operações e outros tipos não pedem", () => {
     expect(mudancaPedeRecarga([], "mudanca", { tabela: "recibos_mensagem", op: "UPDATE", id: null })).toBe(false);
     expect(mudancaPedeRecarga([], "mudanca", { tabela: "channel_messages", op: "UPDATE", id: "m2" })).toBe(false);
