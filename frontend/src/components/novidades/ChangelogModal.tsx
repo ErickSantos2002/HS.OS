@@ -23,13 +23,15 @@ function dataBr(iso: string): string {
 export function ChangelogModal({ aberto, aoFechar }: { aberto: boolean; aoFechar: () => void }) {
   return (
     <Dialog open={aberto} onOpenChange={(v) => !v && aoFechar()}>
-      <DialogContent className="max-w-2xl w-[calc(100vw-2rem)] max-h-[85vh] p-0 gap-0 flex flex-col">
+      <DialogContent className="max-w-2xl w-[calc(100vw-2rem)] max-h-[85dvh] p-0 gap-0 flex flex-col">
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-border/60 text-left">
           <DialogTitle className="text-xl">O que há de novo?</DialogTitle>
           <DialogDescription>Atualizações recentes do HS.OS</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-6">
+        {/* `min-h-0` é o que faz rolar: item flex não encolhe abaixo do
+            conteúdo sem ele, e o `overflow-hidden` do DialogContent cortava. */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 space-y-6">
           {CHANGELOG.map((v, i) => (
             <section key={v.version} className="space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
