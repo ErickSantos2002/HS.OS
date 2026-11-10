@@ -81,6 +81,18 @@ _COLUNAS = [("Cliente", "nome", 40), ("CNPJ/CPF", "documento", 20), ("Filiais", 
             ("Último contato", "ultimo_contato", 20)]
 
 
+_NUMERICAS = {"filiais", "titulos", "valor_devido", "valor_inadimplente", "maior_atraso"}
+
+
+def _texto_seguro(v) -> str | None:
+    """Texto que começa com = + - @ (ou tab/CR) vira fórmula no Excel: o nome do
+    cliente vem do cadastro do Tiny, digitado por gente. Apóstrofo na frente."""
+    if v is None:
+        return None
+    t = str(v)
+    return "'" + t if t[:1] in ("=", "+", "-", "@", "\t", "\r") else t
+
+
 def planilha(empresas: list[dict]) -> bytes:
     wb = Workbook()
     ws = wb.active
@@ -93,7 +105,7 @@ def planilha(empresas: list[dict]) -> bytes:
     for lin, e in enumerate(empresas, 2):
         for c, (_, campo, _) in enumerate(_COLUNAS, 1):
             v = e.get(campo)
-            cel = ws.cell(lin, c, v)
+            cel = ws.cell(lin, c, v if campo in _NUMERICAS else _texto_seguro(v))
             if campo in ("valor_devido", "valor_inadimplente"):
                 cel.number_format = 'R$ #,##0.00'
     ws.freeze_panes = "A2"

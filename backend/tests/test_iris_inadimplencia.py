@@ -108,3 +108,14 @@ def test_ferramenta_registrada_no_hsos_relatorios():
     assert set(f["inputSchema"]["properties"]["modo"]["enum"]) == {"resumo", "lista"}
     d = f["description"].lower()
     assert "datacore" in d and "não calcule" in d
+
+
+def test_nome_de_cliente_nao_vira_formula():
+    """Nome vem do cadastro do Tiny, digitado por gente: `=HYPERLINK(...)` num
+    nome viraria fórmula na planilha que o Nicholson abre. Texto fica texto;
+    só as colunas de número continuam número."""
+    e = dict(EMPRESAS[0], nome="=HYPERLINK(\"http://x\",\"ok\")", status="+cmd")
+    ws = load_workbook(io.BytesIO(inad.planilha([e]))).active
+    assert ws.cell(2, 1).data_type == "s" and ws.cell(2, 1).value.startswith("'=")
+    assert ws.cell(2, 8).value.startswith("'+")
+    assert ws.cell(2, 5).data_type == "n"
