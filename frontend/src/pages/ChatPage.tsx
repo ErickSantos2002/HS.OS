@@ -84,7 +84,7 @@ import ArtifactPanel from "@/components/chat/ArtifactPanel";
 import LiveArtifactViewer from "@/components/LiveArtifactViewer";
 import ArtifactsList from "@/components/chat/ArtifactsList";
 import { ContextWindowIndicator } from "@/components/chat/ContextWindowIndicator";
-import { ModelSelector } from "@/components/chat/ModelSelector";
+import { SeloDoModelo } from "@/components/chat/SeloDoModelo";
 import AudioRecordingOverlay from "@/components/chat/AudioRecordingOverlay";
 import { type ArtifactType, extractAllArtifacts, type ConversationArtifact } from "@/lib/artifact-extractor";
 
@@ -2017,7 +2017,7 @@ export default function ChatPage() {
         {effectiveAgentId && (
           <ContextWindowIndicator
             agentId={effectiveAgentId}
-            actions={<ModelSelector agentId={toCanonicalAgentId(effectiveAgentId)} />}
+            actions={<SeloDoModelo />}
           />
         )}
 

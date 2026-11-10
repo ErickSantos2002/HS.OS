@@ -14,7 +14,7 @@ import ChannelFilesPanel from "@/components/chat/ChannelFilesPanel";
 import { ContextWindowIndicator } from "@/components/chat/ContextWindowIndicator";
 import ConversasAnteriores from "@/components/chat/ConversasAnteriores";
 import { StreamingMarkdownContent } from "@/components/chat/MessageContent";
-import { ModelSelector } from "@/components/chat/ModelSelector";
+import { SeloDoModelo } from "@/components/chat/SeloDoModelo";
 import { PainelEmbutido } from "@/components/chat/painel-embutido";
 import LiveArtifactViewer from "@/components/LiveArtifactViewer";
 import { useAgents } from "@/hooks/use-agents";
@@ -272,7 +272,7 @@ export function TelaConversaAgente({
       {painel === "contexto" && (
         <Sobreposta titulo="Modelo e contexto" aoVoltar={voltarDoPainel}>
           <div className="cel-painel-conteudo">
-            <ContextWindowIndicator agentId={agentId} actions={<ModelSelector agentId={toCanonicalAgentId(agentId)} />} />
+            <ContextWindowIndicator agentId={agentId} actions={<SeloDoModelo />} />
           </div>
         </Sobreposta>
       )}

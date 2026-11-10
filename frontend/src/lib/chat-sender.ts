@@ -14,7 +14,6 @@ import { assinar } from "@/lib/realtime";
 import { getAgentReadableImageContext } from "@/lib/chat-image-vision";
 import { getModelForAgent } from "@/lib/active-agents";
 import { appendToConversations, conversationRowToMessage } from "@/lib/chat-persistence";
-import { getModelOverride } from "@/lib/agent-model-override";
 import { enviarParaAgente } from "@/lib/agent-chat";
 import { UUID_RE } from "@/lib/vistos";
 import { api, lerUsuarioDoToken } from "@/lib/api";

@@ -58,6 +58,10 @@ export const CHANGELOG: ChangelogVersion[] = [
         text: "Guardi: a primeira mensagem da conversa não leva mais as instruções de painéis HTML, que ele confundia com uma tentativa de mudar o comportamento dele.",
       },
       {
+        kind: "correcao",
+        text: "Conversa com agente: saiu a escolha de modelo, que não funcionava (a resposta vinha sempre do DeepSeek, mesmo com outro escolhido). O cabeçalho mostra o modelo em uso: DeepSeek.",
+      },
+      {
         kind: "melhoria",
         text: "Guardi no TaskHS: quando não há tarefa aberta, ele diz quantas estão em listas marcadas como \"de concluído\" no quadro, em vez de achar que a busca falhou.",
       },
