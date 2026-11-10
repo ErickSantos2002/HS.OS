@@ -46,6 +46,7 @@ import { canalNaoResolve } from "@/lib/tela-cheia";
 import { estadoNoCanal } from "@/lib/vistos";
 import { AudioDoAnexo, Bolha, Pensando, type ReacaoNaBolha } from "./Bolha";
 import { Cabecalho, Sobreposta } from "./Cabecalho";
+import { ehPessoal, nomeDaConversaPessoal, PLACEHOLDER_PESSOAL } from "@/lib/conversa-pessoal";
 import { autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "@/lib/citacao";
 import { Composer } from "./Composer";
 import { FolhaDeAcoes, FolhaDeAnexo, FolhaDeEmoji } from "./Folhas";
@@ -109,10 +110,12 @@ export function TelaConversaCanal({
   const { typingUsers, notifyTyping } = useTypingIndicator(canalId, user?.id ?? null, nomeProprio);
 
   const isDm = canal?.type === "dm";
+  // Conversa consigo mesmo (10/11/2026): sem vistos, "digitando", membros nem silenciar.
+  const isPessoal = ehPessoal(canal);
   const pessoaPorId = useMemo(() => new Map(people.map((p) => [p.id, p])), [people]);
   const outra = isDm ? membros.find((m) => m.member_type !== "agent" && m.user_id !== user?.id) : undefined;
   const pessoaDaDm = outra ? pessoaPorId.get(outra.user_id) : undefined;
-  const titulo = isDm ? (pessoaDaDm?.full_name || pessoaDaDm?.email || "Conversa") : `#${canal?.name ?? ""}`;
+  const titulo = isPessoal ? nomeDaConversaPessoal(profile?.full_name, user?.email) : isDm ? (pessoaDaDm?.full_name || pessoaDaDm?.email || "Conversa") : `#${canal?.name ?? ""}`;
   const agentMembers = useMemo(() => membros.filter((m) => m.member_type === "agent").map((m) => m.user_id), [membros]);
 
   // Agentes trabalhando: o local responde no envio, o do servidor é a verdade.
@@ -258,6 +261,7 @@ export function TelaConversaCanal({
   const digitando = formatTypingLabel(typingUsers);
   const sub = agentesPensando.length > 0
     ? `${agentesPensando.map((a) => getAgentDisplayName(a)).join(", ")} pensando…`
+    : isPessoal ? "Suas anotações"
     : digitando || (isDm
       ? (pessoaDaDm?.presence === "online" ? "online" : [pessoaDaDm?.cargo, pessoaDaDm?.departamento].filter(Boolean).join(" · "))
       : `${membros.length} ${membros.length === 1 ? "participante" : "participantes"}`);
@@ -267,13 +271,15 @@ export function TelaConversaCanal({
     <>
       <Cabecalho
         aoVoltar={aoVoltar}
-        avatar={isDm
+        avatar={isPessoal
+          ? <Avatar tipo="pessoa" nome={titulo} chave={user?.id ?? canalId} foto={profile?.avatar_url} tam="sm" />
+          : isDm
           ? <Avatar tipo="pessoa" nome={titulo} chave={pessoaDaDm?.id ?? canalId} foto={pessoaDaDm?.avatar_url} tam="sm" />
           : <Avatar tipo="canal" nome={titulo} chave={canalId} tam="sm" />}
         titulo={titulo}
         sub={sub}
         subVivo={agentesPensando.length > 0 || !!digitando}
-        aoTocarQuem={() => aoAbrir({ tipo: "painel", painel: "participantes" })}
+        aoTocarQuem={isPessoal ? undefined : () => aoAbrir({ tipo: "painel", painel: "participantes" })}
         aoMenu={() => setMenu(true)}
       />
       {painel === null && busca && (
@@ -310,11 +316,11 @@ export function TelaConversaCanal({
                 id={m.id}
                 eu={eu}
                 inicio={inicio}
-                grupo={!isDm}
+                grupo={!isDm && !isPessoal}
                 avatar={avatarAutor}
                 autor={!isDm && !eu && inicio ? { nome: `${nomeAutor}${ehAgente ? " ✦" : ""}`, cor: corDoNome(m.author_id) } : null}
                 hora={horaCurta(m.created_at)}
-                visto={eu ? estadoNoCanal(m.id, recibos) : null}
+                visto={eu && !isPessoal ? estadoNoCanal(m.id, recibos) : null}
                 editada={!!m.edited_at && !apagada}
                 reacoes={reacoesDe(m)}
                 aoReagir={(e) => reagir(m, e)}
@@ -365,9 +371,9 @@ export function TelaConversaCanal({
         ) : (
           <Composer
             campoRef={campoRef}
-            placeholder="Mensagem"
+            placeholder={isPessoal ? PLACEHOLDER_PESSOAL : "Mensagem"}
             valor={rascunho}
-            aoMudar={(v) => { setRascunho(v); if (v.trim()) notifyTyping(); }}
+            aoMudar={(v) => { setRascunho(v); if (v.trim() && !isPessoal) notifyTyping(); }}
             aoEnviar={() => void enviar()}
             aoGravar={editando ? undefined : async (blob) => { if (ctxEnvio) { colado.current = true; await enviarAudioNoCanal(ctxEnvio, blob); } }}
             aoAbrirAnexo={editando ? undefined : () => setFolhaAnexo(true)}
@@ -385,11 +391,11 @@ export function TelaConversaCanal({
         aberto={menu}
         aoFechar={() => setMenu(false)}
         itens={[
-          { rotulo: isDm ? "Ver perfil" : "Participantes", icone: <Users />, aoEscolher: () => aoAbrir({ tipo: "painel", painel: "participantes" }) },
+          ...(isPessoal ? [] : [{ rotulo: isDm ? "Ver perfil" : "Participantes", icone: <Users />, aoEscolher: () => aoAbrir({ tipo: "painel", painel: "participantes" }) }]),
           { rotulo: "Arquivos", icone: <Paperclip />, aoEscolher: () => aoAbrir({ tipo: "painel", painel: "arquivos" }) },
-          silenciado
+          ...(isPessoal ? [] : [silenciado
             ? { rotulo: "Reativar notificações", icone: <Bell />, aoEscolher: () => { void alternarSilencio(canalId, false); toast("Notificações reativadas"); } }
-            : { rotulo: "Silenciar", icone: <BellOff />, aoEscolher: () => { void alternarSilencio(canalId, true); toast("Silenciado: sem notificação, a não ser que mencionem você"); } },
+            : { rotulo: "Silenciar", icone: <BellOff />, aoEscolher: () => { void alternarSilencio(canalId, true); toast("Silenciado: sem notificação, a não ser que mencionem você"); } }]),
           { rotulo: "Buscar na conversa", icone: <Search />, aoEscolher: () => aoAbrir({ tipo: "painel", painel: "busca" }) },
         ]}
       />

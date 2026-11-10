@@ -64,3 +64,28 @@ describe("horaDaLista", () => {
     expect(horaDaLista(0, AGORA)).toBe("");
   });
 });
+
+/**
+ * Conversa consigo mesmo (10/11/2026): fixa no topo de "Pessoas", mesmo com
+ * conversa mais nova ou não lida abaixo — e nunca vira canal. Pela ordem do
+ * WhatsApp ela desceria assim que alguém mandasse mensagem.
+ */
+describe("montarLista com a conversa pessoal", () => {
+  const pessoal = item({ id: "cp", tipo: "pessoal", nome: "Erick Santos (você)", canalId: "cp",
+    previa: { texto: "comprar café", quando: AGORA.getTime() - 5 * 864e5, minha: true } });
+  const comPessoal = [...itens, pessoal];
+
+  it("vem primeiro em Pessoas", () => {
+    expect(montarLista(comPessoal, "pessoa", "")[0].id).toBe("cp");
+  });
+
+  it("não aparece em Agentes nem em Canais", () => {
+    expect(montarLista(comPessoal, "agente", "").map((i) => i.id)).not.toContain("cp");
+    expect(montarLista(comPessoal, "canal", "").map((i) => i.id)).not.toContain("cp");
+  });
+
+  it("respeita a busca", () => {
+    expect(montarLista(comPessoal, "pessoa", "erick").map((i) => i.id)).toEqual(["cp"]);
+    expect(montarLista(comPessoal, "pessoa", "marina").map((i) => i.id)).not.toContain("cp");
+  });
+});
