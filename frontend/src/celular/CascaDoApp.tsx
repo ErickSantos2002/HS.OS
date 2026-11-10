@@ -11,6 +11,7 @@ import { useLocation } from "react-router-dom";
 
 import { AppLayout } from "@/components/AppLayout";
 import { NotificationsProvider } from "@/components/NotificationsProvider";
+import { NovidadesProvider } from "@/components/novidades/NovidadesProvider";
 import { useAuthContext } from "@/contexts/auth-context";
 import { useAgentCatalog } from "@/hooks/use-agent-catalog";
 import { useAgents } from "@/hooks/use-agents";
@@ -44,6 +45,9 @@ function AppCelularComServicos() {
 export function CascaDoApp({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile();
   const { pathname } = useLocation();
-  if (usaAppCelular(isMobile, pathname)) return <AppCelularComServicos />;
-  return <AppLayout>{children}</AppLayout>;
+  return (
+    <NovidadesProvider>
+      {usaAppCelular(isMobile, pathname) ? <AppCelularComServicos /> : <AppLayout>{children}</AppLayout>}
+    </NovidadesProvider>
+  );
 }

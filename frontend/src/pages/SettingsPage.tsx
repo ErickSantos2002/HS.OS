@@ -34,6 +34,7 @@ import MissionControlDossierPage from "@/pages/MissionControlDossierPage";
 import UsersPage from "@/pages/UsersPage";
 import DocumentationPage from "@/pages/DocumentationPage";
 import { APP_VERSION, formatBuildDate } from "@/lib/app-version";
+import { VERSAO_ATUAL } from "@/data/changelog";
 import { AvatarCropDialog } from "@/components/AvatarCropDialog";
 import {
   isSupported as isBrowserNotifSupported,
@@ -525,9 +526,9 @@ export default function SettingsPage() {
             Configurações
             <span
               className="ml-1 text-[10px] font-mono font-normal text-muted-foreground/80 px-2 py-0.5 rounded-md bg-muted/40 border border-border/50"
-              title={`Último deploy: ${formatBuildDate()}`}
+              title={`Build ${APP_VERSION} · último deploy: ${formatBuildDate()}`}
             >
-              {APP_VERSION} · {formatBuildDate()}
+              v{VERSAO_ATUAL} · {formatBuildDate()}
             </span>
           </h1>
           <p className="text-xs text-muted-foreground mt-1 ml-10">Perfil, identidade visual e conexão do gateway</p>
