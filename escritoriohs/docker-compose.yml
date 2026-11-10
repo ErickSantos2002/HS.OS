@@ -38,7 +38,11 @@ services:
       - INTERNAL_MAP_STORAGE_URL=http://map-storage:3000
       - PUBLIC_MAP_STORAGE_URL=https://${DOMAIN}/map-storage
       - START_ROOM_URL
-      - OPENID_PROMPT=login
+      # Sem `prompt`: a Microsoft entra direto com a conta da HS já logada no
+      # navegador. `login` pedia senha toda vez — e o WA refaz o login quando o
+      # token da Microsoft (~1 h) vence (10/11/2026). O issuer é do tenant, então
+      # conta pessoal não entra por engano. Vazio no EasyPanel = sem `prompt`.
+      - OPENID_PROMPT
       - OPENID_WOKA_NAME_POLICY
       - OPENID_CLIENT_ID
       - OPENID_CLIENT_SECRET

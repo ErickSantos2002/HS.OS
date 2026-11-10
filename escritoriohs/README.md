@@ -186,6 +186,15 @@ atrás.** Teste de WebSocket que só olha o 101 passa com tudo desligado.
 O `play` loga `MatrixProvider … Invalid URL` sem Matrix configurado — é ruído
 do WA, não erro nosso.
 
+⚠️ **Login Microsoft sem `prompt` (10/11/2026).** Até então o compose fixava
+`OPENID_PROMPT=login`: a Microsoft pedia e-mail e senha em todo login, mesmo com
+a conta da HS aberta no navegador. E o WA (v1.33.11) **não renova** o token da
+Microsoft: o `/me` confere o `access_token` no `userinfo` a cada visita, e
+quando ele vence (~1 h) a pessoa é mandada ao login de novo — com `login`, isso
+virava digitar a senha várias vezes por dia. Sem `prompt`, essa volta é
+silenciosa. O JWT do próprio WA dura 30 dias, fixo no código. **Não ponha
+`OPENID_PROMPT` no Environment do EasyPanel.**
+
 ⚠️ **Deploy do `wa` NÃO recarrega o `borda/nginx.conf`.** O Compose só recria
 o container cujo serviço mudou; a `borda` fica de pé com o arquivo montado
 antigo (o git troca o arquivo, e o bind mount continua no inode velho). Depois

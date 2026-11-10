@@ -28,6 +28,11 @@ exige .env.example '^OPENID_WOKA_NAME_POLICY=force_opid$' "nome vem do Entra"
 exige .env.example '^MAP_EDITOR_ALLOW_ALL_USERS=false$' "editor fechado"
 exige .env.example '^MAX_USERS_FOR_WEBRTC=4$' "LiveKit acima de 4"
 proibe .env.example '^MATRIX_' "sem Matrix"
+# `prompt=login` mandava a Microsoft pedir e-mail e senha em TODO login, sem
+# usar a conta já logada — e o WA refaz o login sempre que o token da Microsoft
+# (~1 h) vence. Era a reclamação "não puxa a conta e não salva" (10/11/2026).
+proibe docker-compose.yml 'OPENID_PROMPT=login' "login Microsoft usa a conta já logada"
+proibe .env.example '^OPENID_PROMPT=.+' "sem prompt forçado no .env.example"
 # Repo público: o exemplo não pode carregar segredo.
 proibe .env.example '^(SECRET_KEY|OPENID_CLIENT_SECRET|LIVEKIT_API_SECRET|TURN_STATIC_AUTH_SECRET|MAP_STORAGE_AUTHENTICATION_TOKEN|ROOM_API_SECRET_KEY)=.+' "nenhum segredo preenchido no .env.example"
 
