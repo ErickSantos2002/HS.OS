@@ -63,6 +63,15 @@ class MensagemCanalIn(BaseModel):
     attachments: list[dict] | None = None
 
 
+# ⚠️ Toda conversa pessoal (035) se chama "Anotações": sem o filtro, o
+# `name ILIKE` abria a de qualquer pessoa para quem tem o segredo — este
+# módulo roda como `service_role`, por cima da RLS.
+SQL_CANAL_POR_NOME = (
+    "SELECT id::text AS id, name FROM public.channels "
+    "WHERE (name ILIKE $1 OR id::text = $1) AND type <> 'pessoal' LIMIT 1"
+)
+
+
 @router.post("/canal", status_code=status.HTTP_201_CREATED)
 async def publicar_em_canal(
     dados: MensagemCanalIn,
@@ -75,11 +84,7 @@ async def publicar_em_canal(
     envelhece.
     """
     async with sessao(role="service_role") as conn:
-        canal = await conn.fetchrow(
-            "SELECT id::text AS id, name FROM public.channels "
-            "WHERE name ILIKE $1 OR id::text = $1 LIMIT 1",
-            dados.channel,
-        )
+        canal = await conn.fetchrow(SQL_CANAL_POR_NOME, dados.channel)
         if canal is None:
             raise HTTPException(
                 status.HTTP_404_NOT_FOUND, f'Canal "{dados.channel}" não encontrado.'
@@ -167,10 +172,7 @@ async def ler_canal(
 ):
     """O agente lê o que foi dito no canal — para responder com contexto."""
     async with sessao(role="service_role") as conn:
-        canal = await conn.fetchval(
-            "SELECT id::text FROM public.channels WHERE name ILIKE $1 OR id::text = $1 LIMIT 1",
-            channel,
-        )
+        canal = await conn.fetchval(SQL_CANAL_POR_NOME, channel)
         if not canal:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Canal não encontrado.")
         linhas = await conn.fetch(

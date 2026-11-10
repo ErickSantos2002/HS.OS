@@ -271,6 +271,9 @@ _ESPERA_CANAL_MS = 140_000
 _TAREFAS: set[asyncio.Task] = set()
 
 _TIPOS = {"public", "private", "dm"}
+# Canais cujos membros ninguém mexe: DM tem duas pessoas por construção; a
+# conversa pessoal (035), uma só — pôr alguém nela é ler as anotações da dona.
+TIPOS_SEM_MEMBROS = {"dm", "pessoal"}
 _TIPOS_MEMBRO = {"human", "agent"}
 _PAGINA = 200
 
@@ -565,6 +568,22 @@ class InterlocutorOut(BaseModel):
     email: str | None = None
     avatar_url: str | None = None
     status: str | None = None
+
+
+@router.get("/pessoal")
+async def conversa_pessoal(usuario: Usuario = Depends(usuario_atual)):
+    """A conversa consigo mesmo de quem chama, criada na primeira vez (035).
+
+    ⚠️ **Antes de `GET /{channel_id}`**, senão "pessoal" vira id de canal.
+
+    Achar-ou-criar mora na função `minha_conversa_pessoal()` do banco: uma por
+    pessoa pelo índice único, e ela repõe a membresia de quem foi desativado e
+    voltou. A tela chama ao carregar a lista — para a pessoa, a conversa
+    "existe desde sempre".
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        canal = await conn.fetchval("SELECT public.minha_conversa_pessoal()")
+    return {"channel_id": str(canal)}
 
 
 @router.get("/dms/interlocutores", response_model=list[InterlocutorOut])
@@ -1572,9 +1591,10 @@ async def remover_membro(
         tipo = await conn.fetchval(
             "SELECT c.type::text FROM public.channels c WHERE c.id = $1::uuid", channel_id
         )
-        if tipo == "dm":
+        if tipo in TIPOS_SEM_MEMBROS:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
+                "A sua conversa pessoal é só sua." if tipo == "pessoal" else
                 "Uma conversa direta é entre duas pessoas — ninguém sai nem é removido dela.",
             )
         marca = await conn.execute(
@@ -1644,9 +1664,10 @@ async def adicionar_membros(
         # `GET /channels/dms/interlocutores` passa a devolver dois peers para o
         # mesmo canal). DM tem duas pessoas por construção — quem o cria é o
         # `find_or_create_dm`, não esta rota.
-        if tipo == "dm":
+        if tipo in TIPOS_SEM_MEMBROS:
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN,
+                "A sua conversa pessoal é só sua." if tipo == "pessoal" else
                 "Uma conversa direta é entre duas pessoas. "
                 "Para incluir mais gente, peça ao administrador um canal.",
             )
