@@ -7,6 +7,12 @@ acrescentar itens a checklist existente, anexo e imagem no `ler_anexo`, e-mail
 marcar como lido e **agenda e lembretes** (`/agenda`, migração `032`, disparador).
 Ferramentas publicadas no gateway e `AGENTS.md` dos 23 Guardis reescritos.
 
+**10/11:** o Erick conferiu a agenda — o lembrete das 12:29 disparou na hora,
+apareceu na `/agenda` e o Guardi mandou a mensagem. Entrou o changelog
+("O que há de novo?", v2.2.0) — a partir daqui toda mudança fecha com entrada
+em `frontend/src/data/changelog.ts`. Celular e Iris ficam para depois, por
+decisão dele (o celular vai ganhar uma rodada de ajustes de uma vez).
+
 Pendente, em ordem:
 1. **Iris → Inadimplência do DataCore.** Spec das duas pontas: no DataCore, a API
    de Inadimplência aceita o token de agente (como o TaskHS); aqui, ferramenta
