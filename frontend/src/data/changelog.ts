@@ -37,6 +37,10 @@ export const CHANGELOG: ChangelogVersion[] = [
         kind: "correcao",
         text: "Dá para tirar reação de novo: clicar na sua reação agora a remove, no computador e no celular. Antes ela sumia e voltava em seguida.",
       },
+      {
+        kind: "correcao",
+        text: "Documento escrito por agente mostra o nome do agente como autor em mais casos, em vez do identificador interno.",
+      },
     ],
   },
   {

@@ -60,7 +60,7 @@ export function DocumentEditor({ document, space, onDeleted }: Props) {
   // vem do cache do React Query; se não vier, o id serve — "flow" é legível.
   const { agents } = useAgents();
   const nomeDoAgente =
-    agents?.find((a) => a.id === document.agent_id || a.openclaw_id === document.agent_id)?.name ??
+    agents?.find((a) => a.id === document.agent_id || a.openclawId === document.agent_id)?.name ??
     document.agent_id;
 
   // Resolve last editor display name
