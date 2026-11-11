@@ -89,3 +89,56 @@ def test_links_do_front():
     assert gh.com_links("proposta", {"id": 2}, base)["link"] == "https://g.x/app/propostas"
     assert "link" not in gh.com_links("fases", [{"id": 1}], base)[0]
     assert gh.com_links("aparelho", {"serie": "sem id"}, base) == {"serie": "sem id"}
+
+
+# --- o cliente ------------------------------------------------------------------
+
+import asyncio  # noqa: E402
+
+import httpx  # noqa: E402
+import jwt  # noqa: E402
+from cryptography.hazmat.primitives import serialization as s  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
+
+from app import agente_token as at  # noqa: E402
+from app.config import settings  # noqa: E402
+from app.sistemas import gestorhs  # noqa: E402
+
+
+@pytest.fixture
+def chave(monkeypatch):
+    k = Ed25519PrivateKey.generate()
+    pem = k.private_bytes(s.Encoding.PEM, s.PrivateFormat.PKCS8, s.NoEncryption()).decode()
+    monkeypatch.setattr(at.settings, "AGENTE_CHAVE_PRIVADA", pem)
+    return k
+
+
+def test_cliente_chama_a_api_nao_o_front(chave, monkeypatch):
+    """Duas URLs: a API (gestorhsapi) e o front (gestorhs). Chamar o front
+    devolveria o HTML da SPA com 200 — o agente leria uma página de login como
+    se fosse a resposta. O token vai com `aud=gestorhs`, `sub` = e-mail do DONO
+    e `act` = o Guardi; e é sempre GET (na fase 1, só leitura)."""
+    reqs = []
+
+    def h(req):
+        reqs.append(req)
+        return httpx.Response(200, json={"id": 7})
+    monkeypatch.setattr(gestorhs, "_transporte", httpx.MockTransport(h))
+    assert asyncio.run(gestorhs.chamar("ana@hs.com", "ana-bot", "/auth/me")) == {"id": 7}
+    r = reqs[0]
+    assert r.method == "GET"
+    assert str(r.url) == settings.GESTORHS_API_URL.rstrip("/") + "/auth/me"
+    assert "gestorhsapi" in settings.GESTORHS_API_URL and "gestorhsapi" not in settings.GESTORHS_URL
+    token = r.headers["authorization"].removeprefix("Bearer ")
+    d = jwt.decode(token, at.chave_publica_pem(), algorithms=["EdDSA"], audience="gestorhs")
+    assert d["sub"] == "ana@hs.com" and d["act"] == {"sub": "ana-bot"}
+
+
+def test_401_fala_da_conta_do_dono(chave, monkeypatch):
+    """401 é quase sempre "sem conta ativa no GestorHS" (ou o GestorHS ainda sem
+    a chave pública) — não "você não tem permissão", que mandaria a pessoa pedir
+    acesso a quem não pode dar."""
+    monkeypatch.setattr(gestorhs, "_transporte", httpx.MockTransport(lambda r: httpx.Response(401, json={})))
+    with pytest.raises(gestorhs.ErroSistema) as e:
+        asyncio.run(gestorhs.chamar("ana@hs.com", "ana-bot", "/auth/me"))
+    assert "conta ativa no GestorHS" in str(e.value) and e.value.status == 401

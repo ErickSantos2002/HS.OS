@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     # O front do DocsHS; a API é `DOCSHS_URL + "/api/v1"` (o nginx de lá repassa).
     # Também é a base dos links que o Guardi entrega (`/documentos/<id>`).
     DOCSHS_URL: str = "https://docshs.healthsafetytech.com"
+    # GestorHS: DUAS URLs, ao contrário do DocsHS. A API (chamadas, sem prefixo)
+    # e o front (só a base dos links `/app/...` que o Guardi entrega). Trocar
+    # uma pela outra quebra os links ou faz a chamada receber o HTML da SPA.
+    GESTORHS_API_URL: str = "https://gestorhsapi.healthsafetytech.com"
+    GESTORHS_URL: str = "https://gestorhs.healthsafetytech.com"
 
     # ⚠️ NÃO É MAIS USADO — o storage foi para o R2 em 13/10/2026. Continua
     # declarado só porque o pydantic-settings recusa chave desconhecida no
