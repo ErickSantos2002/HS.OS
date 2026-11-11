@@ -20,12 +20,17 @@ vir antes). O `banco-hsos` da `nina` já foi republicado com `hsos_agente`.
 Depois do deploy: conferir no navegador a conversa pessoal (desktop e celular)
 e o Responder.
 
+**11/11:** no ar a v2.2.0 e, no gateway, a `iris` com `inadimplencia` (como o
+Nicholson) e os 23 Guardis com `datacore_consultas`/`datacore_consultar` (login
+do dono). DataCore aceita token de agente em 27 leituras (`8086a6a`) e confere
+papel nas rotas irmãs (`5d12b61`, `673a0b9`). Conferido perguntando: `iris`
+deu R$ 806.877,01 / 179 empresas; `atlas` não enxerga a ferramenta;
+`erick-bot` lista as duas. **Falta:** o Erick testar uma consulta de verdade
+pelo chat do `erick-bot` (a ferramenta só roda no turno do dono) e deploy do
+front com a v2.3.0.
+
 Pendente, em ordem:
-1. **Iris → Inadimplência do DataCore.** Spec das duas pontas: no DataCore, a API
-   de Inadimplência aceita o token de agente (como o TaskHS); aqui, ferramenta
-   da Iris que monta a lista no servidor (planilha/link). **Não** copiar a régua
-   de `DataCore/backend/app/core/inadimplencia.py` para cá. Prometido ao
-   Nicholson em 09/11.
+1. ~~Iris → Inadimplência~~ feito em 11/11.
 2. **Conferir a agenda** com o Erick: o lembrete de teste das 12:29 de 09/11 no
    `erick-bot`; a página `/agenda` no navegador (nunca vista); e o risco
    documentado — responder ao recado enquanto o turno do lembrete roda (bolhas

@@ -30,6 +30,20 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.3.0",
+    date: "2026-11-11",
+    changes: [
+      {
+        kind: "novidade",
+        text: "Guardi no DataCoreHS: pergunte sobre clientes, estoque, vendas, notas, contas e inadimplência. Ele vê exatamente o que o seu login no DataCore permite.",
+      },
+      {
+        kind: "melhoria",
+        text: "Iris: inadimplência com os mesmos números da tela do DataCoreHS (até 30 dias é atraso, depois inadimplência), e a lista de inadimplentes em planilha nos Documentos.",
+      },
+    ],
+  },
+  {
     version: "2.2.0",
     date: "2026-11-10",
     changes: [
