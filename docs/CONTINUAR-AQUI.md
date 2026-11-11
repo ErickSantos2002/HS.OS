@@ -25,9 +25,20 @@ Nicholson) e os 23 Guardis com `datacore_consultas`/`datacore_consultar` (login
 do dono). DataCore aceita token de agente em 27 leituras (`8086a6a`) e confere
 papel nas rotas irmãs (`5d12b61`, `673a0b9`). Conferido perguntando: `iris`
 deu R$ 806.877,01 / 179 empresas; `atlas` não enxerga a ferramenta;
-`erick-bot` lista as duas. **Falta:** o Erick testar uma consulta de verdade
-pelo chat do `erick-bot` (a ferramenta só roda no turno do dono) e deploy do
-front com a v2.3.0.
+`erick-bot` lista as duas. Testado pelo Erick no chat (faturamento, estoque,
+"vendemos para a Aperam?"). Notas de entrada no catálogo (DataCore `4fb20e4`,
+só a DIRETORIA: `erick-bot` e `djalma-bot`); backend em produção `96a4857`.
+
+**Próximos (11/11):**
+- Avisar o time para testar o DataCore no Guardi (texto pronto no clipboard do
+  Erick em 11/11 — refazer se perdeu).
+- Proposta pendente de ok: no `AGENTS.md` dos Guardis trocar "Recusou? … não
+  contorno" por "tento outra consulta do catálogo que o login permita; só se
+  nenhuma servir, digo que é permissão" (o modelo pode parar no 403 de
+  `clientes` quando `vendas` responderia).
+- Deploy do front para a v2.3.0 aparecer no "O que há de novo?" (se ainda não).
+- DeepSeek recebendo dado do DataCore de todos: confirmar com o Erick que o
+  risco LGPD aceito no piloto vale para todos.
 
 Pendente, em ordem:
 1. ~~Iris → Inadimplência~~ feito em 11/11.
