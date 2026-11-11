@@ -142,3 +142,93 @@ def test_401_fala_da_conta_do_dono(chave, monkeypatch):
     with pytest.raises(gestorhs.ErroSistema) as e:
         asyncio.run(gestorhs.chamar("ana@hs.com", "ana-bot", "/auth/me"))
     assert "conta ativa no GestorHS" in str(e.value) and e.value.status == 401
+
+
+# --- as ferramentas no hsos-bot-<bot> --------------------------------------------
+
+_CTX = {"sistemas": ["gestorhs"], "email": "ana@hs.com", "dono": None, "primeiro": "Ana"}
+
+
+def _grava(monkeypatch, resposta):
+    chamadas = []
+
+    def h(req):
+        chamadas.append(req)
+        return httpx.Response(200, json=resposta)
+    monkeypatch.setattr(gestorhs, "_transporte", httpx.MockTransport(h))
+    return chamadas
+
+
+def test_ferramentas_no_guardi_gestorhs():
+    """O `toolFilter.include` e o `alsoAllow` listam ferramenta por ferramenta a
+    partir de `FERRAMENTAS_BOT`: fora dela, a ferramenta existe no servidor e o
+    Guardi nunca a vê."""
+    from app.email.regras import FERRAMENTAS_BOT
+    from app.routers import mcp_bot
+    assert {"gestorhs_consultas", "gestorhs_consultar"} <= set(FERRAMENTAS_BOT)
+    assert {"gestorhs_consultas", "gestorhs_consultar"} <= {f["name"] for f in mcp_bot.FERRAMENTAS}
+
+
+def test_sem_gestorhs_ligado_recusa_sem_rede(chave, monkeypatch):
+    """Sem a flag, nada sai: um 401 de lá diria à pessoa que ela não tem conta,
+    quando o que falta é ligar."""
+    from app.routers import mcp_bot
+    chamadas = _grava(monkeypatch, {})
+    ctx = {**_CTX, "sistemas": ["docshs"]}
+    for nome in ("gestorhs_consultas", "gestorhs_consultar"):
+        with pytest.raises(mcp_bot._Recusa):
+            asyncio.run(mcp_bot._gestorhs("ana-bot", nome, {"consulta": "aparelhos"}, ctx))
+    assert chamadas == []
+
+
+def test_id_invalido_nao_toca_a_rede(chave, monkeypatch):
+    """O `id` é validado antes da rede: `1/notas-fiscais` levaria o token do dono
+    a uma rota fora do catálogo, e só a allowlist de lá o barraria."""
+    from app.routers import mcp_bot
+    chamadas = _grava(monkeypatch, {})
+    for args in ({"consulta": "aparelho", "id": "1/notas-fiscais"},
+                 {"consulta": "caixas", "parametros": {"fase": 3}}):
+        with pytest.raises(ValueError):
+            asyncio.run(mcp_bot._gestorhs("ana-bot", "gestorhs_consultar", args, _CTX))
+    assert chamadas == []
+
+
+def test_lista_crua_pagina_do_nosso_lado(chave, monkeypatch):
+    """`/equipamentos` devolve a tabela inteira: o `offset` iria ao GestorHS e
+    seria ignorado (o defeito do `/estoque/` do DataCore em 11/11) — o agente
+    receberia sempre a mesma fatia achando que avançou."""
+    from app.routers import mcp_bot
+    chamadas = _grava(monkeypatch, [{"id": i, "nome": f"M{i}"} for i in range(30)])
+    t = asyncio.run(mcp_bot._gestorhs("ana-bot", "gestorhs_consultar",
+                                      {"consulta": "modelos",
+                                       "parametros": {"offset": 10, "limite": 5}}, _CTX))
+    assert chamadas[0].url.query == b""
+    assert '"offset":10' in t and '"proximo_offset":15' in t
+
+
+def test_retorno_e_dado_externo_com_link(chave, monkeypatch):
+    """O que volta é dado do GestorHS (observação de caixa e nome de cliente são
+    texto de terceiro e podem carregar instrução), com o link do FRONT montado
+    pelo servidor — e o `offset` das listas que paginam lá segue na query."""
+    from app.routers import mcp_bot
+    chamadas = _grava(monkeypatch, {"items": [{"id": 5, "serie": "A1"}], "total": 1})
+    t = asyncio.run(mcp_bot._gestorhs("ana-bot", "gestorhs_consultar",
+                                      {"consulta": "aparelhos",
+                                       "parametros": {"cliente": 9, "offset": 50}}, _CTX))
+    assert "DADO_EXTERNO" in t and "origem: GestorHS" in t
+    assert settings.GESTORHS_URL.rstrip("/") + "/app/equipamentos/5" in t
+    assert chamadas[0].url.path == "/equipamentos-cliente"
+    assert dict(chamadas[0].url.params) == {"cliente": "9", "offset": "50"}
+
+
+def test_catalogo_lista_filtros_declarados(chave, monkeypatch):
+    """O catálogo é o que o agente lê para escolher: sem o significado de
+    `vencendo` ele chutaria a janela, e sem o "(pede id)" mandaria a consulta
+    de item único sem id."""
+    from app.routers import mcp_bot
+    chamadas = _grava(monkeypatch, {})
+    t = asyncio.run(mcp_bot._gestorhs("ana-bot", "gestorhs_consultas", {}, _CTX))
+    assert "aparelhos" in t and "vencendo" in t and "aparelho (pede id)" in t
+    assert asyncio.run(mcp_bot._gestorhs("ana-bot", "gestorhs_consultas", {"consulta": "caixa"}, _CTX)) \
+        .startswith("- caixa (pede id)")
+    assert chamadas == []
