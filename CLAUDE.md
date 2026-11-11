@@ -806,7 +806,13 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   `publicar-bots-mcp.py --aplicar`; ligar: `--ligar-sistema <bot> gestorhs`
   (piloto) ou `--ligar-gestorhs-todos` (confere por `/auth/me`, ensaio sem
   `--aplicar`). Fase 2 = escrita (caixa, certificado, proposta) por cartão,
-  com o `require_funcao` de lá.
+  com o `require_funcao` de lá. ⚠️ **PDF de certificado e proposta vai por
+  `link_pdf`**, o link público assinado que o GestorHS já punha nos cards do
+  TaskHS (abre sem login, não expira); para token de agente o `html` do
+  certificado vem nulo. **No ar para os 23 Guardis desde 11/11/2026**,
+  conferido no `erick-bot` (piloto respondeu com o link do PDF da OS 11700).
+  ⚠️ O EasyPanel do GestorHS tem dois serviços: deploy do `gestorhs-sistema`
+  (front) não sobe o `gestorhs-api` — confira o commit no ar antes de testar.
 - **A `iris` lê a Inadimplência como o Nicholson** (`np@`, `admin` no
   DataCore; decisão do Erick, 10/11/2026): ferramenta `inadimplencia` no
   `hsos-relatorios`, só dela. Quem pergunta à `iris` não é identificado — se
