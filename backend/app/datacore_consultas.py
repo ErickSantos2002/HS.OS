@@ -95,7 +95,61 @@ def params_da_consulta(parametros: dict | None) -> list[tuple[str, str]]:
     return saida
 
 
-def texto_do_retorno(dados) -> str:
+def paginacao_local(openapi: dict, caminho: str,
+                    params: list[tuple[str, str]]) -> tuple[list[tuple[str, str]], int, int | None]:
+    """Separa `offset`/`limite` da query quando a rota NÃO pagina no DataCore.
+
+    11/11/2026: `/estoque/` não aceita parâmetro nenhum e devolve a tabela
+    inteira; o `offset` que o agente mandava era ignorado e ele recebia sempre a
+    mesma lista cortada. Rota que declara `offset` pagina lá e a query segue
+    intacta. Devolve (query para o DataCore, offset local, limite local)."""
+    op = (((openapi or {}).get("paths") or {}).get(caminho) or {}).get("get") or {}
+    if any(p.get("name") == "offset" for p in op.get("parameters") or []):
+        return params, 0, None
+    resto, offset, limite = [], 0, None
+    for k, v in params:
+        if k in ("offset", "limite"):
+            try:
+                n = int(v)
+            except ValueError:
+                raise ValueError(f"`{k}` tem que ser um número inteiro.") from None
+            if n < 0 or (k == "limite" and n == 0):
+                raise ValueError(f"`{k}` inválido: {n}.")
+            if k == "offset":
+                offset = n
+            else:
+                limite = n
+        else:
+            resto.append((k, v))
+    return resto, offset, limite
+
+
+def _pagina_da_lista(dados: list, offset: int, limite: int | None) -> str:
+    """Lista crua: a fatia pedida, por ITEM inteiro, dentro do teto."""
+    total = len(dados)
+    ini = min(offset, total)
+    fim_pedido = total if limite is None else min(total, ini + limite)
+
+    def montar(fim: int) -> str:
+        return json.dumps({"total": total, "offset": ini,
+                           "proximo_offset": fim if fim < total else None,
+                           "itens": dados[ini:fim]},
+                          ensure_ascii=False, separators=(",", ":"), default=str)
+
+    fim = fim_pedido
+    t = montar(fim)
+    while len(t) > TETO_RETORNO and fim > ini + 1:
+        # encolhe proporcionalmente e afina item a item
+        fim = max(ini + 1, min(fim - 1, ini + int((fim - ini) * TETO_RETORNO / len(t))))
+        t = montar(fim)
+    if len(t) > TETO_RETORNO:  # um item sozinho maior que o teto
+        return t[:TETO_RETORNO] + "\n…[cortado: um item só já passa do teto]"
+    return t
+
+
+def texto_do_retorno(dados, offset: int = 0, limite: int | None = None) -> str:
+    if isinstance(dados, list):
+        return _pagina_da_lista(dados, offset, limite)
     t = json.dumps(dados, ensure_ascii=False, separators=(",", ":"), default=str)
     if len(t) <= TETO_RETORNO:
         return t

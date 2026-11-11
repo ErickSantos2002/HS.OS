@@ -52,8 +52,44 @@ def test_filtros_viram_query_string_com_teto():
 
 
 def test_retorno_tem_teto():
-    t = dc.texto_do_retorno([{"nome": "x" * 100}] * 1000)
+    t = dc.texto_do_retorno({"itens": [{"nome": "x" * 100}] * 1000})
     assert len(t) <= dc.TETO_RETORNO + 200 and "cortado" in t
+
+
+def test_lista_crua_pagina_do_nosso_lado():
+    """11/11/2026: `/estoque/` do DataCore não aceita parâmetro nenhum e devolve
+    os 285 itens de uma vez. O corte de 12 mil caracteres parava no item ~45 e
+    mandava "use limite/offset" — que a rota ignora. A Djalma-Guardi pediu
+    `offset`, recebeu a mesma lista cortada no mesmo ponto e (com razão) disse
+    que não conseguia ler o resto do estoque. Lista crua é paginada AQUI, por
+    item inteiro, e o retorno diz o total e o próximo offset."""
+    import json
+    itens = [{"id": i, "nome": "Bafômetro " + "x" * 200} for i in range(285)]
+    primeira = json.loads(dc.texto_do_retorno(itens))
+    assert primeira["total"] == 285 and primeira["offset"] == 0
+    n = len(primeira["itens"])
+    assert 0 < n < 285 and primeira["proximo_offset"] == n
+    seguinte = json.loads(dc.texto_do_retorno(itens, offset=n))
+    assert seguinte["itens"][0]["id"] == n
+    ultima = json.loads(dc.texto_do_retorno(itens, offset=280))
+    assert [i["id"] for i in ultima["itens"]] == list(range(280, 285))
+    assert ultima["proximo_offset"] is None
+    assert json.loads(dc.texto_do_retorno(itens, offset=10, limite=3))["proximo_offset"] == 13
+    assert len(dc.texto_do_retorno(itens)) <= dc.TETO_RETORNO
+
+
+def test_paginacao_local_so_onde_o_datacore_nao_pagina():
+    """Rota que declara `offset` pagina lá (devolve a página como objeto); nas
+    outras, `offset`/`limite` saem da query e são aplicados aqui."""
+    openapi = {"paths": {
+        "/clientes/": {"get": {"parameters": [{"name": "offset", "in": "query"},
+                                               {"name": "limite", "in": "query"}]}},
+        "/estoque/": {"get": {}}}}
+    params = [("offset", "45"), ("limite", "20"), ("busca", "x")]
+    assert dc.paginacao_local(openapi, "/clientes/", params) == (params, 0, None)
+    assert dc.paginacao_local(openapi, "/estoque/", params) == ([("busca", "x")], 45, 20)
+    with pytest.raises(ValueError):
+        dc.paginacao_local(openapi, "/estoque/", [("offset", "-1")])
 
 
 def test_filtros_lidos_do_openapi():

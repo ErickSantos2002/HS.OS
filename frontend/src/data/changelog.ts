@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.3.1",
+    date: "2026-11-11",
+    changes: [
+      {
+        kind: "correcao",
+        text: "Guardi no DataCoreHS: o estoque inteiro agora é lido, página a página. Antes ele parava por volta do 45º produto.",
+      },
+    ],
+  },
+  {
     version: "2.3.0",
     date: "2026-11-11",
     changes: [
