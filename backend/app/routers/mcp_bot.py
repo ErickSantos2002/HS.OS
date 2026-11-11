@@ -134,8 +134,9 @@ FERRAMENTAS = [
        {"consulta": {"type": "string", "description": "opcional: só esta consulta"}}),
     _f("gestorhs_consultar", "Lê o GestorHS (calibração: aparelhos, clientes, OS, caixas, certificados "
        "e propostas) COMO o seu dono, com a função dele lá: só vem o que o login dele permite. "
-       "Recusa é permissão dele no GestorHS: diga isso, não contorne. PDF de certificado ou de "
-       "proposta não é acessível: passe o `link` ao seu dono. A `fase_descricao` da OS já vem "
+       "Recusa é permissão dele no GestorHS: diga isso, não contorne. O PDF do certificado e "
+       "da proposta vem em `link_pdf` (abre sem login): entregue esse link quando pedirem o "
+       "documento; o `link` é a tela no GestorHS. A `fase_descricao` da OS já vem "
        "pronta: não traduza o número. Lista grande vem em páginas: `offset`/`limit` nas que "
        "paginam lá (aparelhos, clientes, ordens, caixas), `page` em propostas, e nas demais "
        "`offset`/`limite`, repetindo com `offset` = o `proximo_offset` até ele vir nulo. "

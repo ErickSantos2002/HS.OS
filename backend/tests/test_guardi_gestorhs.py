@@ -292,3 +292,18 @@ def test_ligar_gestorhs_todos_so_quem_tem_conta(chave, monkeypatch, capsys):
     conn = _ConnFalsa(linhas)
     asyncio.run(pub._ligar_gestorhs_todos(conn, aplicar=True))
     assert conn.escritas == [(["ana-bot"], "gestorhs")]
+
+
+def test_guardi_entrega_o_link_pdf_do_gestorhs():
+    """11/11/2026, primeira pergunta real no piloto: "consegue me retornar o
+    link do certificado da OS 11700?" — e o Guardi respondeu que não tinha,
+    mandando abrir pela OS. O GestorHS já tinha esse link (o mesmo que vai aos
+    cards do TaskHS); só não o devolvia ao Guardi. Agora devolve em `link_pdf`,
+    e sem o nome do campo na descrição da ferramenta e no AGENTS.md o agente
+    continuaria dizendo que PDF "não é acessível"."""
+    from app.bots_pessoais import arquivos_do_bot
+    from app.routers.mcp_bot import FERRAMENTAS
+    desc = next(f for f in FERRAMENTAS if f["name"] == "gestorhs_consultar")["description"]
+    assert "link_pdf" in desc and "não é acessível" not in desc
+    a = arquivos_do_bot({"full_name": "Ana Souza", "email": "ana@hs.com"})["AGENTS.md"]
+    assert "link_pdf" in a.split("gestorhs_consultar", 1)[1][:400]

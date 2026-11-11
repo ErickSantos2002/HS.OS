@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.5.1",
+    date: "2026-11-11",
+    changes: [
+      {
+        kind: "melhoria",
+        text: "Pediu ao Guardi o certificado ou a proposta de uma OS? Ele agora entrega o link direto do PDF, o mesmo que vai para o TaskHS.",
+      },
+    ],
+  },
+  {
     version: "2.5.0",
     date: "2026-11-11",
     changes: [
