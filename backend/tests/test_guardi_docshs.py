@@ -172,3 +172,71 @@ def test_401_fala_da_conta_do_dono(chave, monkeypatch):
     with pytest.raises(docshs.ErroSistema) as e:
         asyncio.run(docshs.chamar("ana@hs.com", "ana-bot", "/auth/eu"))
     assert "conta ativa no DocsHS" in str(e.value) and e.value.status == 401
+
+
+# --- as ferramentas no hsos-bot-<bot> --------------------------------------------
+
+_CTX = {"sistemas": ["docshs"], "email": "ana@hs.com", "dono": None, "primeiro": "Ana"}
+
+
+def test_ferramentas_no_guardi_docshs():
+    from app.email.regras import FERRAMENTAS_BOT
+    assert {"docshs_consultas", "docshs_consultar"} <= set(FERRAMENTAS_BOT)
+
+
+def test_sem_docshs_ligado_recusa_sem_rede(chave, monkeypatch):
+    """A flag é a ordem de abertura (piloto no erick-bot, depois quem tem conta
+    lá). Sem ela, nem o `/auth/eu` sai — um 401 vindo do DocsHS diria à pessoa
+    que ela não tem conta, quando o que falta é ligar."""
+    from app.routers import mcp_bot
+    chamadas = []
+    monkeypatch.setattr(docshs, "_transporte", httpx.MockTransport(
+        lambda r: chamadas.append(r) or httpx.Response(200, json={})))
+    ctx = {**_CTX, "sistemas": ["datacore"]}
+    for nome in ("docshs_consultas", "docshs_consultar"):
+        with pytest.raises(mcp_bot._Recusa):
+            asyncio.run(mcp_bot._docshs("ana-bot", nome, {"consulta": "eu"}, ctx))
+    assert chamadas == []
+
+
+def test_meus_treinamentos_usa_o_id_do_eu(chave, monkeypatch):
+    """O histórico é o do DONO: o servidor pergunta ao DocsHS quem ele é e usa
+    esse id. O `id` mandado pelo agente é recusado ANTES da rede — senão o
+    Guardi de A leria o histórico de B."""
+    from app.routers import mcp_bot
+    caminhos = []
+
+    def h(req):
+        caminhos.append(req.url.path)
+        if req.url.path.endswith("/auth/eu"):
+            return httpx.Response(200, json={"id": 7, "nome": "Ana"})
+        return httpx.Response(200, json={"treinamentos": []})
+    monkeypatch.setattr(docshs, "_transporte", httpx.MockTransport(h))
+    asyncio.run(mcp_bot._docshs("ana-bot", "docshs_consultar", {"consulta": "meus_treinamentos"}, _CTX))
+    assert caminhos == ["/api/v1/auth/eu", "/api/v1/treinamentos/pessoas/7/historico"]
+    caminhos.clear()
+    with pytest.raises(ValueError):
+        asyncio.run(mcp_bot._docshs("ana-bot", "docshs_consultar",
+                                    {"consulta": "meus_treinamentos", "id": "8"}, _CTX))
+    assert caminhos == []
+
+
+def test_retorno_e_dado_externo_com_link(chave, monkeypatch):
+    """O que volta é dado do DocsHS (título de documento é texto de terceiro e
+    pode carregar instrução), com o link montado pelo servidor."""
+    from app.routers import mcp_bot
+    monkeypatch.setattr(docshs, "_transporte", httpx.MockTransport(lambda r: httpx.Response(
+        200, json={"itens": [{"id": 5, "codigo": "PO-07", "titulo": "Calibração"}],
+                   "total": 1, "pagina": 1, "tamanho": 25})))
+    t = asyncio.run(mcp_bot._docshs("ana-bot", "docshs_consultar",
+                                    {"consulta": "documentos", "parametros": {"busca": "calibracao"}}, _CTX))
+    assert "DADO_EXTERNO" in t and "origem: DocsHS" in t
+    assert settings.DOCSHS_URL.rstrip("/") + "/documentos/5" in t
+
+
+def test_catalogo_lista_filtros_declarados(chave, monkeypatch):
+    from app.routers import mcp_bot
+    t = asyncio.run(mcp_bot._docshs("ana-bot", "docshs_consultas", {}, _CTX))
+    assert "documentos" in t and "busca" in t and "documento (pede id)" in t
+    assert asyncio.run(mcp_bot._docshs("ana-bot", "docshs_consultas", {"consulta": "painel"}, _CTX)) \
+        .startswith("- painel")
