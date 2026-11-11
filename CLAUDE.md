@@ -785,7 +785,9 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   --aplicar`**: o `toolFilter.include` e o `alsoAllow` listam ferramenta por
   ferramenta (`FERRAMENTAS_BOT`). Ligar: `--ligar-sistema <bot> docshs`
   (piloto) ou `--ligar-docshs-todos`, que liga só quem responde 200 no
-  `/auth/eu` (ensaio sem `--aplicar`).
+  `/auth/eu` (ensaio sem `--aplicar`). **No ar para os 23 Guardis desde
+  11/11/2026**, conferido no `erick-bot` (administrador lá) e no `welton-bot`
+  (colaborador, 121 documentos visíveis).
 - **A `iris` lê a Inadimplência como o Nicholson** (`np@`, `admin` no
   DataCore; decisão do Erick, 10/11/2026): ferramenta `inadimplencia` no
   `hsos-relatorios`, só dela. Quem pergunta à `iris` não é identificado — se
