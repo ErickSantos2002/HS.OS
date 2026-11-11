@@ -111,3 +111,64 @@ def test_links_do_front():
     # leitura aponta para o documento dela
     assert dh.com_links("minhas_leituras", [{"id": 1, "documento_id": 8}], base)[0]["link"] == \
         "https://d.x/documentos/8"
+
+
+# --- o cliente ------------------------------------------------------------------
+
+import asyncio  # noqa: E402
+
+import httpx  # noqa: E402
+import jwt  # noqa: E402
+from cryptography.hazmat.primitives import serialization as s  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
+
+from app import agente_token as at  # noqa: E402
+from app.config import settings  # noqa: E402
+from app.sistemas import docshs  # noqa: E402
+
+
+@pytest.fixture
+def chave(monkeypatch):
+    k = Ed25519PrivateKey.generate()
+    pem = k.private_bytes(s.Encoding.PEM, s.PrivateFormat.PKCS8, s.NoEncryption()).decode()
+    monkeypatch.setattr(at.settings, "AGENTE_CHAVE_PRIVADA", pem)
+    return k
+
+
+def test_cliente_le_a_api_com_token_do_dono(chave, monkeypatch):
+    """A API mora em `/api/v1` atrás do nginx do front — chamar a raiz devolve o
+    HTML da SPA, não um erro. O token vai com `aud=docshs`, `sub` = e-mail do
+    DONO e `act` = o Guardi; e é sempre GET (nesta fase, só leitura)."""
+    reqs = []
+
+    def h(req):
+        reqs.append(req)
+        return httpx.Response(200, json={"id": 7})
+    monkeypatch.setattr(docshs, "_transporte", httpx.MockTransport(h))
+    assert asyncio.run(docshs.chamar("ana@hs.com", "ana-bot", "/auth/eu")) == {"id": 7}
+    r = reqs[0]
+    assert r.method == "GET"
+    assert str(r.url) == settings.DOCSHS_URL.rstrip("/") + "/api/v1/auth/eu"
+    token = r.headers["authorization"].removeprefix("Bearer ")
+    d = jwt.decode(token, at.chave_publica_pem(), algorithms=["EdDSA"], audience="docshs")
+    assert d["sub"] == "ana@hs.com" and d["act"] == {"sub": "ana-bot"}
+
+
+def test_404_nao_diz_que_nao_existe(chave, monkeypatch):
+    """O DocsHS responde 404 a documento que o dono não pode ver. Se a mensagem
+    dissesse "não existe", o Guardi afirmaria à pessoa que a empresa não tem o
+    procedimento — quando ele só não é visível para o cargo dela."""
+    monkeypatch.setattr(docshs, "_transporte", httpx.MockTransport(lambda r: httpx.Response(404, json={})))
+    with pytest.raises(docshs.ErroSistema) as e:
+        asyncio.run(docshs.chamar("ana@hs.com", "ana-bot", "/documentos/12"))
+    assert "não tem acesso" in str(e.value) and "não existe" not in str(e.value)
+
+
+def test_401_fala_da_conta_do_dono(chave, monkeypatch):
+    """401 é quase sempre "sem conta ativa no DocsHS" (ou o DocsHS ainda sem a
+    chave pública) — não "você não tem permissão", que mandaria a pessoa pedir
+    acesso a quem não pode dar."""
+    monkeypatch.setattr(docshs, "_transporte", httpx.MockTransport(lambda r: httpx.Response(401, json={})))
+    with pytest.raises(docshs.ErroSistema) as e:
+        asyncio.run(docshs.chamar("ana@hs.com", "ana-bot", "/auth/eu"))
+    assert "conta ativa no DocsHS" in str(e.value) and e.value.status == 401

@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     ANEXOS_MCP_SEGREDO: str = ""
     TASKHS_API_URL: str = "https://taskhsapi.healthsafetytech.com/api"
     DATACORE_API_URL: str = "https://tinyapi.healthsafetytech.com"
+    # O front do DocsHS; a API é `DOCSHS_URL + "/api/v1"` (o nginx de lá repassa).
+    # Também é a base dos links que o Guardi entrega (`/documentos/<id>`).
+    DOCSHS_URL: str = "https://docshs.healthsafetytech.com"
 
     # ⚠️ NÃO É MAIS USADO — o storage foi para o R2 em 13/10/2026. Continua
     # declarado só porque o pydantic-settings recusa chave desconhecida no
