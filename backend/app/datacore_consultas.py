@@ -50,7 +50,9 @@ CONSULTAS: dict[str, tuple[str, str]] = {
     "centro_de_custo": ("/centro_custo/resumo_produto/", "resumo por produto do centro de custo"),
     # Gerenciamento financeiro (11/11/2026). No DataCore só a DIRETORIA abre.
     "notas_de_entrada_resumo": ("/notas_entrada/resumo", "resumo das notas de entrada (compras)"),
-    "notas_de_entrada": ("/notas_entrada/pagina", "notas de entrada (compras), paginado"),
+    "notas_de_entrada": ("/notas_entrada/pagina", "notas de entrada (compras), paginado. "
+                         "Importação antiga vem com remetente 'Exterior — remetente não "
+                         "identificado': o nome real não está no DataCore, não deduza"),
     "itens_da_nota_de_entrada": ("/notas_entrada/{id}/itens", "itens de uma nota de entrada (id da nota)"),
 }
 
