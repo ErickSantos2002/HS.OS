@@ -35,7 +35,7 @@ export const CHANGELOG: ChangelogVersion[] = [
     changes: [
       {
         kind: "novidade",
-        text: "Guardi no DataCoreHS: pergunte sobre clientes, estoque, vendas, notas, contas e inadimplência. Ele vê exatamente o que o seu login no DataCore permite.",
+        text: "Guardi no DataCoreHS: pergunte sobre clientes, estoque, vendas, notas, notas de entrada, contas e inadimplência. Ele vê exatamente o que o seu login no DataCore permite.",
       },
       {
         kind: "melhoria",

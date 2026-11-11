@@ -48,6 +48,10 @@ CONSULTAS: dict[str, tuple[str, str]] = {
     "inadimplencia_empresa": ("/inadimplencia/empresas/{id}", "detalhe de uma empresa inadimplente"),
     "inadimplencia_titulos": ("/inadimplencia/empresas/{id}/titulos", "títulos de uma empresa inadimplente"),
     "centro_de_custo": ("/centro_custo/resumo_produto/", "resumo por produto do centro de custo"),
+    # Gerenciamento financeiro (11/11/2026). No DataCore só a DIRETORIA abre.
+    "notas_de_entrada_resumo": ("/notas_entrada/resumo", "resumo das notas de entrada (compras)"),
+    "notas_de_entrada": ("/notas_entrada/pagina", "notas de entrada (compras), paginado"),
+    "itens_da_nota_de_entrada": ("/notas_entrada/{id}/itens", "itens de uma nota de entrada (id da nota)"),
 }
 
 

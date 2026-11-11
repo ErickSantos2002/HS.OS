@@ -20,6 +20,9 @@ def test_so_consultas_de_negocio():
     for chave, (caminho, _desc) in dc.CONSULTAS.items():
         assert not any(caminho.startswith(p) or p in caminho for p in proibidas), chave
     assert {"clientes", "estoque", "faturamento_resumo", "contas_receber", "inadimplencia_resumo"} <= set(dc.CONSULTAS)
+    # 11/11/2026: notas de entrada (gerenciamento financeiro, só a DIRETORIA no DataCore).
+    assert dc.caminho_da_consulta("notas_de_entrada", None) == "/notas_entrada/pagina"
+    assert dc.caminho_da_consulta("itens_da_nota_de_entrada", "123") == "/notas_entrada/123/itens"
 
 
 def test_caminho_vem_do_catalogo():
