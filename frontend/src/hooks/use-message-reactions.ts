@@ -123,10 +123,17 @@ export function useMessageReactions(channelId: string | null) {
 
     // O `user_id` sai do token no servidor: reagir em nome de outra pessoa não
     // é caso de uso, e mandá-lo daqui abria para isso.
-    const error = await api("/reactions", {
-      method: alreadyReacted ? "DELETE" : "POST",
-      body: { message_id: messageId, emoji },
-    }).then(() => null, (e: Error) => e);
+    // ⚠️ O DELETE lê `message_id` e `emoji` da QUERY STRING, não do corpo
+    // (`desreagir` em `routers/chat_extras.py`). Mandados no corpo, o servidor
+    // respondia 422, o bloco abaixo desfazia o otimista e a reação "voltava"
+    // sozinha — não dava para tirar reação nenhuma.
+    const pedido = alreadyReacted
+      ? api(
+          `/reactions?${new URLSearchParams({ message_id: messageId, emoji })}`,
+          { method: "DELETE" },
+        )
+      : api("/reactions", { method: "POST", body: { message_id: messageId, emoji } });
+    const error = await pedido.then(() => null, (e: Error) => e);
 
     if (error) {
       setReactions(previousReactions);

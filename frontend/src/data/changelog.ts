@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.4.1",
+    date: "2026-11-11",
+    changes: [
+      {
+        kind: "correcao",
+        text: "Dá para tirar reação de novo: clicar na sua reação agora a remove, no computador e no celular. Antes ela sumia e voltava em seguida.",
+      },
+    ],
+  },
+  {
     version: "2.4.0",
     date: "2026-11-11",
     changes: [
