@@ -8,6 +8,7 @@
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-email erick-bot          # só banco
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-sistema erick-bot taskhs # só banco
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-docshs-todos [--aplicar] # só quem tem conta lá
+    PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-gestorhs-todos [--aplicar] # idem, GestorHS
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --aplicar                        # gateway
 
 Lê o `backend/.env` (banco, gateway, `ANEXOS_MCP_SEGREDO`, `GUARDRAILS_API_TOKEN`)
@@ -117,41 +118,57 @@ def _mascarar(novos: dict) -> dict:
                 "headers": "<GUARDRAILS_API_TOKEN>"} for n, e in novos.items()}
 
 
-async def _ligar_docshs_todos(conn, aplicar: bool) -> int:
-    """Liga o DocsHS só em quem TEM conta ativa lá (spec 2026-11-11-guardi-docshs).
+_ROTULO = {"docshs": "DocsHS", "gestorhs": "GestorHS"}
 
-    Ao contrário do DataCore, nem todo colaborador usa o DocsHS: ligar para quem
-    não tem conta faria o Guardi responder "sem conta" a cada pergunta, e o
-    AGENTS.md já promete a ferramenta. Pergunta `/auth/eu` com o token de cada
-    dono — 200 entra, o resto é listado. Só GET; o DocsHS precisa estar com a
-    chave pública do HS.OS no ar, senão todo mundo sai como "sem conta"."""
-    from app.sistemas import docshs
+
+async def _ligar_quem_tem_conta(conn, sistema: str, modulo, caminho_eu: str, aplicar: bool) -> int:
+    """Liga `sistema` só em quem TEM conta ativa lá (DocsHS e GestorHS, 11/11/2026).
+
+    Ao contrário do DataCore, nem todo colaborador tem conta em todo sistema:
+    ligar para quem não tem faria o Guardi responder "sem conta" a cada
+    pergunta, e o AGENTS.md já promete a ferramenta. Pergunta `caminho_eu` com
+    o token de cada dono — 200 entra, o resto é listado. Só GET; o sistema
+    precisa estar com a chave pública do HS.OS no ar, senão todo mundo sai como
+    "sem conta"."""
+    rotulo = _ROTULO[sistema]
     linhas = await conn.fetch(
         "SELECT a.agent_id, pr.email FROM public.agent_profiles a "
         "  JOIN public.profiles pr ON pr.id = a.dono_id "
         "  JOIN auth.users u ON u.id = a.dono_id "
         " WHERE a.dono_id IS NOT NULL AND u.is_active AND pr.email IS NOT NULL "
-        "   AND NOT ('docshs' = ANY(coalesce(a.sistemas_ligados, '{}'))) ORDER BY a.agent_id")
+        "   AND NOT ($1 = ANY(coalesce(a.sistemas_ligados, '{}'))) ORDER BY a.agent_id", sistema)
     com_conta, sem_conta = [], []
     for l in linhas:
         try:
-            await docshs.chamar(l["email"], l["agent_id"], "/auth/eu", dono=None)
+            await modulo.chamar(l["email"], l["agent_id"], caminho_eu, dono=None)
             com_conta.append(l["agent_id"])
-        except docshs.ErroSistema as e:
+        except modulo.ErroSistema as e:
             sem_conta.append(f"{l['agent_id']} ({e.status or 'sem resposta'})")
-    print("Com conta no DocsHS:", ", ".join(com_conta) or "(nenhum)")
-    print("Sem conta no DocsHS (ou inativo lá):", ", ".join(sem_conta) or "(nenhum)")
+    print(f"Com conta no {rotulo}:", ", ".join(com_conta) or "(nenhum)")
+    print(f"Sem conta no {rotulo} (ou inativo lá):", ", ".join(sem_conta) or "(nenhum)")
     if not aplicar:
         print("(ensaio — nada foi escrito)")
         return 0
     if com_conta:
         n = await conn.fetchval(
             "WITH u AS (UPDATE public.agent_profiles SET sistemas_ligados = (SELECT "
-            "  array_agg(DISTINCT x) FROM unnest(sistemas_ligados || '{docshs}'::text[]) x) "
+            "  array_agg(DISTINCT x) FROM unnest(sistemas_ligados || $2::text) x) "
             "  WHERE agent_id = ANY($1::text[]) AND dono_id IS NOT NULL RETURNING 1) "
-            "SELECT count(*) FROM u", com_conta)
-        print(f"DocsHS ligado em {n} bots")
+            "SELECT count(*) FROM u", com_conta, sistema)
+        print(f"{rotulo} ligado em {n} bots")
     return 0
+
+
+async def _ligar_docshs_todos(conn, aplicar: bool) -> int:
+    """Spec 2026-11-11-guardi-docshs: confere por `/auth/eu`."""
+    from app.sistemas import docshs
+    return await _ligar_quem_tem_conta(conn, "docshs", docshs, "/auth/eu", aplicar)
+
+
+async def _ligar_gestorhs_todos(conn, aplicar: bool) -> int:
+    """Spec 2026-11-11-guardi-gestorhs: confere por `/auth/me` (o "eu" de lá)."""
+    from app.sistemas import gestorhs
+    return await _ligar_quem_tem_conta(conn, "gestorhs", gestorhs, "/auth/me", aplicar)
 
 
 async def main() -> int:
@@ -166,12 +183,15 @@ async def main() -> int:
     ap.add_argument("--ligar-todos", action="store_true",
                     help="liga e-mail e TaskHS em TODOS os bots pessoais (só banco)")
     ap.add_argument("--ligar-sistema", nargs=2, metavar=("BOT", "SISTEMA"),
-                    help="acrescenta um sistema (taskhs, datacore, docshs) a sistemas_ligados de UM bot (só banco)")
+                    help="acrescenta um sistema (taskhs, datacore, docshs, gestorhs) a sistemas_ligados de UM bot (só banco)")
     ap.add_argument("--ligar-datacore-todos", action="store_true",
                     help="acrescenta datacore a sistemas_ligados de TODOS os bots pessoais (só banco)")
     ap.add_argument("--ligar-docshs-todos", action="store_true",
                     help="acrescenta docshs a sistemas_ligados dos bots cujo dono TEM conta ativa no "
                          "DocsHS (confere por /auth/eu; ensaio sem --aplicar; só banco)")
+    ap.add_argument("--ligar-gestorhs-todos", action="store_true",
+                    help="acrescenta gestorhs a sistemas_ligados dos bots cujo dono TEM conta ativa no "
+                         "GestorHS (confere por /auth/me; ensaio sem --aplicar; só banco)")
     a = ap.parse_args()
 
     await init_db()
@@ -196,6 +216,8 @@ async def main() -> int:
                 return 0
             if a.ligar_docshs_todos:
                 return await _ligar_docshs_todos(conn, a.aplicar)
+            if a.ligar_gestorhs_todos:
+                return await _ligar_gestorhs_todos(conn, a.aplicar)
             if a.ligar_email:
                 ok = await conn.fetchval(
                     "UPDATE public.agent_profiles SET email_ligado = true "
@@ -204,8 +226,8 @@ async def main() -> int:
                 return 0 if ok else 1
             if a.ligar_sistema:
                 bot, sistema = a.ligar_sistema
-                if sistema not in ("taskhs", "datacore", "docshs"):
-                    print("sistema desconhecido (por ora: taskhs, datacore, docshs)")
+                if sistema not in ("taskhs", "datacore", "docshs", "gestorhs"):
+                    print("sistema desconhecido (por ora: taskhs, datacore, docshs, gestorhs)")
                     return 1
                 ok = await conn.fetchval(
                     "UPDATE public.agent_profiles SET sistemas_ligados = "

@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.5.0",
+    date: "2026-11-11",
+    changes: [
+      {
+        kind: "novidade",
+        text: "O Guardi agora consulta o GestorHS: aparelhos de um cliente, OS aberta, em que caixa está, certificados e propostas — com a mesma permissão que você tem lá.",
+      },
+    ],
+  },
+  {
     version: "2.4.1",
     date: "2026-11-11",
     changes: [

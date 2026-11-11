@@ -232,3 +232,63 @@ def test_catalogo_lista_filtros_declarados(chave, monkeypatch):
     assert asyncio.run(mcp_bot._gestorhs("ana-bot", "gestorhs_consultas", {"consulta": "caixa"}, _CTX)) \
         .startswith("- caixa (pede id)")
     assert chamadas == []
+
+
+def test_agents_md_do_guardi_aponta_para_o_gestorhs_e_cabe_no_teto():
+    """Ferramenta disponível não é ferramenta usada (lição de 14/08 com a skill
+    `faturamento`): sem o ponteiro no AGENTS.md o Guardi responderia "não tenho
+    acesso ao GestorHS". E o AGENTS.md tem teto de 20.000 caracteres que o
+    gateway corta em silêncio — o que se perde é o último bloco escrito."""
+    from app.bots_pessoais import arquivos_do_bot
+    from app.gateway.client import excede_o_teto
+    a = arquivos_do_bot({"full_name": "Ana Souza", "email": "ana@hs.com"})["AGENTS.md"]
+    assert "gestorhs_consultas" in a and "gestorhs_consultar" in a
+    assert "login de Ana" in a.split("gestorhs_consultar", 1)[1][:80]
+    assert not excede_o_teto(a)
+
+
+class _ConnFalsa:
+    def __init__(self, linhas):
+        self.linhas, self.escritas, self.fetch_args = linhas, [], None
+
+    async def fetch(self, sql, *args):
+        self.fetch_args = args
+        return self.linhas
+
+    async def fetchval(self, sql, *args):
+        self.escritas.append(args)
+        return len(args[0])
+
+
+def test_ligar_gestorhs_todos_so_quem_tem_conta(chave, monkeypatch, capsys):
+    """Ligar o GestorHS para quem não tem conta lá faria o Guardi responder
+    "sem conta" a cada pergunta, com o AGENTS.md prometendo a ferramenta. O
+    "eu" de lá é `/auth/me` (no DocsHS é `/auth/eu`: trocar daria 404 para
+    todo mundo e ninguém seria ligado). E o ensaio não escreve nada."""
+    import importlib.util
+    import pathlib
+    spec = importlib.util.spec_from_file_location(
+        "publicar_bots_mcp", pathlib.Path(__file__).resolve().parents[1] / "scripts" / "publicar-bots-mcp.py")
+    pub = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pub)
+
+    caminhos = []
+
+    def h(req):
+        caminhos.append(req.url.path)
+        sub = jwt.decode(req.headers["authorization"].removeprefix("Bearer "),
+                         options={"verify_signature": False})["sub"]
+        return httpx.Response(200 if sub == "ana@hs.com" else 401, json={})
+    monkeypatch.setattr(gestorhs, "_transporte", httpx.MockTransport(h))
+    linhas = [{"agent_id": "ana-bot", "email": "ana@hs.com"}, {"agent_id": "beto-bot", "email": "b@hs.com"}]
+
+    conn = _ConnFalsa(linhas)
+    assert asyncio.run(pub._ligar_gestorhs_todos(conn, aplicar=False)) == 0
+    assert caminhos == ["/auth/me", "/auth/me"] and conn.fetch_args == ("gestorhs",)
+    assert conn.escritas == []
+    out = capsys.readouterr().out
+    assert "Com conta no GestorHS: ana-bot" in out and "beto-bot (401)" in out
+
+    conn = _ConnFalsa(linhas)
+    asyncio.run(pub._ligar_gestorhs_todos(conn, aplicar=True))
+    assert conn.escritas == [(["ana-bot"], "gestorhs")]

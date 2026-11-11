@@ -788,6 +788,25 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   `/auth/eu` (ensaio sem `--aplicar`). **No ar para os 23 Guardis desde
   11/11/2026**, conferido no `erick-bot` (administrador lá) e no `welton-bot`
   (colaborador, 121 documentos visíveis).
+- **GestorHS (11/11/2026, fase 1 = só consulta):** `gestorhs_consultas` /
+  `gestorhs_consultar` no `hsos-bot-<bot>` (com `gestorhs` em
+  `sistemas_ligados`): frota de aparelhos, clientes, OS, caixas, certificados e
+  propostas, **como o DONO, com a função dele lá** (decisão do Erick: a função
+  no GestorHS é a permissão do Guardi). Spec
+  `docs/superpowers/specs/2026-11-11-guardi-gestorhs-design.md`. Catálogo em
+  `app/gestorhs_consultas.py`, filtros declarados (o openapi de lá é
+  alcançável, mas não diz que `status=vencendo` são 90 dias); `id` só dígitos.
+  ⚠️ **Duas URLs**: `GESTORHS_API_URL` (gestorhsapi, as chamadas) e
+  `GESTORHS_URL` (o front, só os links `/app/...`) — trocar uma pela outra faz
+  a chamada receber o HTML da SPA. ⚠️ **Allowlist dos dois lados**: rota nova
+  só chega ao Guardi entrando no catálogo daqui **e** no allowlist de token de
+  agente do GestorHS (que também barra todo método fora de GET). Nas listas que
+  paginam lá (`aparelhos`, `clientes`, `ordens`, `caixas`) o `offset` vai ao
+  GestorHS; nas cruas é nosso (`offset`/`limite`). Ferramenta nova exige
+  `publicar-bots-mcp.py --aplicar`; ligar: `--ligar-sistema <bot> gestorhs`
+  (piloto) ou `--ligar-gestorhs-todos` (confere por `/auth/me`, ensaio sem
+  `--aplicar`). Fase 2 = escrita (caixa, certificado, proposta) por cartão,
+  com o `require_funcao` de lá.
 - **A `iris` lê a Inadimplência como o Nicholson** (`np@`, `admin` no
   DataCore; decisão do Erick, 10/11/2026): ferramenta `inadimplencia` no
   `hsos-relatorios`, só dela. Quem pergunta à `iris` não é identificado — se
