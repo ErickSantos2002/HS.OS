@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.4.0",
+    date: "2026-11-11",
+    changes: [
+      {
+        kind: "novidade",
+        text: "O Guardi agora consulta o DocsHS: documentos, leituras e treinamentos, com o seu acesso de lá. Ele procura por código ou título, diz a revisão vigente e o vencimento e manda o link para abrir. Só leitura: confirmar leitura e responder treinamento continuam com você.",
+      },
+    ],
+  },
+  {
     version: "2.3.1",
     date: "2026-11-11",
     changes: [

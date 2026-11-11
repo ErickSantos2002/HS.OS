@@ -234,6 +234,21 @@ def test_retorno_e_dado_externo_com_link(chave, monkeypatch):
     assert settings.DOCSHS_URL.rstrip("/") + "/documentos/5" in t
 
 
+def test_agents_md_do_guardi_aponta_para_o_docshs_e_cabe_no_teto():
+    """Ferramenta disponível não é ferramenta usada (lição de 14/08 com a skill
+    `faturamento`): sem o ponteiro no AGENTS.md o Guardi responderia "não tenho
+    acesso a documentos". E a frase de quando não acha é o anti-objetivo da
+    spec: dizer que o documento não existe quando só não é visível ao dono. O
+    arquivo tem teto de 20.000 caracteres que o gateway corta em silêncio."""
+    from app.bots_pessoais import arquivos_do_bot
+    from app.gateway.client import excede_o_teto
+    a = arquivos_do_bot({"full_name": "Ana Souza", "email": "ana@hs.com"})["AGENTS.md"]
+    assert "docshs_consultas" in a and "docshs_consultar" in a
+    assert "não achei entre os que você pode ver" in a
+    assert "login de Ana" in a.split("docshs_consultar", 1)[1][:80]
+    assert not excede_o_teto(a)
+
+
 def test_catalogo_lista_filtros_declarados(chave, monkeypatch):
     from app.routers import mcp_bot
     t = asyncio.run(mcp_bot._docshs("ana-bot", "docshs_consultas", {}, _CTX))

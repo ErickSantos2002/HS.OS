@@ -768,6 +768,24 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   caminho; filtros só como query; retorno com teto de 12 mil caracteres. Rota
   nova do DataCore só chega ao Guardi entrando no catálogo **e** no allowlist
   de agente de lá. Os filtros saem do `/openapi.json` público do DataCore.
+- **DocsHS (11/11/2026):** `docshs_consultas` / `docshs_consultar` no
+  `hsos-bot-<bot>` (com `docshs` em `sistemas_ligados`), só leitura, como o
+  DONO — o DocsHS aplica cargo, setor e classificação. Spec
+  `docs/superpowers/specs/2026-11-11-guardi-docshs-design.md`. Catálogo em
+  `app/docshs_consultas.py`, **com os filtros declarados à mão**: o
+  `/openapi.json` de lá não é alcançável (o nginx só repassa `/api/`); filtro
+  novo numa rota de lá só chega ao Guardi entrando aqui. ⚠️ Fora de propósito:
+  arquivo de documento, prova, vídeo, materiais, anexos, exportação. ⚠️ O
+  `{eu}` do histórico de treinamentos sai do `/auth/eu` do próprio DocsHS,
+  nunca do `id` do agente. ⚠️ O 404 lá também é "documento que o cargo não
+  vê": a mensagem nunca diz "não existe", e o `AGENTS.md` manda dizer "não
+  achei entre os que você pode ver". O link (`DOCSHS_URL/documentos/<id>`,
+  `/treinamentos/<id>`) é montado pelo servidor. API em `DOCSHS_URL + /api/v1`.
+  ⚠️ **Ferramenta nova no `hsos-bot-<bot>` exige `publicar-bots-mcp.py
+  --aplicar`**: o `toolFilter.include` e o `alsoAllow` listam ferramenta por
+  ferramenta (`FERRAMENTAS_BOT`). Ligar: `--ligar-sistema <bot> docshs`
+  (piloto) ou `--ligar-docshs-todos`, que liga só quem responde 200 no
+  `/auth/eu` (ensaio sem `--aplicar`).
 - **A `iris` lê a Inadimplência como o Nicholson** (`np@`, `admin` no
   DataCore; decisão do Erick, 10/11/2026): ferramenta `inadimplencia` no
   `hsos-relatorios`, só dela. Quem pergunta à `iris` não é identificado — se

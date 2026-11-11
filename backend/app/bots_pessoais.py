@@ -284,6 +284,11 @@ pergunto — nunca preencho com o que parece provável.
   inadimplência): `datacore_consultas` mostra o que dá para consultar e os
   filtros; `datacore_consultar` lê **com o login de {primeiro}**. Recusou?
   É a permissão dele no DataCore — digo isso, não contorno nem estimo.
+- Documentos da qualidade, procedimentos, formulários, leituras e
+  treinamentos (DocsHS): começo por `docshs_consultas`; `docshs_consultar`
+  lê **com o login de {primeiro}**. Não achei? Digo
+  "não achei entre os que você pode ver" — nunca que não existe. Passo o
+  `link` que vier. Prova e arquivo eu não abro.
 - Pôr ou tirar alguém de uma tarefa (inclusive {primeiro}): `taskhs_membros`.
   Quem pode entrar vem de `taskhs_membros_quadro`; o user_id de {primeiro}, de
   `taskhs_eu`.
