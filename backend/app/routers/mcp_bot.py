@@ -195,7 +195,7 @@ FERRAMENTAS = [
        "ou o SDR): campos do card, campos personalizados, nota, tarefas (criar, alterar, concluir) "
        "e mover uma etapa — executados nessa ordem. Junte tudo o que ele contou numa chamada só. "
        "Ganho e perda não são etapa: use hsgrowth_ganhar/hsgrowth_perder; reunião que não "
-       "aconteceu é hsgrowth_noshow. Ao CONCLUIR tarefa, pergunte ao seu dono se ela foi "
+       "aconteceu é hsgrowth_noshow. Card ganho ou perdido só recebe nota e tarefa nova. Ao CONCLUIR tarefa, pergunte ao seu dono se ela foi "
        "realizada ou foi só uma tentativa sem resultado (`valida`) — nunca presuma." + _HSG_FIM,
        {"card_id": _HSG_CARD,
         "campos": {"type": "object", "description": "campos do card: " + ", ".join(hge.CAMPOS_CARD)
@@ -210,7 +210,8 @@ FERRAMENTAS = [
                 "op": {"type": "string", "enum": ["criar", "alterar", "concluir"]},
                 "task_id": {"type": "integer", "description": "alterar/concluir: tarefa PENDENTE do card"},
                 "title": {"type": "string"}, "description": {"type": "string"},
-                "task_type": {"type": "string", "enum": list(hge.TIPOS_TAREFA)},
+                "task_type": {"type": "string", "enum": list(hge.TIPOS_TAREFA),
+                              "description": "só no criar: o tipo de tarefa existente não muda"},
                 "priority": {"type": "string", "enum": list(hge.PRIORIDADES)},
                 "due_date": {"type": "string", "description": "AAAA-MM-DDTHH:MM, horário de Brasília"},
                 "duration_minutes": {"type": "integer", "minimum": hge.DURACAO_MIN,
@@ -1588,19 +1589,35 @@ async def _hsg_card_do_dono(ctx: dict, bot: str, card_id: int) -> dict:
 
 
 def _hsg_exibir_card(card: dict) -> dict:
-    return {"card": hge.uma_linha(card.get("title")) or f"card {card['id']}", "link": _hsg_link(card["id"]),
-            "cliente": hge.uma_linha(card.get("client_name")), "etapa": hge.uma_linha(card.get("list_name"))}
+    ex = {"card": hge.uma_linha(card.get("title")) or f"card {card['id']}", "link": _hsg_link(card["id"]),
+          "cliente": hge.uma_linha(card.get("client_name")), "etapa": hge.uma_linha(card.get("list_name")),
+          "dono": hge.uma_linha(card.get("assigned_to_name"))}
+    if card.get("sdr_name"):
+        ex["sdr"] = hge.uma_linha(card["sdr_name"])
+    return ex
+
+
+def _hsg_quadro(card: dict) -> int:
+    b = card.get("board_id")
+    if isinstance(b, bool) or not isinstance(b, int):
+        raise _Recusa("Não achei o quadro do card; não preparo às cegas.")
+    return b
+
+
+_HSG_ENCERRADO = "Este card está encerrado (ganho ou perdido); reabrir é com o time de TI."
+
+
+def _hsg_encerrado(card: dict) -> bool:
+    return bool(card.get("is_won") or card.get("is_lost"))
 
 
 def _hsg_aberto(card: dict) -> None:
-    if card.get("is_won") or card.get("is_lost"):
-        raise _Recusa("Este card já está encerrado (ganho ou perdido).")
+    if _hsg_encerrado(card):
+        raise _Recusa(_HSG_ENCERRADO)
 
 
-async def _hsg_etapas(ctx: dict, bot: str, board_id) -> list[dict]:
-    if isinstance(board_id, bool) or not isinstance(board_id, int):
-        raise _Recusa("Não achei o quadro do card; não preparo às cegas.")
-    return _hsg_itens(await _hsg_get(ctx, bot, f"/boards/{board_id}/lists"), "lists")
+async def _hsg_etapas(ctx: dict, bot: str, card: dict) -> list[dict]:
+    return _hsg_itens(await _hsg_get(ctx, bot, f"/boards/{_hsg_quadro(card)}/lists"), "lists")
 
 
 async def _preparar_registrar(ctx: dict, bot: str, args: dict) -> tuple[dict, str, str | None]:
@@ -1613,6 +1630,13 @@ async def _preparar_registrar(ctx: dict, bot: str, args: dict) -> tuple[dict, st
     nota = hge.nota(args["nota"]) if "nota" in pedido else None
     destino = _hsg_id(args["mover_para"], "mover_para") if "mover_para" in pedido else None
     card = await _hsg_card_do_dono(ctx, bot, cid)
+    if _hsg_encerrado(card):
+        # Card ganho/perdido: só nota e tarefa NOVA (o acompanhamento depois do
+        # ganho é legítimo); campo, etapa, alterar e concluir mexeriam no fechado.
+        ops = args.get("tarefas") if isinstance(args.get("tarefas"), list) else []
+        if any(k in pedido for k in ("campos", "campos_personalizados", "mover_para")) or any(
+                not isinstance(o, dict) or o.get("op") != "criar" for o in ops):
+            raise _Recusa(_HSG_ENCERRADO + " Nele só entram nota e tarefa nova.")
     payload: dict = {"card_id": cid}
     ex = _hsg_exibir_card(card)
     partes: list[str] = []
@@ -1632,7 +1656,7 @@ async def _preparar_registrar(ctx: dict, bot: str, args: dict) -> tuple[dict, st
         ex["antes"] = {k: _hsg_exib(card.get(k)) for k in campos}
         partes.append("campos")
     if "campos_personalizados" in pedido:
-        defs = _hsg_itens(await _hsg_get(ctx, bot, f"/fields/definitions/board/{card.get('board_id')}"),
+        defs = _hsg_itens(await _hsg_get(ctx, bot, f"/fields/definitions/board/{_hsg_quadro(card)}"),
                           "definitions")
         itens = hge.campos_personalizados(args["campos_personalizados"], defs)
         nomes = {d.get("id"): hge.uma_linha(d.get("name")) for d in defs}
@@ -1652,7 +1676,7 @@ async def _preparar_registrar(ctx: dict, bot: str, args: dict) -> tuple[dict, st
         partes.append(_plural(len(ops), "tarefa", "tarefas"))
     aviso = None
     if destino is not None:
-        etapas = await _hsg_etapas(ctx, bot, card.get("board_id"))
+        etapas = await _hsg_etapas(ctx, bot, card)
         aviso = hge.conferir_movimento(card, etapas, destino)
         nome = hge.uma_linha(next(e.get("name") for e in etapas if e.get("id") == destino))
         payload["mover_para"] = destino
@@ -1748,7 +1772,13 @@ async def _preparar_lead(ctx: dict, bot: str, args: dict) -> tuple[dict, str, st
         existente = achados[0]
         cliente = {"id": existente["id"]}
         busca = await _hsg_get(ctx, bot, "/search/global", params={"q": doc, "limit": 30})
-        cards = [v for v in _hsg_itens(busca, "vendas") if isinstance(v.get("id"), int)]
+        # A busca casa título, cliente, CNPJ e contato: só ficam os cards DESTE
+        # cliente. O `/search/global` de lá não traz `client_id` (12/11/2026);
+        # sem ele, vale `matched_on == "CNPJ/CPF"` (o documento do cliente do
+        # card contém os 11/14 dígitos procurados).
+        cards = [v for v in _hsg_itens(busca, "vendas") if isinstance(v.get("id"), int)
+                 and (v["client_id"] == existente["id"] if "client_id" in v
+                      else v.get("matched_on") == "CNPJ/CPF")]
         # Parceiro: o aviso do HSGrowth é por card. Com card do cliente, recusa
         # aqui, com o nome; sem nenhum, o 409 do HSGrowth no clique é a trava
         # (o executor repassa o nome e manda falar com o gerente).
@@ -1804,16 +1834,17 @@ async def _preparar_fechamento(ctx: dict, bot: str, nome: str, args: dict) -> tu
     ex = _hsg_exibir_card(card)
     if nome == "hsgrowth_ganhar":
         hge.conferir_ganho(card)
-        etapas = await _hsg_etapas(ctx, bot, card.get("board_id"))
+        etapas = await _hsg_etapas(ctx, bot, card)
         if not any(e.get("is_done_stage") for e in etapas):
             raise _Recusa("Este quadro não tem Negócio Ganho: na Prospecção o card passa para a "
                           "Aquisição antes de ser ganho.")
-        ex.update({"valor": _hsg_exib(card.get("value")), "modalidade": card.get("modality")})
+        ex.update({"valor": _hsg_exib(card.get("value")), "modalidade": hge.uma_linha(card.get("modality"))})
         return {"card_id": cid, "_exibir": ex}, hge.uma_linha(f"HSGrowth · {ex['card']} — marcar como GANHO", 200), None
     if nome == "hsgrowth_perder":
         _hsg_aberto(card)
         return ({"card_id": cid, "motivo": motivo, "_exibir": ex},
                 hge.uma_linha(f"HSGrowth · {ex['card']} — marcar como PERDIDO ({motivo})", 200), None)
+    _hsg_aberto(card)
     pendentes = _hsg_itens(card.get("pending_tasks"), "tasks")
     tarefa = next((t for t in pendentes if t.get("id") == tid), None)
     if tarefa is None:
@@ -1821,7 +1852,7 @@ async def _preparar_fechamento(ctx: dict, bot: str, nome: str, args: dict) -> tu
                       "hsgrowth_consultar card.")
     # As pendentes do `/expanded` são DESTE card e não concluídas por construção.
     hge.conferir_noshow({**tarefa, "card_id": card["id"], "is_completed": False}, card)
-    ex.update({"reuniao": hge.uma_linha(tarefa.get("title")), "quando": tarefa.get("due_date")})
+    ex.update({"reuniao": hge.uma_linha(tarefa.get("title")), "quando": hge.uma_linha(tarefa.get("due_date"))})
     return ({"card_id": cid, "task_id": tid, "_exibir": ex},
             hge.uma_linha(f"HSGrowth · {ex['card']} — cliente não compareceu ({ex['reuniao']})", 200), None)
 

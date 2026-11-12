@@ -317,7 +317,7 @@ async def _gestorhs_alterar_proposta(email, bot, p, dono=None) -> str:
 # já em UTC, nada é recalculado aqui):
 #   hsgrowth_registrar: {card_id, campos?, campos_personalizados?: [{field_definition_id, value}],
 #       nota?, tarefas?: [{op:"criar", title, task_type, priority?, due_date?, description?, duration_minutes?}
-#       | {op:"alterar", task_id, title|description|task_type|priority|due_date|duration_minutes}
+#       | {op:"alterar", task_id, title|description|priority|due_date|duration_minutes}  (task_type NUNCA)
 #       | {op:"concluir", task_id, valida: bool (OBRIGATÓRIO: True=realizada, False=tentativa sem resultado)}], mover_para?: list_id, _exibir: {card, link, aviso?}}
 #   hsgrowth_cliente: {card_id, cliente?: {id, campos}, contato?: {id, campos}, _exibir}
 #   hsgrowth_criar_lead: {titulo, list_id, cliente: {id}|{campos}, contato: {id}|{campos},
@@ -327,8 +327,10 @@ async def _gestorhs_alterar_proposta(email, bot, p, dono=None) -> str:
 # (nunca `**p`): payload adulterado não leva `assigned_to_id` nem `is_won` ao CRM.
 # ⚠️ Lote PARA no primeiro erro e NÃO desfaz (nota e tarefa criadas são registro).
 
-_CAMPOS_TAREFA_ALTERAR = ("title", "description", "task_type", "priority", "due_date", "duration_minutes")
-_CAMPOS_TAREFA_CRIAR = _CAMPOS_TAREFA_ALTERAR
+# ⚠️ `alterar` nunca leva `task_type` (nem de payload adulterado): reunião virada
+# ligação e depois concluída pagaria comissão de reunião que não houve.
+_CAMPOS_TAREFA_CRIAR = ("title", "description", "task_type", "priority", "due_date", "duration_minutes")
+_CAMPOS_TAREFA_ALTERAR = tuple(c for c in _CAMPOS_TAREFA_CRIAR if c != "task_type")
 
 
 def _pegar(origem: dict, chaves) -> dict:

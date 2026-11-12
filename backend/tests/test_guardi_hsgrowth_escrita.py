@@ -241,3 +241,9 @@ def test_movimento_aquisicao_com_origem_desconhecida_e_valor_finito():
     for ruim in (float("nan"), float("inf")):
         with pytest.raises(ValueError):
             h.campos_do_card({"value": ruim})
+
+
+def test_alterar_tarefa_nao_troca_o_tipo():
+    """Reunião → ligação seguida de concluir furaria a regra da reunião."""
+    with pytest.raises(ValueError, match="tipo"):
+        h.tarefas([{"op": "alterar", "task_id": 7, "task_type": "call"}], {7: "meeting"})

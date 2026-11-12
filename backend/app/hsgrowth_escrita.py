@@ -205,7 +205,9 @@ def nota(texto) -> str:
 
 # --- tarefas ---------------------------------------------------------------------
 
-_CAMPOS_ALTERAR = ("title", "description", "task_type", "priority", "due_date", "duration_minutes")
+# ⚠️ Sem `task_type`: trocar reunião → ligação e depois concluir furaria a regra
+# da reunião (concluir reunião paga comissão ao SDR). Tipo errado: nova tarefa.
+_CAMPOS_ALTERAR = ("title", "description", "priority", "due_date", "duration_minutes")
 DURACAO_MIN, DURACAO_MAX = 5, 480
 
 
@@ -259,6 +261,9 @@ def tarefas(ops: list, tipos_das_tarefas: dict[int, str] | None = None) -> list[
             tid = _inteiro(op.get("task_id"), "task_id")
             if tid not in tipos_das_tarefas:
                 raise ValueError(f"A tarefa {tid} não é deste card.")
+            if "task_type" in op:
+                raise ValueError(f"Tarefa {tid}: o tipo de uma tarefa não muda por aqui — se o tipo "
+                                 "está errado, crie uma tarefa nova do tipo certo.")
             campos = _campos_tarefa(op, False)
             if not campos:
                 raise ValueError(f"Tarefa {tid}: diga o que alterar "
