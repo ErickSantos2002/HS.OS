@@ -45,6 +45,8 @@ from app import gestorhs_propostas as gp
 from app import hsgrowth_consultas as hg
 from app import hsgrowth_escrita as hge
 from app import hsgrowth_servicos_consultas as hgs
+from app import hsgrowth_servicos_escrita as hgse_sv
+from app import hsgrowth_servicos_preparo as hsp
 from app.config import settings
 from app.sistemas import datacore, docshs, gestorhs, hsgrowth, taskhs
 
@@ -114,6 +116,16 @@ _HSG_CARD = {"type": "integer", "description": "id do card. \"O card da X\": ach
              "hsgrowth_consultar buscar; vindo dois ou mais, PERGUNTE ao seu dono qual — nunca escolha"}
 _HSG_FIM = (" O que falta para a etapa quem diz é o HSGrowth: se recusar, pergunte ao seu dono o "
             "que falta — nunca preencha com valor provável." + _CONFIRMA)
+
+# HSGrowth Serviços (escrita por cartão, 12/11/2026).
+_SV_BOARD = {"type": "integer", "enum": list(hgse_sv.QUADROS),
+             "description": "1 (Serviços) ou 2 (Serviço - Cobrança)"}
+_SV_CARD = {"type": "integer", "description": "id do card. \"O card da X\": ache antes com "
+            "hsgrowth_servicos_consultar buscar; vindo dois ou mais, PERGUNTE ao seu dono qual — nunca escolha"}
+_SV_NEGOCIO = "; ".join(f"{k} ({', '.join(v) if v else ('true/false' if k == 'form_answered' else 'número')})"
+                        for k, v in hgse_sv.CHAVES_NEGOCIO.items()) + (
+    ". collection_type, acquisition_channel e shipping_confirmed só no quadro 2; closing_type, "
+    "proposal_number, order_number e from_collection só no quadro 1")
 
 _BOARD = {"type": "integer", "description": "o quadro da lista (do taskhs_quadro) — opcional, "
           "ajuda a mostrar o nome da lista no cartão"}
@@ -269,6 +281,77 @@ FERRAMENTAS = [
         "id": {"type": "string", "description": "id do card (consultas `card` e `atividades`)"},
         "parametros": {"type": "object", "description": "filtros da consulta (nome → valor)"}},
        ("consulta",)),
+    _f("hsgrowth_servicos_registrar", "O pós-contato num cartão só, num card de Serviços ou Cobrança "
+       "(o módulo é colaborativo: qualquer card dos quadros 1 e 2): Resumo do card (`negocio`), "
+       "dados do card (incluindo ligar cliente e contato que JÁ existem), atividades (criar, "
+       "concluir), anotação e mover UMA etapa para frente ou para trás — executados nessa ordem. "
+       "Junte tudo o que a pessoa contou numa chamada só. Ganho e perda não são etapa: use "
+       "hsgrowth_servicos_ganhar/hsgrowth_servicos_perder. Ao CONCLUIR atividade, pergunte ao seu "
+       "dono se ela foi realizada ou foi só uma tentativa sem resultado (`valida`) — nunca presuma. "
+       "Número de proposta é o do GestorHS: o cartão confere lá e avisa se não bater." + _HSG_FIM,
+       {"board_id": _SV_BOARD, "card_id": _SV_CARD,
+        "negocio": {"type": "object", "description": "Resumo do card. Só estas chaves e valores: "
+                    + _SV_NEGOCIO},
+        "campos": {"type": "object", "description": "dados do card: " + ", ".join(hgse_sv.CAMPOS_PUT)
+                   + " (due_date em AAAA-MM-DDTHH:MM, Brasília; client_id/person_id de "
+                   "hsgrowth_servicos_consultar clientes/contatos — o contato tem de ser do cliente)"},
+        "atividades": {"type": "array", "maxItems": hgse_sv.TETO_ATIVIDADES, "items": {
+            "type": "object",
+            "properties": {
+                "op": {"type": "string", "enum": ["criar", "concluir"]},
+                "category": {"type": "string", "enum": ["atividade", "anotacao"],
+                             "description": "criar: atividade (com tipo e título) ou anotacao (só description)"},
+                "activity_type": {"type": "string", "enum": list(hgse_sv.TIPOS_ATIVIDADE)},
+                "title": {"type": "string", "maxLength": 500},
+                "description": {"type": "string", "maxLength": 5000},
+                "priority": {"type": "string", "enum": list(hgse_sv.PRIORIDADES)},
+                "due_date": {"type": "string", "description": "AAAA-MM-DDTHH:MM, horário de Brasília"},
+                "activity_id": {"type": "integer", "description": "concluir: atividade PENDENTE do card "
+                                "(hsgrowth_servicos_consultar atividades)"},
+                "valida": {"type": "boolean", "description": "concluir: true = realizada, false = "
+                           "tentativa sem resultado (pergunte ao seu dono)"}},
+            "required": ["op"]}},
+        "mover_para": {"type": "integer", "description": "id da etapa (hsgrowth_servicos_consultar "
+                       "etapas), uma adiante ou atrás no mesmo quadro"}},
+       ("board_id", "card_id")),
+    _f("hsgrowth_servicos_itens", "Pôr, alterar ou tirar aparelho (produto) e serviço de um card de "
+       "Serviços/Cobrança. Pôr só o que está no catálogo (hsgrowth_servicos_consultar "
+       "catalogo_aparelhos/catalogo_servicos); alterar e tirar só item DESTE card (o `id` da linha, "
+       "de hsgrowth_servicos_consultar card). Preço e quantidade são os que a pessoa disser — "
+       "nunca invente." + _HSG_FIM,
+       {"board_id": _SV_BOARD, "card_id": _SV_CARD,
+        "itens": {"type": "array", "minItems": 1, "maxItems": hsp.TETO_ITENS, "items": {
+            "type": "object",
+            "properties": {
+                "tipo": {"type": "string", "enum": ["aparelho", "servico"]},
+                "acao": {"type": "string", "enum": ["por", "alterar", "tirar"]},
+                "product_id": {"type": "integer", "description": "por um aparelho: id do catálogo"},
+                "service_id": {"type": "integer", "description": "por um serviço: id do catálogo"},
+                "item_id": {"type": "integer", "description": "alterar/tirar: id da linha no card"},
+                "quantity": {"type": "integer", "minimum": 1},
+                "unit_price": {"type": "number", "minimum": 0},
+                "discount": {"type": "number", "minimum": 0, "description": "em reais"},
+                "notes": {"type": "string", "maxLength": 1000}},
+            "required": ["tipo", "acao"]}}},
+       ("board_id", "card_id", "itens")),
+    _f("hsgrowth_servicos_ganhar", "Marcar um card de Serviços/Cobrança como Negócio GANHO. Só como a "
+       "tela deixa: no quadro 1, de Aguardando Pedido (com nº do pedido) ou de Proposta com "
+       "Faturamento direto, sempre com nº da proposta e `from_collection`; no quadro 2, de Operações "
+       "com envio confirmado. Faltou algo? Pergunte e grave antes com hsgrowth_servicos_registrar. "
+       "Se o card veio do GestorHS, o ganho avisa o GestorHS e a caixa vai para o Financeiro — diga "
+       "isso ao seu dono." + _HSG_FIM,
+       {"board_id": _SV_BOARD, "card_id": _SV_CARD}, ("board_id", "card_id")),
+    _f("hsgrowth_servicos_perder", "Marcar um card de Serviços/Cobrança como PERDIDO, com o motivo que "
+       "o seu dono disser (anota \"Motivo da perda\" e move para Perdido)." + _HSG_FIM,
+       {"board_id": _SV_BOARD, "card_id": _SV_CARD,
+        "motivo": {"type": "string", "enum": list(hgse_sv.MOTIVOS_PERDA)}},
+       ("board_id", "card_id", "motivo")),
+    _f("hsgrowth_servicos_anexar_proposta", "Anexar no slot Proposta do card o PDF da proposta N do "
+       "GestorHS (o número, não o id). O PDF vem do próprio GestorHS — nunca de link seu. Se o slot "
+       "já tiver arquivo, o cartão diz qual será substituído." + _HSG_FIM,
+       {"board_id": _SV_BOARD, "card_id": _SV_CARD,
+        "numero": {"type": "integer", "description": "número da proposta no GestorHS"}},
+       ("board_id", "card_id", "numero")),
     _f("gestorhs_receber", "Receber aparelhos que chegaram (Expedição): abre uma OS por aparelho, "
        "todas na mesma caixa — sem `caixa`, a primeira OS cria a caixa nova; com `caixa`, entram "
        "nessa caixa já existente. Um cartão para o lote inteiro (até 30). Com mais de um aparelho, "
@@ -1978,6 +2061,13 @@ async def _hsgrowth_servicos(conn, bot: str, nome: str, args: dict, ctx: dict) -
             linhas.append(f"- {chave}{' (' + ', '.join(pede) + ')' if pede else ''}: {desc}"
                           + (f"\n    filtros: {', '.join(filtros)}" if filtros else ""))
         return "\n".join(linhas) or "Consulta desconhecida."
+    if nome in hsp.ESCRITAS:
+        # Prepara, nunca executa: só LÊ, recusa antes, grava o cartão.
+        payload, resumo = await hsp.preparar(ctx, bot, nome, args)
+        await acoes.criar_pendente(conn, ctx["dono"], bot, "hsgrowth_servicos", nome, payload, resumo)
+        aviso = (payload.get("_exibir") or {}).get("aviso")
+        return (f"Preparado: {resumo}. Aguardando {ctx['primeiro']} confirmar no HS.OS — não diga que foi "
+                "feito." + (f" Avise: {aviso}." if aviso else ""))
     if nome != "hsgrowth_servicos_consultar":
         raise _Recusa(f"Ferramenta desconhecida: {nome}.")
     chave = str(args.get("consulta") or "")
