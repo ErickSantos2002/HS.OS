@@ -171,3 +171,101 @@ def test_link_de_fora_e_sobrescrito():
     r = hg.com_links("card", {"id": 7, "link": "https://evil"}, "https://hs.x")
     assert r["link"] == "https://hs.x/cards/7"
     assert "link" not in hg.com_links("card", {"id": "../x", "link": "https://evil"}, "https://hs.x")
+
+
+# --- as ferramentas no hsos-bot-<bot> --------------------------------------------
+
+_CTX = {"sistemas": ["hsgrowth"], "email": "ana@hs.com", "dono": None, "primeiro": "Ana"}
+
+
+def _roteia(monkeypatch, rotas):
+    """Transporte que responde por caminho e guarda as requisições."""
+    chamadas = []
+
+    def h(req):
+        chamadas.append(req)
+        resp = rotas.get(req.url.path.removeprefix("/api/v1"))
+        if resp is None:
+            return httpx.Response(404, json={"detail": "x"})
+        return httpx.Response(200, json=resp)
+    monkeypatch.setattr(hsgrowth, "_transporte", httpx.MockTransport(h))
+    return chamadas
+
+
+def test_ferramentas_de_leitura_no_guardi_hsgrowth():
+    """`FERRAMENTAS_BOT` alimenta o `toolFilter` e o `alsoAllow`: fora dela a
+    ferramenta existe no servidor e o Guardi nunca a vê."""
+    from app.email.regras import FERRAMENTAS_BOT
+    from app.routers import mcp_bot
+    nomes = {"hsgrowth_consultas", "hsgrowth_consultar"}
+    assert nomes <= set(FERRAMENTAS_BOT)
+    assert nomes <= {f["name"] for f in mcp_bot.FERRAMENTAS}
+
+
+def test_sem_hsgrowth_ligado_recusa_sem_rede(chave, monkeypatch):
+    """Sem a flag nada sai: um 401 de lá diria à pessoa que ela não tem conta,
+    quando o que falta é ligar."""
+    from app.routers import mcp_bot
+    chamadas = _roteia(monkeypatch, {})
+    ctx = {**_CTX, "sistemas": ["taskhs"]}
+    for nome in ("hsgrowth_consultas", "hsgrowth_consultar"):
+        with pytest.raises(mcp_bot._Recusa, match="HSGrowth ainda não está ligado"):
+            asyncio.run(mcp_bot._hsgrowth(None, "ana-bot", nome, {"consulta": "quadros"}, ctx))
+    assert chamadas == []
+
+
+def test_meus_cards_injeta_o_eu_de_users_me(chave, monkeypatch):
+    """O dono vem de `/users/me`, nunca do agente: sem isso `meus_cards` listaria
+    card de outro vendedor, ou o agente poderia passar o `assigned_to_id` que
+    quisesse. O retorno é dado externo e o link do card é montado aqui."""
+    from app.routers import mcp_bot
+    chamadas = _roteia(monkeypatch, {
+        "/users/me": {"id": 3, "role": "vendedor"},
+        "/cards": {"cards": [{"id": 8, "assigned_to_id": 3, "title": "A"},
+                             {"id": 9, "assigned_to_id": 4, "sdr_id": 5, "title": "B"}], "total": 2}})
+    t = asyncio.run(mcp_bot._hsgrowth(None, "ana-bot", "hsgrowth_consultar",
+                                      {"consulta": "meus_cards", "parametros": {"board_id": 2}}, dict(_CTX)))
+    q = dict(chamadas[-1].url.params)
+    assert q["assigned_to_id"] == "3" and q["all"] == "true" and q["board_id"] == "2"
+    assert "HSGrowth" in t and "/cards/8" in t and "/cards/9" not in t   # filtro local do dono
+
+
+def test_users_me_e_pedido_uma_vez_por_chamada(chave, monkeypatch):
+    """O `/users/me` fica no `ctx` da chamada: refazê-lo a cada passo dobraria a
+    latência de toda escrita (Tasks seguintes) à toa."""
+    from app.routers import mcp_bot
+    chamadas = _roteia(monkeypatch, {"/users/me": {"id": 3}})
+    ctx = dict(_CTX)
+    asyncio.run(mcp_bot._eu_no_hsgrowth(ctx, "ana-bot"))
+    asyncio.run(mcp_bot._eu_no_hsgrowth(ctx, "ana-bot"))
+    assert len(chamadas) == 1
+
+
+def test_users_me_sem_id_inteiro_e_recusado(chave, monkeypatch):
+    """Resposta sem `id` inteiro faria o filtro do dono falhar aberto ou virar
+    `assigned_to_id=None`: melhor recusar com mensagem clara."""
+    from app.routers import mcp_bot
+    for corpo in ({"id": "3"}, {"role": "x"}, [], {"id": True}):
+        _roteia(monkeypatch, {"/users/me": corpo})
+        with pytest.raises((ErroSistema, ValueError), match="HSGrowth"):
+            asyncio.run(mcp_bot._eu_no_hsgrowth(dict(_CTX), "ana-bot"))
+
+
+def test_consulta_que_nao_e_do_dono_nao_chama_users_me(chave, monkeypatch):
+    """`/users/me` só se pede para as consultas que dependem do dono."""
+    from app.routers import mcp_bot
+    chamadas = _roteia(monkeypatch, {"/boards": [{"id": 1}]})
+    asyncio.run(mcp_bot._hsgrowth(None, "ana-bot", "hsgrowth_consultar", {"consulta": "quadros"}, dict(_CTX)))
+    assert [r.url.path for r in chamadas] == ["/api/v1/boards"]
+
+
+def test_filtro_invalido_nao_toca_a_rede(chave, monkeypatch):
+    """Filtro e id são validados antes da rede: `1/../x` levaria o token do dono
+    a uma rota fora do catálogo."""
+    from app.routers import mcp_bot
+    chamadas = _roteia(monkeypatch, {})
+    for args in ({"consulta": "card", "id": "1/../x"},
+                 {"consulta": "clientes", "parametros": {"zzz": 1}}):
+        with pytest.raises(ValueError):
+            asyncio.run(mcp_bot._hsgrowth(None, "ana-bot", "hsgrowth_consultar", args, dict(_CTX)))
+    assert chamadas == []
