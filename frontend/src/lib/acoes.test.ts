@@ -253,6 +253,13 @@ describe("cartão do HSGrowth", () => {
     expect(dataBrasilia("2026-11-19T13:00:00Z")).toBe("19/11/2026 10:00");
     expect(dataBrasilia("2026-11-19T02:30:00Z")).toBe("18/11/2026 23:30");
   });
+  it("previsão de fechamento do card sai em horário de Brasília, não no dia UTC", () => {
+    // `due_date` vai ao HSGrowth em UTC: 02:00Z do dia 20 é 23:00 do dia 19 em
+    // Brasília. Mostrar só a data UTC poria a previsão um dia depois.
+    const c = cartaoDaAcao("hsgrowth_registrar", { card_id: 7, campos: { due_date: "2026-11-20T02:00:00Z" },
+      _exibir: { card: "ACME", antes: { due_date: "2026-11-25T15:00:00Z" } } });
+    expect(c.linhas).toContainEqual(["Previsão", "19/11/2026 23:00 (antes: 25/11/2026 12:00)"]);
+  });
   it("tarefa nova mostra o título do payload, sem _exibir", () => {
     // O executor cria com o `title` do payload; mostrar outra coisa aprovaria o que não vai.
     const c = cartaoDaAcao("hsgrowth_registrar", { card_id: 7,

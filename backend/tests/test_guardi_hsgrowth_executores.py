@@ -73,7 +73,8 @@ def test_corpo_do_put_sai_da_allowlist(monkeypatch):
 
 def test_lote_para_e_diz_o_que_entrou(monkeypatch):
     """Sem dizer o que já entrou, a pessoa repetiria o cartão e duplicaria nota e tarefa."""
-    r = {("PUT", "/cards/7/move"): lambda: httpx.Response(400, json={"detail": "Necessário anexo de proposta"})}
+    r = {("PUT", "/cards/7/move"): lambda: httpx.Response(400, json={
+        "detail": "Para avançar é preciso anexar a Proposta Comercial em PDF (seção 'Resumo' do card)"})}
     out, reqs = _rodar(monkeypatch, "hsgrowth_registrar", REG, r)
     assert isinstance(out, hsgrowth.ErroSistema)
     m = str(out)
@@ -85,20 +86,21 @@ def test_lote_para_e_diz_o_que_entrou(monkeypatch):
 def test_lead_cria_cliente_contato_card_e_liga(monkeypatch):
     """O contato precisa nascer ligado ao cliente criado e o card levar os dois ids."""
     r = {("POST", "/clients"): {"id": 44}, ("POST", "/persons"): {"id": 55}, ("POST", "/cards"): {"id": 66}}
-    p = {"titulo": "ACME", "list_id": 6, "cliente": {"campos": {"name": "ACME", "document": "123"}},
+    p = {"titulo": "ACME", "list_id": 6, "assigned_to_id": 3, "cliente": {"campos": {"name": "ACME", "document": "123"}},
          "contato": {"campos": {"name": "Ana", "assigned_to_id": 3}}, "campos_do_card": {"value": 5, "sdr_id": 2},
          "_exibir": {}}
     out, reqs = _rodar(monkeypatch, "hsgrowth_criar_lead", p, r)
     assert [(m, c) for m, c, _ in reqs] == [("POST", "/clients"), ("POST", "/persons"), ("POST", "/cards")]
     assert reqs[1][2] == {"name": "Ana", "organization_id": 44}
-    assert reqs[2][2] == {"value": 5, "title": "ACME", "list_id": 6, "client_id": 44, "person_id": 55}
+    assert reqs[2][2] == {"value": 5, "title": "ACME", "list_id": 6, "client_id": 44, "person_id": 55,
+                          "assigned_to_id": 3}
     assert out.endswith("/cards/66")
 
 
 def test_lead_com_cliente_existente_nao_recria(monkeypatch):
     """Cliente existente por documento é reaproveitado: POST /clients duplicaria o cadastro."""
     r = {("POST", "/cards"): {"id": 66}}
-    p = {"titulo": "X", "list_id": 6, "cliente": {"id": 44}, "contato": {"id": 55}, "campos_do_card": {}}
+    p = {"titulo": "X", "list_id": 6, "assigned_to_id": 3, "cliente": {"id": 44}, "contato": {"id": 55}, "campos_do_card": {}}
     _, reqs = _rodar(monkeypatch, "hsgrowth_criar_lead", p, r)
     assert [(m, c) for m, c, _ in reqs] == [("POST", "/cards")]
 
@@ -106,7 +108,7 @@ def test_lead_com_cliente_existente_nao_recria(monkeypatch):
 def test_lead_409_de_parceiro_repassa_e_manda_falar_com_o_gerente(monkeypatch):
     """O detalhe do CRM ("com o parceiro X") é a regra; sem ele a pessoa tentaria de novo."""
     r = {("POST", "/clients"): lambda: httpx.Response(409, json={"detail": "Este CNPJ está com o parceiro Beta"})}
-    p = {"titulo": "X", "list_id": 6, "cliente": {"campos": {"name": "A"}}, "contato": {"campos": {"name": "B"}},
+    p = {"titulo": "X", "list_id": 6, "assigned_to_id": 3, "cliente": {"campos": {"name": "A"}}, "contato": {"campos": {"name": "B"}},
          "campos_do_card": {}}
     out, reqs = _rodar(monkeypatch, "hsgrowth_criar_lead", p, r)
     assert "parceiro Beta" in str(out) and "gerente" in str(out) and "Parou em cliente (1 de 3)" in str(out)
@@ -171,8 +173,40 @@ def test_concluir_sem_valida_recusa_sem_chamar(monkeypatch):
 def test_lead_sem_id_na_resposta_para_com_mensagem_do_lote(monkeypatch):
     """Resposta sem `id` virava KeyError e escondia o que já tinha entrado."""
     r = {("POST", "/clients"): {"id": 44}, ("POST", "/persons"): {"ok": True}}
-    p = {"titulo": "X", "list_id": 6, "cliente": {"campos": {"name": "A"}}, "contato": {"campos": {"name": "B"}},
+    p = {"titulo": "X", "list_id": 6, "assigned_to_id": 3, "cliente": {"campos": {"name": "A"}}, "contato": {"campos": {"name": "B"}},
          "campos_do_card": {}}
     out, _ = _rodar(monkeypatch, "hsgrowth_criar_lead", p, r)
     assert isinstance(out, hsgrowth.ErroSistema)
     assert "Parou em contato (2 de 3)" in str(out) and "cliente criado" in str(out)
+
+
+def test_dica_da_proposta_so_para_proposta_comercial(monkeypatch):
+    """A etapa "Diagnóstico e Proposta" tem "proposta" no nome: qualquer recusa que
+    a citasse ganhava "anexe a proposta", mandando o vendedor resolver o problema errado."""
+    r = {("PUT", "/cards/7/move"): lambda: httpx.Response(400, json={
+        "detail": "Para sair de Diagnóstico e Proposta é preciso um follow-up pendente"})}
+    out, _ = _rodar(monkeypatch, "hsgrowth_registrar", REG, r)
+    assert "anexe a proposta" not in str(out)
+    neg = {**REG, "_exibir": {**REG["_exibir"], "etapa_para": "Negociação"}}
+    r = {("PUT", "/cards/7/move"): lambda: httpx.Response(400, json={"detail": "faltam requisitos"})}
+    out, _ = _rodar(monkeypatch, "hsgrowth_registrar", neg, r)
+    assert "anexe a proposta no card pela tela" in str(out)
+
+
+def test_409_que_ja_manda_ao_gerente_nao_repete(monkeypatch):
+    """"Fale com o gerente. — fale com o gerente comercial" soa como defeito."""
+    r = {("POST", "/clients"): lambda: httpx.Response(409, json={
+        "detail": "Este CNPJ está com o parceiro Beta. Fale com o gerente."})}
+    p = {"titulo": "X", "list_id": 6, "assigned_to_id": 3, "cliente": {"campos": {"name": "A"}},
+         "contato": {"campos": {"name": "B"}}, "campos_do_card": {}}
+    out, _ = _rodar(monkeypatch, "hsgrowth_criar_lead", p, r)
+    assert str(out).lower().count("gerente") == 1
+
+
+def test_lead_sem_dono_no_cartao_nao_envia_nada(monkeypatch):
+    """Sem o dono gravado, o lead de admin sairia sem responsável — e o erro no
+    meio do lote deixaria cliente e contato criados à toa."""
+    p = {"titulo": "X", "list_id": 6, "cliente": {"campos": {"name": "A"}}, "contato": {"campos": {"name": "B"}},
+         "campos_do_card": {}}
+    out, reqs = _rodar(monkeypatch, "hsgrowth_criar_lead", p)
+    assert isinstance(out, hsgrowth.ErroSistema) and reqs == []

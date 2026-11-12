@@ -897,6 +897,9 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   pelo servidor). O "eu" é `GET /users/me`, não `/auth/me`. ⚠️ **Escrita só em
   card do dono** (`assigned_to_id` ou `sdr_id`), mesmo para admin; card
   ganho/perdido só aceita nota e tarefa nova; cliente/contato só de card aberto.
+  Lead novo nasce com `assigned_to_id` = o PRÓPRIO dono (único corpo que leva o
+  campo; o `PUT` nunca). ⚠️ O `/clients?search` de lá compara o documento cru:
+  a busca do lead vai por dígitos e, sem achado, com a máscara.
   ⚠️ **Comissão mora nas tarefas:** concluir exige `valida` (realizada × tentativa
   sem resultado, vale pontos), reunião que não aconteceu é **no-show**, e
   `alterar` nunca muda `task_type` (fechava o desvio reunião→ligação→concluir).

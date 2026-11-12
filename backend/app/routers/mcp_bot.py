@@ -1541,6 +1541,30 @@ _HSG_ESCRITAS = ("hsgrowth_registrar", "hsgrowth_cliente", "hsgrowth_criar_lead"
                  "hsgrowth_perder", "hsgrowth_noshow")
 _QUADRO_PROSPECCAO = 6     # fixo no código do HSGrowth
 _LEAD_NOVO = "lead novo"
+# O que conta como "contato alcançável" para o HSGrowth criar o card (card_service).
+_MEIOS_DE_CONTATO = ("email", "email_commercial", "phone", "phone_whatsapp", "phone_commercial")
+_FALTA_NO_CLIENTE = {"sector": "setor", "relationship_type": "tipo de relacionamento"}
+
+
+def _mascara(doc: str) -> str:
+    if len(doc) == 14:
+        return f"{doc[:2]}.{doc[2:5]}.{doc[5:8]}/{doc[8:12]}-{doc[12:]}"
+    return f"{doc[:3]}.{doc[3:6]}.{doc[6:9]}-{doc[9:]}"
+
+
+async def _clientes_pelo_documento(ctx: dict, bot: str, doc: str) -> list[dict]:
+    """⚠️ O `/clients?search` do HSGrowth compara o documento CRU (ILIKE): cliente
+    gravado com máscara não aparece buscando dígitos (253 de 7.989 em produção).
+    Sem achado exato pelos dígitos, busca de novo com a máscara. A conferência é
+    sempre por dígitos exatos — a busca casa nome e e-mail também."""
+    achados: list[dict] = []
+    for termo in (doc, _mascara(doc)):
+        r = await _hsg_get(ctx, bot, "/clients", params={"search": termo, "page_size": 100})
+        achados = [c for c in _hsg_itens(r, "clients") if hge.digitos(c.get("document")) == doc
+                   and isinstance(c.get("id"), int)]
+        if achados:
+            break
+    return achados
 
 
 def _hsg_id(v, campo: str) -> int:
@@ -1696,6 +1720,8 @@ async def _preparar_cliente(ctx: dict, bot: str, args: dict) -> tuple[dict, str,
     card = await _hsg_card_do_dono(ctx, bot, cid)
     # ⚠️ Os ids saem do CARD, nunca do agente: cliente é compartilhado.
     client_id = card.get("client_id")
+    if isinstance(client_id, bool) or not isinstance(client_id, int):
+        raise _Recusa("O card não tem cliente ligado; ligue um pela tela do HSGrowth.")
     hge.cliente_alteravel(client_id, [card])
     payload: dict = {"card_id": cid}
     antes: dict = {}
@@ -1753,7 +1779,9 @@ async def _preparar_lead(ctx: dict, bot: str, args: dict) -> tuple[dict, str, st
         if "name" not in contato or not (contato.get("email") or contato.get("phone")):
             raise _Recusa("Contato novo precisa de `name` e de e-mail ou telefone (o HSGrowth exige "
                           "um dos dois) — pergunte ao seu dono.")
-    await _eu_no_hsgrowth(ctx, bot)
+    # ⚠️ O dono do lead é o id dele no HSGrowth, posto AQUI (nunca do agente): o
+    # HSGrowth só o força para vendedor, e lead de admin sairia sem responsável.
+    eu = await _eu_no_hsgrowth(ctx, bot)
     # ⚠️ A etapa é sempre o Lead Novo da Prospecção, achado aqui: vendedor só
     # cria card lá (fora, 403 no clique), e o agente nunca escolhe.
     etapas = _hsg_itens(await _hsg_get(ctx, bot, f"/boards/{_QUADRO_PROSPECCAO}/lists"), "lists")
@@ -1761,9 +1789,7 @@ async def _preparar_lead(ctx: dict, bot: str, args: dict) -> tuple[dict, str, st
                       and isinstance(e.get("id"), int)), None)
     if lead_novo is None:
         raise _Recusa("Não achei a etapa Lead Novo na Prospecção do HSGrowth; não preparo às cegas.")
-    r = await _hsg_get(ctx, bot, "/clients", params={"search": doc, "page_size": 100})
-    achados = [c for c in _hsg_itens(r, "clients") if hge.digitos(c.get("document")) == doc
-               and isinstance(c.get("id"), int)]
+    achados = await _clientes_pelo_documento(ctx, bot, doc)
     if len(achados) > 1:
         raise _Recusa(f"Há {len(achados)} clientes com esse documento no HSGrowth (ids "
                       + ", ".join(str(c["id"]) for c in achados) + "): fale com o gerente comercial.")
@@ -1771,6 +1797,17 @@ async def _preparar_lead(ctx: dict, bot: str, args: dict) -> tuple[dict, str, st
     if achados:
         existente = achados[0]
         cliente = {"id": existente["id"]}
+        # O HSGrowth recusa (422) card ligado a empresa sem setor ou tipo de
+        # relacionamento — 60% dos clientes de produção. Recusa antes do cartão.
+        ficha = existente
+        if any(k not in existente for k in _FALTA_NO_CLIENTE):
+            ficha = await _hsg_get(ctx, bot, f"/clients/{existente['id']}") or {}
+        faltam = [rotulo for k, rotulo in _FALTA_NO_CLIENTE.items() if not (ficha or {}).get(k)]
+        if faltam:
+            raise _Recusa(f"O cliente {hge.uma_linha(existente.get('name'))} já existe no HSGrowth, mas "
+                          f"sem {' e '.join(faltam)} — e lá não nasce card sem isso. Peça ao seu dono "
+                          f"que complete {' e '.join(faltam)} do cliente pela tela do HSGrowth e me "
+                          "chame de novo.")
         busca = await _hsg_get(ctx, bot, "/search/global", params={"q": doc, "limit": 30})
         # A busca casa título, cliente, CNPJ e contato: só ficam os cards DESTE
         # cliente. O `/search/global` de lá não traz `client_id` (12/11/2026);
@@ -1814,13 +1851,17 @@ async def _preparar_lead(ctx: dict, bot: str, args: dict) -> tuple[dict, str, st
         pessoa = next((p for p in pessoas if p.get("id") == con_id), None)
         if pessoa is None:
             raise _Recusa(f"O contato {con_id} não é deste cliente — veja hsgrowth_consultar contatos.")
+        if not any(pessoa.get(k) for k in _MEIOS_DE_CONTATO):
+            raise _Recusa(f"O contato {hge.uma_linha(pessoa.get('name'))} não tem e-mail nem telefone, e "
+                          "o HSGrowth não cria card assim. Peça ao seu dono que complete pela tela do "
+                          "HSGrowth, ou mande um contato novo com e-mail ou telefone.")
         contato_p = {"id": con_id}
         ex["contato"] = hge.uma_linha(pessoa.get("name"))
     else:
         contato_p = {"campos": contato}
         ex["contato"] = hge.uma_linha(contato["name"])
-    payload = {"titulo": titulo, "list_id": lead_novo["id"], "cliente": cliente, "contato": contato_p,
-               "campos_do_card": campos_card, "_exibir": ex}
+    payload = {"titulo": titulo, "list_id": lead_novo["id"], "assigned_to_id": eu["id"], "cliente": cliente,
+               "contato": contato_p, "campos_do_card": campos_card, "_exibir": ex}
     tipo = "cliente existente" if ex["cliente_existente"] else "cliente novo"
     return payload, hge.uma_linha(f"HSGrowth · novo lead {titulo} ({ex['cliente']}, {tipo})", 200), None
 

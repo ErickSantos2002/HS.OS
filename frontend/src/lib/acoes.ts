@@ -201,7 +201,8 @@ export function dataBrasilia(x: unknown): string {
 }
 
 const vazioHSG = (x: unknown) => (x === null || x === undefined || x === "" ? "(vazio)" : v(x));
-const valorHSG = (k: string, x: unknown) => (k === "due_date" && x ? prazo(x) : vazioHSG(x));
+// `due_date` é instante UTC: o dia certo é o de Brasília (02:00Z do dia 20 é 19, 23:00).
+const valorHSG = (k: string, x: unknown) => (k === "due_date" && x ? dataBrasilia(x) : vazioHSG(x));
 const rotuloHSG = (k: string) => ROTULO_CARD_HSG[k] ?? k;
 
 interface TarefaHSG {

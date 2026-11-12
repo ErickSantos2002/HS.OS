@@ -68,6 +68,8 @@ def crm(monkeypatch):
         if req.method != "GET":
             return httpx.Response(500, json={"detail": "escrita antes do cartão"})
         r = estado["rotas"].get(caminho)
+        if callable(r):           # resposta que depende da query
+            r = r(dict(req.url.params))
         if r is None:
             return httpx.Response(404, json={"detail": "não encontrado"})
         return httpx.Response(200, json=r)
@@ -265,9 +267,13 @@ def test_lead_vai_para_lead_novo(crm):
 
 def test_lead_com_cnpj_existente_usa_o_cliente(crm):
     """Documento repetido dá 400 no clique; e criar outro cliente separaria o
-    histórico. A busca é por dígitos e confere o documento exato."""
-    crm["rotas"]["/clients"] = {"clients": [{"id": 43, "name": "Outra", "document": "11111111000111"},
-                                            {"id": 44, "name": "Beta", "document": "12.345.678/0001-90"}]}
+    histórico. O `/clients?search` de lá compara o documento CRU (ILIKE): cliente
+    gravado com máscara (253 de 7.989 em produção) só aparece buscando com a
+    máscara — buscar só por dígitos criaria o duplicado. O documento é conferido
+    por dígitos exatos."""
+    achado = {"clients": [{"id": 43, "name": "Outra", "document": "11.111.111/0001-11"},
+                          {"id": 44, "name": "Beta", "document": "12.345.678/0001-90"}]}
+    crm["rotas"]["/clients"] = lambda q: achado if q.get("search") == "12.345.678/0001-90" else {"clients": []}
     crm["rotas"]["/search/global"] = {"vendas": [
         {"id": 79, "title": "Pedido 12345678000190", "assigned_to_name": "Carla", "is_won": False,
          "is_lost": False, "matched_on": "Título"},
@@ -280,6 +286,7 @@ def test_lead_com_cnpj_existente_usa_o_cliente(crm):
     p = crm["pendentes"][0][2]
     assert p["cliente"] == {"id": 44}
     assert ("GET", "/clients", {"search": "12345678000190", "page_size": "100"}) in crm["reqs"]
+    assert ("GET", "/clients", {"search": "12.345.678/0001-90", "page_size": "100"}) in crm["reqs"]
     ex = p["_exibir"]
     assert ex["cliente_existente"] is True and ex["cards_abertos"] == 1 and ex["donos"] == ["Bruno"]
 
@@ -367,7 +374,7 @@ def test_ida_e_volta_lead_cria_cliente_contato_e_card(crm, monkeypatch):
                               "relationship_type": "Lead"}),
         ("POST", "/persons", {"name": "Maria", "email": "maria@beta.com", "organization_id": 500}),
         ("POST", "/cards", {"modality": "locacao", "title": "Beta — locação", "list_id": 61,
-                            "client_id": 500, "person_id": 501})]
+                            "client_id": 500, "person_id": 501, "assigned_to_id": EU})]
 
 
 def test_ida_e_volta_cliente_leva_os_campos_aos_ids_do_card(crm, monkeypatch):
@@ -476,3 +483,56 @@ def test_quadro_sem_id_recusa_antes_das_definicoes(crm):
         _ferramenta("hsgrowth_registrar", {"card_id": 7, "campos_personalizados": [
             {"field_definition_id": 3, "value": "x"}]})
     assert not any("/fields/" in c for _m, c, _p in crm["reqs"])
+
+
+def test_lead_com_cliente_existente_incompleto_recusa_antes(crm):
+    """O HSGrowth recusa (422) card ligado a empresa sem setor ou tipo de
+    relacionamento — 60% dos clientes de produção. O cartão sairia e o clique
+    falharia; aqui recusa antes, dizendo o que completar."""
+    crm["rotas"]["/clients"] = {"clients": [{"id": 44, "name": "Beta", "document": "12345678000190"}]}
+    crm["rotas"]["/clients/44"] = {"id": 44, "name": "Beta", "document": "12345678000190",
+                                   "sector": None, "relationship_type": None}
+    with pytest.raises(mcp_bot._Recusa, match="setor e tipo de relacionamento.*tela do HSGrowth"):
+        _ferramenta("hsgrowth_criar_lead", _LEAD)
+    crm["rotas"]["/clients"] = {"clients": [{"id": 44, "name": "Beta", "document": "12345678000190",
+                                             "sector": "Mineração", "relationship_type": None}]}
+    with pytest.raises(mcp_bot._Recusa, match="complete tipo de relacionamento do cliente"):
+        _ferramenta("hsgrowth_criar_lead", _LEAD)
+    assert crm["pendentes"] == []
+    _sem_escrita(crm)
+
+
+def test_lead_com_contato_existente_sem_email_nem_telefone_recusa(crm):
+    """Contato sem nenhum e-mail ou telefone faz o HSGrowth recusar o card (422)."""
+    crm["rotas"]["/clients"] = {"clients": [{"id": 44, "name": "Beta", "document": "12345678000190",
+                                             "sector": "Mineração", "relationship_type": "Lead"}]}
+    crm["rotas"]["/persons"] = {"persons": [{"id": 56, "name": "Zé", "email": None, "phone": None,
+                                             "organization_id": 44}]}
+    with pytest.raises(mcp_bot._Recusa, match="e-mail ou telefone"):
+        _ferramenta("hsgrowth_criar_lead", {**_LEAD, "contato": None, "contato_id": 56})
+    crm["rotas"]["/persons"] = {"persons": [{"id": 56, "name": "Zé", "phone_whatsapp": "11999",
+                                             "organization_id": 44}]}
+    _ferramenta("hsgrowth_criar_lead", {**_LEAD, "contato": None, "contato_id": 56})
+    assert crm["pendentes"][0][2]["contato"] == {"id": 56}
+    _sem_escrita(crm)
+
+
+def test_lead_nasce_com_o_dono_como_responsavel(crm, monkeypatch):
+    """Lead criado por admin sairia sem responsável (o HSGrowth só força o dono
+    para vendedor). O id vem do `/users/me`, nunca do agente."""
+    _ferramenta("hsgrowth_criar_lead", {**_LEAD, "assigned_to_id": 99,
+                                        "campos_do_card": {"modality": "venda"}})
+    p = crm["pendentes"][0][2]
+    assert p["assigned_to_id"] == EU
+    reqs = _executar(monkeypatch, "hsgrowth_criar_lead", p, {
+        ("POST", "/clients"): {"id": 500}, ("POST", "/persons"): {"id": 501}, ("POST", "/cards"): {"id": 502}})
+    assert reqs[-1][2]["assigned_to_id"] == EU
+    with pytest.raises(ValueError, match="assigned_to_id"):
+        _ferramenta("hsgrowth_criar_lead", {**_LEAD, "campos_do_card": {"assigned_to_id": 99}})
+
+
+def test_cliente_de_card_sem_cliente_recusa_com_clareza(crm):
+    """Sem cliente no card, a mensagem genérica de "card aberto" confundia o vendedor."""
+    crm["rotas"]["/cards/7/expanded"] = {**CARD, "client_id": None}
+    with pytest.raises(mcp_bot._Recusa, match="não tem cliente ligado"):
+        _ferramenta("hsgrowth_cliente", {"card_id": 7, "cliente": {"sector": "Mineração"}})

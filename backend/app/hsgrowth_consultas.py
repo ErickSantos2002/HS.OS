@@ -12,7 +12,7 @@ Três coisas diferem do GestorHS:
 - **`meus_cards` ainda é filtrado AQUI**: o `/cards` do HSGrowth devolve cards de
   mais de um responsável conforme o papel, então só ficam os que têm o dono como
   `assigned_to_id` ou `sdr_id` (`filtrar_local`).
-- **Filtros locais** (`etapa`, `tarefa`, `parados_dias`) são aceitos do agente mas
+- **Filtros locais** (`etapa`, `tarefa`, `parado`) são aceitos do agente mas
   NUNCA vão ao HSGrowth: `separar_filtros` os tira da query e `filtrar_local` os
   aplica na resposta.
 

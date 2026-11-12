@@ -148,7 +148,7 @@ cartão o que lá seria recusado (dizendo por quê e o que falta), grava em
 |---|---|---|
 | `hsgrowth_registrar` | o pós-ligação, **um cartão só**: campos do card, campos personalizados, nota, tarefas (criar, alterar, concluir) e mover de etapa — executa nessa ordem, para e não desfaz | `PUT /cards/{id}`, `POST /cards/{id}/fields`, `POST /card-notes`, `POST /card-tasks`, `PUT /card-tasks/{id}`, `PATCH /card-tasks/{id}/complete`, `PUT /cards/{id}/move` |
 | `hsgrowth_cliente` | completar cliente e contato que a etapa pede (setor, relacionamento, porte; e-mail, cargo, área) — só de card aberto do dono | `PUT /clients/{id}`, `PUT /persons/{id}` |
-| `hsgrowth_criar_lead` | lead novo na Prospecção / Lead Novo, com cliente e contato (achando os existentes, ou criando — CNPJ consultado na Receita) | `POST /clients`, `POST /persons`, `POST /cards`, `POST /cards/{id}/person` |
+| `hsgrowth_criar_lead` | lead novo na Prospecção / Lead Novo, com cliente e contato (achando os existentes, ou criando — CNPJ consultado na Receita); o dono do lead é o próprio vendedor | `POST /clients`, `POST /persons`, `POST /cards` (com `person_id` e `assigned_to_id` no corpo — sem `POST /cards/{id}/person`) |
 | `hsgrowth_ganhar` / `hsgrowth_perder` | fechar o card; perder exige motivo | `POST /cards/{id}/win`, `POST /cards/{id}/lose` |
 | `hsgrowth_noshow` | cliente faltou à reunião | `PATCH /card-tasks/{id}/noshow` |
 
@@ -175,12 +175,21 @@ Regras do nosso lado (antes do cartão):
 - **Corpo por allowlist de chaves.** `assigned_to_id`, `sdr_id`, `is_won`,
   `is_lost` e `loss_reason` **nunca** saem no `PUT`; ganho e perdido só pelas
   rotas próprias; campo personalizado só por definição que já existe.
+  **Exceção única:** o `POST /cards` do lead novo leva `assigned_to_id` = o id
+  do PRÓPRIO dono (de `/users/me`, posto pelo servidor na preparação, nunca
+  vindo do agente). O HSGrowth já o força para vendedor; sem ele, lead criado
+  por admin nasceria sem responsável.
 - **Mover:** o que a etapa exige, quem diz é o HSGrowth. Do nosso lado só o
-  barato e estável é conferido antes do cartão (uma etapa por vez, ganho sem
-  `modality` → "falta dizer se é venda ou locação", Negociação sem anexo de
-  proposta); o resto é a recusa de lá, **traduzida** para o vendedor dizendo o
-  que falta, e ele resolve na mesma conversa (o Guardi prepara a nota, a
-  tarefa ou o campo que faltava). Duas réguas de etapa é o que não queremos.
+  barato e estável é conferido antes do cartão: etapa do mesmo quadro, ganho e
+  perdido nunca por movimento, **uma etapa por vez só na Aquisição** (quadro
+  7; na Prospecção quem decide é o servidor) e ganho sem `modality` → "falta
+  dizer se é venda ou locação". **Anexo de proposta NÃO é conferido antes** —
+  o `/expanded` não traz anexos e a rota de anexos está fora da allowlist: é a
+  recusa de lá, e o executor acrescenta "anexe a proposta no card pela tela"
+  quando ela cita a Proposta Comercial (ou o destino é Negociação). O resto é
+  a recusa de lá, **traduzida** para o vendedor dizendo o que falta, e ele
+  resolve na mesma conversa (o Guardi prepara a nota, a tarefa ou o campo que
+  faltava). Duas réguas de etapa é o que não queremos.
 - **Uma conversa, vários cartões é aceitável,** mas o caso comum ("liguei, pediu
   retorno quinta, passa pra Qualificação") deve virar **um cartão só** com as
   três coisas, executadas na ordem nota → tarefa → movimento, e "para e não
@@ -188,7 +197,14 @@ Regras do nosso lado (antes do cartão):
   Expedição.
 - **CNPJ:** antes de criar lead, procurar cliente existente pelo documento e
   conferir parceiro; o cartão mostra se o cliente é novo ou existente (e de
-  quem são os cards abertos dele, se houver).
+  quem são os cards abertos dele, se houver). A busca vai por dígitos e, sem
+  achado exato, de novo com a máscara (o `/clients?search` de lá compara o
+  documento cru). Cliente existente sem setor ou tipo de relacionamento, ou
+  contato existente sem e-mail nem telefone, é recusado antes do cartão (lá o
+  card seria recusado com 422). ⚠️ **Limite aceito:** o aviso de parceiro do
+  HSGrowth é por card; CNPJ protegido de cliente NOVO (ou existente sem card)
+  só é barrado pelo 409 no clique — depois de cliente e contato já criados (o
+  lote para e diz o que entrou).
 - **Datas de tarefa:** o vendedor fala em horário de Brasília; a API guarda
   UTC.
 - 403 numa escrita vira "o HSGrowth não deixa a sua função fazer isso"; 409 de
@@ -267,7 +283,13 @@ sistemas; o servidor recusa a ferramenta sem o sistema ligado.
    (criar, alterar, concluir, no-show) e `cards/{id}/person`, que hoje não conferem.
    `PUT /cards/{id}` de agente recusa (403) `assigned_to_id`, `sdr_id`,
    `is_won`, `is_lost`; `POST /cards/{id}/fields` de agente só aceita
-   `field_definition_id`.
+   `field_definition_id`. `POST /cards` de agente aceita `assigned_to_id`
+   **só igual ao próprio usuário do token** (o lead nasce do dono) e recusa
+   `sdr_id`.
+4a. `GET /clients?search=` deveria normalizar o documento como o
+   `/search/global` já faz (comparar só dígitos): hoje compara o texto cru, e
+   cliente gravado com máscara (253 de 7.989) não aparece buscando dígitos — o
+   HS.OS contorna buscando duas vezes.
 5. Na atividade/histórico do card (e no `AuditLog`), quando vier de token de
    agente, acrescentar "via <bot>". Assim o vendedor e o Erick veem o que foi
    pelo Guardi.
