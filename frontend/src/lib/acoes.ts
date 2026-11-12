@@ -47,7 +47,7 @@ const legivel = (k: string, x: unknown) =>
   k === "priority" ? PRIORIDADE[String(x)] ?? v(x) : k === "due_date" ? prazo(x) : v(x);
 
 /** Nome do sistema no cabeçalho do cartão. */
-const SISTEMA: Record<string, string> = { taskhs: "TaskHS", gestorhs: "GestorHS" };
+const SISTEMA: Record<string, string> = { taskhs: "TaskHS", gestorhs: "GestorHS", hsgrowth: "HSGrowth" };
 export const nomeDoSistema = (s?: string) => (s ? SISTEMA[s] ?? s : "");
 
 const TIPO_SERVICO: Record<string, string> = { C: "calibração", M: "manutenção", A: "calibração e manutenção" };
@@ -174,6 +174,128 @@ function cartaoDoGestorHS(acao: string, p: Record<string, unknown>, ex: Record<s
   return null;
 }
 
+const ROTULO_CARD_HSG: Record<string, string> = {
+  title: "Título", description: "Descrição", value: "Valor", due_date: "Previsão", deal_type: "Tipo de negócio",
+  modality: "Modalidade", acquisition_channel: "Canal de aquisição", acquisition_channel_detail: "Detalhe do canal",
+  has_implementation: "Implantação", has_personnel: "Pessoal próprio",
+  name: "Nome", document: "Documento", sector: "Setor", relationship_type: "Relacionamento",
+  employee_count: "Funcionários", commercial_activity: "Atividade comercial",
+  email: "E-mail", phone: "Telefone", position: "Cargo", area: "Área",
+};
+const TIPO_TAREFA_HSG: Record<string, string> = {
+  call: "Ligação", meeting: "Reunião", task: "Tarefa", follow_up: "Follow-up", deadline: "Prazo",
+  email: "E-mail", lunch: "Almoço", other: "Outro",
+};
+const PRIORIDADE_HSG: Record<string, string> = { normal: "Normal", high: "Alta", urgent: "Urgente" };
+
+/** Instante UTC (ISO) → `DD/MM/AAAA HH:MM` em Brasília. Sem deslocamento fixo:
+ *  o fuso vem do `Intl`. Sem fuso no texto, assume UTC (o payload é UTC). */
+export function dataBrasilia(x: unknown): string {
+  const t = String(x);
+  const d = new Date(/(Z|[+-]\d{2}:?\d{2})$/.test(t) ? t : `${t}Z`);
+  if (Number.isNaN(d.getTime())) return t;
+  const f = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit",
+    year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const o = Object.fromEntries(f.formatToParts(d).map((q) => [q.type, q.value]));
+  return `${o.day}/${o.month}/${o.year} ${o.hour}:${o.minute}`;
+}
+
+const vazioHSG = (x: unknown) => (x === null || x === undefined || x === "" ? "(vazio)" : v(x));
+const valorHSG = (k: string, x: unknown) => (k === "due_date" && x ? prazo(x) : vazioHSG(x));
+const rotuloHSG = (k: string) => ROTULO_CARD_HSG[k] ?? k;
+
+interface TarefaHSG {
+  op: string; task_id?: number; title?: string; task_type?: string; priority?: string; due_date?: string;
+  description?: string; duration_minutes?: number; valida?: boolean;
+}
+
+function linhaDaTarefaHSG(o: TarefaHSG, nome: string): [string, string] {
+  const partes: string[] = [];
+  if (o.op === "concluir")
+    return ["Concluir", `${nome} · ${o.valida ? "realizada" : "tentativa sem resultado"}`];
+  if (o.op === "criar") {
+    partes.push(TIPO_TAREFA_HSG[String(o.task_type)] ?? v(o.task_type));
+  } else partes.push(nome);
+  if (o.op === "alterar" && o.title) partes.push(`título: ${o.title}`);
+  if (o.op === "alterar" && o.task_type) partes.push(`tipo: ${TIPO_TAREFA_HSG[o.task_type] ?? o.task_type}`);
+  if (o.priority) partes.push(`prioridade ${PRIORIDADE_HSG[o.priority] ?? o.priority}`);
+  if (o.due_date) partes.push(dataBrasilia(o.due_date));
+  if (o.duration_minutes != null) partes.push(`${o.duration_minutes} min`);
+  if (o.description) partes.push(`obs.: ${o.description}`);
+  if (o.op === "criar") partes.splice(1, 0, nome);
+  return [o.op === "criar" ? "Nova tarefa" : "Alterar tarefa", partes.join(" · ")];
+}
+
+/** HSGrowth (12/11/2026). O vendedor confirma o que está aqui e o servidor
+ *  executa o `payload` gravado: todo VALOR sai do payload; o `_exibir` só dá
+ *  nome ao que lá é id (tarefa, campo personalizado, etapa) e o "antes". */
+function cartaoDoHSGrowth(acao: string, p: Record<string, unknown>, ex: Record<string, unknown>): CartaoDaAcao | null {
+  const card = ex.card ? String(ex.card) : `card ${v(p.card_id)}`;
+  const comCliente = (l: [string, string][]) => { if (ex.cliente) l.unshift(["Cliente", String(ex.cliente)]); return l; };
+  if (acao === "hsgrowth_registrar") {
+    const linhas: [string, string][] = [];
+    const antes = (ex.antes as Record<string, unknown> | undefined) ?? {};
+    for (const [k, x] of Object.entries((p.campos as Record<string, unknown> | undefined) ?? {}))
+      linhas.push([rotuloHSG(k), k in antes ? `${valorHSG(k, x)} (antes: ${valorHSG(k, antes[k])})` : valorHSG(k, x)]);
+    const nomes = (ex.campos_personalizados as string[] | undefined) ?? [];
+    ((p.campos_personalizados as { field_definition_id: number; value: unknown }[] | undefined) ?? [])
+      .forEach((c, i) => linhas.push([nomes[i] || `campo ${c.field_definition_id}`, vazioHSG(c.value)]));
+    if (p.mover_para != null)
+      linhas.push(["Mover para", ex.etapa_para ? String(ex.etapa_para) : `etapa ${v(p.mover_para)}`]);
+    if (ex.aviso) linhas.push(["Atenção", String(ex.aviso)]);
+    const nomesT = (ex.tarefas as string[] | undefined) ?? [];
+    ((p.tarefas as TarefaHSG[] | undefined) ?? []).forEach((o, i) =>
+      linhas.push(linhaDaTarefaHSG(o, nomesT[i] || (o.task_id != null ? `tarefa ${o.task_id}` : "tarefa"))));
+    return { verbo: "Atualizar card", titulo: card, linhas: comCliente(linhas), checklists: [],
+             texto: p.nota ? { rotulo: "Nota", valor: v(p.nota) } : undefined };
+  }
+  if (acao === "hsgrowth_cliente") {
+    const linhas: [string, string][] = [];
+    const antes = (ex.antes as Record<string, Record<string, unknown>> | undefined) ?? {};
+    for (const [quem, rot] of [["cliente", "Cliente"], ["contato", "Contato"]] as const) {
+      const campos = (p[quem] as { campos?: Record<string, unknown> } | undefined)?.campos;
+      for (const [k, x] of Object.entries(campos ?? {}))
+        linhas.push([`${rot} · ${rotuloHSG(k)}`, `${vazioHSG(antes[quem]?.[k])} → ${vazioHSG(x)}`]);
+    }
+    return { verbo: "Completar cadastro", titulo: card, linhas: comCliente(linhas), checklists: [] };
+  }
+  if (acao === "hsgrowth_criar_lead") {
+    const linhas: [string, string][] = [["Etapa", ex.etapa ? String(ex.etapa) : "Lead Novo"]];
+    const cli = p.cliente as { id?: number; campos?: Record<string, unknown> } | undefined;
+    const nomeCli = ex.cliente ? String(ex.cliente) : cli?.id != null ? `cliente ${cli.id}` : "?";
+    linhas.push([cli?.id != null ? "Cliente (já existe)" : "Cliente (novo)", nomeCli]);
+    if (ex.documento) linhas.push(["Documento", String(ex.documento)]);
+    if (ex.cliente_existente && Number(ex.cards_abertos ?? 0) > 0) {
+      const donos = (ex.donos as string[] | undefined) ?? [];
+      linhas.push(["Cards abertos do cliente", `${v(ex.cards_abertos)}${donos.length ? ` — ${donos.join(", ")}` : ""}`]);
+    }
+    for (const [k, x] of Object.entries(cli?.campos ?? {})) if (k !== "name") linhas.push([`Cliente · ${rotuloHSG(k)}`, vazioHSG(x)]);
+    const con = p.contato as { id?: number; campos?: Record<string, unknown> } | undefined;
+    if (con?.id != null) linhas.push(["Contato (já existe)", ex.contato ? String(ex.contato) : `contato ${con.id}`]);
+    else {
+      linhas.push(["Contato (novo)", ex.contato ? String(ex.contato) : v(con?.campos?.name)]);
+      for (const [k, x] of Object.entries(con?.campos ?? {})) if (k !== "name") linhas.push([`Contato · ${rotuloHSG(k)}`, vazioHSG(x)]);
+    }
+    for (const [k, x] of Object.entries((p.campos_do_card as Record<string, unknown> | undefined) ?? {}))
+      linhas.push([rotuloHSG(k), valorHSG(k, x)]);
+    return { verbo: "Novo lead", titulo: v(p.titulo), linhas, checklists: [] };
+  }
+  if (acao === "hsgrowth_ganhar") {
+    const linhas: [string, string][] = [];
+    if (ex.valor != null) linhas.push(["Valor", reais(ex.valor)]);
+    if (ex.modalidade) linhas.push(["Modalidade", String(ex.modalidade)]);
+    return { verbo: "Marcar como GANHO", titulo: card, linhas: comCliente(linhas), checklists: [] };
+  }
+  if (acao === "hsgrowth_perder")
+    return { verbo: "Marcar como PERDIDO", titulo: card, linhas: comCliente([["Motivo", v(p.motivo)]]), checklists: [] };
+  if (acao === "hsgrowth_noshow") {
+    const linhas: [string, string][] = [["Reunião", ex.reuniao ? String(ex.reuniao) : `tarefa ${v(p.task_id)}`]];
+    if (ex.quando) linhas.push(["Marcada para", dataBrasilia(ex.quando)]);
+    return { verbo: "Cliente não compareceu", titulo: card, linhas: comCliente(linhas), checklists: [] };
+  }
+  return null;
+}
+
 interface ItemDaProposta { descricao?: string; sku?: string; quantidade?: number; preco_un?: number }
 
 /** `1335` → `R$ 1.335,00`, sem `Intl` (o espaço dele é NBSP e varia por ambiente). */
@@ -267,6 +389,8 @@ export function cartaoDaAcao(acao: string, p: Record<string, unknown>): CartaoDa
   }
   const gestor = cartaoDoGestorHS(acao, p, ex);
   if (gestor) return gestor;
+  const growth = cartaoDoHSGrowth(acao, p, ex);
+  if (growth) return growth;
   return { verbo: acao, titulo: "", checklists: [],
            linhas: Object.entries(p).filter(([k]) => k !== "_exibir").map(([k, x]) => [k, JSON.stringify(x)]) };
 }
