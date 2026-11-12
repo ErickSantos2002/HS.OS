@@ -12,6 +12,8 @@ Testado em `tests/test_guardi_hsgrowth_servicos_escrita.py`.
 """
 from __future__ import annotations
 
+import math
+
 from app.hsgrowth_escrita import (_inteiro, _opcao, _texto, digitos, uma_linha,
                                   utc_de_brasilia)
 
@@ -42,7 +44,7 @@ _SO_QUADRO = {"collection_type": 2, "acquisition_channel": 2, "shipping_confirme
               "closing_type": 1, "proposal_number": 1, "order_number": 1,
               "from_collection": 1}
 
-CAMPOS_PUT = ("title", "description", "due_date", "contact_info", "client_id", "person_id")
+CAMPOS_PUT = ("title", "description", "due_date", "client_id", "person_id")
 
 # Tipos do seletor da aba Atividade (`ServiceActivityTab.tsx:48-56`).
 TIPOS_ATIVIDADE = ("call", "task", "follow_up", "email", "whatsapp", "linkedin", "other")
@@ -68,10 +70,11 @@ def _quadro(board_id) -> int:
 
 # --- business_info -----------------------------------------------------------------
 
-def negocio(d: dict, board_id: int | None = None) -> dict:
-    """Só as chaves conhecidas, com valor da lista da tela. Com `board_id`, recusa a
+def negocio(d: dict, board_id: int) -> dict:
+    """Só as chaves conhecidas, com valor da lista da tela. `board_id` é obrigatório: recusa a
     chave que a tela não mostra naquele quadro (ex.: `shipping_confirmed` em Serviços).
     Não há limpar-campo: valor vazio é recusado."""
+    _quadro(board_id)
     if not isinstance(d, dict) or not d:
         raise ValueError("Diga o que preencher no Resumo do card.")
     desconhecidas = [k for k in d if k not in CHAVES_NEGOCIO]
@@ -81,7 +84,7 @@ def negocio(d: dict, board_id: int | None = None) -> dict:
             + ", ".join(CHAVES_NEGOCIO) + ".")
     out: dict = {}
     for k, v in d.items():
-        if board_id is not None and k in _SO_QUADRO and _SO_QUADRO[k] != board_id:
+        if k in _SO_QUADRO and _SO_QUADRO[k] != board_id:
             raise ValueError(f"`{k}` não existe no Resumo deste quadro.")
         if k == "form_answered":
             if not isinstance(v, bool):
@@ -115,10 +118,6 @@ def campos_do_card(d: dict) -> dict:
             out[k] = _texto(v, k, 5000, 0)
         elif k == "due_date":
             out[k] = utc_de_brasilia(v)
-        elif k == "contact_info":
-            if not isinstance(v, dict):
-                raise ValueError("`contact_info` tem que ser um objeto.")
-            out[k] = v
         else:  # client_id, person_id
             out[k] = _inteiro(v, k)
     return out
@@ -269,8 +268,8 @@ def motivo_da_perda(s) -> str:
 
 # --- itens do card -----------------------------------------------------------------
 
-def _numero(v, campo: str, minimo_int: bool = False):
-    if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0 or v != v:
+def _numero(v, campo: str):
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0:
         raise ValueError(f"`{campo}` tem que ser um número maior ou igual a zero.")
     return v
 
@@ -281,20 +280,25 @@ def _quantidade(v) -> int:
     return v
 
 
-def item(op: dict, catalogo_ids: set[int], itens_do_card: dict[int, dict]) -> dict:
+def item(op: dict, catalogo_ids: dict[str, set[int]],
+         itens_do_card: dict[str, dict[int, dict]]) -> dict:
     """`tipo` aparelho (produto) ou servico; `acao` por/alterar/tirar. `por` exige id
     do catálogo, `quantity` e `unit_price` (como o schema de lá); `alterar`/`tirar`
-    exigem `item_id` que seja linha deste card. Devolve o corpo pronto para a rota."""
+    exigem `item_id` que seja linha deste card DO MESMO tipo (ids de
+    produto e serviço se repetem). Catálogo e itens vêm por tipo; tipo ausente = recusa. Devolve o corpo pronto para a rota."""
     if not isinstance(op, dict):
         raise ValueError("O item é um objeto com `tipo` e `acao`.")
-    if catalogo_ids is None or itens_do_card is None:
-        raise ValueError("Para mexer em item é preciso conferir o catálogo e os itens do card.")
     tipo = _opcao(op.get("tipo"), ("aparelho", "servico"), "tipo")
+    if not isinstance(catalogo_ids, dict) or not isinstance(itens_do_card, dict) \
+            or tipo not in catalogo_ids or tipo not in itens_do_card:
+        raise ValueError("Para mexer em item é preciso conferir o catálogo e os itens do card "
+                         f"({tipo}).")
+    catalogo, no_card = catalogo_ids[tipo], itens_do_card[tipo]
     acao = _opcao(op.get("acao"), ("por", "alterar", "tirar"), "acao")
     chave = "product_id" if tipo == "aparelho" else "service_id"
     if acao == "por":
         cid = _inteiro(op.get(chave), chave)
-        if cid not in catalogo_ids:
+        if cid not in catalogo:
             raise ValueError(f"{chave} {cid} não está no catálogo; não chuto item.")
         if "quantity" not in op or "unit_price" not in op:
             raise ValueError("Para pôr um item preciso de `quantity` e `unit_price`.")
@@ -305,8 +309,7 @@ def item(op: dict, catalogo_ids: set[int], itens_do_card: dict[int, dict]) -> di
             corpo["notes"] = _texto(op["notes"], "notes", 1000, 0)
         return {"tipo": tipo, "acao": acao, "corpo": corpo}
     iid = _inteiro(op.get("item_id"), "item_id")
-    linha = itens_do_card.get(iid)
-    if linha is None or linha.get("tipo", tipo) != tipo:
+    if iid not in no_card:
         raise ValueError(f"O item {iid} não é um {tipo} deste card.")
     if acao == "tirar":
         return {"tipo": tipo, "acao": acao, "item_id": iid}

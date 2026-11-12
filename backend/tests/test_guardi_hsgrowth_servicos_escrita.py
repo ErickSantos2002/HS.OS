@@ -31,18 +31,18 @@ def erro(fn, *a, **k):
 
 def test_negocio_opcao_fora_lista_as_opcoes():
     """Valor inventado gravado no Resumo apareceria como vazio na tela."""
-    m = erro(r.negocio, {"service_type": "troca"})
+    m = erro(r.negocio, {"service_type": "troca"}, 1)
     assert "recalibracao" in m and "manutencao" in m
 
 
 def test_negocio_chave_desconhecida_e_tipos():
     """Chave fora da lista deixaria o agente gravar o que quisesse no business_info."""
-    assert "status" in erro(r.negocio, {"status": "x"})
-    assert r.negocio({"form_answered": True, "proposal_number": 12, "order_number": 5}) == {
+    assert "status" in erro(r.negocio, {"status": "x"}, 1)
+    assert r.negocio({"form_answered": True, "proposal_number": 12, "order_number": 5}, 1) == {
         "form_answered": True, "proposal_number": 12, "order_number": 5}
-    erro(r.negocio, {"form_answered": "sim"})
-    erro(r.negocio, {"proposal_number": 0})
-    erro(r.negocio, {"order_number": "PED-1"})
+    erro(r.negocio, {"form_answered": "sim"}, 1)
+    erro(r.negocio, {"proposal_number": 0}, 1)
+    erro(r.negocio, {"order_number": "PED-1"}, 1)
 
 
 def test_negocio_chave_de_outro_quadro():
@@ -53,7 +53,7 @@ def test_negocio_chave_de_outro_quadro():
 
 def test_campos_do_card_recusa_list_id_e_is_deleted_e_converte_data():
     """list_id/is_deleted no PUT moveriam ou apagariam o card sem as travas."""
-    for k in ("list_id", "is_deleted", "assigned_to_id", "position"):
+    for k in ("list_id", "is_deleted", "assigned_to_id", "position", "contact_info"):
         erro(r.campos_do_card, {k: 1})
     out = r.campos_do_card({"due_date": "2026-11-19T10:00", "client_id": 3, "title": " x "})
     assert out == {"due_date": "2026-11-19T13:00:00Z", "client_id": 3, "title": "x"}
@@ -147,21 +147,60 @@ def test_motivo_da_perda():
 
 def test_item_por_alterar_tirar():
     """Item fora do catálogo ou de outro card seria gravado/apagado às cegas."""
-    cat, card_itens = {1, 2}, {50: {"tipo": "aparelho"}, 60: {"tipo": "servico"}}
+    cat = {"aparelho": {1, 2}, "servico": {1, 2}}
+    no_card = {"aparelho": {50: {}}, "servico": {60: {}}}
     out = r.item({"tipo": "aparelho", "acao": "por", "product_id": 1, "quantity": 2,
-                  "unit_price": 10.5}, cat, card_itens)
+                  "unit_price": 10.5}, cat, no_card)
     assert out["corpo"] == {"product_id": 1, "quantity": 2, "unit_price": 10.5, "discount": 0}
     erro(r.item, {"tipo": "servico", "acao": "por", "service_id": 9, "quantity": 1,
-                  "unit_price": 1}, cat, card_itens)
+                  "unit_price": 1}, cat, no_card)
     erro(r.item, {"tipo": "servico", "acao": "por", "service_id": 1, "quantity": 0,
-                  "unit_price": 1}, cat, card_itens)
-    erro(r.item, {"tipo": "servico", "acao": "por", "service_id": 1, "quantity": 1}, cat, card_itens)
-    assert r.item({"tipo": "aparelho", "acao": "tirar", "item_id": 50}, cat, card_itens)["item_id"] == 50
-    assert "não é" in erro(r.item, {"tipo": "aparelho", "acao": "tirar", "item_id": 99}, cat, card_itens)
-    erro(r.item, {"tipo": "aparelho", "acao": "alterar", "item_id": 60, "quantity": 2}, cat, card_itens)
-    erro(r.item, {"tipo": "aparelho", "acao": "alterar", "item_id": 50}, cat, card_itens)
+                  "unit_price": 1}, cat, no_card)
+    erro(r.item, {"tipo": "servico", "acao": "por", "service_id": 1, "quantity": 1}, cat, no_card)
+    assert r.item({"tipo": "aparelho", "acao": "tirar", "item_id": 50}, cat, no_card)["item_id"] == 50
+    assert "não é" in erro(r.item, {"tipo": "aparelho", "acao": "tirar", "item_id": 99}, cat, no_card)
+    erro(r.item, {"tipo": "aparelho", "acao": "alterar", "item_id": 60, "quantity": 2}, cat, no_card)
+    erro(r.item, {"tipo": "aparelho", "acao": "alterar", "item_id": 50}, cat, no_card)
     assert r.item({"tipo": "aparelho", "acao": "alterar", "item_id": 50, "quantity": 3},
-                  cat, card_itens)["corpo"] == {"quantity": 3}
+                  cat, no_card)["corpo"] == {"quantity": 3}
+
+
+def test_item_tipos_separados_e_falha_fechado():
+    """Ids de produto e serviço se repetem: um dict só tiraria o serviço 7 achando que é o
+    aparelho 7; catálogo único aceitaria service_id que só existe como produto."""
+    cat = {"aparelho": {5}, "servico": {6}}
+    no_card = {"aparelho": {7: {}}, "servico": {8: {}}}
+    erro(r.item, {"tipo": "servico", "acao": "por", "service_id": 5, "quantity": 1,
+                  "unit_price": 1}, cat, no_card)
+    erro(r.item, {"tipo": "servico", "acao": "tirar", "item_id": 7}, cat, no_card)
+    mesmo = {"aparelho": {7: {}}, "servico": {7: {}}}
+    assert r.item({"tipo": "servico", "acao": "tirar", "item_id": 7}, cat, mesmo)["tipo"] == "servico"
+    erro(r.item, {"tipo": "servico", "acao": "tirar", "item_id": 8}, cat, {"aparelho": {}})
+    erro(r.item, {"tipo": "servico", "acao": "por", "service_id": 6, "quantity": 1,
+                  "unit_price": 1}, {"aparelho": {1}}, no_card)
+    erro(r.item, {"tipo": "aparelho", "acao": "por", "product_id": 5, "quantity": 1,
+                  "unit_price": float("inf")}, cat, no_card)
+    erro(r.item, {"tipo": "aparelho", "acao": "por", "product_id": 5, "quantity": 1,
+                  "unit_price": float("nan")}, cat, no_card)
+
+
+def test_negocio_exige_quadro_e_recusa_vazio():
+    """Sem quadro a conferência por quadro não rodaria; valor vazio limparia o campo sem querer."""
+    with pytest.raises(TypeError):
+        r.negocio({"service_type": "ambos"})
+    erro(r.negocio, {"service_type": "ambos"}, 7)
+    for k, v in (("service_type", ""), ("order_number", None), ("proposal_number", ""),
+                 ("form_answered", None), ("closing_type", "")):
+        erro(r.negocio, {k: v}, 1)
+    erro(r.negocio, {}, 1)
+
+
+def test_ganho_order_number_em_branco():
+    """Número do pedido só com espaços passaria como preenchido."""
+    biz = {"proposal_number": 5, "order_number": "   ", "from_collection": "nao"}
+    assert "pedido" in erro(r.conferir_ganho, card(13), ETAPAS1, biz)
+    biz["order_number"] = None
+    assert "pedido" in erro(r.conferir_ganho, card(13), ETAPAS1, biz)
 
 
 def test_mesmo_cliente():
