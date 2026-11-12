@@ -50,15 +50,17 @@ async def chamar(email: str, bot: str, metodo: str, caminho: str, json: Any = No
 
 async def chamar_sistema(aud: str, nome: str, base: str, transporte, mensagens: dict,
                          email: str, bot: str, metodo: str, caminho: str, json: Any = None,
-                         params: dict | None = None, dono: str | None = None) -> Any:
+                         params: dict | None = None, dono: str | None = None,
+                         files: dict | None = None) -> Any:
     """O miolo comum a todo sistema interno: token do `aud`, auditoria, erro legível.
-    Usado pelo TaskHS e pelo DataCore (`app/sistemas/datacore.py`)."""
+    Usado pelo TaskHS e pelo DataCore (`app/sistemas/datacore.py`). `files` (multipart,
+    só o HSGrowth usa) segue o mesmo caminho de token, auditoria e erro."""
     url = base.rstrip("/") + caminho
     token, jti = token_e_jti(aud, email, bot)
     headers = {"Authorization": f"Bearer {token}"}
     try:
         async with httpx.AsyncClient(timeout=TIMEOUT, transport=transporte) as c:
-            r = await c.request(metodo, url, headers=headers, json=json, params=params)
+            r = await c.request(metodo, url, headers=headers, json=json, params=params, files=files)
     except httpx.HTTPError as e:
         if dono:
             await _registrar(dono, bot, aud, metodo, caminho, 0, jti)

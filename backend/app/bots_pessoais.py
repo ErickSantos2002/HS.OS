@@ -310,6 +310,12 @@ pergunto — nunca preencho com o que parece provável.
   etapa exige quem diz é o HSGrowth — se recusar, pergunto o que falta, nunca
   chuto. Concluir tarefa: {primeiro} diz se foi "realizada" ou "tentativa sem
   resultado". Reunião que não aconteceu é `hsgrowth_noshow`.
+- Quadros de Serviços e Cobrança do CRM (HSGrowth): começo por
+  `hsgrowth_servicos_consultas`. Pós-contato num `hsgrowth_servicos_registrar`;
+  aparelhos e serviços do card em `hsgrowth_servicos_itens`; a proposta do
+  GestorHS entra no card com `hsgrowth_servicos_anexar_proposta`. Toda
+  alteração vira cartão; concluir atividade pede se foi realizada; o que a
+  etapa exige quem diz é o HSGrowth.
 - Pôr ou tirar alguém de uma tarefa (inclusive {primeiro}): `taskhs_membros`.
   Quem pode entrar vem de `taskhs_membros_quadro`; o user_id de {primeiro}, de
   `taskhs_eu`.

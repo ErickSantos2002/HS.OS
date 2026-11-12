@@ -47,7 +47,7 @@ const legivel = (k: string, x: unknown) =>
   k === "priority" ? PRIORIDADE[String(x)] ?? v(x) : k === "due_date" ? prazo(x) : v(x);
 
 /** Nome do sistema no cabeçalho do cartão. */
-const SISTEMA: Record<string, string> = { taskhs: "TaskHS", gestorhs: "GestorHS", hsgrowth: "HSGrowth" };
+const SISTEMA: Record<string, string> = { taskhs: "TaskHS", gestorhs: "GestorHS", hsgrowth: "HSGrowth", hsgrowth_servicos: "HSGrowth" };
 export const nomeDoSistema = (s?: string) => (s ? SISTEMA[s] ?? s : "");
 
 const TIPO_SERVICO: Record<string, string> = { C: "calibração", M: "manutenção", A: "calibração e manutenção" };
@@ -299,6 +299,105 @@ function cartaoDoHSGrowth(acao: string, p: Record<string, unknown>, ex: Record<s
   return null;
 }
 
+const ROTULO_NEGOCIO_SV: Record<string, string> = {
+  collection_type: "Tipo de cobrança", service_type: "Tipo de serviço", acquisition_channel: "Canal de aquisição",
+  form_answered: "Formulário respondido", closing_type: "Tipo de fechamento", proposal_number: "Nº da proposta",
+  order_number: "Nº do pedido", from_collection: "Veio da cobrança", shipping_confirmed: "Envio confirmado",
+};
+const VALOR_NEGOCIO_SV: Record<string, string> = {
+  a_vencer: "A vencer", atrasados: "Atrasados", recalibracao: "Recalibração", manutencao: "Manutenção",
+  ambos: "Ambos", faturamento_direto: "Faturamento direto", pedido: "Pedido", sim: "Sim", nao: "Não",
+};
+const TIPO_ATIVIDADE_SV: Record<string, string> = {
+  call: "Ligação", task: "Tarefa", follow_up: "Follow-up", email: "E-mail", whatsapp: "WhatsApp",
+  linkedin: "LinkedIn", other: "Outro",
+};
+// Ganho e perda no HSGrowth concluem as atividades pendentes, menos follow-up
+// (`_complete_pending_activities` de lá). Texto fixo: não vem do `_exibir`.
+const FECHA_ATIVIDADES_SV: [string, string] = ["Atividades", "as pendentes são concluídas, menos follow-up"];
+const valorNegocioSV = (x: unknown) =>
+  x === null || x === undefined || x === "" ? "(vazio)" : VALOR_NEGOCIO_SV[String(x)] ?? v(x);
+
+/** HSGrowth Serviços e Cobrança (12/11/2026). Mesma regra do Vendas: todo VALOR
+ *  sai do payload (o que o servidor executa); `_exibir` só nomeia ids e dá o "antes". */
+function cartaoDoHSGrowthServicos(acao: string, p: Record<string, unknown>, ex: Record<string, unknown>): CartaoDaAcao | null {
+  if (!acao.startsWith("hsgrowth_servicos_")) return null;
+  const card = ex.card ? String(ex.card) : `card ${v(p.card_id)}`;
+  const comCliente = (l: [string, string][]) => { if (ex.cliente) l.unshift(["Cliente", String(ex.cliente)]); return l; };
+  const etapa = (id: unknown, nome: unknown) => (nome ? String(nome) : `etapa ${v(id)}`);
+  const trecho = (de: unknown, para: unknown): [string, string] =>
+    ["Etapa", `${etapa(de, ex.etapa_de)} → ${etapa(para, ex.etapa_para)}`];
+  const avisoLinha = (l: [string, string][]) => { if (ex.aviso) l.push(["Atenção", String(ex.aviso)]); return l; };
+  const quadro = ex.quadro ? ` · ${String(ex.quadro)}` : "";
+  if (acao === "hsgrowth_servicos_registrar") {
+    const linhas: [string, string][] = [];
+    const camposP = (p.campos as Record<string, unknown> | undefined) ?? {};
+    if ("client_id" in camposP) linhas.push(["Cliente do card", ex.cliente_novo ? String(ex.cliente_novo) : `cliente ${v(camposP.client_id)}`]);
+    if ("person_id" in camposP) linhas.push(["Contato do card", ex.contato_novo ? String(ex.contato_novo) : `contato ${v(camposP.person_id)}`]);
+    for (const [k, x] of Object.entries(camposP))
+      if (k !== "client_id" && k !== "person_id") linhas.push([rotuloHSG(k), valorHSG(k, x)]);
+    const antes = (ex.negocio_antes as Record<string, unknown> | undefined) ?? {};
+    for (const [k, x] of Object.entries((p.negocio as Record<string, unknown> | undefined) ?? {}))
+      linhas.push([ROTULO_NEGOCIO_SV[k] ?? k, `${valorNegocioSV(antes[k])} → ${valorNegocioSV(x)}`]);
+    const prop = ex.proposta as { numero?: unknown; cliente?: unknown; valor?: unknown } | undefined;
+    if (prop && (p.negocio as Record<string, unknown> | undefined)?.proposal_number != null)
+      linhas.push(["Proposta no GestorHS", [prop.cliente, prop.valor != null ? reais(prop.valor) : ""].filter(Boolean).join(" · ") || "(achada)"]);
+    const nomes = (ex.atividades_nomes as Record<string, string> | undefined) ?? {};
+    for (const o of (p.atividades as Record<string, unknown>[] | undefined) ?? []) {
+      if (o.op === "concluir")
+        linhas.push(["Concluir atividade", `${nomes[String(o.activity_id)] || `atividade ${v(o.activity_id)}`} · ${o.valida ? "realizada" : "tentativa sem resultado"}`]);
+      else if (o.category === "anotacao") linhas.push(["Anotação", v(o.description)]);
+      else {
+        const partes = [TIPO_ATIVIDADE_SV[String(o.activity_type)] ?? v(o.activity_type), v(o.title)];
+        if (o.priority) partes.push(`prioridade ${PRIORIDADE_HSG[String(o.priority)] ?? v(o.priority)}`);
+        if (o.due_date) partes.push(dataBrasilia(o.due_date));
+        if (o.description) partes.push(`obs.: ${v(o.description)}`);
+        linhas.push(["Nova atividade", partes.join(" · ")]);
+      }
+    }
+    const mov = p.mover as { de?: unknown; para?: unknown } | undefined;
+    if (mov) linhas.push(trecho(mov.de, mov.para));
+    return { verbo: "Atualizar card", titulo: card + quadro, linhas: avisoLinha(comCliente(linhas)), checklists: [] };
+  }
+  if (acao === "hsgrowth_servicos_itens") {
+    const nomes = (ex.itens_nomes as string[] | undefined) ?? [];
+    const rot: Record<string, string> = { por: "Pôr", alterar: "Alterar", tirar: "Tirar" };
+    const itens = ((p.ops as Record<string, unknown>[] | undefined) ?? []).map((o, i) => {
+      const c = (o.corpo as Record<string, unknown> | undefined) ?? {};
+      const partes = [`${rot[String(o.acao)] ?? v(o.acao)} ${o.tipo === "aparelho" ? "aparelho" : "serviço"}`,
+        nomes[i] || (o.item_id != null ? `item ${v(o.item_id)}` : "item")];
+      if (c.quantity != null) partes.push(`${v(c.quantity)} un.`);
+      if (c.unit_price != null) partes.push(`${reais(c.unit_price)} cada`);
+      if (c.discount != null) partes.push(`desconto ${v(c.discount)}`);
+      if (c.notes) partes.push(`obs.: ${v(c.notes)}`);
+      return { texto: partes.join(" · ") };
+    });
+    return { verbo: "Itens do card", titulo: card + quadro, linhas: comCliente([]),
+             checklists: [{ titulo: "Itens", itens }] };
+  }
+  if (acao === "hsgrowth_servicos_ganhar") {
+    const linhas: [string, string][] = [trecho(p.de, p.para)];
+    if (ex.valor != null) linhas.push(["Valor", reais(ex.valor)]);
+    const prop = ex.proposta as { numero?: unknown } | undefined;
+    if (prop?.numero != null) linhas.push(["Proposta", v(prop.numero)]);
+    linhas.push(FECHA_ATIVIDADES_SV);
+    return { verbo: "Marcar como GANHO", titulo: card + quadro, linhas: avisoLinha(comCliente(linhas)), checklists: [] };
+  }
+  if (acao === "hsgrowth_servicos_perder")
+    return { verbo: "Marcar como PERDIDO", titulo: card + quadro,
+             linhas: comCliente([["Motivo", v(p.motivo)], trecho(p.de, p.para), FECHA_ATIVIDADES_SV]), checklists: [] };
+  if (acao === "hsgrowth_servicos_anexar_proposta") {
+    const prop = ex.proposta as { cliente?: unknown; valor?: unknown } | undefined;
+    const linhas: [string, string][] = [["Proposta", v(p.numero)]];
+    if (prop?.cliente) linhas.push(["Cliente da proposta", String(prop.cliente)]);
+    if (prop?.valor != null) linhas.push(["Valor", reais(prop.valor)]);
+    if (p.nome_arquivo) linhas.push(["Arquivo", v(p.nome_arquivo)]);
+    if (ex.substitui) linhas.push(["Substitui", String(ex.substitui)]);
+    return { verbo: "Anexar proposta (PDF)", titulo: card + quadro, linhas: avisoLinha(comCliente(linhas)), checklists: [] };
+  }
+  return null;
+}
+
 interface ItemDaProposta { descricao?: string; sku?: string; quantidade?: number; preco_un?: number }
 
 /** `1335` → `R$ 1.335,00`, sem `Intl` (o espaço dele é NBSP e varia por ambiente). */
@@ -394,6 +493,8 @@ export function cartaoDaAcao(acao: string, p: Record<string, unknown>): CartaoDa
   if (gestor) return gestor;
   const growth = cartaoDoHSGrowth(acao, p, ex);
   if (growth) return growth;
+  const servicos = cartaoDoHSGrowthServicos(acao, p, ex);
+  if (servicos) return servicos;
   return { verbo: acao, titulo: "", checklists: [],
            linhas: Object.entries(p).filter(([k]) => k !== "_exibir").map(([k, x]) => [k, JSON.stringify(x)]) };
 }

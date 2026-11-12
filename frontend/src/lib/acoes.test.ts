@@ -276,3 +276,73 @@ describe("cartão do HSGrowth", () => {
     expect(e.linhas.some(([k]) => k.includes("Setor"))).toBe(false);
   });
 });
+
+describe("cartão do HSGrowth Serviços", () => {
+  it("o sistema tem nome", () => {
+    expect(nomeDoSistema("hsgrowth_servicos")).toBe("HSGrowth");
+  });
+  it("registrar mostra tudo em ordem, com valores do payload", () => {
+    // Faltar uma parte (resumo, atividade, anotação, etapa) é aprovar o que não foi visto;
+    // um valor forjado no _exibir aparecendo seria mostrar o que não será executado.
+    const c = cartaoDaAcao("hsgrowth_servicos_registrar", {
+      board_id: 1, card_id: 7, campos: { title: "Novo título", due_date: "2026-11-20T02:00:00Z" },
+      negocio: { service_type: "recalibracao", form_answered: true },
+      atividades: [
+        { op: "criar", category: "atividade", activity_type: "call", title: "Ligar", priority: "high", due_date: "2026-11-19T13:00:00Z" },
+        { op: "criar", category: "anotacao", description: "Falei com o cliente." },
+        { op: "concluir", activity_id: 9, valida: false }],
+      mover: { de: 1, para: 2 },
+      _exibir: { card: "ACME", quadro: "Serviços", cliente: "ACME SA", negocio_antes: { service_type: "manutencao", form_answered: false },
+        atividades_nomes: { "9": "Reunião X" }, etapa_de: "Novo", etapa_para: "Orçamento", aviso: "Atenção ao prazo.",
+        service_type: "FORJADO" } });
+    expect(c.titulo).toBe("ACME · Serviços");
+    expect(c.linhas).toEqual([
+      ["Cliente", "ACME SA"], ["Título", "Novo título"], ["Previsão", "19/11/2026 23:00"],
+      ["Tipo de serviço", "Manutenção → Recalibração"], ["Formulário respondido", "não → sim"],
+      ["Nova atividade", "Ligação · Ligar · prioridade Alta · 19/11/2026 10:00"],
+      ["Anotação", "Falei com o cliente."],
+      ["Concluir atividade", "Reunião X · tentativa sem resultado"],
+      ["Etapa", "Novo → Orçamento"], ["Atenção", "Atenção ao prazo."]]);
+    expect(JSON.stringify(c)).not.toContain("FORJADO");
+  });
+  it("itens mostram operação, nome e valores do payload", () => {
+    const c = cartaoDaAcao("hsgrowth_servicos_itens", { board_id: 1, card_id: 7, ops: [
+      { tipo: "aparelho", acao: "por", corpo: { product_id: 3, quantity: 2, unit_price: 1500 } },
+      { tipo: "servico", acao: "tirar", item_id: 8 }],
+      _exibir: { card: "ACME", itens_nomes: ["Bafômetro X", "Calibração"] } });
+    expect(c.checklists[0].itens.map((i) => i.texto)).toEqual([
+      "Pôr aparelho · Bafômetro X · 2 un. · R$ 1.500,00 cada", "Tirar serviço · Calibração"]);
+  });
+  it("ganhar destaca o aviso", () => {
+    const c = cartaoDaAcao("hsgrowth_servicos_ganhar", { board_id: 1, card_id: 7, de: 5, para: 6,
+      _exibir: { card: "ACME", etapa_de: "Aprovado", etapa_para: "Ganho", aviso: "Proposta não conferida." } });
+    expect(c.verbo).toBe("Marcar como GANHO");
+    expect(c.linhas).toEqual([["Etapa", "Aprovado → Ganho"],
+      ["Atividades", "as pendentes são concluídas, menos follow-up"], ["Atenção", "Proposta não conferida."]]);
+  });
+  it("nº do pedido é texto: zero à esquerda e letras aparecem como vieram", () => {
+    const c = cartaoDaAcao("hsgrowth_servicos_registrar", { board_id: 1, card_id: 7,
+      negocio: { order_number: "035897" }, _exibir: { card: "ACME", negocio_antes: { order_number: "PED-1" } } });
+    expect(c.linhas).toContainEqual(["Nº do pedido", "PED-1 → 035897"]);
+  });
+    it("ganhar mostra o número da proposta que o servidor grava em `_exibir.proposta.numero`", () => {
+    const c = cartaoDaAcao("hsgrowth_servicos_ganhar", { board_id: 1, card_id: 7, de: 14, para: 19,
+      _exibir: { card: "ACME", etapa_de: "Aguardando Pedido", etapa_para: "Negócio Ganho", valor: 900,
+        proposta: { numero: 812 }, aviso: "O ganho avisa o GestorHS e a caixa vai para o Financeiro." } });
+    expect(c.linhas).toContainEqual(["Proposta", "812"]);
+    expect(c.linhas).toContainEqual(["Atenção", "O ganho avisa o GestorHS e a caixa vai para o Financeiro."]);
+  });
+  it("perder mostra o motivo do payload", () => {
+    const c = cartaoDaAcao("hsgrowth_servicos_perder", { board_id: 2, card_id: 7, de: 5, para: 9, motivo: "Sem Conserto",
+      _exibir: { card: "ACME", etapa_de: "Em andamento", etapa_para: "Perdido", motivo: "FORJADO" } });
+    expect(c.linhas).toEqual([["Motivo", "Sem Conserto"], ["Etapa", "Em andamento → Perdido"],
+      ["Atividades", "as pendentes são concluídas, menos follow-up"]]);
+  });
+  it("anexar mostra número, arquivo e o que substitui", () => {
+    const c = cartaoDaAcao("hsgrowth_servicos_anexar_proposta", { board_id: 1, card_id: 7, numero: 1234,
+      nome_arquivo: "Proposta 1234.pdf", _exibir: { card: "ACME", proposta: { numero: 999, cliente: "ACME SA", valor: 2000 },
+        substitui: "Proposta 1200.pdf", aviso: "substitui Proposta 1200.pdf" } });
+    expect(c.linhas).toEqual([["Proposta", "1234"], ["Cliente da proposta", "ACME SA"], ["Valor", "R$ 2.000,00"],
+      ["Arquivo", "Proposta 1234.pdf"], ["Substitui", "Proposta 1200.pdf"], ["Atenção", "substitui Proposta 1200.pdf"]]);
+  });
+});
