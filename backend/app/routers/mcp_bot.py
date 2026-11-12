@@ -529,6 +529,19 @@ class _Recusa(Exception):
     pass
 
 
+def _preparado(ctx: dict, resumo: str, origem: str, extra: str | None = None,
+               rotulo_extra: str = "Avise ao seu dono") -> str:
+    """O retorno de toda ferramenta que prepara cartão. ⚠️ `resumo` e `extra` levam
+    texto vindo do sistema (título de card, nome de cliente): vão DENTRO de
+    `como_dado_externo`; a instrução fixa ("não diga que foi feito") fica fora, para
+    um título forjado não conseguir desdizê-la."""
+    txt = (f"Preparado: {como_dado_externo(resumo, origem=origem)}\n"
+           f"Aguardando {ctx['primeiro']} confirmar no HS.OS — não diga que foi feito.")
+    if extra:
+        txt += f"\n{rotulo_extra}:\n{como_dado_externo(extra, origem=origem)}"
+    return txt
+
+
 async def _contexto(conn, agent_id: str) -> dict:
     p = await conn.fetchrow(
         "SELECT a.dono_id::text AS dono_id, a.sistemas_ligados, a.email_ligado, pr.email, pr.full_name "
@@ -1090,8 +1103,7 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
                 mudancas.append(f"excluir o checklist '{exibir['excluir']['titulo']}'")
             resumo = f"Atualizar '{titulo}': " + ", ".join(mudancas)
     await acoes.criar_pendente(conn, ctx["dono"], bot, "taskhs", acao, payload, resumo)
-    return (f"Preparado: {resumo}. Aguardando {ctx['primeiro']} confirmar no HS.OS — "
-            "não diga que foi feito.")
+    return _preparado(ctx, resumo, "TaskHS")
 
 
 _OPENAPI_CACHE: dict = {}
@@ -1280,8 +1292,7 @@ async def _gestorhs_escrita(conn, bot: str, nome: str, args: dict, ctx: dict) ->
         resumo = f"Cadastrar o aparelho série {gw.exibir_texto(payload['serie'])}"
         acao = "cadastrar_aparelho"
     await acoes.criar_pendente(conn, ctx["dono"], bot, "gestorhs", acao, payload, resumo)
-    return (f"Preparado: {resumo}. Aguardando {ctx['primeiro']} confirmar no HS.OS — "
-            "não diga que foi feito.")
+    return _preparado(ctx, resumo, "GestorHS")
 
 
 # ── Fase 2c: propostas (Serviços, 12/11/2026) ────────────────────────────────
@@ -1392,8 +1403,9 @@ async def _padrao_das_propostas(ctx: dict, bot: str, linhas: list[dict]) -> dict
 def _texto_dos_lembretes(lembretes: list[str], primeiro: str) -> str:
     if not lembretes:
         return "\nSem lembretes: está tudo no padrão."
+    # Lembrete cita nome de cliente e texto da proposta: vai como dado externo.
     return (f"\nLembretes (leia para {primeiro} antes de ele confirmar):\n"
-            + "\n".join(f"- {x}" for x in lembretes))
+            + como_dado_externo("\n".join(f"- {x}" for x in lembretes), origem="GestorHS"))
 
 
 async def _preparar_criar_proposta(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
@@ -1582,8 +1594,8 @@ async def _gestorhs_proposta(conn, bot: str, nome: str, args: dict, ctx: dict) -
         payload, resumo = await _preparar_criar_proposta(ctx, bot, args)
         acao = "criar_proposta"
     await acoes.criar_pendente(conn, ctx["dono"], bot, "gestorhs", acao, payload, resumo)
-    return (f"Preparado: {resumo}. Aguardando {ctx['primeiro']} confirmar no HS.OS — não diga que foi "
-            "feito." + _texto_dos_lembretes(payload["_exibir"]["lembretes"], ctx["primeiro"]))
+    return (_preparado(ctx, resumo, "GestorHS")
+            + _texto_dos_lembretes(payload["_exibir"]["lembretes"], ctx["primeiro"]))
 
 
 async def _gestorhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
@@ -2009,8 +2021,7 @@ async def _hsgrowth_escrita(conn, bot: str, nome: str, args: dict, ctx: dict) ->
     else:
         payload, resumo, aviso = await _preparar_fechamento(ctx, bot, nome, args)
     await acoes.criar_pendente(conn, ctx["dono"], bot, "hsgrowth", nome, payload, resumo)
-    return (f"Preparado: {resumo}. Aguardando {ctx['primeiro']} confirmar no HS.OS — não diga que foi "
-            "feito." + (f" Avise: {aviso}." if aviso else ""))
+    return _preparado(ctx, resumo, "HSGrowth", aviso)
 
 
 async def _hsgrowth(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
@@ -2066,8 +2077,7 @@ async def _hsgrowth_servicos(conn, bot: str, nome: str, args: dict, ctx: dict) -
         payload, resumo = await hsp.preparar(ctx, bot, nome, args)
         await acoes.criar_pendente(conn, ctx["dono"], bot, "hsgrowth_servicos", nome, payload, resumo)
         aviso = (payload.get("_exibir") or {}).get("aviso")
-        return (f"Preparado: {resumo}. Aguardando {ctx['primeiro']} confirmar no HS.OS — não diga que foi "
-                "feito." + (f" Avise: {aviso}." if aviso else ""))
+        return _preparado(ctx, resumo, "HSGrowth", aviso)
     if nome != "hsgrowth_servicos_consultar":
         raise _Recusa(f"Ferramenta desconhecida: {nome}.")
     chave = str(args.get("consulta") or "")

@@ -51,6 +51,8 @@ def _rodar(monkeypatch, acao, payload, respostas=None, card=None, pdf=None):
             return r()
         if req.method == "GET" and caminho == C:
             return httpx.Response(200, json=card)
+        if req.method == "GET" and caminho == "/service-boards/1/lists":
+            return httpx.Response(200, json=[{"id": i, "board_id": 1} for i in range(10, 20)])
         return httpx.Response(200, json=r if r is not None else {"id": 1})
     monkeypatch.setattr(hsgrowth, "_transporte", httpx.MockTransport(h))
     if pdf is not None:
@@ -134,7 +136,8 @@ def test_perder_anota_motivo_e_move(monkeypatch):
     p = {**BASE, "de": 10, "para": 13, "motivo": "Sem budget aprovado"}
     _, reqs = _rodar(monkeypatch, "hsgrowth_servicos_perder", p)
     assert _escritas(reqs) == [("POST", C + "/activities"), ("PUT", C + "/move")]
-    assert reqs[1][2] == {"category": "anotacao", "description": "Motivo da perda: Sem budget aprovado"}
+    assert [r for r in reqs if r[0] != "GET"][0][2] == {"category": "anotacao",
+                                                       "description": "Motivo da perda: Sem budget aprovado"}
 
 
 def test_ganhar_confere_etapa(monkeypatch):
@@ -154,7 +157,7 @@ def test_itens_usa_rotas_e_allowlist(monkeypatch):
     _, reqs = _rodar(monkeypatch, "hsgrowth_servicos_itens", p)
     assert _escritas(reqs) == [("POST", C + "/products"), ("PUT", C + "/services/8"),
                                ("DELETE", C + "/services/9")]
-    assert reqs[0][2] == {"product_id": 2, "quantity": 1, "unit_price": 5}
+    assert [r for r in reqs if r[0] != "GET"][0][2] == {"product_id": 2, "quantity": 1, "unit_price": 5}
 
 
 def _pdf_ok(req):
@@ -197,7 +200,7 @@ def test_anexar_recusa_o_que_nao_e_pdf(monkeypatch):
 def test_anexar_envia_multipart_no_slot_proposta(monkeypatch):
     """Sem slot=proposta o arquivo vira anexo solto e não aparece no Resumo."""
     out, reqs = _rodar(monkeypatch, "hsgrowth_servicos_anexar_proposta", ANEXO, pdf=_pdf_ok)
-    m, c, _, req = reqs[0]
+    m, c, _, req = [r for r in reqs if r[0] != "GET"][0]
     assert (m, c) == ("POST", C + "/activities/files")
     assert req.url.params["slot"] == "proposta"
     assert "multipart/form-data" in req.headers["content-type"]
@@ -271,3 +274,17 @@ def test_dica_de_vendas_nao_vaza_para_servicos(monkeypatch):
 def test_fim_sem_nada_entrado_nao_imprime_lista_vazia():
     """'Entrou no HSGrowth: .' confunde quem lê o resultado."""
     assert "Entrou no HSGrowth: ." not in acoes._fim([], {"_exibir": {}})
+
+
+@pytest.mark.parametrize("acao,extra", [("hsgrowth_servicos_registrar", {"negocio": {"service_type": "ambos"}}),
+                                        ("hsgrowth_servicos_itens", {"ops": [{"tipo": "servico", "acao": "tirar",
+                                                                              "item_id": 9}]}),
+                                        ("hsgrowth_servicos_anexar_proposta",
+                                         {"numero": 5, "link_pdf": PDF, "nome_arquivo": "P.pdf"})])
+def test_card_de_outro_quadro_recusa_no_clique(monkeypatch, acao, extra):
+    """O HSGrowth acha o card só pelo id: um cartão com `board_id` 1 escreveria num
+    card de quadro livre (etapa 99, fora das etapas do quadro 1)."""
+    out, reqs = _rodar(monkeypatch, acao, {**BASE, **extra}, card={"id": 7, "list_id": 99, "business_info": {}},
+                       pdf=_pdf_ok)
+    assert isinstance(out, hsgrowth.ErroSistema) and "não é do quadro" in str(out)
+    assert _escritas(reqs) == []

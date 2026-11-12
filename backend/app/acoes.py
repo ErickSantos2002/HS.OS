@@ -549,10 +549,19 @@ def _sv(p: dict) -> str:
 
 
 async def _sv_reler(email, bot, dono, p: dict, de=None) -> dict:
-    """Relê o card; com `de`, recusa se a etapa já não é a do cartão (nada escrito)."""
+    """Relê o card e confere que ele é DO QUADRO do cartão; com `de`, recusa se a
+    etapa já não é a do cartão (nada escrito).
+    ⚠️ O HSGrowth acha o card só pelo id e ignora o `board_id` da rota: sem esta
+    conferência, um `board_id` 1 abriria um card de quadro livre."""
     card = await _hsg(email, bot, dono, "GET", _sv(p))
     if not isinstance(card, dict):
         raise hsgrowth.ErroSistema(502, "o HSGrowth não devolveu o card")
+    etapas = await _hsg(email, bot, dono, "GET", f"/service-boards/{int(p['board_id'])}/lists")
+    ids = {e.get("id") for e in (etapas if isinstance(etapas, list) else []) if isinstance(e, dict)
+           and e.get("board_id", p["board_id"]) == p["board_id"]}
+    if card.get("list_id") not in ids:
+        raise hsgrowth.ErroSistema(0, f"o card {int(p['card_id'])} não é do quadro {int(p['board_id'])}; "
+                                      "nada foi enviado ao HSGrowth")
     if de is not None and card.get("list_id") != int(de):
         raise hsgrowth.ErroSistema(0, "alguém mexeu no card desde o cartão (a etapa mudou) — "
                                       "peça de novo; nada foi enviado ao HSGrowth")
@@ -617,6 +626,7 @@ async def _hsgrowth_servicos_itens(email, bot, p, dono=None) -> str:
                 or (op["acao"] != "por" and (isinstance(op.get("item_id"), bool)
                                              or not isinstance(op.get("item_id"), int))):
             raise hsgrowth.ErroSistema(0, "item do cartão incompleto ou desconhecido; nada foi enviado ao HSGrowth")
+    await _sv_reler(email, bot, dono, p)
     for op in p.get("ops") or []:
         produto = op.get("tipo") == "aparelho"
         rota, nome = ("products", "aparelho") if produto else ("services", "servico")
@@ -666,7 +676,7 @@ def _hosts_do_gestorhs() -> set[str]:
     return {h for h in (urlsplit(u).hostname for u in (settings.GESTORHS_API_URL, settings.GESTORHS_URL)) if h}
 
 
-async def _baixar_pdf(url: str) -> bytes:
+async def baixar_pdf(url: str) -> bytes:
     """O `link_pdf` do GestorHS é público e assinado (sem token). ⚠️ O servidor faz GET
     nele: só https e só o host do GestorHS, sem seguir redirect (SSRF para a rede do
     gateway), teto de 10 MB e tem que ser PDF."""
@@ -700,7 +710,9 @@ async def _baixar_pdf(url: str) -> bytes:
 
 
 async def _hsgrowth_servicos_anexar(email, bot, p, dono=None) -> str:
-    pdf = await _baixar_pdf(p["link_pdf"])
+    _sv(p)
+    pdf = await baixar_pdf(p["link_pdf"])
+    await _sv_reler(email, bot, dono, p)
     nome = hge.uma_linha(p.get("nome_arquivo") or f"Proposta {p.get('numero')}", 120).replace("/", "-").replace("\\", "-")
     if not nome.lower().endswith(".pdf"):
         nome += ".pdf"

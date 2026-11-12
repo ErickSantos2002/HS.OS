@@ -69,20 +69,36 @@ def _base(board: int, cid: int) -> str:
     return f"/service-boards/{board}/cards/{cid}"
 
 
-async def _card(ctx: dict, bot: str, board: int, cid: int) -> dict:
+async def _etapas(ctx: dict, bot: str, board: int) -> list[dict]:
+    r = await _get(ctx, bot, f"/service-boards/{board}/lists")
+    # `ServiceListResponse` tem `board_id`; se faltar, é o do quadro pedido.
+    return [{**e, "board_id": e.get("board_id", board)} for e in _itens(r, "lists")
+            if e.get("board_id", board) == board]
+
+
+async def _card(ctx: dict, bot: str, board: int, cid: int) -> tuple[dict, list[dict]]:
+    """O card e as etapas do quadro. ⚠️ O HSGrowth acha o card SÓ pelo id e ignora o
+    `board_id` da rota: o que prova que o card é do quadro é a etapa dele estar
+    entre as etapas do quadro. Sem isso, `board_id: 1` abriria card de quadro livre."""
     card = await _get(ctx, bot, _base(board, cid),
                       nao_achou=f"O card {cid} não existe no quadro {_NOMES_QUADRO[board]} — ache o id "
                                 "com hsgrowth_servicos_consultar buscar.")
     if not isinstance(card, dict) or card.get("id") != cid:
         raise ValueError(f"O HSGrowth não devolveu o card {cid}; não preparo às cegas.")
-    # O card não traz o quadro: é o da rota que respondeu.
-    return {**card, "board_id": board}
+    etapas = await _etapas(ctx, bot, board)
+    if card.get("list_id") not in {e.get("id") for e in etapas}:
+        raise ValueError(f"O card {cid} não é do quadro {_NOMES_QUADRO[board]} ({board}) — ache o "
+                         "quadro certo com hsgrowth_servicos_consultar buscar.")
+    # O card não traz o quadro: é o da rota, agora conferido.
+    return {**card, "board_id": board}, etapas
 
 
-async def _etapas(ctx: dict, bot: str, board: int) -> list[dict]:
-    r = await _get(ctx, bot, f"/service-boards/{board}/lists")
-    # `ServiceListResponse` tem `board_id`; se faltar, é o do quadro pedido.
-    return [{**e, "board_id": e.get("board_id", board)} for e in _itens(r, "lists")]
+async def _doc_do_cliente(ctx: dict, bot: str, client_id) -> str | None:
+    """O CNPJ/CPF do cliente do card. ⚠️ O GET de um card não traz `client_document`
+    (só a listagem traz): sem ler o cliente, "proposta de outro cliente" nunca avisaria."""
+    if isinstance(client_id, bool) or not isinstance(client_id, int):
+        return None
+    return (await _cadastro(ctx, bot, "cliente", client_id)).get("document")
 
 
 async def _atividades_do_card(ctx: dict, bot: str, board: int, cid: int) -> list[dict]:
@@ -101,12 +117,11 @@ def _exibir(card: dict, board: int) -> dict:
             "contato": uma_linha(card.get("person_name"))}
 
 
-def _terminal(e: dict | None) -> bool:
-    return hgse._terminal(e)
+_ENCERRADO = "Este card está encerrado (ganho ou perdido); reabrir é com o time de TI."
 
 
 def _encerrado(card: dict, etapas: list[dict]) -> bool:
-    return _terminal(next((e for e in etapas if e.get("id") == card.get("list_id")), None))
+    return hgse.terminal(next((e for e in etapas if e.get("id") == card.get("list_id")), None))
 
 
 # --- proposta no GestorHS -------------------------------------------------------------
@@ -114,7 +129,7 @@ def _encerrado(card: dict, etapas: list[dict]) -> bool:
 async def _proposta(ctx: dict, bot: str, numero: int) -> dict | None:
     """A proposta de NÚMERO `numero` (não o id). A busca `q` casa nome e documento
     também: só vale o `numero` exato."""
-    r = await gestorhs.chamar(ctx["email"], bot, "/propostas", params={"q": str(numero), "page_size": 25},
+    r = await gestorhs.chamar(ctx["email"], bot, "/propostas", params={"q": str(numero), "page_size": 100},
                               dono=ctx["dono"])
     return next((p for p in _itens(r, "items") if p.get("numero") == numero), None)
 
@@ -172,8 +187,7 @@ async def _registrar(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
     campos = hgse.campos_do_card(args["campos"]) if "campos" in pedido else None
     destino = _id(args["mover_para"], "mover_para") if "mover_para" in pedido else None
 
-    card = await _card(ctx, bot, board, cid)
-    etapas = await _etapas(ctx, bot, board)
+    card, etapas = await _card(ctx, bot, board, cid)
     ex = _exibir(card, board)
     avisos: list[str] = []
     payload: dict = {"board_id": board, "card_id": cid}
@@ -182,8 +196,7 @@ async def _registrar(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
     if _encerrado(card, etapas):
         ops = args.get("atividades") if isinstance(args.get("atividades"), list) else []
         if negocio or campos or destino or any(not isinstance(o, dict) or o.get("op") != "criar" for o in ops):
-            raise ValueError("Este card está encerrado (ganho ou perdido); reabrir é com o time de TI. "
-                             "Nele só entram atividade e anotação novas.")
+            raise ValueError(_ENCERRADO + " Nele só entram atividade e anotação novas.")
 
     if negocio:
         atual = card.get("business_info") if isinstance(card.get("business_info"), dict) else {}
@@ -193,7 +206,7 @@ async def _registrar(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
         payload["negocio"] = negocio
         resumo.append("Resumo")
 
-    doc_cliente = card.get("client_document")
+    doc_cliente = None
     if campos:
         cli_id = campos.get("client_id")
         con_id = campos.get("person_id")
@@ -242,6 +255,8 @@ async def _registrar(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
     atual_bi = card.get("business_info") if isinstance(card.get("business_info"), dict) else {}
     if numero is not None and str(atual_bi.get("proposal_number")) != str(numero) \
             and "gestorhs" in (ctx.get("sistemas") or []):
+        if doc_cliente is None:
+            doc_cliente = await _doc_do_cliente(ctx, bot, card.get("client_id"))
         prop, av = await _conferir_proposta(ctx, bot, numero, doc_cliente)
         if prop:
             ex["proposta"] = prop
@@ -286,7 +301,9 @@ async def _itens_op(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
             raise ValueError("Cada item tem `tipo`: aparelho ou servico.")
         if t not in tipos:
             tipos.append(t)
-    card = await _card(ctx, bot, board, cid)
+    card, etapas = await _card(ctx, bot, board, cid)
+    if _encerrado(card, etapas):
+        raise ValueError(_ENCERRADO)
     catalogos = {t: await _catalogo(ctx, bot, t) for t in tipos}
     no_card = {t: await _itens_do_card(ctx, bot, board, cid, t) for t in tipos}
     ids = {t: set(c) for t, c in catalogos.items()}
@@ -313,8 +330,7 @@ async def _itens_op(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
 async def _ganhar(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
     board = _quadro(args.get("board_id"))
     cid = _id(args.get("card_id"), "card_id")
-    card = await _card(ctx, bot, board, cid)
-    etapas = await _etapas(ctx, bot, board)
+    card, etapas = await _card(ctx, bot, board, cid)
     biz = card.get("business_info") if isinstance(card.get("business_info"), dict) else {}
     mov = hgse.conferir_ganho(card, etapas, biz)
     ex = {**_exibir(card, board), "etapa_de": _nome_etapa(etapas, mov["de"]),
@@ -330,13 +346,12 @@ async def _perder(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
     board = _quadro(args.get("board_id"))
     cid = _id(args.get("card_id"), "card_id")
     motivo = hgse.motivo_da_perda(args.get("motivo"))
-    card = await _card(ctx, bot, board, cid)
-    etapas = [e for e in await _etapas(ctx, bot, board) if e.get("board_id") == board]
+    card, etapas = await _card(ctx, bot, board, cid)
     origem = next((e for e in etapas if e.get("id") == card.get("list_id")), None)
     if origem is None:
         raise ValueError("Não achei a etapa atual do card no quadro; não movo às cegas.")
-    if _terminal(origem):
-        raise ValueError("Este card já está encerrado (ganho ou perdido); reabrir é com o time de TI.")
+    if hgse.terminal(origem):
+        raise ValueError(_ENCERRADO)
     destino = next((e for e in etapas if e.get("is_lost_stage")), None) \
         or next((e for e in etapas if "perdido" in str(e.get("name") or "").lower()), None)
     if destino is None:
@@ -359,7 +374,9 @@ async def _anexar(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
     if "gestorhs" not in (ctx.get("sistemas") or []):
         raise ValueError("O GestorHS não está ligado para mim, então não tenho de onde tirar o PDF da "
                          "proposta: anexe pela tela do card.")
-    card = await _card(ctx, bot, board, cid)
+    card, etapas = await _card(ctx, bot, board, cid)
+    if _encerrado(card, etapas):
+        raise ValueError(_ENCERRADO)
     prop = await _proposta(ctx, bot, numero)
     if prop is None:
         raise ValueError(f"A proposta {numero} não foi achada no GestorHS: confira o número ou anexe "
@@ -369,13 +386,14 @@ async def _anexar(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
         raise ValueError(f"O GestorHS não deu o link do PDF da proposta {numero}: anexe pela tela do card.")
     try:
         # Baixa já aqui (só GET, link público): PDF que não baixa recusa antes do cartão.
-        await acoes._baixar_pdf(link)
+        await acoes.baixar_pdf(link)
     except hsgrowth.ErroSistema as e:
         motivo = str(e).split(";")[0]
         raise ValueError(f"{motivo[:1].upper()}{motivo[1:]}: anexe pela tela do card.") from e
     ex = {**_exibir(card, board), "proposta": _exibir_proposta(prop)}
     avisos = []
-    if hgse.mesmo_cliente(card.get("client_document"), _doc_da_proposta(prop)) is False:
+    doc = await _doc_do_cliente(ctx, bot, card.get("client_id"))
+    if hgse.mesmo_cliente(doc, _doc_da_proposta(prop)) is False:
         avisos.append(f"A proposta {numero} é de {uma_linha(prop.get('cliente_nome')) or 'outro cliente'}, "
                       "não do cliente do card")
     acts = await _atividades_do_card(ctx, bot, board, cid)

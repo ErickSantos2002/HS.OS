@@ -20,7 +20,7 @@ from app.hsgrowth_escrita import (_inteiro, _opcao, _texto, digitos, uma_linha,
 __all__ = ["QUADROS", "CHAVES_NEGOCIO", "CAMPOS_PUT", "TIPOS_ATIVIDADE", "PRIORIDADES",
            "TETO_ATIVIDADES", "MOTIVOS_PERDA", "negocio", "campos_do_card", "atividades",
            "conferir_movimento", "conferir_ganho", "motivo_da_perda", "item",
-           "mesmo_cliente"]
+           "mesmo_cliente", "terminal"]
 
 QUADROS = (1, 2)  # 1 = Serviços, 2 = Serviço - Cobrança
 
@@ -175,7 +175,7 @@ def atividades(ops: list, pendentes: dict[int, dict] | None) -> list[dict]:
 
 # --- movimento e ganho -------------------------------------------------------------
 
-def _terminal(e: dict | None) -> bool:
+def terminal(e: dict | None) -> bool:
     """Como no HSGrowth: a flag OU o nome (`"ganho" in nome`, `"perdido" in nome`)."""
     if not e:
         return False
@@ -195,7 +195,7 @@ def _contexto(card: dict, etapas: list[dict]):
     origem = por_id.get(card.get("list_id"))
     if origem is None:
         raise ValueError("Não achei a etapa atual do card no quadro; não movo às cegas.")
-    ativas = sorted((e for e in do_quadro if not _terminal(e)),
+    ativas = sorted((e for e in do_quadro if not terminal(e)),
                     key=lambda e: e.get("position", 0))
     return board, do_quadro, por_id, origem, ativas
 
@@ -209,7 +209,7 @@ def conferir_movimento(card: dict, etapas: list[dict], para_list_id: int) -> dic
         raise ValueError("Essa etapa não é do quadro do card.")
     if para_list_id == origem["id"]:
         raise ValueError("O card já está nessa etapa.")
-    if _terminal(destino) or _terminal(origem):
+    if terminal(destino) or terminal(origem):
         raise ValueError("Ganho e perda não são movimento de etapa: use "
                          "`hsgrowth_servicos_ganhar` / `hsgrowth_servicos_perder`.")
     ids = [e["id"] for e in ativas]
@@ -225,7 +225,7 @@ def conferir_ganho(card: dict, etapas: list[dict], negocio_atual: dict | None) -
     Quadro 2: origem Operações (última ativa) e `shipping_confirmed = sim`."""
     board, do_quadro, _, origem, ativas = _contexto(card, etapas)
     biz = negocio_atual or {}
-    if _terminal(origem):
+    if terminal(origem):
         raise ValueError("Este card já está encerrado (ganho ou perdido).")
     destino = next((e for e in do_quadro if _ganha(e)), None)
     if destino is None:
