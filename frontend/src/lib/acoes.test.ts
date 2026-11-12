@@ -110,6 +110,35 @@ describe("cartão do GestorHS (Expedição)", () => {
     expect(c).toMatchObject({ verbo: "Fechar caixa", titulo: "Caixa 42" });
     expect(c.linhas[0]).toEqual(["Rastreio", "BR123"]);
   });
+  it("gerar certificado: as 5 leituras, a média do servidor e o aviso de que conclui", () => {
+    // O técnico confirma número por número: leitura escondida seria certificado
+    // da Qualidade aprovado sem ser visto. E regerar mostra a data antiga.
+    const c = cartaoDaAcao("gerar_certificado", {
+      ordem: 11700, calib_cert: "HF02961", calib_temp: "22.0", calib_pressao: "1017.3",
+      calib_teste1: "0,170", calib_teste2: "0,170", calib_teste3: "0,170", calib_teste4: "0,180",
+      calib_teste5: "0,190", calib_teste_media: "0,176", calib_situacao: "Aparelho subsequente",
+      _exibir: { os: 11700, cliente: "ACME", modelo: "Phoebus", serie: "F006097", data: "2026-11-10",
+                 substitui: true, tipo: "calibração e manutenção", manutencao: true },
+    });
+    expect(c.verbo).toBe("Gerar certificado");
+    expect(c.titulo).toBe("OS 11700 · série F006097");
+    expect(c.linhas).toEqual([["Cliente", "ACME"], ["Modelo", "Phoebus"], ["Código", "HF02961"],
+      ["Temperatura", "22.0 °C"], ["Pressão", "1017.3 hPa"], ["Média", "0,176"],
+      ["Situação", "Aparelho subsequente"], ["Data", "10/11/2026"]]);
+    expect(c.checklists).toEqual([{ titulo: "Leituras",
+      itens: ["0,170", "0,170", "0,170", "0,180", "0,190"].map((x, i) => ({ texto: `${i + 1}ª: ${x}` })) }]);
+    expect(c.texto?.rotulo).toBe("Atenção");
+    expect(c.texto?.valor).toContain("conclui o aparelho");
+    expect(c.texto?.valor).toContain("substitui o certificado já gerado");
+    expect(c.texto?.valor).toContain("relatório de manutenção");
+  });
+  it("gerar certificado pela primeira vez sai com a data de hoje e sem 'substitui'", () => {
+    const c = cartaoDaAcao("gerar_certificado", { ordem: 1, calib_teste1: "0,1",
+      _exibir: { serie: "F1", data: "hoje", substitui: false, manutencao: false } });
+    expect(c.linhas).toContainEqual(["Data", "hoje"]);
+    expect(c.texto?.valor).not.toContain("substitui");
+    expect(c.texto?.valor).not.toContain("manutenção");
+  });
   it("cadastrar aparelho", () => {
     const c = cartaoDaAcao("cadastrar_aparelho", { cliente: 1, equipamento: 2, serie: "F9", patrimonio: "P1",
       _exibir: { cliente: "ACME", modelo: "Phoebus" } });

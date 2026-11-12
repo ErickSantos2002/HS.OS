@@ -190,6 +190,27 @@ FERRAMENTAS = [
         "patrimonio": {"type": "string", "maxLength": gw.TETO_SERIE},
         "datacompra": _DIA, "ult_calibragem": _DIA, "prox_calibragem": _DIA},
        ("cliente", "equipamento", "serie")),
+    _f("gestorhs_gerar_certificado", "Gerar o certificado de calibração de um aparelho "
+       "(Laboratório): um aparelho por vez, um cartão por aparelho. Ache a OS pela série com "
+       "gestorhs_consultar ordens q=<série>. Peça temperatura e pressão uma vez e reaproveite na "
+       "mesma conversa, mandando-as em toda chamada. As 5 leituras vão como no visor, com vírgula "
+       "(0,181); se o técnico falou os dígitos (\"um oito um\"), confirme antes. A média: não "
+       "calcule — quem calcula é o servidor, e ela aparece no cartão. `situacao` só se não for "
+       "\"Aparelho subsequente\"; `data_calibracao` só se o técnico disser outra data. O cartão "
+       "gera o certificado E conclui o aparelho no laboratório. Depois de confirmado, entregue o "
+       "link do PDF e pergunte se quer avançar a caixa (gestorhs_avancar_caixa). Quem pode é a "
+       "função do seu dono no GestorHS." + _CONFIRMA,
+       {"os": {"type": "integer", "description": "número da OS (não a série)"},
+        "cert": {"type": "string", "maxLength": gw.TETO_CERT,
+                 "description": "código do certificado, ex.: HF02961"},
+        "temperatura": {"type": "string", "description": "°C, ex.: 22 ou 22,5"},
+        "pressao": {"type": "string", "description": "hPa, ex.: 1017,3"},
+        "leituras": {"type": "array", "minItems": gw.N_LEITURAS, "maxItems": gw.N_LEITURAS,
+                     "items": {"type": "string"},
+                     "description": "as 5 leituras, na ordem, com vírgula (ex.: 0,181)"},
+        "situacao": {"type": "string", "enum": list(gw.SITUACOES)},
+        "data_calibracao": _DIA},
+       ("os", "cert", "temperatura", "pressao", "leituras")),
     _f("taskhs_minhas", "As tarefas (cards) em que o seu dono é membro." + _DADO,
        {"abertas": {"type": "boolean", "description": "true (padrão): só as em aberto"}}),
     _f("taskhs_quadros", "Os quadros do TaskHS que o seu dono pode abrir." + _DADO),
@@ -982,6 +1003,21 @@ async def _gestorhs_escrita(conn, bot: str, nome: str, args: dict, ctx: dict) ->
             resumo = (f"Avançar a caixa {cid} ({ex['fase']}, "
                       f"{_plural(ex['total_os'], 'OS', 'OS')})")
             acao = "avancar_caixa"
+    elif nome == "gestorhs_gerar_certificado":
+        # Tudo o que veio do agente é validado ANTES da rede ("181" nem lê a OS).
+        oid = gw.id_positivo(args.get("os"), "os")
+        payload = gw.payload_do_certificado(args, oid)
+        nao = (f"A OS {oid} não existe no GestorHS — ache pela série com "
+               "gestorhs_consultar ordens q=<série>.")
+        ordem = await _gestorhs_ler(ctx, bot, f"/ordens/{oid}", nao) or {}
+        campos = await _gestorhs_ler(ctx, bot, f"/ordens/{oid}/certificado-campos", nao) or {}
+        certs = await _gestorhs_ler(ctx, bot, f"/ordens/{oid}/certificados", nao) or []
+        ex = gw.conferir_os_para_certificado(ordem, campos, certs)
+        if payload.get("data_calibracao"):
+            ex["data"] = payload["data_calibracao"]
+        payload["_exibir"] = ex
+        resumo = f"Certificado da OS {oid} (série {ex['serie'] or '?'})"
+        acao = "gerar_certificado"
     else:   # gestorhs_cadastrar_aparelho
         gw.conferir_cadastro(args, [])          # valida antes da rede
         serie = str(args.get("serie")).strip()
@@ -1012,11 +1048,11 @@ async def _gestorhs_escrita(conn, bot: str, nome: str, args: dict, ctx: dict) ->
 async def _gestorhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
     """O Guardi no GestorHS (spec 2026-11-11-guardi-gestorhs, fase 1). Quem decide
     o que o dono vê é o GestorHS, pela função dele; daqui só o catálogo e o link.
-    As escritas da fase 2a vão por `_gestorhs_escrita`, sempre em cartão."""
+    As escritas (fases 2a e 2b) vão por `_gestorhs_escrita`, sempre em cartão."""
     if "gestorhs" not in ctx["sistemas"]:
         raise _Recusa("O GestorHS ainda não está ligado para mim.")
     if nome in ("gestorhs_receber", "gestorhs_avancar_caixa", "gestorhs_fechar_caixa",
-                "gestorhs_cadastrar_aparelho"):
+                "gestorhs_cadastrar_aparelho", "gestorhs_gerar_certificado"):
         return await _gestorhs_escrita(conn, bot, nome, args, ctx)
     if nome == "gestorhs_consultas":
         so = str(args.get("consulta") or "").strip()

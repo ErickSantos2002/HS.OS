@@ -115,6 +115,24 @@ function cartaoDoGestorHS(acao: string, p: Record<string, unknown>, ex: Record<s
     if (p.prox_calibragem) linhas.push(["Próxima calibração", prazo(p.prox_calibragem)]);
     return { verbo: "Cadastrar aparelho", titulo: `Série ${v(p.serie)}`, linhas, checklists: [] };
   }
+  if (acao === "gerar_certificado") {
+    // Fase 2b (Laboratório). Cada número sai do payload — é o que vai para o
+    // certificado; a média é a do servidor. Cliente, modelo e série, do `_exibir`.
+    const ou = (x: unknown) => (x ? String(x) : "?");
+    const data = !ex.data || ex.data === "hoje" ? "hoje" : prazo(ex.data);
+    const linhas: [string, string][] = [
+      ["Cliente", ou(ex.cliente)], ["Modelo", ou(ex.modelo)], ["Código", ou(p.calib_cert)],
+      ["Temperatura", `${ou(p.calib_temp)} °C`], ["Pressão", `${ou(p.calib_pressao)} hPa`],
+      ["Média", ou(p.calib_teste_media)], ["Situação", ou(p.calib_situacao)], ["Data", data]];
+    const itens = [1, 2, 3, 4, 5].map((i) => ({ texto: `${i}ª: ${ou(p[`calib_teste${i}`])}` }));
+    const avisos = ["gera o certificado e conclui o aparelho no laboratório"];
+    if (ex.substitui) avisos.push("substitui o certificado já gerado");
+    if (ex.manutencao)
+      avisos.push("também gera o relatório de manutenção (o GestorHS recusa se a manutenção não estiver registrada)");
+    return { verbo: "Gerar certificado", titulo: `OS ${v(p.ordem)} · série ${ou(ex.serie)}`, linhas,
+             checklists: [{ titulo: "Leituras", itens }],
+             texto: { rotulo: "Atenção", valor: avisos.join("; ") + "." } };
+  }
   return null;
 }
 

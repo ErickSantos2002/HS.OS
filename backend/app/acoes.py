@@ -209,6 +209,46 @@ async def _gestorhs_cadastrar(email, bot, p, dono=None) -> str:
     return f"Aparelho cadastrado (id {ident})." if ident else "Aparelho cadastrado."
 
 
+# ── GestorHS, fase 2b (Laboratório, 12/11/2026) ──────────────────────────────
+# Spec `docs/superpowers/specs/2026-11-12-guardi-gestorhs-laboratorio-design.md`.
+# ⚠️ Lista fixa: nenhum override de cabeçalho (`nomecli`, `cnpj`, `serie`…) passa,
+# nem de um payload adulterado — e o GestorHS também os ignora para agente.
+_CAMPOS_CERTIFICADO = ("calib_cert", "calib_temp", "calib_pressao", "calib_teste1", "calib_teste2",
+                       "calib_teste3", "calib_teste4", "calib_teste5", "calib_teste_media",
+                       "calib_situacao", "data_calibracao")
+
+
+def _link_de_calibracao(certs) -> str | None:
+    for c in certs if isinstance(certs, list) else []:
+        if isinstance(c, dict) and c.get("tipo") == "C" and c.get("link_pdf"):
+            return str(c["link_pdf"])
+    return None
+
+
+async def _gestorhs_gerar_certificado(email, bot, p, dono=None) -> str:
+    """O `gerar` do GestorHS também conclui o aparelho no laboratório (como na
+    tela). O link do PDF vem do retorno; se não vier, da lista da OS."""
+    oid = int(p["ordem"])
+    corpo = {k: p[k] for k in _CAMPOS_CERTIFICADO if p.get(k) is not None}
+    try:
+        r = await gestorhs.chamar(email, bot, f"/ordens/{oid}/gerar-certificado", metodo="POST",
+                                  json=corpo, dono=dono)
+    except gestorhs.ErroSistema as e:
+        if e.status == 403:
+            raise gestorhs.ErroSistema(403, "a sua função no GestorHS não permite isso: quem gera "
+                                            "certificado é Laboratório (ou Administrador)") from e
+        raise
+    link = _link_de_calibracao(r)
+    if not link:
+        try:
+            link = _link_de_calibracao(await gestorhs.chamar(email, bot, f"/ordens/{oid}/certificados",
+                                                             dono=dono))
+        except gestorhs.ErroSistema:
+            link = None     # o certificado já foi gerado: não transformar isso em erro
+    feito = "Certificado gerado e aparelho concluído no laboratório."
+    return f"{feito} PDF: {link}" if link else feito
+
+
 EXECUTORES: dict[tuple[str, str], Executor] = {
     ("taskhs", "comentar"): _taskhs_comentar,
     ("taskhs", "mover"): _taskhs_mover,
@@ -219,6 +259,7 @@ EXECUTORES: dict[tuple[str, str], Executor] = {
     ("gestorhs", "avancar_caixa"): _gestorhs_avancar,
     ("gestorhs", "fechar_caixa"): _gestorhs_fechar,
     ("gestorhs", "cadastrar_aparelho"): _gestorhs_cadastrar,
+    ("gestorhs", "gerar_certificado"): _gestorhs_gerar_certificado,
 }
 
 
