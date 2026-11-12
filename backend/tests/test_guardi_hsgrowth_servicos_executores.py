@@ -27,6 +27,14 @@ def chave(monkeypatch):
     monkeypatch.setattr(at.settings, "AGENTE_CHAVE_PRIVADA", pem)
 
 
+@pytest.fixture(autouse=True)
+def urls(monkeypatch):
+    """Os testes não dependem do que o .env local diz sobre as URLs."""
+    monkeypatch.setattr(acoes.settings, "GESTORHS_API_URL", "https://gestorhsapi.healthsafetytech.com")
+    monkeypatch.setattr(acoes.settings, "GESTORHS_URL", "https://gestorhs.healthsafetytech.com")
+    monkeypatch.setattr(acoes.settings, "HSGROWTH_URL", "https://hsgrowth.healthsafetytech.com")
+
+
 def _rodar(monkeypatch, acao, payload, respostas=None, card=None, pdf=None):
     reqs = []
     respostas = respostas or {}
@@ -204,3 +212,62 @@ def test_lote_para_e_diz_o_que_entrou(monkeypatch):
                        respostas={("POST", C + "/activities"): lambda: httpx.Response(422, json={"detail": "ruim"})})
     assert isinstance(out, hsgrowth.ErroSistema)
     assert "Parou em anotacao (2 de 2)" in str(out) and "campos do card" in str(out)
+
+
+@pytest.mark.parametrize("url", ["https://gestorhsapi.healthsafetytech.com:22/x",
+                                 "https://gestorhsapi.healthsafetytech.com@evil.example/x",
+                                 "https://x@gestorhsapi.healthsafetytech.com/x"])
+def test_anexar_recusa_porta_e_userinfo(monkeypatch, url):
+    """Porta estranha ou userinfo permitiriam alcançar outro serviço/host com cara de GestorHS."""
+    out, reqs = _rodar(monkeypatch, "hsgrowth_servicos_anexar_proposta",
+                       {**ANEXO, "link_pdf": url}, pdf=_pdf_ok)
+    assert isinstance(out, hsgrowth.ErroSistema) and reqs == []
+
+
+def test_perder_recusa_etapa_velha(monkeypatch):
+    """Perder com cartão velho anotaria o motivo e encerraria um card que já andou."""
+    out, reqs = _rodar(monkeypatch, "hsgrowth_servicos_perder", {**BASE, "de": 99, "para": 13, "motivo": "m"})
+    assert isinstance(out, hsgrowth.ErroSistema) and _escritas(reqs) == []
+
+
+@pytest.mark.parametrize("op", [
+    {"tipo": "servico", "acao": "alterar", "corpo": {"quantity": 2}},
+    {"tipo": "servico", "acao": "tirar", "item_id": "9"},
+    {"tipo": "servico", "acao": "apagar", "item_id": 9},
+    {"tipo": "outro", "acao": "por", "corpo": {}},
+])
+def test_itens_malformado_recusa_antes_do_lote(monkeypatch, op):
+    """Item sem id/ação/tipo válidos viraria chamada em rota errada (ex.: /services/0) no meio do lote."""
+    p = {**BASE, "ops": [{"tipo": "aparelho", "acao": "por", "corpo": {"product_id": 2, "quantity": 1, "unit_price": 5}}, op]}
+    out, reqs = _rodar(monkeypatch, "hsgrowth_servicos_itens", p)
+    assert isinstance(out, hsgrowth.ErroSistema) and reqs == []
+
+
+def test_atividade_op_desconhecido_recusa_antes_do_lote(monkeypatch):
+    """Op desconhecido cairia como criação com corpo vazio, depois do PUT já gravado."""
+    p = {**BASE, "campos": {"title": "T"}, "atividades": [{"op": "apagar"}]}
+    out, reqs = _rodar(monkeypatch, "hsgrowth_servicos_registrar", p)
+    assert isinstance(out, hsgrowth.ErroSistema) and _escritas(reqs) == []
+
+
+@pytest.mark.parametrize("acao,extra", [("hsgrowth_servicos_registrar", {"campos": {"title": "T"}}),
+                                        ("hsgrowth_servicos_itens", {"ops": []}),
+                                        ("hsgrowth_servicos_ganhar", {"de": 10, "para": 12}),
+                                        ("hsgrowth_servicos_perder", {"de": 10, "para": 13, "motivo": "m"})])
+def test_quadro_fora_de_1_e_2_recusa_sem_rede(monkeypatch, acao, extra):
+    """Um board_id adulterado apontaria o clique para um quadro que o Guardi não cobre."""
+    out, reqs = _rodar(monkeypatch, acao, {**BASE, "board_id": 3, **extra})
+    assert isinstance(out, hsgrowth.ErroSistema) and reqs == []
+
+
+def test_dica_de_vendas_nao_vaza_para_servicos(monkeypatch):
+    """O 409 de Serviços mandaria 'falar com o gerente comercial', conselho do funil de Vendas."""
+    p = {**BASE, "mover": {"de": 10, "para": 11}}
+    out, _ = _rodar(monkeypatch, "hsgrowth_servicos_registrar", p,
+                    respostas={("PUT", C + "/move"): lambda: httpx.Response(409, json={"detail": "regra"})})
+    assert "gerente" not in str(out)
+
+
+def test_fim_sem_nada_entrado_nao_imprime_lista_vazia():
+    """'Entrou no HSGrowth: .' confunde quem lê o resultado."""
+    assert "Entrou no HSGrowth: ." not in acoes._fim([], {"_exibir": {}})
