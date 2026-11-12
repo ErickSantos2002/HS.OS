@@ -22,6 +22,7 @@ FERRAMENTAS_BOT = ("lembrar", "taskhs_eu", "datacore_consultas", "datacore_consu
                    "hsgrowth_consultas", "hsgrowth_consultar",
                    "hsgrowth_registrar", "hsgrowth_cliente", "hsgrowth_criar_lead", "hsgrowth_ganhar",
                    "hsgrowth_perder", "hsgrowth_noshow",
+                   "hsgrowth_servicos_consultas", "hsgrowth_servicos_consultar",
                    "gestorhs_receber", "gestorhs_avancar_caixa", "gestorhs_fechar_caixa",
                    "gestorhs_cadastrar_aparelho", "gestorhs_gerar_certificado", "gestorhs_criar_proposta",
                    "gestorhs_alterar_proposta",
