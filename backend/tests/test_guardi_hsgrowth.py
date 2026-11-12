@@ -275,3 +275,71 @@ def test_pede_eu_so_nas_consultas_do_dono():
     """O router decide por `pede_eu` se pede `/users/me`: lista escrita à mão
     no router esqueceria uma consulta nova do dono e ela falharia só em uso."""
     assert {c for c in hg.CONSULTAS if hg.pede_eu(c)} == {"meus_cards", "minhas_tarefas", "tarefas_atrasadas"}
+
+
+# --- ligar só para os vendedores + ponteiro no AGENTS.md --------------------------
+
+def _publicador():
+    import importlib.util
+    import pathlib
+    caminho = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "publicar-bots-mcp.py"
+    spec = importlib.util.spec_from_file_location("publicar_bots_mcp_hg", caminho)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class _ConnFalsa:
+    def __init__(self, linhas):
+        self.linhas, self.gravou = linhas, None
+
+    async def fetch(self, *a):
+        return self.linhas
+
+    async def fetchval(self, sql, com_conta, sistema):
+        self.gravou = (list(com_conta), sistema)
+        return len(com_conta)
+
+
+class _ModuloFalso:
+    ErroSistema = ErroSistema
+
+    def __init__(self, respostas):
+        self.respostas = respostas
+
+    async def chamar(self, email, bot, caminho, dono=None):
+        r = self.respostas[email]
+        if r is None:
+            raise ErroSistema(401, "sem conta")
+        return r
+
+
+def test_ligar_vendedores_so_liga_salesperson(capsys):
+    """Ligar o HSGrowth para quem tem conta mas é gerente ou admin entregaria a
+    um Guardi ferramentas de escrita que a fase 1 só validou para vendedor — e
+    sem a `aceita` o script ligaria todo mundo que responde 200."""
+    pub = _publicador()
+    linhas = [{"agent_id": "ana-bot", "email": "ana@x"}, {"agent_id": "bia-bot", "email": "bia@x"},
+              {"agent_id": "cai-bot", "email": "cai@x"}, {"agent_id": "dan-bot", "email": "dan@x"}]
+    mod = _ModuloFalso({"ana@x": {"role": "salesperson"}, "bia@x": {"role": "admin"},
+                        "cai@x": None, "dan@x": {"role": "salesperson"}})
+    conn = _ConnFalsa(linhas)
+    asyncio.run(pub._ligar_quem_tem_conta(
+        conn, "hsgrowth", mod, "/users/me", True, aceita=lambda eu: eu.get("role") == "salesperson"))
+    assert conn.gravou == (["ana-bot", "dan-bot"], "hsgrowth")
+    saida = capsys.readouterr().out
+    assert "fora desta fase: admin" in saida and "cai-bot" in saida
+
+
+def test_agents_md_aponta_o_hsgrowth_e_cabe_no_teto():
+    """Sem o ponteiro o Guardi diria "só consigo consultar" (lição da skill
+    `faturamento`); e o AGENTS.md é cortado em silêncio no teto de 20.000
+    caracteres, com o bloco `hsos:empresa` de ~4.000 anexado pelo onboarding."""
+    from app.bots_pessoais import arquivos_do_bot
+    from app.gateway.client import TETO_ARQUIVO_AGENTE
+    a = arquivos_do_bot({"full_name": "Ellen Souza", "email": "ellen@hs.com"})["AGENTS.md"]
+    for nome in ("hsgrowth_consultas", "hsgrowth_registrar", "hsgrowth_noshow"):
+        assert nome in a
+    trecho = " ".join(a.split("hsgrowth_consultas", 1)[1][:900].split())
+    assert "realizada" in trecho and "tentativa sem resultado" in trecho and "como Ellen" in trecho
+    assert len(a + "\n" + "x" * 4000) <= TETO_ARQUIVO_AGENTE
