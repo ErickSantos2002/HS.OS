@@ -212,3 +212,45 @@ def test_filtro_local_em_formato_inesperado_falha_fechado():
         hs.filtrar_local("pendencias", {"outra": []}, {"minhas": "true"}, 3)
     with pytest.raises(ValueError, match="inesperada"):
         hs.filtrar_local("cards", [1, 2], {}, None)
+
+
+# --- ligar só para `service` + ponteiro no AGENTS.md ---------------------------------
+
+def _publicador():
+    import importlib.util
+    import pathlib
+    caminho = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "publicar-bots-mcp.py"
+    spec = importlib.util.spec_from_file_location("publicar_bots_mcp_hgs", caminho)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_ligar_servicos_so_liga_service(capsys):
+    """Ligar Serviços para vendedor, gerente ou admin entregaria ferramentas de
+    escrita nos quadros 1 e 2 a quem não opera lá; o teste usa o `_so_servicos`
+    REAL do script, porque um lambda no teste não pega regra errada no script."""
+    pub = _publicador()
+    from tests.test_guardi_hsgrowth import _ConnFalsa, _ModuloFalso
+    linhas = [{"agent_id": "ana-bot", "email": "ana@x"}, {"agent_id": "bia-bot", "email": "bia@x"},
+              {"agent_id": "cai-bot", "email": "cai@x"}, {"agent_id": "dan-bot", "email": "dan@x"}]
+    mod = _ModuloFalso({"ana@x": {"role": "service"}, "bia@x": {"role": "salesperson"},
+                        "cai@x": None, "dan@x": {"role": "service"}})
+    conn = _ConnFalsa(linhas)
+    asyncio.run(pub._ligar_quem_tem_conta(
+        conn, "hsgrowth_servicos", mod, "/users/me", True, aceita=pub._so_servicos))
+    assert conn.gravou == (["ana-bot", "dan-bot"], "hsgrowth_servicos")
+    assert "HSGrowth (Serviços)" in capsys.readouterr().out
+
+
+def test_agents_md_aponta_servicos_e_cabe_no_teto():
+    """Sem o ponteiro o Guardi de Serviços diria "só consigo consultar"; e o
+    AGENTS.md é cortado em silêncio no teto de 20.000 caracteres, com o bloco
+    `hsos:empresa` de ~4.000 anexado pelo onboarding."""
+    from app.bots_pessoais import arquivos_do_bot
+    from app.gateway.client import TETO_ARQUIVO_AGENTE
+    a = arquivos_do_bot({"full_name": "Ellen Souza", "email": "ellen@hs.com"})["AGENTS.md"]
+    for nome in ("hsgrowth_servicos_consultas", "hsgrowth_servicos_registrar",
+                 "hsgrowth_servicos_itens", "hsgrowth_servicos_anexar_proposta"):
+        assert nome in a
+    assert len(a + "\n" + "x" * 4000) <= TETO_ARQUIVO_AGENTE
