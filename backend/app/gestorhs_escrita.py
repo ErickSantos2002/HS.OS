@@ -26,7 +26,8 @@ from app.bots_pessoais import _linha
 __all__ = ["FASES", "ATIVAS", "TIPOS", "CONDICOES", "ACESSORIOS", "TETO_LOTE",
            "aparelhos_do_lote", "conferir_aparelho", "conferir_caixa_para_receber",
            "conferir_caixa_para_avancar", "conferir_caixa_para_fechar", "conferir_cadastro",
-           "texto_lote_parcial", "exibir_texto"]
+           "texto_lote_parcial", "exibir_texto", "data_de_chegada", "id_positivo",
+           "texto_curto", "TETO_OBS", "serie_chave"]
 
 # id → (nome, função dona da fase). Conferido no GestorHS em 12/11/2026.
 FASES: dict[int, tuple[str, str | None]] = {
@@ -102,6 +103,11 @@ def _data(valor, campo: str) -> str | None:
 
 def data_de_chegada(valor) -> str | None:
     return _data(valor, "data_chegada")
+
+
+# Para o servidor MCP validar os argumentos soltos com as mesmas regras.
+id_positivo = _id
+texto_curto = _texto_opcional
 
 
 def aparelhos_do_lote(args: dict) -> list[dict]:
@@ -217,14 +223,16 @@ def conferir_caixa_para_fechar(caixa: dict, cod_retorno) -> dict:
     if f != PREPARANDO:
         raise ValueError(f"A caixa {caixa.get('id')} está {nome}, não em Preparando Retorno: "
                          "só lá ela fecha. Para andar de fase, use gestorhs_avancar_caixa.")
-    cod = cod_retorno.strip() if isinstance(cod_retorno, str) else ""
+    # Uma linha, sem controle: o rastreio vai para o cartão e para o GestorHS.
+    cod = _linha(cod_retorno, TETO_RASTREIO + 1) if isinstance(cod_retorno, str) else ""
     if not 1 <= len(cod) <= TETO_RASTREIO:
         raise ValueError(f"Informe `cod_retorno`, o código de rastreio (até {TETO_RASTREIO} caracteres).")
     return {"cod_retorno": cod, "total_os": int(caixa.get("total_os") or 0), "clientes": _clientes(caixa)}
 
 
-def _serie_chave(s) -> str:
+def serie_chave(s) -> str:
     return re.sub(r"\s+", "", str(s or "")).upper()
+
 
 
 def conferir_cadastro(args: dict, achados) -> dict:
@@ -245,9 +253,9 @@ def conferir_cadastro(args: dict, achados) -> dict:
         d = _data(args.get(campo), campo)
         if d:
             payload[campo] = d
-    chave = _serie_chave(serie)
+    chave = serie_chave(serie)
     for a in _ordens(achados):
-        if _serie_chave(a.get("serie")) == chave:
+        if serie_chave(a.get("serie")) == chave:
             raise ValueError(f"A série {exibir_texto(a.get('serie'))} já está cadastrada no GestorHS, "
                              f"no cliente {exibir_texto(a.get('cliente_nome')) or '?'} (aparelho id "
                              f"{a.get('id')}). Não cadastre de novo: use esse id.")

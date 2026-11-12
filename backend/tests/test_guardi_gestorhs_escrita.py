@@ -279,3 +279,171 @@ def test_cadastrar_manda_o_payload_sem_exibir(chave, monkeypatch):
     assert reqs[0].url.path == "/equipamentos-cliente"
     assert _corpo(reqs[0]) == {"cliente": 1, "equipamento": 2, "serie": "F9"}
     assert r == "Aparelho cadastrado (id 9001)."
+
+
+# --- as ferramentas no hsos-bot-<bot> ---------------------------------------------
+
+from app.email.regras import FERRAMENTAS_BOT  # noqa: E402
+from app.routers import mcp_bot  # noqa: E402
+from app.routers.mcp_bot import FERRAMENTAS  # noqa: E402
+
+_ESCRITAS = ("gestorhs_receber", "gestorhs_avancar_caixa", "gestorhs_fechar_caixa",
+             "gestorhs_cadastrar_aparelho")
+_CTX = {"sistemas": ["gestorhs"], "email": "ana@hs.com", "dono": "u-ana", "primeiro": "Ana"}
+
+# GestorHS falso das leituras: caminho → resposta.
+_LEITURAS = {
+    "/equipamentos-cliente/5": {"id": 5, "cliente": 1, "cliente_nome": "ACME",
+                                "equipamento_descricao": "Phoebus", "serie": "F1", "ativo": True},
+    "/equipamentos-cliente/5/ordens": [{"id": 9, "fase": 8}],
+    "/equipamentos-cliente/6": {"id": 6, "cliente": 2, "cliente_nome": "Beta Ltda",
+                                "equipamento_descricao": "Phoebus", "serie": "F2", "ativo": True},
+    "/equipamentos-cliente/6/ordens": [],
+    "/equipamentos-cliente/8": {"id": 8, "cliente": 1, "cliente_nome": "ACME",
+                                "equipamento_descricao": "Phoebus", "serie": "F8", "ativo": True},
+    "/equipamentos-cliente/8/ordens": [{"id": 12, "fase": 5}],
+    "/caixas/40": {"id": 40, "fase": 5, "fase_descricao": "Laboratório", "total_os": 2,
+                   "clientes": ["ACME"], "ordens": [{"id": 1, "cliente": 1, "cliente_nome": "ACME"}]},
+    "/caixas/41": {"id": 41, "fase": 4, "total_os": 2, "clientes": ["ACME", "Beta Ltda"],
+                   "cliente_principal": None,
+                   "ordens": [{"id": 1, "cliente": 1, "cliente_nome": "ACME"},
+                              {"id": 2, "cliente": 2, "cliente_nome": "Beta Ltda"}]},
+    "/caixas/42": {"id": 42, "fase": 7, "total_os": 1, "clientes": ["ACME"], "ordens": []},
+    "/clientes/1": {"id": 1, "nome": "ACME"},
+    "/equipamentos": [{"id": 2, "descricao": "Phoebus"}],
+}
+
+
+@pytest.fixture
+def gestor(chave, monkeypatch):
+    """GestorHS falso + `criar_pendente` capturado. Escrita (não-GET) aqui é defeito."""
+    estado = {"reqs": [], "pendentes": [], "frota": {"items": [], "total": 0}}
+
+    def h(req):
+        estado["reqs"].append(req)
+        if req.method != "GET":
+            return httpx.Response(500, json={"detail": "escrita antes do cartão"})
+        if req.url.path == "/equipamentos-cliente":
+            return httpx.Response(200, json=estado["frota"])
+        if req.url.path in _LEITURAS:
+            return httpx.Response(200, json=_LEITURAS[req.url.path])
+        return httpx.Response(404, json={"detail": "não encontrado"})
+    monkeypatch.setattr(gestorhs, "_transporte", httpx.MockTransport(h))
+
+    async def pendente(conn, dono, bot, sistema, acao, payload, resumo):
+        estado["pendentes"].append((sistema, acao, payload, resumo))
+        return "a1"
+    monkeypatch.setattr(mcp_bot.acoes, "criar_pendente", pendente)
+    return estado
+
+
+def _ferramenta(nome, args, ctx=_CTX):
+    return asyncio.run(mcp_bot._gestorhs(object(), "ana-bot", nome, args, ctx))
+
+
+def test_ferramentas_de_escrita_no_guardi():
+    """Fora de `FERRAMENTAS_BOT`, o `toolFilter.include` não as lista e o Guardi
+    nunca as vê — mesmo com o servidor respondendo."""
+    assert set(_ESCRITAS) <= set(FERRAMENTAS_BOT)
+    assert set(_ESCRITAS) <= {f["name"] for f in FERRAMENTAS}
+
+
+def test_escrita_sem_gestorhs_ligado_recusa_sem_rede(gestor):
+    """Sem a flag, nada sai — nem a leitura de conferência."""
+    ctx = {**_CTX, "sistemas": ["taskhs"]}
+    for nome in _ESCRITAS:
+        with pytest.raises(mcp_bot._Recusa):
+            _ferramenta(nome, {"caixa": 40, "aparelhos": [{"id": 5, "tipo_servico": "C"}]}, ctx)
+    assert gestor["reqs"] == [] and gestor["pendentes"] == []
+
+
+def test_receber_grava_cartao_com_cliente_em_cada_linha(gestor):
+    """A série falada pode bater com aparelho de outro cliente; o cartão é a
+    última chance de a pessoa ver isso."""
+    t = _ferramenta("gestorhs_receber", {"aparelhos": [
+        {"id": 5, "tipo_servico": "C", "acessorios": [8]}, {"id": 6, "tipo_servico": "M"}]})
+    assert "Aguardando Ana confirmar" in t
+    sistema, acao, payload, resumo = gestor["pendentes"][0]
+    assert (sistema, acao) == ("gestorhs", "receber")
+    assert payload["caixa"] is None and payload["aparelhos"][0]["equipamento_cliente"] == 5
+    ex = payload["_exibir"]
+    assert [l["cliente"] for l in ex["linhas"]] == ["ACME", "Beta Ltda"]
+    assert ex["linhas"][0]["acessorios"] == ["Maleta"]
+    assert ex["caixa"] == "caixa nova" and ex["clientes"] == 2 and ex["aviso"] is None
+    assert resumo == "Receber 2 aparelhos (caixa nova)"
+    assert all(q.method == "GET" for q in gestor["reqs"])
+
+
+def test_receber_em_caixa_fora_de_recebido_avisa(gestor):
+    """Decisão do Erick (12/11): a OS entra na fase em que a caixa está — o cartão
+    tem que dizer, senão a OS "some" do Recebido e a Expedição a procura."""
+    _ferramenta("gestorhs_receber", {"caixa": 40, "aparelhos": [{"id": 6, "tipo_servico": "C"}]})
+    ex = gestor["pendentes"][0][2]["_exibir"]
+    assert ex["caixa"] == "caixa 40" and "Laboratório" in ex["aviso"]
+    assert ex["clientes"] == 2     # ACME já na caixa + Beta chegando
+
+
+def test_receber_com_os_ativa_nao_grava_cartao(gestor):
+    """O 409 do GestorHS viria no clique, no meio do lote, com OS já abertas."""
+    with pytest.raises(ValueError, match="F8"):
+        _ferramenta("gestorhs_receber", {"aparelhos": [{"id": 5, "tipo_servico": "C"},
+                                                       {"id": 8, "tipo_servico": "C"}]})
+    assert gestor["pendentes"] == []
+
+
+def test_receber_aparelho_inexistente_diz_como_achar(gestor):
+    with pytest.raises(mcp_bot._Recusa, match="q=<série>"):
+        _ferramenta("gestorhs_receber", {"aparelhos": [{"id": 777, "tipo_servico": "C"}]})
+    assert gestor["pendentes"] == []
+
+
+def test_avancar_pede_principal_e_confere_que_e_da_caixa(gestor):
+    """Cliente principal que não está na caixa daria 409 no clique — ou pior,
+    uma proposta para o cliente errado."""
+    with pytest.raises(ValueError, match="cliente_principal"):
+        _ferramenta("gestorhs_avancar_caixa", {"caixa": 41})
+    with pytest.raises(mcp_bot._Recusa):
+        _ferramenta("gestorhs_avancar_caixa", {"caixa": 41, "cliente_principal": 99})
+    _ferramenta("gestorhs_avancar_caixa", {"caixa": 41, "cliente_principal": 2, "obs": "ok"})
+    _s, acao, payload, resumo = gestor["pendentes"][0]
+    assert acao == "avancar_caixa" and payload["cliente_principal"] == 2 and payload["obs"] == "ok"
+    assert payload["_exibir"]["cliente_principal"] == "Beta Ltda"
+    assert payload["_exibir"]["funcao"] == "Expedição" and "Recebido" in resumo
+
+
+def test_avancar_em_preparando_manda_fechar(gestor):
+    with pytest.raises(ValueError, match="gestorhs_fechar_caixa"):
+        _ferramenta("gestorhs_avancar_caixa", {"caixa": 42})
+    assert gestor["pendentes"] == []
+
+
+def test_fechar_fora_de_preparando_recusa_e_em_preparando_prepara(gestor):
+    """É a conferência combinada para o `erick-bot` antes da primeira escrita
+    real: fechar caixa fora de Preparando Retorno recusa antes do cartão."""
+    with pytest.raises(ValueError, match="Preparando Retorno"):
+        _ferramenta("gestorhs_fechar_caixa", {"caixa": 40, "cod_retorno": "BR1"})
+    _ferramenta("gestorhs_fechar_caixa", {"caixa": 42, "cod_retorno": "BR123"})
+    _s, acao, payload, resumo = gestor["pendentes"][0]
+    assert acao == "fechar_caixa" and payload["cod_retorno"] == "BR123" and "sem_nota_fiscal" not in payload
+    assert payload["_exibir"]["total_os"] == 1
+
+
+def test_cadastrar_recusa_serie_existente_e_prepara_a_nova(gestor):
+    gestor["frota"] = {"items": [{"id": 3, "serie": "F 123", "cliente_nome": "Beta Ltda"}], "total": 1}
+    with pytest.raises(ValueError, match="Beta Ltda"):
+        _ferramenta("gestorhs_cadastrar_aparelho", {"cliente": 1, "equipamento": 2, "serie": "f123"})
+    gestor["frota"] = {"items": [], "total": 0}
+    _ferramenta("gestorhs_cadastrar_aparelho", {"cliente": 1, "equipamento": 2, "serie": "F9"})
+    _s, acao, payload, _r = gestor["pendentes"][0]
+    assert acao == "cadastrar_aparelho"
+    assert payload == {"cliente": 1, "equipamento": 2, "serie": "F9",
+                       "_exibir": {"cliente": "ACME", "modelo": "Phoebus"}}
+    with pytest.raises(mcp_bot._Recusa, match="modelo"):
+        _ferramenta("gestorhs_cadastrar_aparelho", {"cliente": 1, "equipamento": 3, "serie": "F10"})
+
+
+def test_descricao_do_receber_manda_perguntar_se_veio_tudo_igual():
+    """Decisão 3 do Erick: depende do cliente, então nada de assumir. A regra
+    mora onde o agente lê — a descrição da ferramenta."""
+    d = next(f for f in FERRAMENTAS if f["name"] == "gestorhs_receber")["description"]
+    assert "tudo igual" in d and "NÃO executa" in d

@@ -39,6 +39,7 @@ from app.routers.mcp_email import outro_turno_aberto
 from app import datacore_consultas as dc
 from app import docshs_consultas as dh
 from app import gestorhs_consultas as gh
+from app import gestorhs_escrita as gw
 from app.config import settings
 from app.sistemas import datacore, docshs, gestorhs, taskhs
 
@@ -145,6 +146,50 @@ FERRAMENTAS = [
         "id": {"type": "string", "description": "só nas consultas que pedem id (número)"},
         "parametros": {"type": "object", "description": "filtros da consulta (nome → valor)"}},
        ("consulta",)),
+    _f("gestorhs_receber", "Receber aparelhos que chegaram (Expedição): abre uma OS por aparelho, "
+       "todas na mesma caixa — sem `caixa`, a primeira OS cria a caixa nova; com `caixa`, entram "
+       "nessa caixa já existente. Um cartão para o lote inteiro (até 30). Com mais de um aparelho, "
+       "PERGUNTE ANTES se veio tudo igual (tipo de serviço, condição, acessórios, pilhas, bocais) "
+       "e qual veio diferente — nunca assuma. Ache o `id` de cada aparelho pela série com "
+       "gestorhs_consultar aparelhos q=<série>; aparelho que não existe, cadastre antes com "
+       "gestorhs_cadastrar_aparelho. Quem pode é a função do seu dono no GestorHS." + _CONFIRMA,
+       {"caixa": {"type": "integer", "description": "opcional: caixa já aberta que recebe mais aparelhos"},
+        "data_chegada": {"type": "string", "description": "AAAA-MM-DD; padrão: hoje"},
+        "aparelhos": {"type": "array", "minItems": 1, "maxItems": gw.TETO_LOTE, "items": {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer", "description": "id do aparelho na frota (não a série)"},
+                "tipo_servico": {"type": "string", "enum": list(gw.TIPOS),
+                                 "description": "C calibração, M manutenção, A as duas"},
+                "condicao": {"type": "string", "enum": list(gw.CONDICOES)},
+                "acessorios": {"type": "array", "items": {"type": "integer"},
+                               "description": "ids: " + ", ".join(f"{k} {v}" for k, v in gw.ACESSORIOS.items())},
+                "pilhas": {"type": "integer", "minimum": 0},
+                "bocais": {"type": "integer", "minimum": 0},
+                "observacao": {"type": "string", "maxLength": gw.TETO_OBS}},
+            "required": ["id", "tipo_servico"]}}},
+       ("aparelhos",)),
+    _f("gestorhs_avancar_caixa", "Avançar uma caixa para a próxima fase (Recebido → Laboratório → "
+       "Pós-Vendas → Financeiro → Preparando Retorno), com todas as OS dela. Quem avança é a "
+       "função dona da fase atual (o GestorHS confere). Caixa em Preparando Retorno NÃO é aqui: "
+       "é gestorhs_fechar_caixa, com o rastreio. Caixa de mais de um cliente saindo de Recebido "
+       "pede `cliente_principal` — pergunte qual é." + _CONFIRMA,
+       {"caixa": _INT, "cliente_principal": {"type": "integer", "description": "id do cliente"},
+        "obs": {"type": "string", "maxLength": gw.TETO_OBS}}, ("caixa",)),
+    _f("gestorhs_fechar_caixa", "Fechar (finalizar) uma caixa em Preparando Retorno, com o código "
+       "de rastreio do despacho. Só vale para caixa em Preparando Retorno." + _CONFIRMA,
+       {"caixa": _INT, "cod_retorno": {"type": "string", "maxLength": gw.TETO_RASTREIO,
+                                       "description": "o código de rastreio"},
+        "obs": {"type": "string", "maxLength": gw.TETO_OBS}}, ("caixa", "cod_retorno")),
+    _f("gestorhs_cadastrar_aparelho", "Cadastrar um aparelho na frota de um cliente (id do cliente "
+       "em gestorhs_consultar clientes; id do modelo em gestorhs_consultar modelos). Série que já "
+       "existe é recusada dizendo de qual cliente é. Depois de confirmado, o recebimento é outro "
+       "cartão (gestorhs_receber com o id novo)." + _CONFIRMA,
+       {"cliente": _INT, "equipamento": {"type": "integer", "description": "id do modelo"},
+        "serie": {"type": "string", "maxLength": gw.TETO_SERIE},
+        "patrimonio": {"type": "string", "maxLength": gw.TETO_SERIE},
+        "datacompra": _DIA, "ult_calibragem": _DIA, "prox_calibragem": _DIA},
+       ("cliente", "equipamento", "serie")),
     _f("taskhs_minhas", "As tarefas (cards) em que o seu dono é membro." + _DADO,
        {"abertas": {"type": "boolean", "description": "true (padrão): só as em aberto"}}),
     _f("taskhs_quadros", "Os quadros do TaskHS que o seu dono pode abrir." + _DADO),
@@ -861,11 +906,118 @@ async def _docshs(bot: str, nome: str, args: dict, ctx: dict) -> str:
     return como_dado_externo(dh.texto_do_retorno(dados, offset, limite), origem="DocsHS")
 
 
-async def _gestorhs(bot: str, nome: str, args: dict, ctx: dict) -> str:
+async def _gestorhs_ler(ctx: dict, bot: str, caminho: str, nao_achou: str, params=None):
+    """GET de conferência antes do cartão; 404 vira recusa que diz o que procurar."""
+    try:
+        return await gestorhs.chamar(ctx["email"], bot, caminho, params=params, dono=ctx["dono"])
+    except gestorhs.ErroSistema as e:
+        if e.status == 404:
+            raise _Recusa(nao_achou) from e
+        raise
+
+
+def _plural(n: int, um: str, varios: str) -> str:
+    return f"{n} {um if n == 1 else varios}"
+
+
+async def _gestorhs_escrita(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
+    """Fase 2a (Expedição, spec 2026-11-12-guardi-gestorhs-expedicao): prepara,
+    nunca executa. Confere no GestorHS (só GET) o que dá para saber antes, para o
+    cartão nunca prometer o que lá vai ser recusado; o resto (a função do dono, as
+    regras de fase) o GestorHS decide no clique."""
+    if nome == "gestorhs_receber":
+        itens = gw.aparelhos_do_lote(args)
+        data = gw.data_de_chegada(args.get("data_chegada"))
+        caixa = gw.id_positivo(args["caixa"], "caixa") if args.get("caixa") is not None else None
+        aviso, clientes = None, set()
+        if caixa:
+            c = await _gestorhs_ler(ctx, bot, f"/caixas/{caixa}", f"A caixa {caixa} não existe no GestorHS.")
+            aviso = gw.conferir_caixa_para_receber(c or {})
+            clientes |= {gw.exibir_texto(n) for n in (c or {}).get("clientes") or []}
+        linhas = []
+        for item in itens:
+            ident = item["equipamento_cliente"]
+            nao = (f"O aparelho id {ident} não existe no GestorHS — ache o id pela série com "
+                   "gestorhs_consultar aparelhos q=<série>, ou cadastre com gestorhs_cadastrar_aparelho.")
+            ap = await _gestorhs_ler(ctx, bot, f"/equipamentos-cliente/{ident}", nao)
+            ordens = await _gestorhs_ler(ctx, bot, f"/equipamentos-cliente/{ident}/ordens", nao)
+            linha = gw.conferir_aparelho(item, ap or {}, ordens)
+            # ⚠️ O cliente vai em CADA linha: a série falada pode bater com
+            # aparelho de outro cliente, e o cartão é a última chance de ver.
+            linha["acessorios"] = [gw.ACESSORIOS[a] for a in item["checklist"]]
+            linhas.append(linha)
+            clientes.add(linha["cliente"])
+        rotulo = f"caixa {caixa}" if caixa else "caixa nova"
+        payload = {"caixa": caixa, "data_chegada": data, "aparelhos": itens,
+                   "_exibir": {"linhas": linhas, "caixa": rotulo, "aviso": aviso,
+                               "clientes": len(clientes - {""}) or 1}}
+        resumo = f"Receber {_plural(len(itens), 'aparelho', 'aparelhos')} ({rotulo})"
+        acao = "receber"
+    elif nome in ("gestorhs_avancar_caixa", "gestorhs_fechar_caixa"):
+        cid = gw.id_positivo(args.get("caixa"), "caixa")
+        obs = gw.texto_curto(args.get("obs"), "obs", gw.TETO_OBS)
+        c = await _gestorhs_ler(ctx, bot, f"/caixas/{cid}", f"A caixa {cid} não existe no GestorHS.") or {}
+        payload = {"caixa": cid}
+        if obs:
+            payload["obs"] = obs
+        if nome == "gestorhs_fechar_caixa":
+            ex = gw.conferir_caixa_para_fechar(c, args.get("cod_retorno"))
+            payload["cod_retorno"] = ex.pop("cod_retorno")
+            payload["_exibir"] = ex
+            resumo = f"Fechar a caixa {cid} com o rastreio {payload['cod_retorno']}"
+            acao = "fechar_caixa"
+        else:
+            cp = args.get("cliente_principal")
+            cp = gw.id_positivo(cp, "cliente_principal") if cp is not None else None
+            ex = gw.conferir_caixa_para_avancar(c, cp)
+            if cp is not None and c.get("fase") == gw.RECEBIDO:
+                nomes = {o.get("cliente"): o.get("cliente_nome") for o in c.get("ordens") or []
+                         if isinstance(o, dict)}
+                if cp not in nomes:
+                    raise _Recusa(f"O cliente {cp} não tem OS na caixa {cid} — o principal tem que ser "
+                                  "um dos clientes dela (veja gestorhs_consultar caixa).")
+                payload["cliente_principal"] = cp
+                ex["cliente_principal"] = gw.exibir_texto(nomes[cp]) or f"cliente {cp}"
+            payload["_exibir"] = ex
+            resumo = (f"Avançar a caixa {cid} ({ex['fase']}, "
+                      f"{_plural(ex['total_os'], 'OS', 'OS')})")
+            acao = "avancar_caixa"
+    else:   # gestorhs_cadastrar_aparelho
+        gw.conferir_cadastro(args, [])          # valida antes da rede
+        serie = str(args.get("serie")).strip()
+        achados = []
+        for q in dict.fromkeys((serie, gw.serie_chave(serie))):
+            r = await gestorhs.chamar(ctx["email"], bot, "/equipamentos-cliente",
+                                      params={"q": q, "limit": 100}, dono=ctx["dono"])
+            achados += (r or {}).get("items", []) if isinstance(r, dict) else (r or [])
+        payload = gw.conferir_cadastro(args, achados)
+        cli = await _gestorhs_ler(ctx, bot, f"/clientes/{payload['cliente']}",
+                                  f"O cliente {payload['cliente']} não existe no GestorHS — "
+                                  "procure com gestorhs_consultar clientes q=<nome ou CNPJ>.") or {}
+        modelos = await gestorhs.chamar(ctx["email"], bot, "/equipamentos", dono=ctx["dono"]) or []
+        modelo = next((m for m in modelos if isinstance(m, dict) and m.get("id") == payload["equipamento"]),
+                      None)
+        if modelo is None:
+            raise _Recusa(f"O modelo {payload['equipamento']} não existe no GestorHS — veja os ids com "
+                          "gestorhs_consultar modelos.")
+        payload["_exibir"] = {"cliente": gw.exibir_texto(cli.get("nome")) or f"cliente {payload['cliente']}",
+                              "modelo": gw.exibir_texto(modelo.get("descricao")) or f"modelo {modelo['id']}"}
+        resumo = f"Cadastrar o aparelho série {gw.exibir_texto(payload['serie'])}"
+        acao = "cadastrar_aparelho"
+    await acoes.criar_pendente(conn, ctx["dono"], bot, "gestorhs", acao, payload, resumo)
+    return (f"Preparado: {resumo}. Aguardando {ctx['primeiro']} confirmar no HS.OS — "
+            "não diga que foi feito.")
+
+
+async def _gestorhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
     """O Guardi no GestorHS (spec 2026-11-11-guardi-gestorhs, fase 1). Quem decide
-    o que o dono vê é o GestorHS, pela função dele; daqui só o catálogo e o link."""
+    o que o dono vê é o GestorHS, pela função dele; daqui só o catálogo e o link.
+    As escritas da fase 2a vão por `_gestorhs_escrita`, sempre em cartão."""
     if "gestorhs" not in ctx["sistemas"]:
         raise _Recusa("O GestorHS ainda não está ligado para mim.")
+    if nome in ("gestorhs_receber", "gestorhs_avancar_caixa", "gestorhs_fechar_caixa",
+                "gestorhs_cadastrar_aparelho"):
+        return await _gestorhs_escrita(conn, bot, nome, args, ctx)
     if nome == "gestorhs_consultas":
         so = str(args.get("consulta") or "").strip()
         linhas = []
@@ -898,7 +1050,7 @@ async def executar(agent_id: str, nome: str, args: dict) -> tuple[str, bool]:
             if nome.startswith("docshs_"):
                 return await _docshs(agent_id, nome, args or {}, ctx), False
             if nome.startswith("gestorhs_"):
-                return await _gestorhs(agent_id, nome, args or {}, ctx), False
+                return await _gestorhs(conn, agent_id, nome, args or {}, ctx), False
             return await _taskhs(conn, agent_id, nome, args or {}, ctx), False
     except (_Recusa, RegraInvalida) as e:
         return str(e), True

@@ -204,7 +204,7 @@ def test_sem_gestorhs_ligado_recusa_sem_rede(chave, monkeypatch):
     ctx = {**_CTX, "sistemas": ["docshs"]}
     for nome in ("gestorhs_consultas", "gestorhs_consultar"):
         with pytest.raises(mcp_bot._Recusa):
-            asyncio.run(mcp_bot._gestorhs("ana-bot", nome, {"consulta": "aparelhos"}, ctx))
+            asyncio.run(mcp_bot._gestorhs(None, "ana-bot", nome, {"consulta": "aparelhos"}, ctx))
     assert chamadas == []
 
 
@@ -216,7 +216,7 @@ def test_id_invalido_nao_toca_a_rede(chave, monkeypatch):
     for args in ({"consulta": "aparelho", "id": "1/notas-fiscais"},
                  {"consulta": "caixas", "parametros": {"fase": 3}}):
         with pytest.raises(ValueError):
-            asyncio.run(mcp_bot._gestorhs("ana-bot", "gestorhs_consultar", args, _CTX))
+            asyncio.run(mcp_bot._gestorhs(None, "ana-bot", "gestorhs_consultar", args, _CTX))
     assert chamadas == []
 
 
@@ -226,7 +226,7 @@ def test_lista_crua_pagina_do_nosso_lado(chave, monkeypatch):
     receberia sempre a mesma fatia achando que avançou."""
     from app.routers import mcp_bot
     chamadas = _grava(monkeypatch, [{"id": i, "nome": f"M{i}"} for i in range(30)])
-    t = asyncio.run(mcp_bot._gestorhs("ana-bot", "gestorhs_consultar",
+    t = asyncio.run(mcp_bot._gestorhs(None, "ana-bot", "gestorhs_consultar",
                                       {"consulta": "modelos",
                                        "parametros": {"offset": 10, "limite": 5}}, _CTX))
     assert chamadas[0].url.query == b""
@@ -239,7 +239,7 @@ def test_retorno_e_dado_externo_com_link(chave, monkeypatch):
     pelo servidor — e o `offset` das listas que paginam lá segue na query."""
     from app.routers import mcp_bot
     chamadas = _grava(monkeypatch, {"items": [{"id": 5, "serie": "A1"}], "total": 1})
-    t = asyncio.run(mcp_bot._gestorhs("ana-bot", "gestorhs_consultar",
+    t = asyncio.run(mcp_bot._gestorhs(None, "ana-bot", "gestorhs_consultar",
                                       {"consulta": "aparelhos",
                                        "parametros": {"cliente": 9, "offset": 50}}, _CTX))
     assert "DADO_EXTERNO" in t and "origem: GestorHS" in t
@@ -254,9 +254,9 @@ def test_catalogo_lista_filtros_declarados(chave, monkeypatch):
     de item único sem id."""
     from app.routers import mcp_bot
     chamadas = _grava(monkeypatch, {})
-    t = asyncio.run(mcp_bot._gestorhs("ana-bot", "gestorhs_consultas", {}, _CTX))
+    t = asyncio.run(mcp_bot._gestorhs(None, "ana-bot", "gestorhs_consultas", {}, _CTX))
     assert "aparelhos" in t and "vencendo" in t and "aparelho (pede id)" in t
-    assert asyncio.run(mcp_bot._gestorhs("ana-bot", "gestorhs_consultas", {"consulta": "caixa"}, _CTX)) \
+    assert asyncio.run(mcp_bot._gestorhs(None, "ana-bot", "gestorhs_consultas", {"consulta": "caixa"}, _CTX)) \
         .startswith("- caixa (pede id)")
     assert chamadas == []
 
