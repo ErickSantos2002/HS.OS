@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives import serialization as s
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from app import agente_token as at
+from app import hsgrowth_consultas as hg
 from app.sistemas import hsgrowth
 from app.sistemas.taskhs import ErroSistema
 
@@ -61,3 +62,83 @@ def test_409_repassa_o_detail(chave, monkeypatch):
     with pytest.raises(ErroSistema) as e:
         asyncio.run(hsgrowth.chamar("a@hs.com", "a-bot", "/cards", metodo="POST", json={}))
     assert "Este CNPJ está com o parceiro X" in str(e.value)
+
+
+# --- o catálogo -----------------------------------------------------------------
+
+def test_catalogo_recusa_filtro_desconhecido_e_id_nao_numerico():
+    """`assigned_to_id` vindo do agente leria o funil de outra pessoa; id com `/`
+    levaria o token do dono a uma rota fora do catálogo."""
+    with pytest.raises(ValueError):
+        hg.params_da_consulta("meus_cards", {"board_id": 1, "assigned_to_id": 3}, eu_id=9)
+    with pytest.raises(ValueError):
+        hg.params_da_consulta("minhas_tarefas", {"assigned_to_id": 3}, eu_id=9)
+    with pytest.raises(ValueError):
+        hg.caminho_da_consulta("card", "5/../users")
+    assert hg.caminho_da_consulta("card", "5") == "/cards/5/expanded"
+    with pytest.raises(ValueError):
+        hg.caminho_da_consulta("quadros", "3")
+    with pytest.raises(ValueError):
+        hg.params_da_consulta("meus_cards", {"board_id": 1}, eu_id=None)   # sem o dono, não lê
+
+
+def test_o_dono_e_injetado_pelo_servidor():
+    """O `<eu>` entra na query por aqui: `meus_cards` leva `all=true` (sem ele
+    só viria a primeira página) e `quadros` sempre `category=vendas`."""
+    p = hg.params_da_consulta("meus_cards", {"board_id": 2, "is_lost": False}, eu_id=9)
+    assert ("assigned_to_id", "9") in p and ("all", "true") in p and ("is_lost", "false") in p
+    assert hg.params_da_consulta("minhas_tarefas", None, eu_id=9) == [("assigned_to_id", "9")]
+    assert hg.params_da_consulta("quadros", None) == [("category", "vendas")]
+    with pytest.raises(ValueError):
+        hg.params_da_consulta("meus_cards", {}, eu_id=9)       # board_id é obrigatório
+
+
+def test_cnpj_da_receita_aceita_pontuacao():
+    """CNPJ colado da tela vem com pontos; 13 dígitos é número digitado errado e
+    a Receita responderia como se o CNPJ não existisse."""
+    assert hg.caminho_da_consulta("receita", "12.345.678/0001-90") == "/clients/cnpj/12345678000190"
+    with pytest.raises(ValueError):
+        hg.caminho_da_consulta("receita", "1234567800019")
+
+
+def test_meus_cards_filtra_etapa_tarefa_e_dono_localmente():
+    """O `/cards` traz cards de outros responsáveis conforme o papel; sem o
+    corte local o Guardi contaria o funil do time como se fosse do dono."""
+    cards = [
+        {"id": 1, "assigned_to_id": 3, "list_id": 29, "pending_tasks_status": "overdue"},
+        {"id": 2, "assigned_to_id": 9, "list_id": 29, "pending_tasks_status": "overdue"},
+        {"id": 3, "assigned_to_id": 3, "list_id": 28, "pending_tasks_status": "overdue"},
+        {"id": 4, "assigned_to_id": 3, "list_id": 29, "pending_tasks_status": "future"},
+        {"id": 5, "assigned_to_id": 9, "sdr_id": 3, "list_id": 29, "pending_tasks_status": "overdue"},
+    ]
+    q = hg.params_da_consulta("meus_cards", {"board_id": 1, "etapa": 29, "tarefa": "overdue"}, eu_id=3)
+    remotos, locais = hg.separar_filtros("meus_cards", q)
+    assert not any(k in ("etapa", "tarefa") for k, _ in remotos)    # nunca vão ao HSGrowth
+    r = hg.filtrar_local("meus_cards", {"cards": cards, "total": 5}, locais, 3)
+    assert [c["id"] for c in r["cards"]] == [1, 5] and r["total"] == 2
+    assert [c["id"] for c in hg.filtrar_local("meus_cards", cards, {}, 3)] == [1, 3, 4, 5]
+
+
+def test_parados_dias_usa_updated_at():
+    """`/cards` não devolve a data de entrada na etapa nem os toques; `updated_at`
+    é o melhor campo. Se o corte inverter, o agente lista como "parado" o card
+    que acabou de ser mexido."""
+    from datetime import datetime, timezone
+    agora = datetime(2026, 11, 12, tzinfo=timezone.utc)
+    cards = [{"id": 1, "assigned_to_id": 3, "updated_at": "2026-11-01T10:00:00"},
+             {"id": 2, "assigned_to_id": 3, "updated_at": "2026-11-11T10:00:00Z"},
+             {"id": 3, "assigned_to_id": 3}]
+    r = hg.filtrar_local("meus_cards", cards, {"parados_dias": "7"}, 3, agora=agora)
+    assert [c["id"] for c in r] == [1]
+
+
+def test_link_do_card_e_montado_pelo_servidor():
+    """O modelo não monta URL: usaria o domínio da API e mandaria a pessoa a
+    uma página que não existe."""
+    base = "https://hs.x"
+    assert hg.com_links("card", {"id": 7}, base)["link"] == "https://hs.x/cards/7"
+    r = hg.com_links("meus_cards", {"cards": [{"id": 8}], "total": 1}, base + "/")
+    assert r["cards"][0]["link"] == "https://hs.x/cards/8"
+    r = hg.com_links("buscar", {"vendas": [{"id": 9}], "servico": [{"id": 4}]}, base)
+    assert r["vendas"][0]["link"] == "https://hs.x/cards/9" and "link" not in r["servico"][0]
+    assert "link" not in hg.com_links("clientes", [{"id": 1}], base)[0]
