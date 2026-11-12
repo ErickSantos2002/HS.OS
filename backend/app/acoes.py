@@ -249,6 +249,52 @@ async def _gestorhs_gerar_certificado(email, bot, p, dono=None) -> str:
     return f"{feito} PDF: {link}" if link else feito
 
 
+# ── GestorHS, fase 2c (propostas, 12/11/2026) ────────────────────────────────
+# Spec `docs/superpowers/specs/2026-11-12-guardi-gestorhs-propostas-design.md`.
+# ⚠️ `destinatario` sai só com tipo e id: no GestorHS ele ESCREVE no cadastro do
+# cliente (nome, endereço) e sincroniza com o Tiny. Um payload adulterado com
+# `nome` renomearia o cliente; `vendedor`/`assinatura` nunca passam.
+_CAMPOS_PROPOSTA = ("desconto", "frete", "condicao_pagamento", "contato", "intro", "outros_itens",
+                    "observacoes", "validade_dias", "data_entrega", "descricao_entrega",
+                    "endereco_entrega_diferente", "endereco_entrega")
+_CAMPOS_ITEM = ("descricao", "sku", "quantidade", "unidade", "preco_un")
+
+
+def _corpo_da_proposta(p: dict) -> dict:
+    corpo = {k: p[k] for k in _CAMPOS_PROPOSTA if p.get(k) is not None}
+    if p.get("itens") is not None:
+        corpo["itens"] = [{k: i.get(k) for k in _CAMPOS_ITEM} for i in p["itens"]]
+    if p.get("aparelhos") is not None:
+        corpo["aparelhos"] = [{"equipamento_cliente": int(a["equipamento_cliente"])} for a in p["aparelhos"]]
+    return corpo
+
+
+def _sem_funcao_proposta(e: "gestorhs.ErroSistema") -> "gestorhs.ErroSistema":
+    if e.status == 403:
+        return gestorhs.ErroSistema(403, "a sua função no GestorHS não permite isso: quem cria e altera "
+                                         "proposta é Comercial Pós-Vendas, Financeiro (ou Administrador)")
+    return e
+
+
+def _com_pdf(texto: str, r) -> str:
+    link = (r or {}).get("link_pdf") if isinstance(r, dict) else None
+    return f"{texto} PDF: {link}" if link else texto
+
+
+async def _gestorhs_criar_proposta(email, bot, p, dono=None) -> str:
+    d = p.get("destinatario") or {}
+    if d.get("tipo") not in ("cliente", "empresa"):
+        raise gestorhs.ErroSistema(0, "destinatário inválido no cartão")
+    corpo = _corpo_da_proposta(p)
+    corpo["destinatario"] = {"tipo": d["tipo"], "id": int(d["id"])}
+    try:
+        r = await gestorhs.chamar(email, bot, "/propostas", metodo="POST", json=corpo, dono=dono)
+    except gestorhs.ErroSistema as e:
+        raise _sem_funcao_proposta(e) from e
+    numero = (r or {}).get("numero") if isinstance(r, dict) else None
+    return _com_pdf(f"Proposta {numero} criada." if numero else "Proposta criada.", r)
+
+
 EXECUTORES: dict[tuple[str, str], Executor] = {
     ("taskhs", "comentar"): _taskhs_comentar,
     ("taskhs", "mover"): _taskhs_mover,
@@ -260,6 +306,7 @@ EXECUTORES: dict[tuple[str, str], Executor] = {
     ("gestorhs", "fechar_caixa"): _gestorhs_fechar,
     ("gestorhs", "cadastrar_aparelho"): _gestorhs_cadastrar,
     ("gestorhs", "gerar_certificado"): _gestorhs_gerar_certificado,
+    ("gestorhs", "criar_proposta"): _gestorhs_criar_proposta,
 }
 
 

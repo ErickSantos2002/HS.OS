@@ -133,7 +133,51 @@ function cartaoDoGestorHS(acao: string, p: Record<string, unknown>, ex: Record<s
              checklists: [{ titulo: "Leituras", itens }],
              texto: { rotulo: "Atenção", valor: avisos.join("; ") + "." } };
   }
+  if (acao === "criar_proposta") {
+    // Fase 2c (propostas). Preço, quantidade, frete e desconto saem do payload
+    // (o que vai ao PDF do cliente); o total e os lembretes são do servidor.
+    const itensP = (p.itens as ItemDaProposta[] | undefined) ?? [];
+    const flags = (ex.itens as { fora_do_catalogo?: boolean }[] | undefined) ?? [];
+    const linhas: [string, string][] = [["Total", reais(ex.total)], ["Frete", reais(p.frete)]];
+    if (Number(p.desconto ?? 0) > 0) linhas.push(["Desconto", reais(p.desconto)]);
+    linhas.push(["Pagamento", p.condicao_pagamento ? v(p.condicao_pagamento) : "em branco"]);
+    if (p.validade_dias != null) linhas.push(["Validade", `${v(p.validade_dias)} dias`]);
+    if (ex.modelo) linhas.push(["Modelo", v(ex.modelo)]);
+    if (p.data_entrega) linhas.push(["Entrega", prazo(p.data_entrega)]);
+    const entrega = (p.endereco_entrega as { texto?: string } | undefined)?.texto;
+    if (entrega) linhas.push(["Endereço de entrega", entrega.replace(/\n/g, " · ")]);
+    const checklists: CartaoDaAcao["checklists"] = [
+      { titulo: "Itens", itens: itensP.map((it, i) => ({ texto: linhaDoItem(it, flags[i]?.fora_do_catalogo) })) }];
+    const aparelhos = (ex.aparelhos as { modelo?: string; serie?: string }[] | undefined) ?? [];
+    if (aparelhos.length)
+      checklists.push({ titulo: "Aparelhos", itens: aparelhos.map((a) => ({
+        texto: `${a.modelo || "aparelho"} · série ${a.serie || "?"}` })) });
+    return { verbo: "Nova proposta", titulo: ex.cliente ? String(ex.cliente) : "Proposta", linhas, checklists,
+             texto: lembretesDoCartao(ex) };
+  }
   return null;
+}
+
+interface ItemDaProposta { descricao?: string; sku?: string; quantidade?: number; preco_un?: number }
+
+/** `1335` → `R$ 1.335,00`, sem `Intl` (o espaço dele é NBSP e varia por ambiente). */
+export function reais(x: unknown): string {
+  const n = Number(x ?? 0);
+  if (!Number.isFinite(n)) return "R$ ?";
+  const [int, cent] = Math.abs(n).toFixed(2).split(".");
+  return `${n < 0 ? "-" : ""}R$ ${int.replace(/\B(?=(\d{3})+(?!\d))/g, ".")},${cent}`;
+}
+
+function linhaDoItem(it: ItemDaProposta, fora?: boolean): string {
+  const q = Number(it.quantidade ?? 0), pu = Number(it.preco_un ?? 0);
+  const qtd = Number.isInteger(q) ? String(q) : String(q).replace(".", ",");
+  return `${qtd} × ${it.descricao || it.sku || "item"} — ${reais(pu)} = ${reais(Math.round(q * pu * 100) / 100)}`
+    + (fora ? " (≠ catálogo)" : "");
+}
+
+function lembretesDoCartao(ex: Record<string, unknown>): CartaoDaAcao["texto"] {
+  const l = (ex.lembretes as string[] | undefined) ?? [];
+  return l.length ? { rotulo: "Lembretes", valor: l.join("\n") } : undefined;
 }
 
 /** O cartão em partes separadas — tudo num bloco só confundia (06/11/2026).

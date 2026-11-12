@@ -25,9 +25,13 @@ import re
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from app.bots_pessoais import _linha
+from app.gestorhs_escrita import _data as data_iso
+from app.gestorhs_escrita import exibir_texto, id_positivo, texto_curto
 
 __all__ = ["TETO_ITENS", "TETO_QTD", "itens_do_pedido", "eh_phoebus", "frete_padrao", "total",
-           "outros_itens_padrao", "texto_ainda_e_do_modelo", "lembretes", "reais", "dinheiro"]
+           "outros_itens_padrao", "texto_ainda_e_do_modelo", "lembretes", "reais", "dinheiro",
+           "destinatario", "aparelhos_ids", "endereco_de_entrega", "campos_do_pedido",
+           "pedido_de_criacao", "corpo_dos_itens", "exibir_itens"]
 
 TETO_ITENS = 30
 TETO_QTD = 999
@@ -201,4 +205,128 @@ def lembretes(*, itens, frete, frete_tabela, uf, desconto, pagamento, pagamento_
                      f"{series}.")
     if entrega_diferente:
         saida.append("Endereço de entrega diferente do cadastro: confira.")
+    return saida
+
+
+# ── O pedido do agente, validado ANTES da rede ───────────────────────────────
+
+TETO_PAGAMENTO = 100
+TETO_TEXTO = 500
+TETO_APARELHOS = 30
+_TIPOS_DESTINO = ("cliente", "empresa")
+_CAMPOS_ENDERECO = ("endereco", "numero", "complemento", "bairro", "municipio", "estado", "cep")
+
+
+def destinatario(v) -> dict:
+    """⚠️ Só `{tipo, id}`. No GestorHS o bloco `destinatario` ESCREVE no cadastro
+    (nome, documento, endereço) e agenda o Tiny; qualquer outro campo que o
+    agente mande é descartado aqui, e `nova_empresa` é recusado."""
+    if not isinstance(v, dict) or v.get("tipo") not in _TIPOS_DESTINO:
+        raise ValueError("Informe `destinatario`: {tipo: \"cliente\" ou \"empresa\", id}. Cliente novo "
+                         "se cadastra pela tela do GestorHS.")
+    return {"tipo": v["tipo"], "id": id_positivo(v.get("id"), "destinatario.id")}
+
+
+def aparelhos_ids(v, campo: str = "aparelhos") -> list[int]:
+    if v is None:
+        return []
+    if not isinstance(v, list):
+        raise ValueError(f"`{campo}` é uma lista de ids de aparelho da frota (não a série).")
+    if len(v) > TETO_APARELHOS:
+        raise ValueError(f"No máximo {TETO_APARELHOS} aparelhos por proposta.")
+    saida = []
+    for a in v:
+        n = id_positivo(a, campo)
+        if n not in saida:
+            saida.append(n)
+    return saida
+
+
+def endereco_de_entrega(v) -> dict | None:
+    """O endereço de entrega no formato que a TELA do GestorHS edita (`texto`);
+    o PDF de lá também o prefere ao estruturado."""
+    if v is None:
+        return None
+    if not isinstance(v, dict) or not v:
+        raise ValueError("`endereco_entrega` é um objeto: " + ", ".join(_CAMPOS_ENDERECO) + ".")
+    e = {}
+    for k, x in v.items():
+        if k not in _CAMPOS_ENDERECO:
+            raise ValueError(f"`endereco_entrega` não aceita {k!r}. Válidos: {', '.join(_CAMPOS_ENDERECO)}.")
+        t = texto_curto(x, f"endereco_entrega.{k}", 100)
+        if t:
+            e[k] = _linha(t, 101)
+    if not e:
+        return None
+    rua = ", ".join(x for x in (e.get("endereco"), e.get("numero")) if x)
+    if e.get("complemento"):
+        rua = f"{rua} {e['complemento']}".strip()
+    cidade = "/".join(x for x in (e.get("municipio"), (e.get("estado") or "").upper() or None) if x)
+    if e.get("cep"):
+        cidade = f"{cidade} — CEP: {e['cep']}".strip(" —")
+    linhas = [rua, f"Bairro: {e['bairro']}" if e.get("bairro") else "", cidade]
+    return {"texto": "\n".join(x for x in linhas if x)}
+
+
+def _forma_dos_itens(v) -> None:
+    """Só a forma (sku e quantidade), para recusar sem ir à rede; o catálogo
+    resolve o resto em `itens_do_pedido`."""
+    if not isinstance(v, list) or not v:
+        raise ValueError("Informe `itens`: pelo menos um, com o `sku` do catálogo e a quantidade.")
+    if len(v) > TETO_ITENS:
+        raise ValueError(f"No máximo {TETO_ITENS} itens por proposta.")
+    for n, item in enumerate(v, 1):
+        if not isinstance(item, dict) or not _sku(item.get("sku")):
+            raise ValueError(f"Item {n}: um objeto com `sku` (do catálogo) e `quantidade`.")
+        _quantidade(item.get("quantidade"), n)
+        if item.get("preco") is not None:
+            dinheiro(item["preco"], f"itens[{n}].preco")
+
+
+def campos_do_pedido(args: dict, *, validade: bool = False) -> dict:
+    """Os campos soltos (só os que vieram), normalizados. Dinheiro em `Decimal`."""
+    args = args or {}
+    c: dict = {}
+    for k in ("desconto", "frete"):
+        if args.get(k) is not None:
+            c[k] = dinheiro(args[k], k)
+    for k, teto in (("condicao_pagamento", TETO_PAGAMENTO), ("contato", TETO_TEXTO),
+                    ("intro", TETO_TEXTO), ("descricao_entrega", TETO_TEXTO)):
+        if k in args and args[k] is not None:
+            c[k] = texto_curto(args[k], k, teto)
+    if args.get("data_entrega") not in (None, ""):
+        c["data_entrega"] = data_iso(args["data_entrega"], "data_entrega")
+    if args.get("endereco_entrega") is not None:
+        c["endereco_entrega"] = endereco_de_entrega(args["endereco_entrega"])
+    if validade and args.get("validade_dias") is not None:
+        d = args["validade_dias"]
+        if isinstance(d, bool) or not isinstance(d, int) or not 1 <= d <= 365:
+            raise ValueError("`validade_dias` vai de 1 a 365.")
+        c["validade_dias"] = d
+    return c
+
+
+def pedido_de_criacao(args: dict) -> dict:
+    args = args or {}
+    p = {"destinatario": destinatario(args.get("destinatario")),
+         "aparelhos": aparelhos_ids(args.get("aparelhos"))}
+    _forma_dos_itens(args.get("itens"))
+    p["itens"] = args["itens"]
+    p.update(campos_do_pedido(args))
+    return p
+
+
+def corpo_dos_itens(itens) -> list[dict]:
+    """No formato do `PropostaItemCreate` (números em float, como o JSON leva)."""
+    return [{"descricao": i["descricao"], "sku": i["sku"], "quantidade": float(i["quantidade"]),
+             "unidade": i["unidade"], "preco_un": float(i["preco_un"])} for i in itens]
+
+
+def exibir_itens(itens) -> list[dict]:
+    saida = []
+    for i in itens:
+        linha = (Decimal(str(i["quantidade"])) * Decimal(str(i["preco_un"]))).quantize(_CENTAVO, ROUND_HALF_UP)
+        saida.append({"descricao": exibir_texto(i["descricao"]), "quantidade": float(i["quantidade"]),
+                      "preco_un": float(i["preco_un"]), "total": float(linha),
+                      "fora_do_catalogo": Decimal(str(i["preco_un"])) != Decimal(str(i["preco_catalogo"]))})
     return saida

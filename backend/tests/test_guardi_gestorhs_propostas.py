@@ -145,3 +145,236 @@ def test_texto_do_modelo_resiste_ao_que_o_editor_mexe():
     assert gp.texto_ainda_e_do_modelo("<p>Serviços de Calibração</p>\n<p><br></p><p></p>", PADRAO)
     assert gp.texto_ainda_e_do_modelo("<p>PHOEBUS</p>", PADRAO)
     assert not gp.texto_ainda_e_do_modelo("", PADRAO)
+
+
+# --- criar: a ferramenta, o cartão e o executor ----------------------------------
+
+import asyncio  # noqa: E402
+import json  # noqa: E402
+
+import httpx  # noqa: E402
+from cryptography.hazmat.primitives import serialization as s  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
+
+from app import acoes  # noqa: E402
+from app import agente_token as at  # noqa: E402
+from app import gestorhs_consultas as gh  # noqa: E402
+from app.email.regras import FERRAMENTAS_BOT  # noqa: E402
+from app.routers import mcp_bot  # noqa: E402
+from app.routers.mcp_bot import FERRAMENTAS  # noqa: E402
+from app.sistemas import gestorhs  # noqa: E402
+
+_CTX = {"sistemas": ["gestorhs"], "email": "ellen@hs.com", "dono": "u-ellen", "primeiro": "Ellen"}
+_CRIAR = {"destinatario": {"tipo": "cliente", "id": 7}, "itens": [{"sku": "312", "quantidade": 3}],
+          "aparelhos": [70]}
+
+_PROPOSTA_ANTIGA = {"id": 900, "numero": 1200, "cliente": 7, "empresa": None, "condicao_pagamento": "30 dias",
+                    "is_deleted": False}
+
+
+def _leituras():
+    """GestorHS falso das leituras (caminho → resposta), com o contrato do
+    `GET /propostas/padrao` pedido ao GestorHS (a rota ainda não existe lá)."""
+    return {
+        "/clientes/7": {"id": 7, "nome": "ACME Transportes", "estado": "PE", "ativo": True},
+        "/clientes/8": {"id": 8, "nome": "Sem UF Ltda", "estado": None, "ativo": True},
+        "/servicos": [CAT[0], CAT[1]],
+        "/produtos": [{"sku": "P1", "nome": "BOCAL", "preco": 2, "unidade": "UN"}],
+        "/equipamentos-cliente/70": {"id": 70, "cliente": 7, "equipamento_descricao": "Alcoolímetro X",
+                                     "serie": "F1"},
+        "/equipamentos-cliente/71": {"id": 71, "cliente": 99, "equipamento_descricao": "Alcoolímetro X",
+                                     "serie": "F9"},
+        "/equipamentos-cliente": {"items": [{"id": 72, "cliente": 7, "serie": "F2"}], "total": 1},
+        "/propostas": {"items": [{"id": 901, "cliente": 7, "empresa": 3, "condicao_pagamento": "à vista"},
+                                 _PROPOSTA_ANTIGA], "total": 2},
+        "/propostas/padrao": PADRAO,
+    }
+
+
+@pytest.fixture
+def chave(monkeypatch):
+    k = Ed25519PrivateKey.generate()
+    pem = k.private_bytes(s.Encoding.PEM, s.PrivateFormat.PKCS8, s.NoEncryption()).decode()
+    monkeypatch.setattr(at.settings, "AGENTE_CHAVE_PRIVADA", pem)
+    return k
+
+
+@pytest.fixture
+def gestor(chave, monkeypatch):
+    """GestorHS falso + `criar_pendente` capturado. Escrita (não-GET) aqui é defeito."""
+    estado = {"reqs": [], "pendentes": [], "leituras": _leituras()}
+
+    def h(req):
+        estado["reqs"].append(req)
+        if req.method != "GET":
+            return httpx.Response(500, json={"detail": "escrita antes do cartão"})
+        if req.url.path in estado["leituras"]:
+            return httpx.Response(200, json=estado["leituras"][req.url.path])
+        return httpx.Response(404, json={"detail": "não encontrado"})
+    monkeypatch.setattr(gestorhs, "_transporte", httpx.MockTransport(h))
+
+    async def pendente(conn, dono, bot, sistema, acao, payload, resumo):
+        estado["pendentes"].append((sistema, acao, payload, resumo))
+        return "a1"
+    monkeypatch.setattr(mcp_bot.acoes, "criar_pendente", pendente)
+    return estado
+
+
+def _ferramenta(nome, args, ctx=_CTX):
+    return asyncio.run(mcp_bot._gestorhs(object(), "ellen-bot", nome, args, ctx))
+
+
+def test_ferramenta_de_criar_no_guardi():
+    """Fora de `FERRAMENTAS_BOT`, o `toolFilter.include` não a lista e o Guardi
+    nunca a vê — mesmo com o servidor respondendo."""
+    assert "gestorhs_criar_proposta" in FERRAMENTAS_BOT
+    assert "gestorhs_criar_proposta" in {f["name"] for f in FERRAMENTAS}
+    assert ("gestorhs", "criar_proposta") in acoes.EXECUTORES
+
+
+def test_catalogo_de_servicos_e_produtos_para_achar_o_sku():
+    """Sem consultar o catálogo o agente não tem de onde tirar o `sku` — e
+    inventaria um."""
+    assert gh.caminho_da_consulta("servicos", None) == "/servicos"
+    assert gh.caminho_da_consulta("produtos", None) == "/produtos"
+    assert gh.params_da_consulta("servicos", {"q": "calibra"}) == [("q", "calibra")]
+
+
+def test_criar_sem_gestorhs_recusa_sem_rede(gestor):
+    with pytest.raises(mcp_bot._Recusa):
+        _ferramenta("gestorhs_criar_proposta", _CRIAR, {**_CTX, "sistemas": ["taskhs"]})
+    assert gestor["reqs"] == [] and gestor["pendentes"] == []
+
+
+def test_cartao_tem_padrao_total_e_lembretes(gestor):
+    """O padrão vem do GestorHS, o frete da região do estado do cliente (PE →
+    Nordeste, 150) e o total do servidor; preparar só LÊ — escrever antes do
+    clique criaria proposta que a pessoa nem viu."""
+    t = _ferramenta("gestorhs_criar_proposta", {**_CRIAR, "total": 1, "outros_itens": "<script>"})
+    assert "Aguardando Ellen confirmar" in t
+    sistema, acao, payload, resumo = gestor["pendentes"][0]
+    assert (sistema, acao) == ("gestorhs", "criar_proposta")
+    assert payload["frete"] == 150 and payload["desconto"] == 0
+    assert payload["observacoes"] == PADRAO["observacoes"] and payload["validade_dias"] == 30
+    assert payload["outros_itens"] == PADRAO["outros_itens"]["padrao"]       # nunca o do agente
+    assert payload["destinatario"] == {"tipo": "cliente", "id": 7}
+    assert payload["aparelhos"] == [{"equipamento_cliente": 70}]
+    assert payload["itens"] == [{"descricao": CAT[0]["nome"], "sku": "312", "quantidade": 3.0,
+                                 "unidade": "UN", "preco_un": 395.0}]
+    ex = payload["_exibir"]
+    assert ex["total"] == 1335.0 and ex["modelo"] == "padrão" and ex["uf"] == "PE"
+    assert ex["cliente"] == "ACME Transportes" and ex["aparelhos"] == [{"modelo": "Alcoolímetro X", "serie": "F1"}]
+    assert ex["itens"][0] == {"descricao": CAT[0]["nome"], "quantidade": 3.0, "preco_un": 395.0,
+                              "total": 1185.0, "fora_do_catalogo": False}
+    # O aparelho F2 (vencendo) ficou fora; o pagamento em branco difere da última (30 dias).
+    assert any("F2" in l for l in ex["lembretes"]) and any("30 dias" in l for l in ex["lembretes"])
+    assert resumo == "Nova proposta para ACME Transportes: 1 item, R$ 1.335,00"
+    assert "F2" in t                                   # o agente lê os lembretes à pessoa
+    assert all(q.method == "GET" for q in gestor["reqs"])
+    padrao = next(q for q in gestor["reqs"] if q.url.path == "/propostas/padrao")
+    assert padrao.url.params["modelos"] == "Alcoolímetro X" and padrao.url.params["series"] == "F1"
+
+
+def test_sem_uf_o_frete_nao_e_chutado(gestor):
+    """Cliente sem estado: frete 0 e o lembrete — nunca o de uma região qualquer."""
+    _ferramenta("gestorhs_criar_proposta", {"destinatario": {"tipo": "cliente", "id": 8},
+                                            "itens": [{"sku": "312", "quantidade": 1}]})
+    payload = gestor["pendentes"][0][2]
+    assert payload["frete"] == 0 and any("estado desconhecido" in l for l in payload["_exibir"]["lembretes"])
+
+
+def test_phoebus_tem_frete_incluso_e_o_texto_do_modelo(gestor):
+    _ferramenta("gestorhs_criar_proposta", {**_CRIAR, "itens": [{"sku": "306", "quantidade": 1}]})
+    payload = gestor["pendentes"][0][2]
+    assert payload["frete"] == 0 and payload["outros_itens"] == "<p>PHOEBUS</p>"
+    assert payload["_exibir"]["modelo"] == "Phoebus"
+
+
+def test_aparelho_de_outro_cliente_recusa(gestor):
+    """O GestorHS recusaria no clique ("fora da frota do cliente"), e o cartão
+    teria mostrado a série de outra empresa na proposta desta."""
+    with pytest.raises(ValueError, match="F9"):
+        _ferramenta("gestorhs_criar_proposta", {**_CRIAR, "aparelhos": [70, 71]})
+    assert gestor["pendentes"] == []
+
+
+def test_sku_inexistente_recusa_sem_cartao(gestor):
+    """"Calibração" casando com dois itens: o agente pergunta; um sku chutado
+    que não existe é recusado, nunca trocado pelo mais parecido."""
+    with pytest.raises(ValueError, match="catálogo"):
+        _ferramenta("gestorhs_criar_proposta", {**_CRIAR, "itens": [{"sku": "31", "quantidade": 1}]})
+    assert gestor["pendentes"] == []
+
+
+def test_destinatario_so_tipo_e_id_e_validado_antes_da_rede(gestor):
+    """No GestorHS o `destinatario` ESCREVE no cadastro e sincroniza com o Tiny:
+    um `nome` mandado renomearia o cliente. Aqui ele nem chega a ser lido."""
+    for ruim in ({"tipo": "nova_empresa", "id": 1}, {"tipo": "cliente"}, {"tipo": "cliente", "id": "7a"},
+                 "ACME", None):
+        with pytest.raises(ValueError):
+            _ferramenta("gestorhs_criar_proposta", {**_CRIAR, "destinatario": ruim})
+    for ruim in ({"desconto": -1}, {"frete": "muito"}, {"condicao_pagamento": "x" * 101},
+                 {"intro": "x" * 501}, {"data_entrega": "12/11/2026"}, {"aparelhos": ["F1"]}):
+        with pytest.raises(ValueError):
+            _ferramenta("gestorhs_criar_proposta", {**_CRIAR, **ruim})
+    assert gestor["reqs"] == []
+    _ferramenta("gestorhs_criar_proposta", {**_CRIAR, "destinatario": {"tipo": "cliente", "id": 7,
+                                                                       "nome": "Outro Nome"}})
+    assert gestor["pendentes"][0][2]["destinatario"] == {"tipo": "cliente", "id": 7}
+
+
+def test_endereco_de_entrega_vira_texto_e_lembrete(gestor):
+    """A tela do GestorHS edita o endereço de entrega como `texto`: estruturado,
+    o PDF sairia certo e a tela mostraria o campo vazio."""
+    _ferramenta("gestorhs_criar_proposta", {**_CRIAR, "endereco_entrega": {
+        "endereco": "Rua A", "numero": "10", "bairro": "Centro", "municipio": "Recife", "estado": "PE",
+        "cep": "50000-000"}})
+    p = gestor["pendentes"][0][2]
+    assert p["endereco_entrega_diferente"] is True
+    assert p["endereco_entrega"] == {"texto": "Rua A, 10\nBairro: Centro\nRecife/PE — CEP: 50000-000"}
+    assert any("entrega" in l for l in p["_exibir"]["lembretes"])
+
+
+def _servidor(monkeypatch, responder):
+    reqs = []
+
+    def h(req):
+        reqs.append(req)
+        return responder(req, len(reqs))
+    monkeypatch.setattr(gestorhs, "_transporte", httpx.MockTransport(h))
+    return reqs
+
+
+def _executar(acao, p):
+    return asyncio.run(acoes.EXECUTORES[("gestorhs", acao)]("ellen@hs.com", "ellen-bot", p))
+
+
+def test_executor_cria_e_devolve_link(gestor, monkeypatch):
+    """O corpo sai por lista fixa: `_exibir` e um destinatário adulterado no
+    payload (com nome) não chegam ao GestorHS — o nome renomearia o cliente."""
+    _ferramenta("gestorhs_criar_proposta", _CRIAR)
+    p = gestor["pendentes"][0][2]
+    p = {**p, "destinatario": {**p["destinatario"], "nome": "Renomeado"}, "vendedor": "Outro", "assinatura": "x"}
+    reqs = _servidor(monkeypatch, lambda r, n: httpx.Response(
+        201, json={"id": 950, "numero": 1301, "link_pdf": "https://pdf/1301"}))
+    r = _executar("criar_proposta", p)
+    assert reqs[0].method == "POST" and reqs[0].url.path == "/propostas"
+    corpo = json.loads(reqs[0].content)
+    assert corpo["destinatario"] == {"tipo": "cliente", "id": 7}
+    assert not {"_exibir", "vendedor", "assinatura"} & set(corpo)
+    assert corpo["frete"] == 150 and corpo["aparelhos"] == [{"equipamento_cliente": 70}]
+    assert r == "Proposta 1301 criada. PDF: https://pdf/1301"
+
+
+def test_403_diz_quem_pode(chave, monkeypatch):
+    """Guardi da Expedição pedindo proposta: a pessoa precisa saber que é a
+    função dela, e quem pode, não "erro"."""
+    _servidor(monkeypatch, lambda r, n: httpx.Response(403, json={}))
+    with pytest.raises(gestorhs.ErroSistema) as e:
+        _executar("criar_proposta", {"destinatario": {"tipo": "cliente", "id": 7}, "itens": []})
+    assert "Comercial Pós-Vendas" in str(e.value)
+
+
+def test_descricao_manda_nao_calcular_e_perguntar():
+    d = next(f for f in FERRAMENTAS if f["name"] == "gestorhs_criar_proposta")["description"]
+    assert "não calcule" in d and "pergunte" in d and "lembretes" in d and "NÃO executa" in d

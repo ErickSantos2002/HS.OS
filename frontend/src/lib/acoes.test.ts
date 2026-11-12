@@ -145,4 +145,35 @@ describe("cartão do GestorHS (Expedição)", () => {
     expect(c).toMatchObject({ verbo: "Cadastrar aparelho", titulo: "Série F9",
       linhas: [["Cliente", "ACME"], ["Modelo", "Phoebus"], ["Patrimônio", "P1"]] });
   });
+  it("nova proposta: total, itens com o preço do payload e os lembretes em destaque", () => {
+    // Fase 2c. O que vai ao PDF do cliente é o payload: preço e quantidade saem
+    // dele; lembrete escondido seria a pessoa confirmando sem ler o que fugiu
+    // do padrão.
+    const c = cartaoDaAcao("criar_proposta", {
+      destinatario: { tipo: "cliente", id: 7 }, frete: 150, desconto: 10, condicao_pagamento: "60 dias",
+      validade_dias: 30,
+      itens: [{ descricao: "CALIBRAÇÃO COM GÁS", sku: "312", quantidade: 3, unidade: "UN", preco_un: 350 },
+              { descricao: "BOCAL", sku: "P1", quantidade: 1200, unidade: "UN", preco_un: 2 }],
+      aparelhos: [{ equipamento_cliente: 70 }],
+      _exibir: { cliente: "ACME Transportes", total: 3590, modelo: "padrão",
+        itens: [{ fora_do_catalogo: true }, { fora_do_catalogo: false }],
+        aparelhos: [{ modelo: "Alcoolímetro X", serie: "F1" }],
+        lembretes: ["Preço diferente do catálogo.", "Aparelho F2 ficou fora."] },
+    });
+    expect(c.verbo).toBe("Nova proposta");
+    expect(c.titulo).toBe("ACME Transportes");
+    expect(c.linhas).toEqual([["Total", "R$ 3.590,00"], ["Frete", "R$ 150,00"], ["Desconto", "R$ 10,00"],
+      ["Pagamento", "60 dias"], ["Validade", "30 dias"], ["Modelo", "padrão"]]);
+    expect(c.checklists[0]).toEqual({ titulo: "Itens", itens: [
+      { texto: "3 × CALIBRAÇÃO COM GÁS — R$ 350,00 = R$ 1.050,00 (≠ catálogo)" },
+      { texto: "1200 × BOCAL — R$ 2,00 = R$ 2.400,00" }] });
+    expect(c.checklists[1]).toEqual({ titulo: "Aparelhos", itens: [{ texto: "Alcoolímetro X · série F1" }] });
+    expect(c.texto).toEqual({ rotulo: "Lembretes", valor: "Preço diferente do catálogo.\nAparelho F2 ficou fora." });
+  });
+  it("nova proposta no padrão: sem desconto, sem lembrete, pagamento em branco", () => {
+    const c = cartaoDaAcao("criar_proposta", { frete: 0, itens: [], _exibir: { cliente: "X", total: 0, lembretes: [] } });
+    expect(c.linhas.map(([k]) => k)).not.toContain("Desconto");
+    expect(c.linhas).toContainEqual(["Pagamento", "em branco"]);
+    expect(c.texto).toBeUndefined();
+  });
 });

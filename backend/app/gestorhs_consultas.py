@@ -78,6 +78,11 @@ CONSULTAS: dict[str, tuple[str, str, tuple[str, ...]]] = {
                   ("q", "incluir_desabilitadas", "page", "page_size")),
     "proposta": ("/propostas/{proposta_id}", "uma proposta pelo id: cliente, valor, situação", ()),
     "versoes_da_proposta": ("/propostas/{proposta_id}/versoes", "as versões de uma proposta", _LOCAL),
+    # Fase 2c (12/11/2026): o catálogo de onde sai o `sku` de cada item da proposta.
+    "servicos": ("/servicos", "o catálogo de serviços (sku, nome, preço) para os itens da proposta. "
+                 "`q` (nome ou sku)", ("q",) + _LOCAL),
+    "produtos": ("/produtos", "o catálogo de produtos (sku, nome, preço) para os itens da proposta. "
+                 "`q` (nome ou sku)", ("q",) + _LOCAL),
 }
 
 # Consultas cuja resposta traz algo que tem tela no front — e o prefixo dela.
