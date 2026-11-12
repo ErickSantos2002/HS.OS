@@ -36,7 +36,7 @@ import re
 from app.datacore_consultas import _escalar, texto_do_retorno
 
 __all__ = ["CONSULTAS", "caminho_da_consulta", "params_da_consulta", "separar_filtros",
-           "filtrar_local", "pede_id", "com_links", "texto_do_retorno"]
+           "filtrar_local", "pede_id", "pede_eu", "com_links", "texto_do_retorno"]
 
 _MAX_PAGINA = 100
 _ID = re.compile(r"^[0-9]{1,10}$")
@@ -98,6 +98,11 @@ CONSULTAS: dict[str, tuple[str, str, tuple[str, ...]]] = {
 _ENVELOPE = {"meus_cards": "cards", "minhas_tarefas": "tasks"}
 _LINK_LISTA = {"meus_cards": "cards", "buscar": "vendas"}   # chave → envelope com cards
 _LINK_UNICO = ("card",)
+
+
+def pede_eu(chave: str) -> bool:
+    """A consulta depende do id do dono no HSGrowth (`/users/me`)."""
+    return chave in _DO_DONO or chave in _SO_LOCAL
 
 
 def pede_id(chave: str) -> bool:

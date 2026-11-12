@@ -247,7 +247,7 @@ def test_users_me_sem_id_inteiro_e_recusado(chave, monkeypatch):
     from app.routers import mcp_bot
     for corpo in ({"id": "3"}, {"role": "x"}, [], {"id": True}):
         _roteia(monkeypatch, {"/users/me": corpo})
-        with pytest.raises((ErroSistema, ValueError), match="HSGrowth"):
+        with pytest.raises(ValueError, match="HSGrowth"):
             asyncio.run(mcp_bot._eu_no_hsgrowth(dict(_CTX), "ana-bot"))
 
 
@@ -269,3 +269,9 @@ def test_filtro_invalido_nao_toca_a_rede(chave, monkeypatch):
         with pytest.raises(ValueError):
             asyncio.run(mcp_bot._hsgrowth(None, "ana-bot", "hsgrowth_consultar", args, dict(_CTX)))
     assert chamadas == []
+
+
+def test_pede_eu_so_nas_consultas_do_dono():
+    """O router decide por `pede_eu` se pede `/users/me`: lista escrita à mão
+    no router esqueceria uma consulta nova do dono e ela falharia só em uso."""
+    assert {c for c in hg.CONSULTAS if hg.pede_eu(c)} == {"meus_cards", "minhas_tarefas", "tarefas_atrasadas"}

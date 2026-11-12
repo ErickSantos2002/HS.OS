@@ -1477,8 +1477,7 @@ async def _hsgrowth(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
     chave = str(args.get("consulta") or "")
     # Tudo o que vem do agente é validado ANTES da rede.
     caminho = hg.caminho_da_consulta(chave, args.get("id"))
-    precisa_do_eu = chave in ("meus_cards", "minhas_tarefas", "tarefas_atrasadas")
-    eu_id = (await _eu_no_hsgrowth(ctx, bot))["id"] if precisa_do_eu else None
+    eu_id = (await _eu_no_hsgrowth(ctx, bot))["id"] if hg.pede_eu(chave) else None
     params = hg.params_da_consulta(chave, args.get("parametros"), eu_id)
     remotos, locais = hg.separar_filtros(chave, params)
     dados = await hsgrowth.chamar(ctx["email"], bot, caminho, params=remotos, dono=ctx["dono"])
