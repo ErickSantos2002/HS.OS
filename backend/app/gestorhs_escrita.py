@@ -210,6 +210,15 @@ def conferir_caixa_para_avancar(caixa: dict, cliente_principal: int | None) -> d
                          "gestorhs_fechar_caixa com o código de rastreio.")
     if f not in ATIVAS:
         raise ValueError(f"A caixa {caixa.get('id')} está {nome}: não há para onde avançar.")
+    if f == LABORATORIO:
+        # Fase 2b: o GestorHS recusaria no clique com "faltam N aparelho(s)", sem
+        # dizer quais. Sem `desfecho_lab` é pendente (o padrão do `CaixaDetalhe`).
+        faltam = [o for o in _ordens(caixa.get("ordens"))
+                  if o.get("fase") in ATIVAS and o.get("desfecho_lab") in (None, "pendente")]
+        if faltam:
+            lista = ", ".join(f"OS {o.get('id')} (série {exibir_texto(o.get('equipamento_serie')) or '?'})"
+                              for o in faltam[:TETO_LOTE])
+            raise ValueError(f"Ainda sem certificado no laboratório: {lista}.")
     clientes = _clientes(caixa)
     if (f == RECEBIDO and len(caixa.get("clientes") or []) > 1
             and not caixa.get("cliente_principal") and not cliente_principal):

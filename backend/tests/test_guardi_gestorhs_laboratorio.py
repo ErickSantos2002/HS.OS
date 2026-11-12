@@ -285,3 +285,45 @@ def test_descricao_manda_nao_calcular_e_perguntar_avancar():
     """Decisões 2 e 6 do Erick moram onde o agente lê: a descrição."""
     d = next(f for f in FERRAMENTAS if f["name"] == "gestorhs_gerar_certificado")["description"]
     assert "não calcule" in d and "avançar" in d and "NÃO executa" in d and "um aparelho por vez" in d
+
+
+# --- avançar caixa no Laboratório -------------------------------------------------
+
+def _caixa_lab(*ordens):
+    return {"id": 40, "fase": 5, "fase_descricao": "Laboratório", "total_os": len(ordens),
+            "clientes": ["ACME"], "ordens": list(ordens)}
+
+
+def test_avancar_no_laboratorio_lista_os_pendentes():
+    """O GestorHS recusaria no clique com "faltam N aparelho(s)", sem dizer
+    quais: o técnico confirmaria um cartão inútil e ainda teria de procurar.
+    Recusar antes, com OS e série, é o que ele precisa para terminar."""
+    caixa = _caixa_lab({"id": 11699, "fase": 5, "equipamento_serie": "F0", "desfecho_lab": "concluido"},
+                       {"id": 11700, "fase": 5, "equipamento_serie": "F1", "desfecho_lab": "pendente"},
+                       {"id": 11701, "fase": 5, "equipamento_serie": "F2"},      # padrão do schema: pendente
+                       {"id": 11702, "fase": 9, "equipamento_serie": "F3", "desfecho_lab": "pendente"})
+    with pytest.raises(ValueError) as e:
+        ge.conferir_caixa_para_avancar(caixa, None)
+    assert str(e.value) == ("Ainda sem certificado no laboratório: OS 11700 (série F1), "
+                            "OS 11701 (série F2).")
+    terminais = _caixa_lab(*({"id": i, "fase": 5, "equipamento_serie": f"F{i}", "desfecho_lab": d}
+                             for i, d in enumerate(("concluido", "sem_conserto", "liberado"), 1)))
+    assert ge.conferir_caixa_para_avancar(terminais, None)["fase"] == "Laboratório"
+
+
+def test_pendencia_de_laboratorio_so_vale_no_laboratorio():
+    """Em Recebido todo aparelho está "pendente" por padrão: olhar o desfecho lá
+    travaria toda caixa na porta do laboratório."""
+    recebido = {"id": 41, "fase": 4, "clientes": ["ACME"], "total_os": 1,
+                "ordens": [{"id": 1, "fase": 4, "equipamento_serie": "F1", "desfecho_lab": "pendente"}]}
+    assert ge.conferir_caixa_para_avancar(recebido, None)["fase"] == "Recebido"
+
+
+def test_ferramenta_de_avancar_recusa_sem_cartao(gestor, monkeypatch):
+    """É a conferência combinada para o `erick-bot`: pedir para avançar caixa do
+    Laboratório com aparelho sem certificado lista quais faltam, sem cartão."""
+    monkeypatch.setitem(_LEITURAS, "/caixas/40", _caixa_lab(
+        {"id": 11700, "fase": 5, "equipamento_serie": "F006097", "desfecho_lab": "pendente"}))
+    with pytest.raises(ValueError, match="OS 11700 \\(série F006097\\)"):
+        _ferramenta("gestorhs_avancar_caixa", {"caixa": 40})
+    assert gestor["pendentes"] == []
