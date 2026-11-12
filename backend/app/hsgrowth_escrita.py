@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo
 from app.bots_pessoais import _linha
 
 __all__ = ["CAMPOS_CARD", "CAMPOS_CLIENTE", "CAMPOS_CONTATO", "MODALIDADES", "TIPOS_TAREFA",
-           "PRIORIDADES", "TETO_TAREFAS", "DEAL_TYPES", "ACQUISITION_CHANNELS",
+           "PRIORIDADES", "TETO_TAREFAS", "DURACAO_MIN", "DURACAO_MAX", "DEAL_TYPES", "ACQUISITION_CHANNELS",
            "ACQUISITION_CHANNEL_DETAILS", "SECTORS", "EMPLOYEE_COUNTS", "RELATIONSHIP_TYPES",
            "COMMERCIAL_ACTIVITIES", "PERSON_AREAS",
            "campos_do_card", "campos_personalizados", "nota", "tarefas", "utc_de_brasilia",
@@ -205,7 +205,8 @@ def nota(texto) -> str:
 
 # --- tarefas ---------------------------------------------------------------------
 
-_CAMPOS_ALTERAR = ("title", "description", "task_type", "priority", "due_date")
+_CAMPOS_ALTERAR = ("title", "description", "task_type", "priority", "due_date", "duration_minutes")
+DURACAO_MIN, DURACAO_MAX = 5, 480
 
 
 def _campos_tarefa(op: dict, obrigatorios: bool) -> dict:
@@ -222,14 +223,23 @@ def _campos_tarefa(op: dict, obrigatorios: bool) -> dict:
         out["description"] = _texto(op["description"], "description", 5000, 0)
     if op.get("due_date") is not None:
         out["due_date"] = utc_de_brasilia(op["due_date"])
+    if op.get("duration_minutes") is not None:
+        d = op["duration_minutes"]
+        if isinstance(d, bool) or not isinstance(d, int) or not DURACAO_MIN <= d <= DURACAO_MAX:
+            raise ValueError(f"`duration_minutes` tem que ser um número inteiro de minutos, de "
+                             f"{DURACAO_MIN} a {DURACAO_MAX}.")
+        out["duration_minutes"] = d
     return out
 
 
 def tarefas(ops: list, tipos_das_tarefas: dict[int, str] | None = None) -> list[dict]:
-    """Até 5 operações. `concluir` de reunião é recusado sem `aconteceu: true`:
-    reunião que não aconteceu é no-show, e concluí-la apagaria o sinal.
-    `tipos_das_tarefas` (id → task_type, lido do HSGrowth) permite conferir isso
-    já aqui; sem ele, a regra vale no executor por `conferir_conclusao`."""
+    """Até 5 operações. `concluir` exige `valida` (bool): o `is_valid` do HSGrowth
+    — realizada ou só uma tentativa sem resultado — vale pontos de gamificação e
+    nunca é presumido. Reunião com `valida: false` é recusada: reunião que não
+    aconteceu é no-show, e concluí-la apagaria o sinal (e pagaria o SDR).
+    `tipos_das_tarefas` (id → task_type, das tarefas PENDENTES do card, lidas do
+    `/expanded`) é obrigatório para alterar ou concluir: a regra vale AQUI, na
+    preparação do cartão — o executor só repassa o que foi gravado."""
     if not isinstance(ops, list) or not ops:
         raise ValueError("Diga quais tarefas criar, alterar ou concluir.")
     if len(ops) > TETO_TAREFAS:
@@ -256,23 +266,24 @@ def tarefas(ops: list, tipos_das_tarefas: dict[int, str] | None = None) -> list[
             out.append({"op": "alterar", "task_id": tid, **campos})
         elif tipo == "concluir":
             tid = _inteiro(op.get("task_id"), "task_id")
-            aconteceu = op.get("aconteceu") is True
             if tid not in tipos_das_tarefas:
                 raise ValueError(f"A tarefa {tid} não é deste card.")
-            conferir_conclusao(tipos_das_tarefas[tid], aconteceu)
-            item = {"op": "concluir", "task_id": tid}
-            if aconteceu:
-                item["aconteceu"] = True
-            out.append(item)
+            valida = op.get("valida")
+            if not isinstance(valida, bool):
+                raise ValueError(f"Tarefa {tid}: diga se ela foi realizada (`valida: true`) ou "
+                                 "foi só uma tentativa sem resultado (`valida: false`) — "
+                                 "pergunte ao seu dono, não presuma.")
+            conferir_conclusao(tipos_das_tarefas[tid], valida)
+            out.append({"op": "concluir", "task_id": tid, "valida": valida})
         else:
             raise ValueError("`op` tem que ser criar, alterar ou concluir.")
     return out
 
 
-def conferir_conclusao(task_type: str | None, aconteceu: bool) -> None:
-    if task_type == "meeting" and not aconteceu:
-        raise ValueError("Reunião que não aconteceu é no-show; que aconteceu, diga e eu "
-                         "concluo com `aconteceu: true`.")
+def conferir_conclusao(task_type: str | None, realizada: bool) -> None:
+    if task_type == "meeting" and not realizada:
+        raise ValueError("Reunião que não aconteceu é no-show (`hsgrowth_noshow`), não "
+                         "conclusão; se aconteceu, concluo com `valida: true`.")
 
 
 # --- dono, movimento, ganho, perda, no-show ---------------------------------------

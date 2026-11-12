@@ -20,6 +20,8 @@ FERRAMENTAS_EMAIL = ("email_caixas", "email_listar", "email_ler", "email_enviar_
 FERRAMENTAS_BOT = ("lembrar", "taskhs_eu", "datacore_consultas", "datacore_consultar",
                    "docshs_consultas", "docshs_consultar", "gestorhs_consultas", "gestorhs_consultar",
                    "hsgrowth_consultas", "hsgrowth_consultar",
+                   "hsgrowth_registrar", "hsgrowth_cliente", "hsgrowth_criar_lead", "hsgrowth_ganhar",
+                   "hsgrowth_perder", "hsgrowth_noshow",
                    "gestorhs_receber", "gestorhs_avancar_caixa", "gestorhs_fechar_caixa",
                    "gestorhs_cadastrar_aparelho", "gestorhs_gerar_certificado", "gestorhs_criar_proposta",
                    "gestorhs_alterar_proposta",

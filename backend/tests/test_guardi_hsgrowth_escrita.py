@@ -34,15 +34,35 @@ def test_campo_personalizado_so_por_definicao_existente():
         h.campos_personalizados([{"field_definition_id": 99, "value": "x"}], defs)
 
 
-def test_concluir_reuniao_exige_aconteceu():
-    """Concluir uma reunião que não aconteceu apaga o sinal de no-show."""
+def test_concluir_exige_valida_e_reuniao_sem_resultado_e_noshow():
+    """`valida` vira o `is_valid` do HSGrowth (pontos de gamificação): presumido,
+    a ligação sem resposta contaria como realizada. E reunião "concluída" sem ter
+    acontecido apagaria o sinal de no-show (e pagaria comissão ao SDR)."""
+    with pytest.raises(ValueError, match="realizada"):
+        h.tarefas([{"op": "concluir", "task_id": 8}], {8: "call"})
+    with pytest.raises(ValueError, match="realizada"):
+        h.tarefas([{"op": "concluir", "task_id": 8, "valida": "sim"}], {8: "call"})
+    assert h.tarefas([{"op": "concluir", "task_id": 8, "valida": False}], {8: "call"}) == \
+        [{"op": "concluir", "task_id": 8, "valida": False}]
     with pytest.raises(ValueError, match="no-show"):
-        h.tarefas([{"op": "concluir", "task_id": 7}], {7: "meeting"})
-    assert h.tarefas([{"op": "concluir", "task_id": 7, "aconteceu": True}], {7: "meeting"}) == \
-        [{"op": "concluir", "task_id": 7, "aconteceu": True}]
-    assert h.tarefas([{"op": "concluir", "task_id": 8}], {8: "call"})[0]["task_id"] == 8
+        h.tarefas([{"op": "concluir", "task_id": 7, "valida": False}], {7: "meeting"})
+    assert h.tarefas([{"op": "concluir", "task_id": 7, "valida": True}], {7: "meeting"}) == \
+        [{"op": "concluir", "task_id": 7, "valida": True}]
     with pytest.raises(ValueError, match="no-show"):
         h.conferir_conclusao("meeting", False)
+
+
+def test_duracao_da_tarefa_de_5_a_480_minutos():
+    """Duração fora da faixa da tela vira 422 no clique, depois de nota e campos
+    já terem entrado — o lote pararia no meio."""
+    t = h.tarefas([{"op": "criar", "title": "Reunião", "task_type": "meeting",
+                    "duration_minutes": 30}])
+    assert t[0]["duration_minutes"] == 30
+    assert h.tarefas([{"op": "alterar", "task_id": 7, "duration_minutes": 480}],
+                     {7: "meeting"})[0]["duration_minutes"] == 480
+    for ruim in (4, 481, True, "30", 30.5):
+        with pytest.raises(ValueError, match="duration_minutes"):
+            h.tarefas([{"op": "criar", "title": "x", "task_type": "call", "duration_minutes": ruim}])
 
 
 def test_tarefas_criar_valida_e_limita():
