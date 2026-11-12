@@ -215,9 +215,10 @@ describe("cartão do HSGrowth", () => {
     expect(c.titulo).toBe("ACME");
     expect(c.linhas).toEqual([
       ["Cliente", "ACME SA"], ["Valor", "1500 (antes: 1000)"], ["Modalidade", "locacao (antes: (vazio))"],
-      ["Nº de bafômetros", "Sim"], ["Mover para", "Qualificação"], ["Atenção", "Falta reunião agendada."],
+      ["Nº de bafômetros", "Sim"],
       ["Nova tarefa", "Ligação · Ligar · prioridade Alta · 19/11/2026 10:00"],
-      ["Concluir", "Reunião X · realizada"], ["Concluir", "Ligar Y · tentativa sem resultado"]]);
+      ["Concluir", "Reunião X · realizada"], ["Concluir", "Ligar Y · tentativa sem resultado"],
+      ["Mover para", "Qualificação"], ["Atenção", "Falta reunião agendada."]]);
     expect(c.texto).toEqual({ rotulo: "Nota", valor: "Falei com o diretor." });
   });
   it("perder mostra o motivo", () => {
@@ -251,5 +252,20 @@ describe("cartão do HSGrowth", () => {
   it("data da tarefa sai em horário de Brasília", () => {
     expect(dataBrasilia("2026-11-19T13:00:00Z")).toBe("19/11/2026 10:00");
     expect(dataBrasilia("2026-11-19T02:30:00Z")).toBe("18/11/2026 23:30");
+  });
+  it("tarefa nova mostra o título do payload, sem _exibir", () => {
+    // O executor cria com o `title` do payload; mostrar outra coisa aprovaria o que não vai.
+    const c = cartaoDaAcao("hsgrowth_registrar", { card_id: 7,
+      tarefas: [{ op: "criar", title: "Enviar proposta", task_type: "email" }] });
+    expect(c.linhas).toEqual([["Nova tarefa", "E-mail · Enviar proposta"]]);
+  });
+  it("lead sem _exibir não inventa etapa nem cliente; cliente existente não lista campos", () => {
+    const c = cartaoDaAcao("hsgrowth_criar_lead", { titulo: "L", list_id: 61,
+      cliente: { campos: { name: "ACME", sector: "Mineração" } }, contato: { id: 5 }, campos_do_card: {} });
+    expect(c.linhas).toContainEqual(["Etapa", "etapa 61"]);
+    expect(c.linhas).toContainEqual(["Cliente (novo)", "ACME"]);
+    const e = cartaoDaAcao("hsgrowth_criar_lead", { titulo: "L", list_id: 61,
+      cliente: { id: 4, campos: { sector: "IGNORADO" } }, contato: { id: 5 }, campos_do_card: {} });
+    expect(e.linhas.some(([k]) => k.includes("Setor"))).toBe(false);
   });
 });

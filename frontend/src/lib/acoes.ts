@@ -240,12 +240,13 @@ function cartaoDoHSGrowth(acao: string, p: Record<string, unknown>, ex: Record<s
     const nomes = (ex.campos_personalizados as string[] | undefined) ?? [];
     ((p.campos_personalizados as { field_definition_id: number; value: unknown }[] | undefined) ?? [])
       .forEach((c, i) => linhas.push([nomes[i] || `campo ${c.field_definition_id}`, vazioHSG(c.value)]));
+    const nomesT = (ex.tarefas as string[] | undefined) ?? [];
+    ((p.tarefas as TarefaHSG[] | undefined) ?? []).forEach((o, i) =>
+      linhas.push(linhaDaTarefaHSG(o, o.op === "criar" ? (o.title || "tarefa")
+        : nomesT[i] || (o.task_id != null ? `tarefa ${o.task_id}` : "tarefa"))));
     if (p.mover_para != null)
       linhas.push(["Mover para", ex.etapa_para ? String(ex.etapa_para) : `etapa ${v(p.mover_para)}`]);
     if (ex.aviso) linhas.push(["Atenção", String(ex.aviso)]);
-    const nomesT = (ex.tarefas as string[] | undefined) ?? [];
-    ((p.tarefas as TarefaHSG[] | undefined) ?? []).forEach((o, i) =>
-      linhas.push(linhaDaTarefaHSG(o, nomesT[i] || (o.task_id != null ? `tarefa ${o.task_id}` : "tarefa"))));
     return { verbo: "Atualizar card", titulo: card, linhas: comCliente(linhas), checklists: [],
              texto: p.nota ? { rotulo: "Nota", valor: v(p.nota) } : undefined };
   }
@@ -260,16 +261,17 @@ function cartaoDoHSGrowth(acao: string, p: Record<string, unknown>, ex: Record<s
     return { verbo: "Completar cadastro", titulo: card, linhas: comCliente(linhas), checklists: [] };
   }
   if (acao === "hsgrowth_criar_lead") {
-    const linhas: [string, string][] = [["Etapa", ex.etapa ? String(ex.etapa) : "Lead Novo"]];
+    const linhas: [string, string][] = [["Etapa", ex.etapa ? String(ex.etapa) : `etapa ${v(p.list_id)}`]];
     const cli = p.cliente as { id?: number; campos?: Record<string, unknown> } | undefined;
-    const nomeCli = ex.cliente ? String(ex.cliente) : cli?.id != null ? `cliente ${cli.id}` : "?";
+    const nomeCli = ex.cliente ? String(ex.cliente) : cli?.id != null ? `cliente ${cli.id}` : v(cli?.campos?.name ?? "?");
     linhas.push([cli?.id != null ? "Cliente (já existe)" : "Cliente (novo)", nomeCli]);
     if (ex.documento) linhas.push(["Documento", String(ex.documento)]);
     if (ex.cliente_existente && Number(ex.cards_abertos ?? 0) > 0) {
       const donos = (ex.donos as string[] | undefined) ?? [];
       linhas.push(["Cards abertos do cliente", `${v(ex.cards_abertos)}${donos.length ? ` — ${donos.join(", ")}` : ""}`]);
     }
-    for (const [k, x] of Object.entries(cli?.campos ?? {})) if (k !== "name") linhas.push([`Cliente · ${rotuloHSG(k)}`, vazioHSG(x)]);
+    if (cli?.id == null)
+      for (const [k, x] of Object.entries(cli?.campos ?? {})) if (k !== "name") linhas.push([`Cliente · ${rotuloHSG(k)}`, vazioHSG(x)]);
     const con = p.contato as { id?: number; campos?: Record<string, unknown> } | undefined;
     if (con?.id != null) linhas.push(["Contato (já existe)", ex.contato ? String(ex.contato) : `contato ${con.id}`]);
     else {
