@@ -813,6 +813,32 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   conferido no `erick-bot` (piloto respondeu com o link do PDF da OS 11700).
   ⚠️ O EasyPanel do GestorHS tem dois serviços: deploy do `gestorhs-sistema`
   (front) não sobe o `gestorhs-api` — confira o commit no ar antes de testar.
+- **GestorHS, fase 2a = Expedição (12/11/2026, escrita por cartão):**
+  `gestorhs_receber` (OS em lote, 1 a 30 aparelhos, **um cartão para o lote**),
+  `gestorhs_avancar_caixa`, `gestorhs_fechar_caixa` (Preparando Retorno →
+  Finalizada, exige o rastreio) e `gestorhs_cadastrar_aparelho`. Spec
+  `docs/superpowers/specs/2026-11-12-guardi-gestorhs-expedicao-design.md`;
+  regra pura em `app/gestorhs_escrita.py`, executores em `app/acoes.py`
+  (ações `receber`, `avancar_caixa`, `fechar_caixa`, `cadastrar_aparelho` —
+  não podem colidir com as do TaskHS: o `cartaoDaAcao` do front despacha pelo
+  nome). Antes do cartão o servidor só LÊ o GestorHS e recusa o que lá seria
+  recusado: aparelho com OS ativa (nomeando a série), caixa fora das fases
+  ativas, Preparando Retorno pedido em "avançar", clientes misturados saindo de
+  Recebido sem `cliente_principal`, série que já existe (dizendo de qual
+  cliente). O cartão mostra o **cliente em cada aparelho** — a série falada
+  pode ser de outro cliente. ⚠️ **Execução do lote: a 1ª OS sem caixa (o
+  GestorHS a cria), as demais com a caixa que voltou dela.** Falha no meio
+  **para e não desfaz** (OS aberta é registro): o `erro` diz "Parou no
+  aparelho N de M", quais OS abriram e em qual caixa — por isso o `erro` da
+  `acoes_pendentes` passou de 300 para 2.000 caracteres. 403 numa escrita vira
+  "a sua função no GestorHS não permite isso" (no avanço, diz qual função
+  avança a fase). Corpo por allowlist de chaves: `sem_nota_fiscal` nunca sai
+  daqui. ⚠️ **Pré-requisito do lado de lá:** a allowlist de token de agente do
+  GestorHS abrir `POST /ordens`, `POST /caixas/{id}/avancar` e `POST
+  /equipamentos-cliente` (seção "Para o GestorHS" da spec), com deploy do
+  `gestorhs-api`. Sem isso toda escrita volta 403. Depois do deploy daqui:
+  `publicar-bots-mcp.py --aplicar` e `criar-bots-pessoais.py
+  --reescrever-agents-md --aplicar --todos`.
 - **A `iris` lê a Inadimplência como o Nicholson** (`np@`, `admin` no
   DataCore; decisão do Erick, 10/11/2026): ferramenta `inadimplencia` no
   `hsos-relatorios`, só dela. Quem pergunta à `iris` não é identificado — se

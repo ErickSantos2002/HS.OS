@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.6.0",
+    date: "2026-11-12",
+    changes: [
+      {
+        kind: "novidade",
+        text: "O Guardi agora ajuda a Expedição no GestorHS: recebe os aparelhos de uma caixa (abrindo as OS de uma vez), avança e fecha caixa com o rastreio, e cadastra aparelho novo — sempre com a sua confirmação.",
+      },
+    ],
+  },
+  {
     version: "2.5.1",
     date: "2026-11-11",
     changes: [

@@ -442,6 +442,19 @@ def test_cadastrar_recusa_serie_existente_e_prepara_a_nova(gestor):
         _ferramenta("gestorhs_cadastrar_aparelho", {"cliente": 1, "equipamento": 3, "serie": "F10"})
 
 
+def test_agents_md_fala_da_escrita_e_cabe_no_teto():
+    """Ferramenta disponível não é ferramenta usada (lição de 14/08 com a skill
+    `faturamento`): sem o ponteiro no AGENTS.md o Guardi diria "só consigo
+    consultar o GestorHS". E o arquivo tem teto de 20.000 caracteres que o
+    gateway corta em silêncio — o que se perde é o último bloco escrito."""
+    from app.bots_pessoais import arquivos_do_bot
+    from app.gateway.client import excede_o_teto
+    a = arquivos_do_bot({"full_name": "Ana Souza", "email": "ana@hs.com"})["AGENTS.md"]
+    trecho = a.split("gestorhs_consultar", 1)[1][:1200]
+    assert "gestorhs_receber" in trecho and "tudo igual" in trecho and "Ana confirma no cartão" in trecho
+    assert not excede_o_teto(a)
+
+
 def test_descricao_do_receber_manda_perguntar_se_veio_tudo_igual():
     """Decisão 3 do Erick: depende do cliente, então nada de assumir. A regra
     mora onde o agente lê — a descrição da ferramenta."""
