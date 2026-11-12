@@ -327,3 +327,18 @@ def test_ferramenta_de_avancar_recusa_sem_cartao(gestor, monkeypatch):
     with pytest.raises(ValueError, match="OS 11700 \\(série F006097\\)"):
         _ferramenta("gestorhs_avancar_caixa", {"caixa": 40})
     assert gestor["pendentes"] == []
+
+
+# --- o AGENTS.md do Guardi --------------------------------------------------------
+
+def test_agents_md_fala_do_certificado_e_cabe_no_teto():
+    """Ferramenta disponível não é ferramenta usada (lição de 14/08 com a skill
+    `faturamento`): sem o ponteiro o Guardi diria "só consigo consultar". E o
+    AGENTS.md tem teto de 20.000 caracteres que o gateway corta em silêncio —
+    o que se perde é o último bloco escrito."""
+    from app.bots_pessoais import arquivos_do_bot
+    from app.gateway.client import excede_o_teto
+    a = arquivos_do_bot({"full_name": "Paulo Lima", "email": "paulo@hs.com"})["AGENTS.md"]
+    trecho = a.split("gestorhs_gerar_certificado", 1)[1][:300]
+    assert "um aparelho por" in trecho and "servidor" in trecho and "Paulo quer avançar a caixa" in trecho
+    assert not excede_o_teto(a)

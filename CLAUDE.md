@@ -839,6 +839,24 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   `gestorhs-api`. Sem isso toda escrita volta 403. Depois do deploy daqui:
   `publicar-bots-mcp.py --aplicar` e `criar-bots-pessoais.py
   --reescrever-agents-md --aplicar --todos`.
+- **GestorHS, fase 2b = Laboratório (12/11/2026, certificado por cartão):**
+  `gestorhs_gerar_certificado`, ação `gerar_certificado`, **um cartão por
+  aparelho**. Spec `docs/superpowers/specs/2026-11-12-guardi-gestorhs-laboratorio-design.md`.
+  Antes do cartão o servidor valida as 5 leituras (vírgula ou ponto, até 3
+  casas, ≤ 9,999 — **"181" é recusado**: é o técnico falando "um oito um"),
+  normaliza para `0,181` e ⚠️ **calcula a média ele mesmo** (`Decimal`,
+  meio-para-cima, 3 casas); o agente não a manda e, se mandar, é ignorada.
+  Temperatura e pressão vão com ponto (`22.0`, `1017.3`, o formato do banco).
+  Lê `/ordens/{id}`, `/certificado-campos` e `/certificados` (só GET): recusa
+  OS fora do Laboratório e tipo M; regerar avisa "substitui" e mostra a data
+  **antiga** (regerar mantém a data e o cilindro congelado). ⚠️ **O corpo nunca
+  leva override de cabeçalho** (`nomecli`, `cnpj`, `serie`…): lista fixa em
+  `_CAMPOS_CERTIFICADO`, e o GestorHS, para token de agente, ignora e preserva
+  o `cert_overrides` (763 OS têm cabeçalho ajustado pela tela). O `gerar`
+  **conclui o aparelho** no laboratório, como na tela; o link do PDF sai do
+  retorno do `gerar` (ou de `/certificados`). Avançar caixa no Laboratório com
+  OS ativa de `desfecho_lab` pendente **recusa sem cartão, listando OS e
+  série** — o GestorHS recusaria no clique só com "faltam N".
 - **A `iris` lê a Inadimplência como o Nicholson** (`np@`, `admin` no
   DataCore; decisão do Erick, 10/11/2026): ferramenta `inadimplencia` no
   `hsos-relatorios`, só dela. Quem pergunta à `iris` não é identificado — se

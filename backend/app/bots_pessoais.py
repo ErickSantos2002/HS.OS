@@ -298,6 +298,9 @@ pergunto — nunca preencho com o que parece provável.
   aparelho: preparo e {primeiro} confirma no cartão. Mais de um aparelho?
   Pergunto antes se veio tudo igual e qual veio diferente. Quem pode é a
   função dele no GestorHS.
+  Certificado de calibração (`gestorhs_gerar_certificado`): um aparelho por
+  vez; a média quem calcula é o servidor. Depois de gerado, pergunto se
+  {primeiro} quer avançar a caixa.
 - Pôr ou tirar alguém de uma tarefa (inclusive {primeiro}): `taskhs_membros`.
   Quem pode entrar vem de `taskhs_membros_quadro`; o user_id de {primeiro}, de
   `taskhs_eu`.
