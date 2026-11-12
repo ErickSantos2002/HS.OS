@@ -885,6 +885,32 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   de agente (`POST /propostas`, `PUT /propostas/{id}`, `GET /propostas/padrao`,
   `/servicos`, `/produtos` e `/empresas/{id}`, que a proposta para filial lê)
   e o `destinatario` restrito para agente (seção "Para o GestorHS" da spec).
+- **HSGrowth (12/11/2026, vendedor):** `hsgrowth_consultas` / `hsgrowth_consultar`
+  (leitura) e escrita por cartão: `hsgrowth_registrar` (pós-ligação: campos,
+  campos personalizados, nota, tarefas criar/alterar/concluir e mover, **um
+  cartão**, nessa ordem, para e não desfaz), `hsgrowth_cliente`,
+  `hsgrowth_criar_lead`, `hsgrowth_ganhar`, `hsgrowth_perder`, `hsgrowth_noshow`.
+  Spec `docs/superpowers/specs/2026-11-12-guardi-hsgrowth-vendas-design.md`;
+  código em `app/sistemas/hsgrowth.py`, `hsgrowth_consultas.py`,
+  `hsgrowth_escrita.py`. ⚠️ **Duas URLs**: `HSGROWTH_API_URL` (API, já com
+  `/api/v1`) e `HSGROWTH_URL` (front, só os links `/cards/<id>`, sempre montados
+  pelo servidor). O "eu" é `GET /users/me`, não `/auth/me`. ⚠️ **Escrita só em
+  card do dono** (`assigned_to_id` ou `sdr_id`), mesmo para admin; card
+  ganho/perdido só aceita nota e tarefa nova; cliente/contato só de card aberto.
+  ⚠️ **Comissão mora nas tarefas:** concluir exige `valida` (realizada × tentativa
+  sem resultado, vale pontos), reunião que não aconteceu é **no-show**, e
+  `alterar` nunca muda `task_type` (fechava o desvio reunião→ligação→concluir).
+  ⚠️ "Parado" é o `is_stuck_3d/7d` do HSGrowth, não a régua do
+  `relatorios-hsgrowth`; `tarefas_atrasadas` é cortada aqui pelo dono (lá o admin
+  vê tudo). **Allowlist dos dois lados**: rota nova só chega ao Guardi no catálogo
+  daqui **e** na allowlist de token de agente do HSGrowth. ⚠️ **Pré-requisito do
+  lado de lá** (seção "Para o HSGrowth" da spec: token de agente, allowlist, dono
+  em toda escrita, "via <bot>"): **nada é ligado antes do deploy do HSGrowth**.
+  Ligar: `--ligar-sistema <bot> hsgrowth` (piloto no `erick-bot`) e depois
+  `--ligar-hsgrowth-vendedores` (só `salesperson`, ensaio sem `--aplicar`).
+  Ordem: deploy do HSGrowth → envs no EasyPanel → deploy do HS.OS →
+  `publicar-bots-mcp.py --aplicar` → `criar-bots-pessoais.py
+  --reescrever-agents-md --aplicar --todos` → piloto → vendedores.
 - **A `iris` lê a Inadimplência como o Nicholson** (`np@`, `admin` no
   DataCore; decisão do Erick, 10/11/2026): ferramenta `inadimplencia` no
   `hsos-relatorios`, só dela. Quem pergunta à `iris` não é identificado — se

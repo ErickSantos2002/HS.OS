@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.9.0",
+    date: "2026-11-12",
+    changes: [
+      {
+        kind: "novidade",
+        text: "O Guardi dos vendedores agora trabalha no CRM: consulta o funil e prepara lead, notas, tarefas e mudança de etapa para você confirmar.",
+      },
+    ],
+  },
+  {
     version: "2.8.0",
     date: "2026-11-12",
     changes: [

@@ -126,11 +126,13 @@ catálogo cobre:
 | clientes e contatos | `GET /clients?search=`, `GET /clients/{id}`, `GET /persons?search=` |
 | CNPJ na Receita | `GET /clients/cnpj/{cnpj}` |
 | parceiro protegendo o CNPJ do card | `GET /cards/{id}/aviso-parcerias` |
-| eu (id, função) | `GET /auth/me` |
+| eu (id, função) | `GET /users/me` |
 
-"Parado" é derivado do que já vem no card (dias na etapa, tarefa pendente); a
-régua exata fica para o construtor, e se `~/projetos/relatorios-hsgrowth/`
-(`cards_parados.py`) já define "parado", **vale a de lá**.
+"Parado" é o `is_stuck_3d/7d` do próprio HSGrowth (a régua do kanban), **não**
+a de `~/projetos/relatorios-hsgrowth/` (decisão da implementação). A leitura de
+`tarefas_atrasadas` é cortada **localmente** pelo dono (o HSGrowth não corta
+para admin) e `meus_cards` usa `minimal=true` com corte local por dono/SDR; o
+link sai sempre do servidor (sobrescreve o que vier).
 
 **Link montado pelo servidor:** `HSGROWTH_URL/cards/<id>`. Duas envs, como no
 GestorHS: `HSGROWTH_API_URL` (as chamadas) e `HSGROWTH_URL` (só os links).
@@ -144,14 +146,17 @@ cartão o que lá seria recusado (dizendo por quê e o que falta), grava em
 
 | ferramenta | o que faz | rota |
 |---|---|---|
+| `hsgrowth_registrar` | o pós-ligação, **um cartão só**: campos do card, campos personalizados, nota, tarefas (criar, alterar, concluir) e mover de etapa — executa nessa ordem, para e não desfaz | `PUT /cards/{id}`, `POST /cards/{id}/fields`, `POST /card-notes`, `POST /card-tasks`, `PUT /card-tasks/{id}`, `PATCH /card-tasks/{id}/complete`, `PUT /cards/{id}/move` |
+| `hsgrowth_cliente` | completar cliente e contato que a etapa pede (setor, relacionamento, porte; e-mail, cargo, área) — só de card aberto do dono | `PUT /clients/{id}`, `PUT /persons/{id}` |
 | `hsgrowth_criar_lead` | lead novo na Prospecção / Lead Novo, com cliente e contato (achando os existentes, ou criando — CNPJ consultado na Receita) | `POST /clients`, `POST /persons`, `POST /cards`, `POST /cards/{id}/person` |
-| `hsgrowth_atualizar` | campos do card (lista fixa) e campos personalizados (só por `field_definition_id` existente) | `PUT /cards/{id}`, `POST /cards/{id}/fields` |
-| `hsgrowth_mover` | uma etapa adiante ou atrás no mesmo quadro | `PUT /cards/{id}/move` |
 | `hsgrowth_ganhar` / `hsgrowth_perder` | fechar o card; perder exige motivo | `POST /cards/{id}/win`, `POST /cards/{id}/lose` |
-| `hsgrowth_cliente` | completar cliente e contato que a etapa pede (setor, relacionamento, porte; e-mail, cargo, área) | `PUT /clients/{id}`, `PUT /persons/{id}` |
-| `hsgrowth_anotar` | nota no card | `POST /card-notes` |
-| `hsgrowth_tarefa` | criar, alterar e concluir tarefa (ligação, reunião, follow-up…) | `POST /card-tasks`, `PUT /card-tasks/{id}`, `PATCH /card-tasks/{id}/complete` |
 | `hsgrowth_noshow` | cliente faltou à reunião | `PATCH /card-tasks/{id}/noshow` |
+
+Regras que a implementação fechou: **concluir tarefa exige `valida`**
+(`is_valid`: realizada × tentativa sem resultado — vale pontos); reunião que
+não aconteceu é no-show; **`alterar` nunca muda `task_type`** (fechava o desvio
+reunião → ligação → concluir, que pagaria comissão); card **ganho ou perdido**
+só aceita nota e tarefa nova; cliente e contato só de card aberto do dono.
 
 Regras do nosso lado (antes do cartão):
 
@@ -196,7 +201,7 @@ Regras do nosso lado (antes do cartão):
 
 - Piloto no `erick-bot` (admin lá) com `--ligar-sistema <bot> hsgrowth`.
 - Depois `--ligar-hsgrowth-vendedores`: liga só quem responde 200 no
-  `/auth/me` **com função `salesperson`** (ensaio sem `--aplicar`). Os outros
+  `/users/me` **com função `salesperson`** (ensaio sem `--aplicar`). Os outros
   donos com conta (Serviços, Lidisay, Welton) **não** são ligados nesta fase —
   ligá-los daria a eles as ferramentas de vendedor antes da fase deles.
 - Ferramenta nova exige `publicar-bots-mcp.py --aplicar` (`FERRAMENTAS_BOT`) e,
@@ -251,7 +256,7 @@ sistemas; o servidor recusa a ferramenta sem o sistema ligado.
    Pular a blacklist/sessão do Redis e o `password_changed_at` para esse
    token (não há sessão; o token vive 5 minutos).
 3. **Allowlist de rotas para token de agente** (qualquer outra, inclusive GET,
-   → 403): as GET do catálogo de leitura acima, `GET /auth/me`, e as escritas
+   → 403): as GET do catálogo de leitura acima, `GET /users/me`, e as escritas
    da tabela de escrita — e só elas. `PUT /clients/{id}` e `PUT /persons/{id}`
    de agente só com cliente/contato ligado a card aberto do dono. Fica de fora, sem precisar lembrar uma por
    uma: `assign`, `DELETE` de card, `reopen`/`reopen-won`, transferências,
