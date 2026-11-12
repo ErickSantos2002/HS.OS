@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import re
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 
 from app.bots_pessoais import _linha
 
@@ -27,7 +28,9 @@ __all__ = ["FASES", "ATIVAS", "TIPOS", "CONDICOES", "ACESSORIOS", "TETO_LOTE",
            "aparelhos_do_lote", "conferir_aparelho", "conferir_caixa_para_receber",
            "conferir_caixa_para_avancar", "conferir_caixa_para_fechar", "conferir_cadastro",
            "texto_lote_parcial", "exibir_texto", "data_de_chegada", "id_positivo",
-           "texto_curto", "TETO_OBS", "serie_chave"]
+           "texto_curto", "TETO_OBS", "serie_chave",
+           "LABORATORIO", "SITUACOES", "TETO_CERT", "N_LEITURAS", "leitura", "media",
+           "numero_ambiente", "conferir_os_para_certificado", "payload_do_certificado"]
 
 # id → (nome, função dona da fase). Conferido no GestorHS em 12/11/2026.
 FASES: dict[int, tuple[str, str | None]] = {
@@ -40,7 +43,7 @@ FASES: dict[int, tuple[str, str | None]] = {
     9: ("Cancelada", None),
 }
 ATIVAS = (4, 5, 6, 10, 7)
-RECEBIDO, PREPARANDO = 4, 7
+RECEBIDO, LABORATORIO, PREPARANDO = 4, 5, 7
 
 TIPOS = {"C": "calibração", "M": "manutenção", "A": "calibração e manutenção"}
 CONDICOES = ("Bom estado", "Com avarias", "Oxidado", "Lacrado", "Sem acessórios")
@@ -270,3 +273,114 @@ def texto_lote_parcial(n_ok: int, total: int, serie_falhou: str, motivo: str,
     return (f"Parou no aparelho {n_ok + 1} de {total} (série {serie_falhou}): {motivo}. "
             f"Já abertas{onde}: OS {abertas}. Nada foi desfeito — os {total - n_ok} restantes "
             "não foram abertos; confira no GestorHS e decida o resto.")
+
+
+# ── Fase 2b: Laboratório (12/11/2026) ────────────────────────────────────────
+# Spec `docs/superpowers/specs/2026-11-12-guardi-gestorhs-laboratorio-design.md`.
+# ⚠️ A média é daqui, nunca do modelo (decisão 2 do Erick). E o payload sai por
+# lista fixa: os campos de override de cabeçalho (`nomecli`, `cnpj`, `serie`…)
+# do `GerarCertificadoIn` nunca entram — 763 OS têm cabeçalho ajustado na tela.
+
+SITUACOES = ("Aparelho subsequente", "Aparelho inicial")   # 2.906 dos 2.909 são o primeiro
+TETO_CERT = 30
+N_LEITURAS = 5
+_TETO_LEITURA = Decimal("9.999")
+_MIL = Decimal("0.001")
+# Vírgula ou ponto obrigatório: "181" é o técnico falando "um oito um".
+_RE_LEITURA = re.compile(r"^(\d*)[.,](\d{1,3})$")
+_RE_NUMERO = re.compile(r"^\d{1,5}(?:[.,]\d{1,3})?$")
+
+
+def _virgula(d: Decimal) -> str:
+    return f"{d.quantize(_MIL, rounding=ROUND_HALF_UP):.3f}".replace(".", ",")
+
+
+def _decimal_da_leitura(valor) -> Decimal:
+    t = valor.strip() if isinstance(valor, str) else ""
+    m = _RE_LEITURA.match(t)
+    if not m:
+        raise ValueError(f"Leitura {valor!r} não é uma leitura: mande como no visor, com vírgula e "
+                         "até 3 casas (ex.: 0,181). Se o técnico falou os dígitos, confirme com ele.")
+    d = Decimal(f"{m.group(1) or '0'}.{m.group(2)}")
+    if d > _TETO_LEITURA:
+        raise ValueError(f"Leitura {valor!r} acima de 9,999: confira com o técnico.")
+    return d
+
+
+def leitura(valor) -> str:
+    """Uma leitura do etilômetro, normalizada para vírgula com 3 casas (`0,181`)."""
+    return _virgula(_decimal_da_leitura(valor))
+
+
+def media(leituras: list[str]) -> str:
+    """Média aritmética das 5 leituras, 3 casas, meio para cima (como à mão)."""
+    if not isinstance(leituras, list) or len(leituras) != N_LEITURAS:
+        raise ValueError(f"São {N_LEITURAS} leituras, nem mais nem menos.")
+    ds = [_decimal_da_leitura(x) for x in leituras]
+    return _virgula(sum(ds) / N_LEITURAS)
+
+
+def numero_ambiente(valor, campo: str) -> str:
+    """Temperatura ou pressão como o técnico disse, gravada com ponto e pelo
+    menos uma casa (`22` → `22.0`, `1017,35` → `1017.35`): o formato do banco."""
+    if isinstance(valor, bool) or valor is None:
+        t = ""
+    elif isinstance(valor, (int, float)):
+        t = str(valor)
+    else:
+        t = str(valor).strip()
+    if not _RE_NUMERO.match(t):
+        raise ValueError(f"`{campo}` tem que ser um número (ex.: 22 ou 1017,3).")
+    t = t.replace(",", ".")
+    return t if "." in t else f"{t}.0"
+
+
+def conferir_os_para_certificado(ordem: dict, campos: dict, certificados) -> dict:
+    """Recebe o GET `/ordens/{id}`, o `/certificado-campos` e o `/certificados`.
+    Recusa fora do Laboratório (o gerar não concluiria nada) e OS só de
+    manutenção (não há leitura). Devolve o `_exibir` do cartão."""
+    ordem, campos = ordem or {}, campos or {}
+    oid = ordem.get("id")
+    if ordem.get("fase") != LABORATORIO:
+        nome = FASES.get(ordem.get("fase"), (None, None))[0] or exibir_texto(ordem.get("fase_descricao")) \
+            or "sem fase"
+        raise ValueError(f"A OS {oid} está em {nome}, não no Laboratório: o certificado pelo Guardi é "
+                         "só para aparelho em calibração.")
+    tipo = ordem.get("tipo_servico")
+    if tipo == "M":
+        raise ValueError(f"A OS {oid} é só de manutenção: não há leitura para registrar. O relatório "
+                         "de manutenção é pela tela do GestorHS.")
+    data = str(campos.get("data_calibracao") or "")[:10] or "hoje"
+    return {"os": oid, "cliente": exibir_texto(ordem.get("cliente_nome")),
+            "modelo": exibir_texto(ordem.get("equipamento_descricao")),
+            "serie": exibir_texto(ordem.get("equipamento_serie")),
+            "data": data, "substitui": bool(_ordens(certificados)),
+            "tipo": TIPOS.get(tipo, exibir_texto(tipo) or "?"), "manutencao": tipo == "A"}
+
+
+def payload_do_certificado(args: dict, ordem_id: int) -> dict:
+    """O corpo do `POST /ordens/{id}/gerar-certificado` (mais a `ordem`)."""
+    args = args or {}
+    cert = args.get("cert")
+    cert = cert.strip() if isinstance(cert, str) else ""
+    if not 1 <= len(cert) <= TETO_CERT or _linha(cert, TETO_CERT + 1) != cert:
+        raise ValueError(f"Informe `cert`, o código do certificado (1 a {TETO_CERT} caracteres, "
+                         "uma linha — ex.: HF02961).")
+    leituras = args.get("leituras")
+    if not isinstance(leituras, list) or len(leituras) != N_LEITURAS:
+        raise ValueError(f"Informe `leituras`: as {N_LEITURAS} leituras, na ordem.")
+    normais = [leitura(x) for x in leituras]
+    situacao = args.get("situacao") or SITUACOES[0]
+    if situacao not in SITUACOES:
+        raise ValueError(f"`situacao` é uma de: {', '.join(SITUACOES)}.")
+    p = {"ordem": _id(ordem_id, "os"), "calib_cert": cert,
+         "calib_temp": numero_ambiente(args.get("temperatura"), "temperatura"),
+         "calib_pressao": numero_ambiente(args.get("pressao"), "pressao")}
+    for i, x in enumerate(normais, 1):
+        p[f"calib_teste{i}"] = x
+    p["calib_teste_media"] = media(normais)
+    p["calib_situacao"] = situacao
+    d = _data(args.get("data_calibracao"), "data_calibracao")
+    if d:
+        p["data_calibracao"] = d
+    return p
