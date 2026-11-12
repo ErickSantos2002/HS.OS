@@ -151,10 +151,28 @@ def test_cliente_e_contato_so_levam_campos_da_allowlist(monkeypatch):
     assert reqs == [("PUT", "/clients/44", {"name": "N"}), ("PUT", "/persons/55", {"phone": "1"})]
 
 
-def test_concluir_tarefa_manda_is_valid(monkeypatch):
-    """O HSGrowth exige `is_valid` ao concluir; sem ele a conclusão fica ambígua."""
-    p = {"card_id": 7, "tarefas": [{"op": "concluir", "task_id": 12}, {"op": "alterar", "task_id": 13, "title": "T", "assigned_to_id": 9}],
+def test_concluir_tarefa_manda_valida_como_veio(monkeypatch):
+    """`is_valid` vale pontos de gamificação: tentativa sem resultado não pode virar "realizada"."""
+    p = {"card_id": 7, "tarefas": [{"op": "concluir", "task_id": 12, "valida": False},
+                                    {"op": "alterar", "task_id": 13, "title": "T", "assigned_to_id": 9}],
          "_exibir": {}}
     _, reqs = _rodar(monkeypatch, "hsgrowth_registrar", p)
-    assert reqs[0] == ("PATCH", "/card-tasks/12/complete", {"is_completed": True, "is_valid": True})
+    assert reqs[0] == ("PATCH", "/card-tasks/12/complete", {"is_completed": True, "is_valid": False})
     assert reqs[1] == ("PUT", "/card-tasks/13", {"title": "T"})
+
+
+def test_concluir_sem_valida_recusa_sem_chamar(monkeypatch):
+    """Sem `valida` o executor presumiria "realizada" e pontuaria uma ligação não atendida."""
+    p = {"card_id": 7, "nota": "x", "tarefas": [{"op": "concluir", "task_id": 12}], "_exibir": {}}
+    out, reqs = _rodar(monkeypatch, "hsgrowth_registrar", p)
+    assert isinstance(out, hsgrowth.ErroSistema) and "realizada" in str(out) and reqs == []
+
+
+def test_lead_sem_id_na_resposta_para_com_mensagem_do_lote(monkeypatch):
+    """Resposta sem `id` virava KeyError e escondia o que já tinha entrado."""
+    r = {("POST", "/clients"): {"id": 44}, ("POST", "/persons"): {"ok": True}}
+    p = {"titulo": "X", "list_id": 6, "cliente": {"campos": {"name": "A"}}, "contato": {"campos": {"name": "B"}},
+         "campos_do_card": {}}
+    out, _ = _rodar(monkeypatch, "hsgrowth_criar_lead", p, r)
+    assert isinstance(out, hsgrowth.ErroSistema)
+    assert "Parou em contato (2 de 3)" in str(out) and "cliente criado" in str(out)

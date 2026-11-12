@@ -11,6 +11,7 @@ from typing import Awaitable, Callable
 
 from app.gestorhs_escrita import texto_lote_parcial
 from app import hsgrowth_escrita as hge
+from app.config import settings
 from app.sistemas import gestorhs, hsgrowth, taskhs
 
 Executor = Callable[..., Awaitable[str]]
@@ -317,7 +318,7 @@ async def _gestorhs_alterar_proposta(email, bot, p, dono=None) -> str:
 #   hsgrowth_registrar: {card_id, campos?, campos_personalizados?: [{field_definition_id, value}],
 #       nota?, tarefas?: [{op:"criar", title, task_type, priority?, due_date?, description?, duration_minutes?}
 #       | {op:"alterar", task_id, title|description|task_type|priority|due_date|duration_minutes}
-#       | {op:"concluir", task_id}], mover_para?: list_id, _exibir: {card, link, aviso?}}
+#       | {op:"concluir", task_id, valida: bool (OBRIGATÓRIO: True=realizada, False=tentativa sem resultado)}], mover_para?: list_id, _exibir: {card, link, aviso?}}
 #   hsgrowth_cliente: {card_id, cliente?: {id, campos}, contato?: {id, campos}, _exibir}
 #   hsgrowth_criar_lead: {titulo, list_id, cliente: {id}|{campos}, contato: {id}|{campos},
 #       campos_do_card, _exibir}   (o CardCreate do HSGrowth aceita `person_id`: sem chamada de vínculo)
@@ -356,6 +357,13 @@ async def _hsg_lote(passos: list, entrou: list, link: str) -> None:
             raise hsgrowth.ErroSistema(
                 e.status, f"Parou em {nome} ({n} de {total}): {msg}. Já entrou: {ja}. "
                           f"Nada foi desfeito.{fim}") from e
+
+
+def _id_ou_erro(r, o_que: str) -> int:
+    i = (r or {}).get("id") if isinstance(r, dict) else None
+    if not i:
+        raise hsgrowth.ErroSistema(502, f"o HSGrowth não devolveu o id do {o_que} criado")
+    return int(i)
 
 
 def _fim(entrou: list, p: dict) -> str:
@@ -400,8 +408,12 @@ async def _hsgrowth_registrar(email, bot, p, dono=None) -> str:
             passo("tarefa", "tarefa alterada", "PUT", f"/card-tasks/{int(t['task_id'])}",
                   _pegar(t, _CAMPOS_TAREFA_ALTERAR))
         elif op == "concluir":
+            # ⚠️ `is_valid` do HSGrowth decide pontos de gamificação: nunca presumido.
+            if not isinstance(t.get("valida"), bool):
+                raise hsgrowth.ErroSistema(0, "cartão sem dizer se a tarefa foi realizada (`valida`); "
+                                              "nada foi enviado ao HSGrowth")
             passo("tarefa", "tarefa concluída", "PATCH", f"/card-tasks/{int(t['task_id'])}/complete",
-                  {"is_completed": True, "is_valid": True})
+                  {"is_completed": True, "is_valid": t["valida"]})
     if p.get("mover_para"):
         passo("mover", "card movido", "PUT", f"/cards/{cid}/move",
               {"target_list_id": int(p["mover_para"])})
@@ -439,7 +451,7 @@ async def _hsgrowth_criar_lead(email, bot, p, dono=None) -> str:
             est["cliente"] = int(cli["id"])
             return
         r = await _hsg(email, bot, dono, "POST", "/clients", _pegar(cli.get("campos") or {}, hge.CAMPOS_CLIENTE))
-        est["cliente"] = int((r or {})["id"])
+        est["cliente"] = _id_ou_erro(r, "cliente")
         entrou.append("cliente criado")
 
     async def f_con():
@@ -448,19 +460,18 @@ async def _hsgrowth_criar_lead(email, bot, p, dono=None) -> str:
             return
         corpo = {**_pegar(con.get("campos") or {}, hge.CAMPOS_CONTATO), "organization_id": est["cliente"]}
         r = await _hsg(email, bot, dono, "POST", "/persons", corpo)
-        est["contato"] = int((r or {})["id"])
+        est["contato"] = _id_ou_erro(r, "contato")
         entrou.append("contato criado")
 
     async def f_card():
         corpo = {**_pegar(p.get("campos_do_card") or {}, hge.CAMPOS_CARD), "title": str(p["titulo"]),
                  "list_id": int(p["list_id"]), "client_id": est["cliente"], "person_id": est["contato"]}
         r = await _hsg(email, bot, dono, "POST", "/cards", corpo)
-        est["card"] = (r or {}).get("id")
-        entrou.append(f"card criado (id {est['card']})" if est["card"] else "card criado")
+        est["card"] = _id_ou_erro(r, "card")
+        entrou.append(f"card criado (id {est['card']})")
 
     await _hsg_lote([("cliente", f_cli), ("contato", f_con), ("card", f_card)], entrou, "")
     txt = "Lead criado no HSGrowth: " + ", ".join(entrou) + "."
-    from app.config import settings
     if est.get("card"):
         txt += f" {settings.HSGROWTH_URL.rstrip('/')}/cards/{est['card']}"
     return txt
