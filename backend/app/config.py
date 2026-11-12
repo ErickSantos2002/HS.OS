@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     # uma pela outra quebra os links ou faz a chamada receber o HTML da SPA.
     GESTORHS_API_URL: str = "https://gestorhsapi.healthsafetytech.com"
     GESTORHS_URL: str = "https://gestorhs.healthsafetytech.com"
+    # HSGrowth (CRM): também DUAS URLs. A API (com prefixo /api/v1) e o front, que
+    # só serve de base dos links `/cards/<id>` que o Guardi entrega.
+    HSGROWTH_API_URL: str = "https://growthhsapi.healthsafetytech.com/api/v1"
+    HSGROWTH_URL: str = "https://hsgrowth.healthsafetytech.com"
 
     # ⚠️ NÃO É MAIS USADO — o storage foi para o R2 em 13/10/2026. Continua
     # declarado só porque o pydantic-settings recusa chave desconhecida no
