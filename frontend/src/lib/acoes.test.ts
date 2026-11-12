@@ -3,7 +3,7 @@
  * um texto livre — os campos estruturados aparecem sempre.
  */
 import { describe, expect, it } from "vitest";
-import { cartaoDaAcao, rotuloAcao } from "./acoes";
+import { cartaoDaAcao, nomeDoSistema, rotuloAcao } from "./acoes";
 
 describe("cartão de ação", () => {
   it("status", () => {
@@ -60,5 +60,60 @@ describe("cartão de ação", () => {
       _exibir: { tarefa: "Mudanças HS.OS", adicionar_em: "Mudanças", excluir: { titulo: "Mudanças", itens: 5 } } });
     expect(c.checklists).toEqual([{ titulo: "Acrescentar em “Mudanças”", itens: [{ texto: "Membros de card" }] }]);
     expect(c.linhas).toEqual([["Excluir checklist", "Mudanças (5 itens)"]]);
+  });
+});
+
+describe("cartão do GestorHS (Expedição)", () => {
+  it("nome do sistema no cabeçalho", () => {
+    expect(nomeDoSistema("gestorhs")).toBe("GestorHS");
+    expect(nomeDoSistema("taskhs")).toBe("TaskHS");
+  });
+  it("receber: o cliente em cada aparelho e o aviso da fase", () => {
+    // A série falada pode ser de aparelho de outro cliente: sem o cliente em
+    // cada linha, a pessoa confirmaria OS no cliente errado.
+    const c = cartaoDaAcao("receber", {
+      caixa: 40, data_chegada: null,
+      aparelhos: [
+        { equipamento_cliente: 5, tipo_servico: "C", condicao_chegada: null, checklist: [8], pilhas: 0, bocais: 2, observacoes: null },
+        { equipamento_cliente: 6, tipo_servico: "M", condicao_chegada: "Com avarias", checklist: [], pilhas: 0, bocais: 0, observacoes: null },
+      ],
+      _exibir: { caixa: "caixa 40", clientes: 2, aviso: "a OS já entra em Laboratório",
+        linhas: [{ cliente: "ACME", modelo: "Phoebus", serie: "F1", acessorios: ["Maleta"] },
+                 { cliente: "Beta Ltda", modelo: "Phoebus", serie: "F2", acessorios: [] }] },
+    });
+    expect(c.verbo).toBe("Receber aparelhos");
+    expect(c.titulo).toBe("Caixa 40");
+    expect(c.linhas).toEqual([["Aparelhos", "2"], ["Clientes", "2 — confira"]]);
+    const itens = c.checklists[0].itens.map((i) => i.texto);
+    expect(itens[0]).toBe("Phoebus · série F1 · ACME · calibração · Maleta · 2 bocais");
+    expect(itens[1]).toContain("Beta Ltda");
+    expect(itens[1]).toContain("Com avarias");
+    expect(c.texto).toEqual({ rotulo: "Atenção", valor: "a OS já entra em Laboratório" });
+  });
+  it("receber em caixa nova, de um cliente só, sem aviso", () => {
+    const c = cartaoDaAcao("receber", { caixa: null,
+      aparelhos: [{ equipamento_cliente: 5, tipo_servico: "A" }],
+      _exibir: { caixa: "caixa nova", clientes: 1, aviso: null, linhas: [{ cliente: "ACME", modelo: "P", serie: "F1" }] } });
+    expect(c.titulo).toBe("Caixa nova");
+    expect(c.linhas).toEqual([["Aparelhos", "1"]]);
+    expect(c.texto).toBeUndefined();
+  });
+  it("avançar caixa", () => {
+    const c = cartaoDaAcao("avancar_caixa", { caixa: 41, cliente_principal: 2,
+      _exibir: { fase: "Recebido", funcao: "Expedição", total_os: 3, cliente_principal: "Beta Ltda" } });
+    expect(c).toMatchObject({ verbo: "Avançar caixa", titulo: "Caixa 41",
+      linhas: [["Fase atual", "Recebido"], ["OS", "3"], ["Cliente principal", "Beta Ltda"]] });
+  });
+  it("fechar caixa mostra o rastreio", () => {
+    const c = cartaoDaAcao("fechar_caixa", { caixa: 42, cod_retorno: "BR123",
+      _exibir: { total_os: 1, clientes: ["ACME"] } });
+    expect(c).toMatchObject({ verbo: "Fechar caixa", titulo: "Caixa 42" });
+    expect(c.linhas[0]).toEqual(["Rastreio", "BR123"]);
+  });
+  it("cadastrar aparelho", () => {
+    const c = cartaoDaAcao("cadastrar_aparelho", { cliente: 1, equipamento: 2, serie: "F9", patrimonio: "P1",
+      _exibir: { cliente: "ACME", modelo: "Phoebus" } });
+    expect(c).toMatchObject({ verbo: "Cadastrar aparelho", titulo: "Série F9",
+      linhas: [["Cliente", "ACME"], ["Modelo", "Phoebus"], ["Patrimônio", "P1"]] });
   });
 });

@@ -46,6 +46,78 @@ const prazo = (x: unknown) => {
 const legivel = (k: string, x: unknown) =>
   k === "priority" ? PRIORIDADE[String(x)] ?? v(x) : k === "due_date" ? prazo(x) : v(x);
 
+/** Nome do sistema no cabeçalho do cartão. */
+const SISTEMA: Record<string, string> = { taskhs: "TaskHS", gestorhs: "GestorHS" };
+export const nomeDoSistema = (s?: string) => (s ? SISTEMA[s] ?? s : "");
+
+const TIPO_SERVICO: Record<string, string> = { C: "calibração", M: "manutenção", A: "calibração e manutenção" };
+const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
+
+interface AparelhoDoLote {
+  equipamento_cliente: number; tipo_servico: string; condicao_chegada?: string | null;
+  checklist?: number[]; pilhas?: number; bocais?: number; observacoes?: string | null;
+}
+interface LinhaDoLote { cliente?: string; modelo?: string; serie?: string; acessorios?: string[] }
+
+/** GestorHS, fase 2a (Expedição, 12/11/2026). Os nomes de ação não colidem com
+ *  os do TaskHS — o despacho daqui é pelo nome. O que vai em cada OS sai do
+ *  `payload` (o que executa); cliente, modelo e série vêm do `_exibir`. */
+function cartaoDoGestorHS(acao: string, p: Record<string, unknown>, ex: Record<string, unknown>): CartaoDaAcao | null {
+  const caixa = (id: unknown) => `Caixa ${v(id)}`;
+  if (acao === "receber") {
+    const aparelhos = (p.aparelhos as AparelhoDoLote[] | undefined) ?? [];
+    const rotulos = (ex.linhas as LinhaDoLote[] | undefined) ?? [];
+    const linhas: [string, string][] = [["Aparelhos", String(aparelhos.length)]];
+    const clientes = Number(ex.clientes ?? 1);
+    // ⚠️ Série falada pode ser de aparelho de outro cliente: com mais de um
+    // cliente no lote, o cartão chama a atenção para conferir linha a linha.
+    if (clientes > 1) linhas.push(["Clientes", `${clientes} — confira`]);
+    if (p.data_chegada) linhas.push(["Chegada", prazo(p.data_chegada)]);
+    const itens = aparelhos.map((a, i) => {
+      const r = rotulos[i] ?? {};
+      const partes = [r.modelo || "aparelho", `série ${r.serie || `id ${a.equipamento_cliente}`}`,
+                      r.cliente || "cliente ?", TIPO_SERVICO[a.tipo_servico] ?? a.tipo_servico];
+      if (a.condicao_chegada) partes.push(a.condicao_chegada);
+      const acess = r.acessorios?.length ? r.acessorios : (a.checklist ?? []).map((n) => `acessório ${n}`);
+      if (acess.length) partes.push(acess.join(", "));
+      if (a.pilhas) partes.push(plural(a.pilhas, "pilha", "pilhas"));
+      if (a.bocais) partes.push(plural(a.bocais, "bocal", "bocais"));
+      if (a.observacoes) partes.push(`obs.: ${a.observacoes}`);
+      return { texto: partes.join(" · ") };
+    });
+    return {
+      verbo: "Receber aparelhos", titulo: p.caixa ? caixa(p.caixa) : "Caixa nova", linhas,
+      checklists: itens.length ? [{ titulo: "Uma OS por aparelho", itens }] : [],
+      texto: ex.aviso ? { rotulo: "Atenção", valor: String(ex.aviso) } : undefined,
+    };
+  }
+  if (acao === "avancar_caixa") {
+    const linhas: [string, string][] = [["Fase atual", v(ex.fase ?? "?")], ["OS", v(ex.total_os ?? "?")]];
+    if (ex.cliente_principal) linhas.push(["Cliente principal", String(ex.cliente_principal)]);
+    return { verbo: "Avançar caixa", titulo: caixa(p.caixa), linhas, checklists: [],
+             texto: p.obs ? { rotulo: "Observação", valor: v(p.obs) } : undefined };
+  }
+  if (acao === "fechar_caixa") {
+    const linhas: [string, string][] = [["Rastreio", v(p.cod_retorno)]];
+    if (ex.total_os != null) linhas.push(["OS", v(ex.total_os)]);
+    const clientes = (ex.clientes as string[] | undefined) ?? [];
+    if (clientes.length) linhas.push([clientes.length === 1 ? "Cliente" : "Clientes", clientes.join(", ")]);
+    return { verbo: "Fechar caixa", titulo: caixa(p.caixa), linhas, checklists: [],
+             texto: p.obs ? { rotulo: "Observação", valor: v(p.obs) } : undefined };
+  }
+  if (acao === "cadastrar_aparelho") {
+    const linhas: [string, string][] = [
+      ["Cliente", ex.cliente ? String(ex.cliente) : `cliente ${v(p.cliente)}`],
+      ["Modelo", ex.modelo ? String(ex.modelo) : `modelo ${v(p.equipamento)}`]];
+    if (p.patrimonio) linhas.push(["Patrimônio", v(p.patrimonio)]);
+    if (p.datacompra) linhas.push(["Compra", prazo(p.datacompra)]);
+    if (p.ult_calibragem) linhas.push(["Última calibração", prazo(p.ult_calibragem)]);
+    if (p.prox_calibragem) linhas.push(["Próxima calibração", prazo(p.prox_calibragem)]);
+    return { verbo: "Cadastrar aparelho", titulo: `Série ${v(p.serie)}`, linhas, checklists: [] };
+  }
+  return null;
+}
+
 /** O cartão em partes separadas — tudo num bloco só confundia (06/11/2026).
  *  Os VALORES vêm do payload (o que o servidor executa); `_exibir` só dá nome
  *  ao que no payload é id (a lista, a tarefa, o item). */
@@ -115,6 +187,8 @@ export function cartaoDaAcao(acao: string, p: Record<string, unknown>): CartaoDa
                    ...(marcados.length ? [{ titulo: "Marcar no checklist", itens: marcados }] : [])],
     };
   }
+  const gestor = cartaoDoGestorHS(acao, p, ex);
+  if (gestor) return gestor;
   return { verbo: acao, titulo: "", checklists: [],
            linhas: Object.entries(p).filter(([k]) => k !== "_exibir").map(([k, x]) => [k, JSON.stringify(x)]) };
 }

@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { CheckSquare, ListTodo, Loader2, Square } from "lucide-react";
 import { ErroApi } from "@/lib/api";
-import { cartaoDaAcao, cancelarAcao, confirmarAcao, rotuloAcao, verAcao, type Acao } from "@/lib/acoes";
+import { cartaoDaAcao, cancelarAcao, confirmarAcao, nomeDoSistema, rotuloAcao, verAcao, type Acao } from "@/lib/acoes";
 
 export default function CartaoAcao({ id }: { id: string }) {
   const [a, setA] = useState<Acao | null>(null);
@@ -37,7 +37,7 @@ export default function CartaoAcao({ id }: { id: string }) {
     <div className="mt-2 w-full max-w-xl overflow-hidden rounded-xl border border-primary/30 bg-card/80 text-sm">
       <div className="flex items-center justify-between gap-2 border-b border-border/30 bg-secondary/20 px-3 py-2">
         <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <ListTodo className="h-3.5 w-3.5 text-primary" /> {a?.sistema === "taskhs" ? "TaskHS" : a?.sistema}{c && ` · ${c.verbo}`}
+          <ListTodo className="h-3.5 w-3.5 text-primary" /> {nomeDoSistema(a?.sistema)}{c && ` · ${c.verbo}`}
         </span>
         {a && <span className={`rounded-full px-2 py-0.5 text-[11px] ${corStatus}`}>{rotuloAcao(a.status)}</span>}
       </div>
