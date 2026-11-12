@@ -16,20 +16,22 @@ Três coisas diferem do GestorHS:
   NUNCA vão ao HSGrowth: `separar_filtros` os tira da query e `filtrar_local` os
   aplica na resposta.
 
-⚠️ "Parado" (`parados_dias`): o relatório `~/projetos/relatorios-hsgrowth/
-cards_parados.py` define parado como >= 7 dias SEM NENHUM toque (atividade, nota ou
-tarefa concluída), olhando as tabelas `activities`, `card_notes` e `card_tasks` —
-dado que o `/cards` NÃO devolve. A resposta de lista só traz `updated_at` (e
-`entered_at_from/to` como filtro remoto, sem o campo de volta); logo `parados_dias`
-é aqui "dias desde `updated_at` >= N", uma aproximação MAIS GENEROSA com o card que
-a régua do relatório. Para a régua exata, o caminho é `card` + `notas`.
+⚠️ "Parado" (`parado=3d|7d`): é a regra do próprio kanban do HSGrowth, as flags
+`is_stuck_3d`/`is_stuck_7d` ("sem movimentação") que o `/cards?minimal=true`
+devolve — por isso `meus_cards` SEMPRE pede `minimal=true`. O relatório
+`~/projetos/relatorios-hsgrowth/cards_parados.py` usa outra régua (7 dias sem
+nenhum toque: atividade, nota ou tarefa concluída); ela NÃO é usada aqui.
+
+⚠️ `filtrar_local` FALHA FECHADO: em `meus_cards` e `tarefas_atrasadas` o corte
+por dono é a única tranca (o HSGrowth não escopa a segunda para admin/gerente);
+resposta num formato inesperado levanta `ValueError` em vez de devolver dados
+sem filtrar.
 
 Puro, testado em `tests/test_guardi_hsgrowth.py`.
 """
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
 
 from app.datacore_consultas import _escalar, texto_do_retorno
 
@@ -44,14 +46,17 @@ _TAREFA = ("overdue", "today", "future", "none")
 _DATA = re.compile(r"^\d{4}-\d{2}-\d{2}([T ][0-9:.+Z-]*)?$")
 
 # Filtros que não vão ao HSGrowth (aplicados em `filtrar_local`).
-_LOCAIS = ("etapa", "tarefa", "parados_dias")
+_LOCAIS = ("etapa", "tarefa", "parado")
+_PARADO = ("3d", "7d")
 # Inteiros que o agente passa como id (o HSGrowth rejeitaria o resto com 422).
 _FILTROS_ID = ("board_id", "organization_id", "etapa")
 _FILTROS_DATA = ("created_at_from", "created_at_to", "entered_at_from", "entered_at_to",
                  "due_date_start", "due_date_end")
 _OBRIGATORIOS = {"meus_cards": ("board_id",), "buscar": ("q",)}
 # Chaves em que o `<eu>` é injetado, e o que vai junto.
-_DO_DONO = {"meus_cards": (("all", "true"),), "minhas_tarefas": ()}
+_DO_DONO = {"meus_cards": (("all", "true"), ("minimal", "true")), "minhas_tarefas": ()}
+# Consultas que exigem o dono mas o filtram só aqui (sem parâmetro remoto).
+_SO_LOCAL = ("tarefas_atrasadas",)
 
 # chave → (caminho no HSGrowth, o que é e para quem, filtros aceitos do agente).
 CONSULTAS: dict[str, tuple[str, str, tuple[str, ...]]] = {
@@ -64,7 +69,8 @@ CONSULTAS: dict[str, tuple[str, str, tuple[str, ...]]] = {
                    "e `entered_at_from`/`entered_at_to` (AAAA-MM-DD; entered = entrou na etapa atual). "
                    "Filtros daqui: `etapa` (id da etapa, de `etapas`), `tarefa` (`overdue` = tarefa "
                    "atrasada, `today` = vence hoje, `future` = só futuras, `none` = sem tarefa "
-                   "pendente) e `parados_dias` (sem atualização há N dias ou mais)",
+                   "pendente) e `parado` (`3d` ou `7d`: o card está parado há mais de 3 ou 7 dias sem movimentação, "
+                   "pela regra do kanban)",
                    ("board_id", "is_won", "is_lost", "created_at_from", "created_at_to",
                     "entered_at_from", "entered_at_to") + _LOCAIS),
     "card": ("/cards/{card_id}/expanded", "um card pelo id: cliente, contato, valor, etapa, tarefas pendentes", ()),
@@ -152,13 +158,13 @@ def params_da_consulta(chave: str, parametros: dict | None,
             v = _inteiro(k, v, 1, 30 if chave == "buscar" else _MAX_PAGINA)
         elif k == "page":
             v = _inteiro(k, v, 1)
-        elif k == "parados_dias":
-            v = _inteiro(k, v, 1)
         elif k in _FILTROS_ID:
             v = _inteiro(k, v, 1, 2**31 - 1)
         elif k in _FILTROS_DATA:
             if not _DATA.match(str(v)):
                 raise ValueError(f"`{k}` inválido: {v} (use AAAA-MM-DD).")
+        elif k == "parado" and v not in _PARADO:
+            raise ValueError(f"`parado` inválido: {v}. Válidos: {', '.join(_PARADO)}.")
         elif k == "tarefa" and v not in _TAREFA:
             raise ValueError(f"`tarefa` inválido: {v}. Válidos: {', '.join(_TAREFA)}.")
         elif k == "q" and len(str(v).strip()) < 2:
@@ -173,6 +179,8 @@ def params_da_consulta(chave: str, parametros: dict | None,
             raise ValueError(f"A consulta {chave} depende do id do dono no HSGrowth.")
         saida.append(("assigned_to_id", str(eu_id)))
         saida.extend(_DO_DONO[chave])
+    if chave in _SO_LOCAL and (eu_id is None or isinstance(eu_id, bool) or not isinstance(eu_id, int)):
+        raise ValueError(f"A consulta {chave} depende do id do dono no HSGrowth.")
     if chave == "quadros":
         saida.append(("category", "vendas"))
     return saida
@@ -196,42 +204,34 @@ def _lista_de(dados, campo: str | None):
     return None, None
 
 
-def _dias_desde(valor, agora: datetime) -> float | None:
-    try:
-        d = datetime.fromisoformat(str(valor).replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if d.tzinfo is None:
-        d = d.replace(tzinfo=timezone.utc)
-    return (agora - d).total_seconds() / 86400
-
-
-def filtrar_local(chave: str, dados, filtros_locais: dict | None, eu_id: int | None,
-                  agora: datetime | None = None):
-    """Aplica na resposta o que não foi ao HSGrowth. Só `meus_cards`: mantém os
-    cards em que o dono é `assigned_to_id` ou `sdr_id` (sempre), e aplica `etapa`
-    (`list_id`), `tarefa` (`pending_tasks_status`) e `parados_dias` (ver o aviso do
-    topo: `updated_at`). Card sem o campo de um filtro pedido NÃO passa."""
-    if chave != "meus_cards":
+def filtrar_local(chave: str, dados, filtros_locais: dict | None, eu_id: int | None):
+    """Aplica na resposta o que não foi ao HSGrowth, FALHANDO FECHADO.
+    `meus_cards`: só cards em que o dono é `assigned_to_id` ou `sdr_id`, mais
+    `etapa` (`list_id`), `tarefa` (`pending_tasks_status`) e `parado`
+    (`is_stuck_3d`/`is_stuck_7d`). `tarefas_atrasadas`: só tarefas com
+    `assigned_to_id` do dono. Formato inesperado ou sem `eu_id`: ValueError."""
+    if chave not in ("meus_cards", "tarefas_atrasadas"):
         return dados
-    itens, campo = _lista_de(dados, _ENVELOPE["meus_cards"])
-    if itens is None:
-        return dados
+    erro = ValueError("resposta inesperada do HSGrowth")
+    if isinstance(eu_id, bool) or not isinstance(eu_id, int):
+        raise ValueError(f"A consulta {chave} depende do id do dono no HSGrowth.")
+    itens, campo = _lista_de(dados, _ENVELOPE.get(chave))
+    if itens is None or not all(isinstance(c, dict) for c in itens):
+        raise erro
     f = filtros_locais or {}
-    agora = agora or datetime.now(timezone.utc)
     saida = []
     for c in itens:
-        if not isinstance(c, dict):
-            continue
-        if eu_id is None or eu_id not in (c.get("assigned_to_id"), c.get("sdr_id")):
-            continue
-        if "etapa" in f and str(c.get("list_id")) != str(f["etapa"]):
-            continue
-        if "tarefa" in f and c.get("pending_tasks_status") != f["tarefa"]:
-            continue
-        if "parados_dias" in f:
-            dias = _dias_desde(c.get("updated_at"), agora)
-            if dias is None or dias < int(f["parados_dias"]):
+        if chave == "tarefas_atrasadas":
+            if c.get("assigned_to_id") != eu_id:
+                continue
+        else:
+            if eu_id not in (c.get("assigned_to_id"), c.get("sdr_id")):
+                continue
+            if "etapa" in f and str(c.get("list_id")) != str(f["etapa"]):
+                continue
+            if "tarefa" in f and c.get("pending_tasks_status") != f["tarefa"]:
+                continue
+            if "parado" in f and c.get(f"is_stuck_{f['parado']}") is not True:
                 continue
         saida.append(c)
     if campo is None:
@@ -240,11 +240,11 @@ def filtrar_local(chave: str, dados, filtros_locais: dict | None, eu_id: int | N
 
 
 def _com_link(item, base: str):
-    if not isinstance(item, dict) or "link" in item:
+    if not isinstance(item, dict):
         return item
     ident = item.get("id")
     if ident is None or isinstance(ident, bool) or not _ID.match(str(ident)):
-        return item
+        return {k: v for k, v in item.items() if k != "link"}   # link de fora é dado externo
     return {**item, "link": f"{base.rstrip('/')}/cards/{ident}"}
 
 

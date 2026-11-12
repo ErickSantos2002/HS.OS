@@ -119,17 +119,38 @@ def test_meus_cards_filtra_etapa_tarefa_e_dono_localmente():
     assert [c["id"] for c in hg.filtrar_local("meus_cards", cards, {}, 3)] == [1, 3, 4, 5]
 
 
-def test_parados_dias_usa_updated_at():
-    """`/cards` não devolve a data de entrada na etapa nem os toques; `updated_at`
-    é o melhor campo. Se o corte inverter, o agente lista como "parado" o card
-    que acabou de ser mexido."""
-    from datetime import datetime, timezone
-    agora = datetime(2026, 11, 12, tzinfo=timezone.utc)
-    cards = [{"id": 1, "assigned_to_id": 3, "updated_at": "2026-11-01T10:00:00"},
-             {"id": 2, "assigned_to_id": 3, "updated_at": "2026-11-11T10:00:00Z"},
+def test_parado_usa_as_flags_do_kanban():
+    """"Parado" é a regra do kanban (`is_stuck_7d`); se o filtro olhasse outro
+    campo, o Guardi listaria como parado o card que a tela mostra em dia."""
+    cards = [{"id": 1, "assigned_to_id": 3, "is_stuck_3d": True, "is_stuck_7d": True},
+             {"id": 2, "assigned_to_id": 3, "is_stuck_3d": True, "is_stuck_7d": False},
              {"id": 3, "assigned_to_id": 3}]
-    r = hg.filtrar_local("meus_cards", cards, {"parados_dias": "7"}, 3, agora=agora)
-    assert [c["id"] for c in r] == [1]
+    assert [c["id"] for c in hg.filtrar_local("meus_cards", cards, {"parado": "7d"}, 3)] == [1]
+    assert [c["id"] for c in hg.filtrar_local("meus_cards", cards, {"parado": "3d"}, 3)] == [1, 2]
+    with pytest.raises(ValueError):
+        hg.params_da_consulta("meus_cards", {"board_id": 1, "parado": "5d"}, eu_id=3)
+    assert ("minimal", "true") in hg.params_da_consulta("meus_cards", {"board_id": 1}, eu_id=3)
+
+
+def test_filtro_local_falha_fechado():
+    """Formato inesperado devolvido sem corte seria o funil (ou as tarefas) do
+    time inteiro entregue ao Guardi de uma pessoa."""
+    for chave in ("meus_cards", "tarefas_atrasadas"):
+        for ruim in ({"detail": "x"}, "texto", None, [1, 2]):
+            with pytest.raises(ValueError, match="resposta inesperada do HSGrowth"):
+                hg.filtrar_local(chave, ruim, {}, 3)
+
+
+def test_tarefas_atrasadas_so_do_dono():
+    """O HSGrowth não escopa `/card-tasks/overdue` para admin/gerente: sem o
+    corte local o Guardi leria as tarefas atrasadas de todo mundo."""
+    tarefas = [{"id": 1, "assigned_to_id": 3}, {"id": 2, "assigned_to_id": 9}]
+    assert [t["id"] for t in hg.filtrar_local("tarefas_atrasadas", tarefas, {}, 3)] == [1]
+    with pytest.raises(ValueError):
+        hg.filtrar_local("tarefas_atrasadas", tarefas, {}, None)
+    with pytest.raises(ValueError):
+        hg.params_da_consulta("tarefas_atrasadas", None, eu_id=None)
+    assert hg.params_da_consulta("tarefas_atrasadas", None, eu_id=3) == []
 
 
 def test_link_do_card_e_montado_pelo_servidor():
@@ -142,3 +163,11 @@ def test_link_do_card_e_montado_pelo_servidor():
     r = hg.com_links("buscar", {"vendas": [{"id": 9}], "servico": [{"id": 4}]}, base)
     assert r["vendas"][0]["link"] == "https://hs.x/cards/9" and "link" not in r["servico"][0]
     assert "link" not in hg.com_links("clientes", [{"id": 1}], base)[0]
+
+
+def test_link_de_fora_e_sobrescrito():
+    """`link` vindo do HSGrowth é dado externo (campo livre): o agente
+    entregaria à pessoa um endereço que não é o do servidor."""
+    r = hg.com_links("card", {"id": 7, "link": "https://evil"}, "https://hs.x")
+    assert r["link"] == "https://hs.x/cards/7"
+    assert "link" not in hg.com_links("card", {"id": "../x", "link": "https://evil"}, "https://hs.x")
