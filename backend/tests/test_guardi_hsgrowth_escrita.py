@@ -178,7 +178,7 @@ def test_opcao_fora_da_lista_lista_as_opcoes():
     with pytest.raises(ValueError, match="Até 50 colaboradores"):
         h.campos_do_cliente({"employee_count": "Ate 50"})
     with pytest.raises(ValueError, match="Fornecedor"):
-        h.campos_do_cliente({"relationship_type": "Amigo"})
+        h.campos_do_cliente({"relationship_type": "Amigo"}, {})
 
 
 def test_texto_de_terceiro_em_uma_linha():
@@ -188,3 +188,36 @@ def test_texto_de_terceiro_em_uma_linha():
     assert "\n" not in s and len(s) <= 80
     assert len(h.uma_linha("y" * 300, 30)) <= 30
     assert h.digitos("12.345-6") == "123456"
+
+
+def test_tarefa_alterar_ou_concluir_exige_tipos_e_pertencer_ao_card():
+    """Sem os tipos lidos do card a regra da reunião não rodava (fail-open), e id de
+    tarefa de outro card seria alterado/concluído."""
+    for op in ({"op": "concluir", "task_id": 7}, {"op": "alterar", "task_id": 7, "title": "x"}):
+        with pytest.raises(ValueError, match="tipos_das_tarefas"):
+            h.tarefas([op])
+        with pytest.raises(ValueError, match="não é deste card"):
+            h.tarefas([op], {8: "call"})
+
+
+def test_relationship_type_exige_cliente_atual():
+    """Sem o cliente atual não dá para saber se é Cliente sendo rebaixado."""
+    with pytest.raises(ValueError, match="atual"):
+        h.campos_do_cliente({"relationship_type": "Lead"})
+
+
+def test_definicao_com_tipo_errado_e_valueerror():
+    """Lista/dict como id estourava TypeError (500) em vez de mensagem ao vendedor."""
+    defs = [{"id": 1, "name": "A"}]
+    for ruim in ([1], {}, 3.0, True):
+        with pytest.raises(ValueError):
+            h.campos_personalizados([{"field_definition_id": ruim, "value": 1}], defs)
+
+
+def test_movimento_aquisicao_com_origem_desconhecida_e_valor_finito():
+    """Origem fora das etapas pularia a checagem de salto; NaN/inf em value vira JSON inválido."""
+    with pytest.raises(ValueError, match="etapa atual"):
+        h.conferir_movimento({"board_id": 7, "list_id": 999}, ETAPAS, 11)
+    for ruim in (float("nan"), float("inf")):
+        with pytest.raises(ValueError):
+            h.campos_do_card({"value": ruim})

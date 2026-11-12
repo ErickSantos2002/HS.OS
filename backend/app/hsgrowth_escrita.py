@@ -12,6 +12,7 @@ Testado em `tests/test_guardi_hsgrowth_escrita.py`.
 """
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -147,7 +148,7 @@ def campos_do_card(d: dict) -> dict:
         elif k == "description":
             out[k] = _texto(v, k, 10000, 0)
         elif k == "value":
-            if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0:
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0:
                 raise ValueError("`value` tem que ser um número maior ou igual a zero.")
             out[k] = v
         elif k == "due_date":
@@ -184,8 +185,8 @@ def campos_personalizados(itens: list, definicoes: list[dict]) -> list[dict]:
         if not isinstance(it, dict) or "value" not in it:
             raise ValueError("Cada campo personalizado leva `field_definition_id` e `value`.")
         if "field_definition_id" in it:
-            fid = it["field_definition_id"]
-            if isinstance(fid, bool) or fid not in por_id:
+            fid = _inteiro(it["field_definition_id"], "field_definition_id")
+            if fid not in por_id:
                 raise ValueError(f"Campo personalizado {uma_linha(fid)} não existe neste "
                                  f"quadro. Disponíveis: {disponiveis}.")
         else:
@@ -233,6 +234,10 @@ def tarefas(ops: list, tipos_das_tarefas: dict[int, str] | None = None) -> list[
         raise ValueError("Diga quais tarefas criar, alterar ou concluir.")
     if len(ops) > TETO_TAREFAS:
         raise ValueError(f"No máximo {TETO_TAREFAS} tarefas por cartão.")
+    if tipos_das_tarefas is None and any(
+            isinstance(o, dict) and o.get("op") in ("concluir", "alterar") for o in ops):
+        raise ValueError("Para alterar ou concluir tarefa é preciso conferir as tarefas "
+                         "do card (`tipos_das_tarefas`).")
     out = []
     for op in ops:
         if not isinstance(op, dict):
@@ -242,6 +247,8 @@ def tarefas(ops: list, tipos_das_tarefas: dict[int, str] | None = None) -> list[
             out.append({"op": "criar", **_campos_tarefa(op, True)})
         elif tipo == "alterar":
             tid = _inteiro(op.get("task_id"), "task_id")
+            if tid not in tipos_das_tarefas:
+                raise ValueError(f"A tarefa {tid} não é deste card.")
             campos = _campos_tarefa(op, False)
             if not campos:
                 raise ValueError(f"Tarefa {tid}: diga o que alterar "
@@ -250,8 +257,9 @@ def tarefas(ops: list, tipos_das_tarefas: dict[int, str] | None = None) -> list[
         elif tipo == "concluir":
             tid = _inteiro(op.get("task_id"), "task_id")
             aconteceu = op.get("aconteceu") is True
-            if tipos_das_tarefas is not None:
-                conferir_conclusao(tipos_das_tarefas.get(tid), aconteceu)
+            if tid not in tipos_das_tarefas:
+                raise ValueError(f"A tarefa {tid} não é deste card.")
+            conferir_conclusao(tipos_das_tarefas[tid], aconteceu)
             item = {"op": "concluir", "task_id": tid}
             if aconteceu:
                 item["aconteceu"] = True
@@ -302,8 +310,9 @@ def conferir_movimento(card: dict, etapas: list[dict], para_list_id: int) -> str
         fila = sorted((e for e in etapas if e.get("board_id") == 7 and not terminal(e)),
                       key=lambda e: e.get("position", 0))
         ids = [e["id"] for e in fila]
-        if card.get("list_id") in ids and abs(ids.index(para_list_id)
-                                              - ids.index(card["list_id"])) > 1:
+        if card.get("list_id") not in ids:
+            raise ValueError("Não achei a etapa atual do card no quadro; não movo às cegas.")
+        if abs(ids.index(para_list_id) - ids.index(card["list_id"])) > 1:
             raise ValueError("Na Aquisição o card anda uma etapa por vez.")
     if board == 6 and str(destino.get("name", "")).strip().lower() == "agendado":
         return ("o HSGrowth leva o card para Reunião Agendada, na Aquisição, ao "
@@ -346,6 +355,8 @@ def campos_do_cliente(d: dict, atual: dict | None = None) -> dict:
     """`atual` (o cliente lido) permite recusar tirar alguém de "Cliente"."""
     if not isinstance(d, dict) or not d:
         raise ValueError("Diga o que alterar no cliente.")
+    if "relationship_type" in d and atual is None:
+        raise ValueError("Para mudar `relationship_type` é preciso o cliente atual (`atual`).")
     fora = [k for k in d if k not in CAMPOS_CLIENTE]
     if fora:
         raise ValueError(f"Não altero {', '.join(f'`{k}`' for k in fora)} no cliente. "
