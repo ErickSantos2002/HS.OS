@@ -114,7 +114,7 @@ fase 1 (agente escolhe consulta, nunca caminho; link do servidor:
 
 | consulta | rota |
 |---|---|
-| quadros e etapas | `/service-boards`, `/service-boards/{b}/lists` |
+| `quadros`, `etapas` | `/service-boards`, `/service-boards/{b}/lists` |
 | cards do quadro (filtros locais: etapa, `pendencia` overdue/today/future/none, `parado` 3d/7d, `cobranca` a_vencer/atrasados, `colaborador` = eu) | `/service-boards/{b}/cards` (pagina até 500; o servidor lê as páginas que precisar, com teto) |
 | um card (com produtos, serviços, `business_info`) | `/service-boards/{b}/cards/{c}` + `/products` + `/services` |
 | atividades e anotações do card | `/service-boards/{b}/cards/{c}/activities` |
@@ -188,6 +188,38 @@ Regras do nosso lado:
   `acoes_pendentes` (o front despacha pelo nome).
 - Mesmas guardas do `hsos-bot-<bot>` e mesmos saneamentos (`uma_linha`) da fase 1.
 
+## Como ficou (decisões da construção, o código é a verdade)
+
+Nomes finais das consultas: `quadros`, `etapas`, `cards`, `card`, `atividades`,
+`pendencias`, `buscar`, `catalogo_aparelhos`, `catalogo_servicos`, `painel`,
+`clientes`, `contatos`. Ferramentas de escrita: `hsgrowth_servicos_registrar`,
+`_itens`, `_ganhar`, `_perder`, `_anexar_proposta`; leitura:
+`hsgrowth_servicos_consultas` / `hsgrowth_servicos_consultar`. Cliente e contato
+ficaram no `registrar` (`campos.client_id`/`person_id`).
+
+- **`contact_info` nunca é editado** pelo Guardi.
+- **Quadro conferido por nós:** o HSGrowth ignora o `board_id` nas rotas de card;
+  o Guardi confere que a `list_id` do card é etapa do quadro dado, no preparo
+  **e** no clique.
+- **Etapa reconferida no clique:** `de` diferente da atual → recusa, nada é
+  gravado. Uma etapa adiante ou atrás, conferido aqui para todos, admin incluído.
+- **Ganho segue a regra mais estrita da tela**, não a da API; o cartão avisa
+  da caixa do GestorHS indo ao Financeiro.
+- **Card ganho/perdido:** só aceita atividade e anotação novas; `itens` e
+  `anexar_proposta` são recusados.
+- **Conferência da proposta:** aviso de outro cliente por dígitos do CNPJ lidos
+  de `GET /clients/{id}` (o `GET` do card não traz documento); busca
+  `GET /propostas?q=` com `page_size` 100 e `numero` exato.
+- **Download do PDF:** só https nos hosts de `GESTORHS_API_URL`/`GESTORHS_URL`,
+  porta 443, sem userinfo, sem redirecionamento, 10 MB, confere que é PDF;
+  baixado no preparo (recusa cedo) e de novo no clique. O GestorHS monta o
+  `link_pdf` com o `CERT_PUBLIC_BASE_URL` dele: se esse host for outro em
+  produção, o anexo recusa (o piloto mostra).
+- **Retorno embrulhado:** o que as ferramentas devolvem com texto externo passa
+  por `como_dado_externo` (`_preparado`), também nas de GestorHS e Vendas.
+- **Ligar:** `--ligar-sistema <bot> hsgrowth_servicos` (piloto) e
+  `--ligar-hsgrowth-servicos` (só `service`, ensaio sem `--aplicar`).
+
 ## Fora da fase 2
 
 - Apagar card, clonar, reabrir (mover de ganho/perdido de volta), editar
@@ -224,7 +256,9 @@ Regras do nosso lado:
 4. Rotas de item (produto/serviço) conferirem que o item é do card (vale para
    todo mundo — hoje não confere).
 5. "via <bot>" na atividade (`ServiceCardActivity`) quando vier de token de agente.
-6. Testes: agente `service` move com regra; `PUT` com `list_id` → 403; `DELETE`
+6. Rotas de card de serviço devem usar `get_card_in_board` (hoje ignoram o
+   `board_id`; o Guardi confere do seu lado, mas a rota deveria recusar).
+7. Testes: agente `service` move com regra; `PUT` com `list_id` → 403; `DELETE`
    do card → 403; item de outro card → 404.
 
 ## Restrições

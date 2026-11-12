@@ -914,6 +914,33 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   Ordem: deploy do HSGrowth → envs no EasyPanel → deploy do HS.OS →
   `publicar-bots-mcp.py --aplicar` → `criar-bots-pessoais.py
   --reescrever-agents-md --aplicar --todos` → piloto → vendedores.
+- **HSGrowth — Serviços (12/11/2026):** sistema `hsgrowth_servicos` (separado do
+  `hsgrowth`), quadros 1 (Serviços) e 2 (Cobrança), para quem é `service` lá.
+  `hsgrowth_servicos_consultas` / `_consultar` e escrita por cartão:
+  `_registrar` (negócio, campos, atividades, anotação e mover UMA etapa, nessa
+  ordem, para e não desfaz), `_itens`, `_ganhar`, `_perder`, `_anexar_proposta`.
+  Spec `docs/superpowers/specs/2026-11-12-guardi-hsgrowth-servicos-design.md`;
+  código em `app/hsgrowth_servicos_{consultas,escrita,preparo}.py` e executores
+  em `app/acoes.py`. ⚠️ **Card de Serviços não tem dono**: é colaborativo, a
+  função `service` lá é a permissão (sem regra de "card do dono"). ⚠️ **O
+  HSGrowth ignora o `board_id` nas rotas de card**: o Guardi confere a `list_id`
+  do card contra as etapas do quadro no preparo **e** no clique. ⚠️ **Mover**:
+  sempre por `/move`, uma etapa adiante ou atrás (conferido aqui até para admin),
+  e no clique a etapa atual tem de ser a de origem do cartão, senão recusa sem
+  gravar. ⚠️ **`business_info` é substituído inteiro lá**: o executor relê o card
+  no clique e mescla só as chaves do cartão; `contact_info` nunca é tocado. ⚠️
+  **Ganho** segue a regra da tela (mais estrita que a API) e o cartão avisa que
+  o ganho avisa o GestorHS e a caixa vai ao Financeiro; card ganho/perdido só
+  aceita atividade/anotação nova. ⚠️ **Anexar proposta**: o PDF vem do GestorHS
+  (`link_pdf`), só https nos hosts de `GESTORHS_API_URL`/`GESTORHS_URL`, 443, sem
+  redirecionamento, 10 MB, conferido como PDF, baixado no preparo e no clique;
+  se o `CERT_PUBLIC_BASE_URL` do GestorHS for outro host em produção, recusa.
+  ⚠️ Retornos com texto externo saem por `como_dado_externo`. **Pré-requisito do
+  lado de lá** (seção "Para o HSGrowth" da spec, soma à de Vendas, incluindo
+  `get_card_in_board` nas rotas de card): nada é ligado antes do deploy do
+  HSGrowth. Ligar: `--ligar-sistema <bot> hsgrowth_servicos` (piloto no
+  `erick-bot`) e `--ligar-hsgrowth-servicos` (só `service`, ensaio sem
+  `--aplicar`); mesma ordem de produção de Vendas.
 - **A `iris` lê a Inadimplência como o Nicholson** (`np@`, `admin` no
   DataCore; decisão do Erick, 10/11/2026): ferramenta `inadimplencia` no
   `hsos-relatorios`, só dela. Quem pergunta à `iris` não é identificado — se
