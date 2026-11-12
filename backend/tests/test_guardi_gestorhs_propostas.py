@@ -507,3 +507,19 @@ def test_alterar_403_diz_quem_pode(chave, monkeypatch):
     _servidor(monkeypatch, lambda r, n: httpx.Response(403, json={}))
     with pytest.raises(gestorhs.ErroSistema, match="Comercial Pós-Vendas"):
         _executar("alterar_proposta", {"proposta": 500, "corpo": {"frete": 0}})
+
+
+# --- o AGENTS.md do Guardi --------------------------------------------------------
+
+def test_agents_md_fala_das_propostas_e_cabe_no_teto():
+    """Ferramenta disponível não é ferramenta usada (lição de 14/08 com a skill
+    `faturamento`): sem o ponteiro o Guardi diria "só consigo consultar
+    propostas". E o AGENTS.md tem teto de 20.000 caracteres que o gateway corta
+    em silêncio — o que se perde é o último bloco escrito."""
+    from app.bots_pessoais import arquivos_do_bot
+    from app.gateway.client import excede_o_teto
+    a = arquivos_do_bot({"full_name": "Ellen Souza", "email": "ellen@hs.com"})["AGENTS.md"]
+    assert "gestorhs_criar_proposta" in a and "gestorhs_alterar_proposta" in a
+    trecho = a.split("gestorhs_alterar_proposta", 1)[1][:200]
+    assert "lembretes para Ellen" in trecho and "cadastro do cliente" in trecho
+    assert not excede_o_teto(a)

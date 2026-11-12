@@ -857,6 +857,34 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   retorno do `gerar` (ou de `/certificados`). Avançar caixa no Laboratório com
   OS ativa de `desfecho_lab` pendente **recusa sem cartão, listando OS e
   série** — o GestorHS recusaria no clique só com "faltam N".
+- **GestorHS, fase 2c = propostas (12/11/2026, Serviços):**
+  `gestorhs_criar_proposta` e `gestorhs_alterar_proposta`, ações
+  `criar_proposta`/`alterar_proposta`. Spec
+  `docs/superpowers/specs/2026-11-12-guardi-gestorhs-propostas-design.md`;
+  regras puras em `app/gestorhs_propostas.py`. A pessoa conta o pedido; o
+  servidor monta pelo padrão e devolve **lembretes** (frete fora da tabela ou
+  estado desconhecido, lacunas do Phoebus, preço fora do catálogo, desconto,
+  pagamento diferente da última proposta do mesmo destinatário, aparelho
+  vencendo fora da proposta, entrega fora do cadastro). ⚠️ **Lembrete não
+  trava** — é linha no cartão e no retorno ao agente, que os lê à pessoa.
+  ⚠️ **O padrão vem do GestorHS** (`GET /propostas/padrao?modelos=&series=`:
+  observação, validade, frete por região, UF → região e os dois
+  `outros_itens`) e **nunca é copiado para cá**; sem a rota, a ferramenta
+  recusa. Item só do catálogo (`/servicos` + `/produtos`, consultas
+  `servicos`/`produtos`): sku inexistente ou repetido é recusado, nunca
+  chutado. Total e frete em `Decimal`, do servidor; Phoebus = frete 0.
+  ⚠️ **Nunca toca no cadastro:** o `destinatario` do GestorHS escreve no
+  cliente e sincroniza com o **Tiny**, então o `POST` leva só `{tipo, id}` e o
+  `PUT` nunca o leva (lista fixa em `app/acoes.py`; trocar cliente é pela
+  tela). ⚠️ **O `PUT` substitui listas:** itens e aparelhos vão sempre como a
+  lista INTEIRA resultante. Alterar recusa faturada e desabilitada antes do
+  cartão, e só refaz o `outros_itens` se os aparelhos mudaram **e** o texto
+  ainda é o do modelo — editado na tela vira lembrete, não é sobrescrito.
+  Endereço de entrega vai como `{"texto": …}`, o formato que a tela edita.
+  ⚠️ **Pré-requisito do lado de lá:** a rota do padrão, a allowlist de token
+  de agente (`POST /propostas`, `PUT /propostas/{id}`, `GET /propostas/padrao`,
+  `/servicos`, `/produtos` e `/empresas/{id}`, que a proposta para filial lê)
+  e o `destinatario` restrito para agente (seção "Para o GestorHS" da spec).
 - **A `iris` lê a Inadimplência como o Nicholson** (`np@`, `admin` no
   DataCore; decisão do Erick, 10/11/2026): ferramenta `inadimplencia` no
   `hsos-relatorios`, só dela. Quem pergunta à `iris` não é identificado — se

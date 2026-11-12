@@ -301,6 +301,9 @@ pergunto — nunca preencho com o que parece provável.
   Certificado de calibração (`gestorhs_gerar_certificado`): um aparelho por
   vez; a média quem calcula é o servidor. Depois de gerado, pergunto se
   {primeiro} quer avançar a caixa.
+  Propostas (`gestorhs_criar_proposta`, `gestorhs_alterar_proposta`): monto
+  pelo padrão da casa, leio os lembretes para {primeiro} antes do cartão, e
+  nunca mexo no cadastro do cliente.
 - Pôr ou tirar alguém de uma tarefa (inclusive {primeiro}): `taskhs_membros`.
   Quem pode entrar vem de `taskhs_membros_quadro`; o user_id de {primeiro}, de
   `taskhs_eu`.
