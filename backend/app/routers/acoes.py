@@ -94,7 +94,7 @@ async def confirmar_acao(acao_id: str, usuario: Usuario = Depends(usuario_atual)
         if falha:
             await conn.execute("UPDATE public.acoes_pendentes SET status = 'erro', erro = $2, "
                                "decidido_em = now() WHERE id = $1::uuid AND status = 'pendente'",
-                               acao_id, falha[:300])
+                               acao_id, falha[:2000])
         else:
             await conn.execute("UPDATE public.acoes_pendentes SET status = 'feita', resultado = $2, "
                                "decidido_em = now() WHERE id = $1::uuid AND status = 'pendente'",

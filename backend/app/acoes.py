@@ -9,7 +9,8 @@ from __future__ import annotations
 import json
 from typing import Awaitable, Callable
 
-from app.sistemas import taskhs
+from app.gestorhs_escrita import texto_lote_parcial
+from app.sistemas import gestorhs, taskhs
 
 Executor = Callable[..., Awaitable[str]]
 
@@ -123,12 +124,101 @@ async def _taskhs_membros(email, bot, p, dono=None) -> str:
     return "; ".join(feito) + "." + (" " + "; ".join(falhou) + "." if falhou else "")
 
 
+# ── GestorHS, fase 2a (Expedição, 12/11/2026) ────────────────────────────────
+# Spec `docs/superpowers/specs/2026-11-12-guardi-gestorhs-expedicao-design.md`.
+# ⚠️ Corpo por allowlist de chaves, nunca `**p`: o `payload` também leva o
+# `_exibir` do cartão, e `sem_nota_fiscal` (exceção de Administrador) não pode
+# chegar ao GestorHS nem por um payload adulterado.
+
+_CAMPOS_OS = ("equipamento_cliente", "tipo_servico", "condicao_chegada", "checklist", "pilhas",
+              "bocais", "observacoes")
+
+
+async def _gestorhs_receber(email, bot, p, dono=None) -> str:
+    """A 1ª OS vai sem caixa (o GestorHS cria; o número é o id) ou com a caixa
+    informada; as demais, com a caixa que voltou da 1ª — é isso que as junta.
+    ⚠️ Falha no meio PARA e diz o que abriu: não desfaz (OS aberta é registro)."""
+    itens = list(p.get("aparelhos") or [])
+    linhas = list((p.get("_exibir") or {}).get("linhas") or [])
+    caixa = int(p["caixa"]) if p.get("caixa") else None
+    abertas: list[int] = []
+    for k, item in enumerate(itens):
+        corpo = {c: item[c] for c in _CAMPOS_OS if item.get(c) is not None}
+        if p.get("data_chegada"):
+            corpo["data_chegada"] = p["data_chegada"]
+        if caixa:
+            corpo["caixa"] = caixa
+        serie = (linhas[k].get("serie") if k < len(linhas) else None) or f"id {item.get('equipamento_cliente')}"
+        try:
+            r = await gestorhs.chamar(email, bot, "/ordens", metodo="POST", json=corpo, dono=dono)
+        except gestorhs.ErroSistema as e:
+            if not abertas:
+                raise
+            raise gestorhs.ErroSistema(e.status, texto_lote_parcial(
+                len(abertas), len(itens), serie, str(e), abertas, caixa)) from e
+        abertas.append(int((r or {}).get("id") or 0))
+        caixa = caixa or (r or {}).get("caixa")
+        if not caixa and k + 1 < len(itens):
+            # Sem a caixa da 1ª, as outras nasceriam cada uma na sua.
+            raise gestorhs.ErroSistema(0, texto_lote_parcial(
+                len(abertas), len(itens), (linhas[k + 1].get("serie") if k + 1 < len(linhas) else "?"),
+                "o GestorHS não devolveu a caixa da primeira OS", abertas, None))
+    lista = ", ".join(str(o) for o in abertas)
+    n = len(abertas)
+    return f"{n} OS {'aberta' if n == 1 else 'abertas'} na caixa {caixa}: OS {lista}."
+
+
+def _sem_funcao(e: "gestorhs.ErroSistema", ex: dict) -> "gestorhs.ErroSistema":
+    """403 no avanço: diz QUAL função avança aquela fase — "não permite" sozinho
+    deixaria a pessoa sem saber a quem pedir."""
+    if e.status == 403 and ex.get("fase") and ex.get("funcao"):
+        return gestorhs.ErroSistema(403, f"a sua função no GestorHS não permite isso: quem avança caixa "
+                                         f"em {ex['fase']} é {ex['funcao']} (ou Administrador)")
+    return e
+
+
+async def _gestorhs_avancar(email, bot, p, dono=None) -> str:
+    cid = int(p["caixa"])
+    corpo = {k: p[k] for k in ("obs", "cliente_principal") if p.get(k) is not None}
+    try:
+        r = await gestorhs.chamar(email, bot, f"/caixas/{cid}/avancar", metodo="POST", json=corpo, dono=dono)
+    except gestorhs.ErroSistema as e:
+        raise _sem_funcao(e, p.get("_exibir") or {}) from e
+    fase = (r or {}).get("fase_descricao")
+    return f"Caixa {cid} avançada para {fase}." if fase else f"Caixa {cid} avançada."
+
+
+async def _gestorhs_fechar(email, bot, p, dono=None) -> str:
+    cid = int(p["caixa"])
+    corpo = {k: p[k] for k in ("cod_retorno", "obs") if p.get(k) is not None}
+    try:
+        await gestorhs.chamar(email, bot, f"/caixas/{cid}/avancar", metodo="POST", json=corpo, dono=dono)
+    except gestorhs.ErroSistema as e:
+        raise _sem_funcao(e, {"fase": "Preparando Retorno", "funcao": "Expedição"}) from e
+    return f"Caixa {cid} finalizada, rastreio {p['cod_retorno']}."
+
+
+_CAMPOS_APARELHO = ("cliente", "equipamento", "serie", "patrimonio", "datacompra", "ult_calibragem",
+                    "prox_calibragem")
+
+
+async def _gestorhs_cadastrar(email, bot, p, dono=None) -> str:
+    corpo = {k: p[k] for k in _CAMPOS_APARELHO if p.get(k) is not None}
+    r = await gestorhs.chamar(email, bot, "/equipamentos-cliente", metodo="POST", json=corpo, dono=dono)
+    ident = (r or {}).get("id")
+    return f"Aparelho cadastrado (id {ident})." if ident else "Aparelho cadastrado."
+
+
 EXECUTORES: dict[tuple[str, str], Executor] = {
     ("taskhs", "comentar"): _taskhs_comentar,
     ("taskhs", "mover"): _taskhs_mover,
     ("taskhs", "criar"): _taskhs_criar,
     ("taskhs", "atualizar"): _taskhs_atualizar,
     ("taskhs", "membros"): _taskhs_membros,
+    ("gestorhs", "receber"): _gestorhs_receber,
+    ("gestorhs", "avancar_caixa"): _gestorhs_avancar,
+    ("gestorhs", "fechar_caixa"): _gestorhs_fechar,
+    ("gestorhs", "cadastrar_aparelho"): _gestorhs_cadastrar,
 }
 
 

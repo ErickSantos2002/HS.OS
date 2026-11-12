@@ -118,3 +118,164 @@ def test_texto_do_lote_parcial():
     OS já existem, ela repetiria o lote inteiro e levaria 409 nos que abriram."""
     t = ge.texto_lote_parcial(2, 5, "F3", "aparelho já possui OS ativa", [100, 101], 40)
     assert t.startswith("Parou no aparelho 3 de 5") and "OS 100, 101" in t and "caixa 40" in t
+
+
+# --- executores no clique ---------------------------------------------------------
+
+import asyncio  # noqa: E402
+import json  # noqa: E402
+
+import httpx  # noqa: E402
+from cryptography.hazmat.primitives import serialization as s  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey  # noqa: E402
+
+from app import acoes  # noqa: E402
+from app import agente_token as at  # noqa: E402
+from app.sistemas import gestorhs  # noqa: E402
+
+
+@pytest.fixture
+def chave(monkeypatch):
+    k = Ed25519PrivateKey.generate()
+    pem = k.private_bytes(s.Encoding.PEM, s.PrivateFormat.PKCS8, s.NoEncryption()).decode()
+    monkeypatch.setattr(at.settings, "AGENTE_CHAVE_PRIVADA", pem)
+    return k
+
+
+def _servidor(monkeypatch, responder):
+    """GestorHS falso: `responder(req, n)` → httpx.Response; devolve as requisições."""
+    reqs = []
+
+    def h(req):
+        reqs.append(req)
+        return responder(req, len(reqs))
+    monkeypatch.setattr(gestorhs, "_transporte", httpx.MockTransport(h))
+    return reqs
+
+
+def _corpo(req):
+    return json.loads(req.content) if req.content else None
+
+
+def _lote(n):
+    return {"caixa": None, "data_chegada": None,
+            "aparelhos": [{"equipamento_cliente": i, "tipo_servico": "C", "condicao_chegada": None,
+                           "checklist": [], "pilhas": 0, "bocais": 0, "observacoes": None}
+                          for i in range(1, n + 1)],
+            "_exibir": {"linhas": [{"cliente": "ACME", "modelo": "Phoebus", "serie": f"F{i}"}
+                                   for i in range(1, n + 1)], "caixa": "nova", "aviso": None,
+                        "clientes": 1}}
+
+
+def _executar(acao, p):
+    return asyncio.run(acoes.EXECUTORES[("gestorhs", acao)]("ana@hs.com", "ana-bot", p))
+
+
+def test_receber_abre_a_primeira_sem_caixa_e_as_demais_na_dela(chave, monkeypatch):
+    """Decisão 2 do Erick: a 1ª OS cria a caixa; mandar caixa nas outras é o que
+    as junta. Mandar a caixa na 1ª (inexistente) ou omiti-la nas outras daria
+    uma caixa por aparelho."""
+    reqs = _servidor(monkeypatch, lambda r, n: httpx.Response(201, json={"id": 99 + n, "caixa": 40}))
+    r = _executar("receber", _lote(3))
+    assert [q.method for q in reqs] == ["POST"] * 3 and all(q.url.path == "/ordens" for q in reqs)
+    corpos = [_corpo(q) for q in reqs]
+    assert "caixa" not in corpos[0]
+    assert corpos[1]["caixa"] == 40 and corpos[2]["caixa"] == 40
+    assert [c["equipamento_cliente"] for c in corpos] == [1, 2, 3]
+    assert "caixa 40" in r and "OS 100, 101, 102" in r
+
+
+def test_receber_em_caixa_existente_manda_a_caixa_desde_a_primeira(chave, monkeypatch):
+    """Chegou mais um da mesma remessa: sem a caixa na 1ª, o aparelho iria para
+    uma caixa nova, separado dos irmãos."""
+    reqs = _servidor(monkeypatch, lambda r, n: httpx.Response(201, json={"id": 200 + n, "caixa": 77}))
+    p = {**_lote(2), "caixa": 77, "data_chegada": "2026-11-12"}
+    _executar("receber", p)
+    assert all(_corpo(q)["caixa"] == 77 and _corpo(q)["data_chegada"] == "2026-11-12" for q in reqs)
+
+
+def test_receber_para_no_meio_e_diz_o_que_abriu(chave, monkeypatch):
+    """OS aberta é registro: desfazer sozinho apagaria o que a Expedição já
+    etiquetou. Para, diz quais abriram e em qual caixa, e a pessoa decide."""
+    def resp(r, n):
+        if n == 3:
+            return httpx.Response(409, json={"detail": "aparelho já possui OS ativa"})
+        return httpx.Response(201, json={"id": 99 + n, "caixa": 40})
+    reqs = _servidor(monkeypatch, resp)
+    with pytest.raises(gestorhs.ErroSistema) as e:
+        _executar("receber", _lote(3))
+    t = str(e.value)
+    assert t.startswith("Parou no aparelho 3 de 3") and "OS 100, 101" in t and "caixa 40" in t
+    assert "F3" in t and "OS ativa" in t
+    assert len(reqs) == 3 and all(q.method == "POST" for q in reqs)
+
+
+def test_receber_falha_no_primeiro_relanca(chave, monkeypatch):
+    """Nada abriu: o erro do GestorHS vai como está (ex.: a função do dono), sem
+    um "parou no 1 de 5" que faria parecer que algo foi feito."""
+    _servidor(monkeypatch, lambda r, n: httpx.Response(403, json={}))
+    with pytest.raises(gestorhs.ErroSistema) as e:
+        _executar("receber", _lote(2))
+    assert "sua função no GestorHS" in str(e.value) and "Parou" not in str(e.value)
+
+
+def test_erro_longo_nao_e_cortado_em_300():
+    """O texto do lote parcial é o que a pessoa usa para decidir o resto: cortado,
+    ela não saberia quais OS já existem (30 OS são ~250 caracteres só de números)."""
+    import pathlib
+    import re
+    fonte = (pathlib.Path(__file__).resolve().parents[1] / "app" / "routers" / "acoes.py").read_text()
+    cortes = [int(n) for n in re.findall(r"falha\[:(\d+)\]", fonte)]
+    assert cortes and min(cortes) >= 2000
+    t = ge.texto_lote_parcial(29, 30, "F" * 60, "x" * 200, list(range(10000, 10029)), 12345)
+    assert len(t) < 2000
+
+
+def test_avancar_403_diz_quem_avanca(chave, monkeypatch):
+    """Quem avança é a função dona da fase: "não permite" sozinho deixaria a
+    pessoa sem saber a quem pedir."""
+    _servidor(monkeypatch, lambda r, n: httpx.Response(403, json={}))
+    p = {"caixa": 7, "_exibir": {"fase": "Laboratório", "funcao": "Laboratório", "total_os": 2,
+                                 "clientes": ["ACME"]}}
+    with pytest.raises(gestorhs.ErroSistema) as e:
+        _executar("avancar_caixa", p)
+    assert "Laboratório" in str(e.value) and e.value.status == 403
+
+
+def test_avancar_devolve_a_fase_nova(chave, monkeypatch):
+    reqs = _servidor(monkeypatch, lambda r, n: httpx.Response(200, json={"id": 7, "fase": 5,
+                                                                          "fase_descricao": "Laboratório"}))
+    r = _executar("avancar_caixa", {"caixa": 7, "cliente_principal": 33, "obs": "ok",
+                                    "_exibir": {"fase": "Recebido", "funcao": "Expedição"}})
+    assert reqs[0].url.path == "/caixas/7/avancar"
+    assert _corpo(reqs[0]) == {"obs": "ok", "cliente_principal": 33}
+    assert r == "Caixa 7 avançada para Laboratório."
+
+
+def test_payload_nunca_leva_sem_nota_fiscal(chave, monkeypatch):
+    """`sem_nota_fiscal` é exceção de Administrador para caixa antiga, fora da
+    fase 2a: um payload adulterado não pode fazê-la passar pelo corpo."""
+    reqs = _servidor(monkeypatch, lambda r, n: httpx.Response(200, json={"fase_descricao": "Finalizada"}))
+    for acao, p in (("avancar_caixa", {"caixa": 7, "sem_nota_fiscal": True, "_exibir": {}}),
+                    ("fechar_caixa", {"caixa": 7, "cod_retorno": "BR1", "sem_nota_fiscal": True,
+                                      "_exibir": {}})):
+        _executar(acao, p)
+    assert len(reqs) == 2 and all("sem_nota_fiscal" not in _corpo(q) for q in reqs)
+
+
+def test_fechar_manda_o_rastreio(chave, monkeypatch):
+    reqs = _servidor(monkeypatch, lambda r, n: httpx.Response(200, json={"fase_descricao": "Finalizada"}))
+    r = _executar("fechar_caixa", {"caixa": 1247, "cod_retorno": "BR123", "_exibir": {}})
+    assert reqs[0].url.path == "/caixas/1247/avancar" and _corpo(reqs[0]) == {"cod_retorno": "BR123"}
+    assert r == "Caixa 1247 finalizada, rastreio BR123."
+
+
+def test_cadastrar_manda_o_payload_sem_exibir(chave, monkeypatch):
+    """O `_exibir` é rótulo do cartão: indo no corpo, o GestorHS recusaria (ou
+    pior, um campo de mesmo nome passaria a valer)."""
+    reqs = _servidor(monkeypatch, lambda r, n: httpx.Response(201, json={"id": 9001}))
+    r = _executar("cadastrar_aparelho", {"cliente": 1, "equipamento": 2, "serie": "F9",
+                                         "_exibir": {"cliente": "ACME", "modelo": "Phoebus"}})
+    assert reqs[0].url.path == "/equipamentos-cliente"
+    assert _corpo(reqs[0]) == {"cliente": 1, "equipamento": 2, "serie": "F9"}
+    assert r == "Aparelho cadastrado (id 9001)."
