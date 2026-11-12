@@ -144,6 +144,33 @@ def test_401_fala_da_conta_do_dono(chave, monkeypatch):
     assert "conta ativa no GestorHS" in str(e.value) and e.value.status == 401
 
 
+def test_escrita_vai_com_metodo_e_corpo_e_403_fala_da_funcao(chave, monkeypatch):
+    """Fase 2a: o mesmo cliente escreve (abrir OS, avançar caixa, cadastrar).
+    O 403 numa escrita é a FUNÇÃO do dono no GestorHS (Consulta tentando abrir
+    OS), não "o Guardi não pode ver": a mensagem da leitura mandaria a pessoa
+    pedir acesso de leitura, que ela já tem."""
+    reqs = []
+
+    def h(req):
+        reqs.append(req)
+        return httpx.Response(200, json={"id": 100, "caixa": 40})
+    monkeypatch.setattr(gestorhs, "_transporte", httpx.MockTransport(h))
+    r = asyncio.run(gestorhs.chamar("ana@hs.com", "ana-bot", "/ordens", metodo="POST",
+                                    json={"equipamento_cliente": 5}))
+    assert r == {"id": 100, "caixa": 40}
+    assert reqs[0].method == "POST" and reqs[0].url.path == "/ordens"
+    import json as _json
+    assert _json.loads(reqs[0].content) == {"equipamento_cliente": 5}
+
+    monkeypatch.setattr(gestorhs, "_transporte", httpx.MockTransport(lambda r: httpx.Response(403, json={})))
+    with pytest.raises(gestorhs.ErroSistema) as e:
+        asyncio.run(gestorhs.chamar("ana@hs.com", "ana-bot", "/ordens", metodo="POST", json={}))
+    assert "sua função no GestorHS" in str(e.value) and e.value.status == 403
+    with pytest.raises(gestorhs.ErroSistema) as e:
+        asyncio.run(gestorhs.chamar("ana@hs.com", "ana-bot", "/caixas/7"))
+    assert "não deixa o Guardi ver" in str(e.value)      # na leitura, a mensagem da fase 1
+
+
 # --- as ferramentas no hsos-bot-<bot> --------------------------------------------
 
 _CTX = {"sistemas": ["gestorhs"], "email": "ana@hs.com", "dono": None, "primeiro": "Ana"}
