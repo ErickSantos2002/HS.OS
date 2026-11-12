@@ -209,7 +209,8 @@ def gestor(chave, monkeypatch):
         if req.method != "GET":
             return httpx.Response(500, json={"detail": "escrita antes do cartão"})
         if req.url.path in estado["leituras"]:
-            return httpx.Response(200, json=estado["leituras"][req.url.path])
+            resp = estado["leituras"][req.url.path]
+            return httpx.Response(200, json=resp(req) if callable(resp) else resp)
         return httpx.Response(404, json={"detail": "não encontrado"})
     monkeypatch.setattr(gestorhs, "_transporte", httpx.MockTransport(h))
 
@@ -378,3 +379,131 @@ def test_403_diz_quem_pode(chave, monkeypatch):
 def test_descricao_manda_nao_calcular_e_perguntar():
     d = next(f for f in FERRAMENTAS if f["name"] == "gestorhs_criar_proposta")["description"]
     assert "não calcule" in d and "pergunte" in d and "lembretes" in d and "NÃO executa" in d
+
+
+# --- alterar ----------------------------------------------------------------------
+
+def _proposta(**mudar):
+    p = {"id": 500, "numero": 1234, "cliente": 7, "empresa": None, "cliente_nome": "ACME Transportes",
+         "destinatario": {"tipo": "cliente", "id": 7, "nome": "ACME Transportes", "estado": "PE"},
+         "itens": [{"id": 1, "descricao": CAT[0]["nome"], "sku": "312", "quantidade": 2, "unidade": "UN",
+                    "preco_un": 395, "total": 790}],
+         "aparelhos": [{"id": 11, "equipamento_cliente": 70, "serie": "F1", "modelo": "Alcoolímetro X"},
+                       {"id": 12, "equipamento_cliente": 73, "serie": "F3", "modelo": "Alcoolímetro X"}],
+         "frete": 150, "desconto": 0, "total": 940, "condicao_pagamento": "30 dias", "validade_dias": 30,
+         "outros_itens": "<p>Aparelhos:&nbsp;F1, F3</p>", "faturada": False, "is_deleted": False}
+    return {**p, **mudar}
+
+
+def _padrao_por_serie(req):
+    """O GestorHS monta o `outros_itens` com as séries pedidas: é isso que faz o
+    texto do modelo antigo ser diferente do novo."""
+    series = req.url.params.get("series", "")
+    return {**PADRAO, "outros_itens": {"padrao": f"<p>Aparelhos: {series}</p>", "phoebus": "<p>PHOEBUS</p>"}}
+
+
+@pytest.fixture
+def com_proposta(gestor):
+    gestor["leituras"]["/propostas/500"] = _proposta()
+    gestor["leituras"]["/propostas/padrao"] = _padrao_por_serie
+    return gestor
+
+
+def test_ferramenta_de_alterar_no_guardi():
+    assert "gestorhs_alterar_proposta" in FERRAMENTAS_BOT
+    assert "gestorhs_alterar_proposta" in {f["name"] for f in FERRAMENTAS}
+    assert ("gestorhs", "alterar_proposta") in acoes.EXECUTORES
+
+
+def test_remover_aparelho_manda_a_lista_inteira_restante(com_proposta):
+    """O `PUT` do GestorHS SUBSTITUI a lista: mandar só o removido (ou só o que
+    fica, sem os outros) apagaria aparelhos da proposta do cliente. E o texto
+    de outros itens, ainda o do modelo, é refeito com as séries que ficaram."""
+    t = _ferramenta("gestorhs_alterar_proposta", {"proposta": 500, "remover_aparelhos": [73]})
+    _s, acao, payload, resumo = com_proposta["pendentes"][0]
+    assert acao == "alterar_proposta" and payload["proposta"] == 500
+    corpo = payload["corpo"]
+    assert corpo["aparelhos"] == [{"equipamento_cliente": 70}]
+    assert corpo["outros_itens"] == "<p>Aparelhos: F1</p>"
+    assert "itens" not in corpo and "destinatario" not in corpo and "frete" not in corpo
+    ex = payload["_exibir"]
+    assert ex["aparelhos_saem"] == ["Alcoolímetro X · série F3"] and ex["aparelhos_entram"] == []
+    assert ex["numero"] == 1234 and ex["cliente"] == "ACME Transportes"
+    assert ex["total_antes"] == 940 and ex["total_depois"] == 940
+    assert resumo == "Alterar a proposta 1234 (ACME Transportes)"
+    assert "Aguardando Ellen confirmar" in t
+    assert all(q.method == "GET" for q in com_proposta["reqs"])
+
+
+def test_trocar_itens_manda_a_lista_nova_e_mostra_o_total(com_proposta):
+    _ferramenta("gestorhs_alterar_proposta", {"proposta": 500, "itens": [{"sku": "312", "quantidade": 3}],
+                                              "condicao_pagamento": "60 dias"})
+    payload = com_proposta["pendentes"][0][2]
+    assert payload["corpo"]["itens"] == [{"descricao": CAT[0]["nome"], "sku": "312", "quantidade": 3.0,
+                                          "unidade": "UN", "preco_un": 395.0}]
+    assert payload["corpo"]["condicao_pagamento"] == "60 dias" and "aparelhos" not in payload["corpo"]
+    ex = payload["_exibir"]
+    assert ex["total_antes"] == 940 and ex["total_depois"] == 1335
+    assert ["Pagamento", "30 dias", "60 dias"] in ex["mudancas"]
+    assert ex["itens_entram"] == [f"3 × {CAT[0]['nome']} — R$ 395,00"]
+    assert ex["itens_saem"] == [f"2 × {CAT[0]['nome']} — R$ 395,00"]
+
+
+def test_adicionar_aparelho_de_outro_cliente_recusa(com_proposta):
+    with pytest.raises(ValueError, match="F9"):
+        _ferramenta("gestorhs_alterar_proposta", {"proposta": 500, "adicionar_aparelhos": [71]})
+    with pytest.raises(ValueError, match="não está na proposta"):
+        _ferramenta("gestorhs_alterar_proposta", {"proposta": 500, "remover_aparelhos": [70, 99]})
+    assert com_proposta["pendentes"] == []
+
+
+def test_faturada_e_desabilitada_recusam(com_proposta):
+    """Desabilitada o GestorHS recusa no clique (409); faturada é assunto do
+    Financeiro — mudar o valor dela desalinha a nota que já saiu."""
+    com_proposta["leituras"]["/propostas/500"] = _proposta(faturada=True)
+    with pytest.raises(mcp_bot._Recusa, match="faturada"):
+        _ferramenta("gestorhs_alterar_proposta", {"proposta": 500, "condicao_pagamento": "60 dias"})
+    com_proposta["leituras"]["/propostas/500"] = _proposta(is_deleted=True)
+    with pytest.raises(mcp_bot._Recusa, match="desabilitada"):
+        _ferramenta("gestorhs_alterar_proposta", {"proposta": 500, "condicao_pagamento": "60 dias"})
+    assert com_proposta["pendentes"] == []
+
+
+def test_texto_editado_nao_e_sobrescrito_e_vira_lembrete(com_proposta):
+    """Alguém escreveu na tela o que combinou com o cliente: refazer pelo
+    modelo apagaria isso do PDF sem ninguém ver."""
+    com_proposta["leituras"]["/propostas/500"] = _proposta(
+        outros_itens="<p>Aparelhos: F1, F3</p><p>combinado com o João: retirada na sexta</p>")
+    _ferramenta("gestorhs_alterar_proposta", {"proposta": 500, "remover_aparelhos": [73]})
+    payload = com_proposta["pendentes"][0][2]
+    assert "outros_itens" not in payload["corpo"]
+    assert any("editado na tela" in x for x in payload["_exibir"]["lembretes"])
+
+
+def test_alteracao_nunca_leva_destinatario(com_proposta, monkeypatch):
+    """Trocar o cliente é pela tela; e no `PUT` o `destinatario` reescreveria o
+    cadastro. Nem o agente o manda, nem um payload adulterado o leva."""
+    with pytest.raises(ValueError, match="tela"):
+        _ferramenta("gestorhs_alterar_proposta", {"proposta": 500, "destinatario": {"tipo": "cliente", "id": 8}})
+    reqs = _servidor(monkeypatch, lambda r, n: httpx.Response(
+        200, json={"id": 500, "numero": 1234, "link_pdf": "https://pdf/1234"}))
+    r = _executar("alterar_proposta", {"proposta": 500, "corpo": {
+        "condicao_pagamento": "60 dias", "destinatario": {"tipo": "cliente", "id": 7, "nome": "X"},
+        "vendedor": "Outro", "_exibir": {}}, "_exibir": {"numero": 1234}})
+    assert reqs[0].method == "PUT" and reqs[0].url.path == "/propostas/500"
+    assert json.loads(reqs[0].content) == {"condicao_pagamento": "60 dias"}
+    assert r == "Proposta 1234 alterada (versão anterior guardada). PDF: https://pdf/1234"
+
+
+def test_nada_a_alterar(com_proposta):
+    """Cartão sem mudança gera uma versão nova no GestorHS a cada clique."""
+    for args in ({"proposta": 500}, {"proposta": 500, "condicao_pagamento": "30 dias", "frete": 150}):
+        with pytest.raises(mcp_bot._Recusa, match="Nada a alterar"):
+            _ferramenta("gestorhs_alterar_proposta", args)
+    assert com_proposta["pendentes"] == []
+
+
+def test_alterar_403_diz_quem_pode(chave, monkeypatch):
+    _servidor(monkeypatch, lambda r, n: httpx.Response(403, json={}))
+    with pytest.raises(gestorhs.ErroSistema, match="Comercial Pós-Vendas"):
+        _executar("alterar_proposta", {"proposta": 500, "corpo": {"frete": 0}})

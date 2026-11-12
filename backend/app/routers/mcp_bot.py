@@ -253,6 +253,21 @@ FERRAMENTAS = [
            "aparelhos": {"type": "array", "items": _INT, "maxItems": gp.TETO_APARELHOS,
                          "description": "ids dos aparelhos da frota do cliente (não a série)"}},
        ("destinatario", "itens")),
+    _f("gestorhs_alterar_proposta", "Alterar uma proposta que já existe no GestorHS (o cliente pediu "
+       "mudança). `proposta` é o id, não o número: ache com gestorhs_consultar propostas q=<número>. "
+       "Mande só o que muda. `itens`, se vier, é a lista NOVA inteira (os que ficam e os novos, cada um "
+       "com o `sku` do catálogo); aparelhos mudam por `adicionar_aparelhos` e `remover_aparelhos` "
+       "(ids da frota) — o servidor monta a lista inteira. Não calcule total nem frete: o cartão "
+       "mostra o antes e o depois, e o GestorHS guarda a versão anterior. Trocar o cliente não é "
+       "aqui, é pela tela. O retorno traz os lembretes: leia-os para o seu dono antes de ele "
+       "confirmar." + _CONFIRMA,
+       _PROPOSTA_PROPS | {
+           "proposta": {"type": "integer", "description": "o id da proposta (não o número)"},
+           "itens": {**_PROPOSTA_ITENS, "description": "a lista NOVA inteira de itens"},
+           "adicionar_aparelhos": {"type": "array", "items": _INT, "maxItems": gp.TETO_APARELHOS},
+           "remover_aparelhos": {"type": "array", "items": _INT, "maxItems": gp.TETO_APARELHOS},
+           "validade_dias": {"type": "integer", "minimum": 1, "maximum": 365}},
+       ("proposta",)),
     _f("taskhs_minhas", "As tarefas (cards) em que o seu dono é membro." + _DADO,
        {"abertas": {"type": "boolean", "description": "true (padrão): só as em aberto"}}),
     _f("taskhs_quadros", "Os quadros do TaskHS que o seu dono pode abrir." + _DADO),
@@ -1242,9 +1257,148 @@ async def _preparar_criar_proposta(ctx: dict, bot: str, args: dict) -> tuple[dic
     return payload, resumo
 
 
+# Campo → (rótulo no cartão, é dinheiro?). Só os que o agente pode mudar.
+_MUDA_NA_PROPOSTA = {"desconto": ("Desconto", True), "frete": ("Frete", True),
+                     "condicao_pagamento": ("Pagamento", False), "contato": ("Contato", False),
+                     "intro": ("Introdução", False), "validade_dias": ("Validade", False),
+                     "data_entrega": ("Data de entrega", False),
+                     "descricao_entrega": ("Descrição da entrega", False)}
+
+
+def _como_no_cartao(campo: str, valor, dinheiro: bool) -> str:
+    if valor in (None, ""):
+        return "em branco"
+    if dinheiro:
+        return gp.reais(valor)
+    if campo == "validade_dias":
+        return f"{valor} dias"
+    return gw.exibir_texto(valor)
+
+
+async def _preparar_alterar_proposta(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
+    """Lê a proposta, aplica o pedido e monta o `PUT` só com o que muda.
+    ⚠️ Itens e aparelhos vão como a lista INTEIRA resultante: o `PUT` do GestorHS
+    substitui a lista, e mandar só o removido apagaria o resto."""
+    if args.get("destinatario") is not None:
+        raise ValueError("Trocar o cliente (ou a empresa) de uma proposta é pela tela do GestorHS, não "
+                         "pela alteração.")
+    pid = gw.id_positivo(args.get("proposta"), "proposta")
+    if args.get("itens") is not None:
+        gp.forma_dos_itens(args["itens"])
+    add = gp.aparelhos_ids(args.get("adicionar_aparelhos"), "adicionar_aparelhos")
+    rem = gp.aparelhos_ids(args.get("remover_aparelhos"), "remover_aparelhos")
+    campos = {k: x for k, x in gp.campos_do_pedido(args, validade=True).items() if x is not None}
+    prop = await _gestorhs_ler(ctx, bot, f"/propostas/{pid}",
+                               f"A proposta id {pid} não existe no GestorHS — o id não é o número: ache com "
+                               "gestorhs_consultar propostas q=<número>.") or {}
+    numero = prop.get("numero") or pid
+    if prop.get("is_deleted"):
+        raise _Recusa(f"A proposta {numero} está desabilitada: não muda mais até um Administrador reativá-la.")
+    if prop.get("faturada"):
+        raise _Recusa(f"A proposta {numero} já está faturada: alterar é assunto do Financeiro, pela tela.")
+    dest_salvo = prop.get("destinatario") if isinstance(prop.get("destinatario"), dict) else {}
+    cliente = gw.exibir_texto(prop.get("cliente_nome") or dest_salvo.get("nome")) or f"proposta {numero}"
+    uf = str(dest_salvo.get("estado") or "").strip().upper() or None
+    matriz = prop.get("cliente")
+
+    catalogo = await _catalogo_de_propostas(ctx, bot)
+    antes = gp.itens_atuais(prop.get("itens"), catalogo)
+    itens = gp.itens_do_pedido(args["itens"], catalogo) if args.get("itens") is not None else antes
+
+    atuais = [a for a in prop.get("aparelhos") or [] if isinstance(a, dict) and a.get("equipamento_cliente")]
+    ids_atuais = [int(a["equipamento_cliente"]) for a in atuais]
+    for a in rem:
+        if a not in ids_atuais:
+            raise ValueError(f"O aparelho id {a} não está na proposta {numero} — veja os aparelhos dela com "
+                             "gestorhs_consultar proposta.")
+    for a in add:
+        if a in ids_atuais:
+            raise ValueError(f"O aparelho id {a} já está na proposta {numero}.")
+    if set(add) & set(rem):
+        raise ValueError("O mesmo aparelho não pode entrar e sair na mesma alteração.")
+    linhas_atuais = [{"id": int(a["equipamento_cliente"]), "modelo": gw.exibir_texto(a.get("modelo")),
+                      "serie": gw.exibir_texto(a.get("serie")) or f"id {a['equipamento_cliente']}"} for a in atuais]
+    linhas_add = await _linhas_dos_aparelhos(ctx, bot, add, matriz)
+    linhas = [x for x in linhas_atuais if x["id"] not in rem] + linhas_add
+    aparelhos_mudaram = bool(add or rem)
+
+    corpo: dict = {}
+    mudancas: list[list[str]] = []
+    if gp.itens_mudaram(antes, itens):
+        corpo["itens"] = gp.corpo_dos_itens(itens)
+    if aparelhos_mudaram:
+        corpo["aparelhos"] = [{"equipamento_cliente": x["id"]} for x in linhas]
+    for k, (rotulo, eh_dinheiro) in _MUDA_NA_PROPOSTA.items():
+        if k not in campos:
+            continue
+        atual = prop.get(k)
+        novo = campos[k]
+        if eh_dinheiro:
+            igual = Decimal(str(atual or 0)) == novo
+        elif k == "data_entrega":
+            igual = str(atual or "")[:10] == novo
+        else:
+            igual = str(atual if atual is not None else "") == str(novo)
+        if igual:
+            continue
+        corpo[k] = float(novo) if eh_dinheiro else novo
+        mudancas.append([rotulo, _como_no_cartao(k, atual, eh_dinheiro), _como_no_cartao(k, novo, eh_dinheiro)])
+    entrega = campos.get("endereco_entrega")
+    atual_entrega = (prop.get("endereco_entrega") or {}) if prop.get("endereco_entrega_diferente") else {}
+    if entrega and entrega.get("texto") != (atual_entrega or {}).get("texto"):
+        corpo["endereco_entrega_diferente"] = True
+        corpo["endereco_entrega"] = entrega
+        mudancas.append(["Endereço de entrega", gw.exibir_texto((atual_entrega or {}).get("texto")) or "o do cadastro",
+                         gw.exibir_texto(entrega["texto"])])
+
+    phoebus = gp.eh_phoebus(itens)
+    padrao = await _padrao_das_propostas(ctx, bot, linhas)
+    extra: list[str] = []
+    outros = prop.get("outros_itens") or ""
+    if aparelhos_mudaram:
+        antigo = await _padrao_das_propostas(ctx, bot, linhas_atuais)
+        if gp.texto_ainda_e_do_modelo(outros, antigo):
+            novo_texto = gp.outros_itens_padrao(padrao, phoebus)
+            if novo_texto and not gp.mesmo_texto(novo_texto, outros):
+                corpo["outros_itens"] = outros = novo_texto
+                mudancas.append(["Outros itens", "modelo dos aparelhos antigos", "refeito para os aparelhos novos"])
+        else:
+            extra.append("O texto de outros itens foi editado na tela: confira modelo e séries (não mexi nele).")
+    if not corpo:
+        raise _Recusa(f"Nada a alterar na proposta {numero}: o que foi pedido já é o que ela tem.")
+
+    frete = Decimal(str(corpo.get("frete", prop.get("frete") or 0)))
+    desconto = Decimal(str(corpo.get("desconto", prop.get("desconto") or 0)))
+    tabela = gp.frete_padrao(padrao, uf, phoebus)
+    frota = await _frota_vencendo(ctx, bot, matriz)
+    lembretes = extra + gp.lembretes(
+        itens=itens, frete=frete, frete_tabela=tabela, uf=uf, desconto=desconto,
+        pagamento=corpo.get("condicao_pagamento", prop.get("condicao_pagamento")), pagamento_ultima=None,
+        aparelhos_na_proposta=[x["id"] for x in linhas], frota_vencendo=frota, phoebus=phoebus,
+        outros_itens=outros, entrega_diferente="endereco_entrega" in corpo)
+    rot_antes, rot_depois = [gp.rotulo_do_item(i) for i in antes], [gp.rotulo_do_item(i) for i in itens]
+    itens_entram, itens_saem = gp.entram_e_saem(rot_antes, rot_depois) if "itens" in corpo else ([], [])
+    rotulo_ap = lambda x: f"{x['modelo'] or 'aparelho'} · série {x['serie']}"  # noqa: E731
+    total_antes = prop.get("total")
+    if total_antes is None:
+        total_antes = gp.total(antes, Decimal(str(prop.get("frete") or 0)), Decimal(str(prop.get("desconto") or 0)))
+    payload = {"proposta": pid, "corpo": corpo, "_exibir": {
+        "numero": numero, "cliente": cliente, "mudancas": mudancas,
+        "itens_entram": itens_entram, "itens_saem": itens_saem,
+        "aparelhos_entram": [rotulo_ap(x) for x in linhas_add],
+        "aparelhos_saem": [rotulo_ap(x) for x in linhas_atuais if x["id"] in rem],
+        "total_antes": float(total_antes), "total_depois": float(gp.total(itens, frete, desconto)),
+        "lembretes": lembretes}}
+    return payload, f"Alterar a proposta {numero} ({cliente})"
+
+
 async def _gestorhs_proposta(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
-    payload, resumo = await _preparar_criar_proposta(ctx, bot, args)
-    acao = "criar_proposta"
+    if nome == "gestorhs_alterar_proposta":
+        payload, resumo = await _preparar_alterar_proposta(ctx, bot, args)
+        acao = "alterar_proposta"
+    else:
+        payload, resumo = await _preparar_criar_proposta(ctx, bot, args)
+        acao = "criar_proposta"
     await acoes.criar_pendente(conn, ctx["dono"], bot, "gestorhs", acao, payload, resumo)
     return (f"Preparado: {resumo}. Aguardando {ctx['primeiro']} confirmar no HS.OS — não diga que foi "
             "feito." + _texto_dos_lembretes(payload["_exibir"]["lembretes"], ctx["primeiro"]))

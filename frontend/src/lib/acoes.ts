@@ -155,6 +155,22 @@ function cartaoDoGestorHS(acao: string, p: Record<string, unknown>, ex: Record<s
     return { verbo: "Nova proposta", titulo: ex.cliente ? String(ex.cliente) : "Proposta", linhas, checklists,
              texto: lembretesDoCartao(ex) };
   }
+  if (acao === "alterar_proposta") {
+    // O `corpo` do payload é o que o PUT leva; o antes → depois e as listas do
+    // que entra e sai vêm do `_exibir`, montados pelo servidor sobre ele.
+    const linhas: [string, string][] = [["Total", `${reais(ex.total_antes)} → ${reais(ex.total_depois)}`]];
+    for (const m of (ex.mudancas as [string, string, string][] | undefined) ?? [])
+      linhas.push([String(m[0]), `${m[1]} → ${m[2]}`]);
+    const strs = (x: unknown) => ((x as string[] | undefined) ?? []).map((texto) => ({ texto: String(texto) }));
+    const entram = [...strs(ex.itens_entram), ...strs(ex.aparelhos_entram)];
+    const saem = [...strs(ex.itens_saem), ...strs(ex.aparelhos_saem)];
+    const checklists: CartaoDaAcao["checklists"] = [];
+    if (entram.length) checklists.push({ titulo: "Entram", itens: entram });
+    if (saem.length) checklists.push({ titulo: "Saem", itens: saem });
+    const cliente = ex.cliente ? ` · ${String(ex.cliente)}` : "";
+    return { verbo: "Alterar proposta", titulo: `Proposta ${v(ex.numero ?? p.proposta)}${cliente}`, linhas,
+             checklists, texto: lembretesDoCartao(ex) };
+  }
   return null;
 }
 

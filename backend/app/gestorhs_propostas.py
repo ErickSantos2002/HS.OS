@@ -322,6 +322,56 @@ def corpo_dos_itens(itens) -> list[dict]:
              "unidade": i["unidade"], "preco_un": float(i["preco_un"])} for i in itens]
 
 
+forma_dos_itens = _forma_dos_itens
+
+
+def mesmo_texto(a, b) -> bool:
+    return _normal(a) == _normal(b)
+
+
+def itens_atuais(itens_da_proposta, catalogo) -> list[dict]:
+    """Os itens que a proposta JÁ tem, no formato de `itens_do_pedido`. O preço de
+    catálogo é o de hoje quando o sku casa uma vez só; senão, o próprio preço
+    (sem lembrete: não há com o que comparar)."""
+    por_sku: dict[str, list[dict]] = {}
+    for c in catalogo or []:
+        if isinstance(c, dict) and _sku(c.get("sku")):
+            por_sku.setdefault(_sku(c.get("sku")), []).append(c)
+    saida = []
+    for i in itens_da_proposta or []:
+        if not isinstance(i, dict):
+            continue
+        preco = Decimal(str(i.get("preco_un") or 0))
+        achados = por_sku.get(_sku(i.get("sku"))) or []
+        cat = Decimal(str(achados[0].get("preco") or 0)) if len(achados) == 1 else preco
+        saida.append({"descricao": str(i.get("descricao") or ""), "sku": _sku(i.get("sku")) or None,
+                      "quantidade": Decimal(str(i.get("quantidade") or 0)), "unidade": i.get("unidade"),
+                      "preco_un": preco, "preco_catalogo": cat})
+    return saida
+
+
+def rotulo_do_item(i: dict) -> str:
+    q = Decimal(str(i["quantidade"]))
+    qtd = str(int(q)) if q == q.to_integral_value() else f"{q.normalize():f}".replace(".", ",")
+    return f"{qtd} × {exibir_texto(i['descricao'])} — {reais(i['preco_un'])}"
+
+
+def _chave_do_item(i: dict) -> tuple:
+    return (i.get("sku") or "", " ".join(str(i.get("descricao") or "").split()),
+            Decimal(str(i["quantidade"])).normalize(), Decimal(str(i["preco_un"])).normalize())
+
+
+def itens_mudaram(antes, depois) -> bool:
+    return [_chave_do_item(i) for i in antes] != [_chave_do_item(i) for i in depois]
+
+
+def entram_e_saem(antes: list[str], depois: list[str]) -> tuple[list[str], list[str]]:
+    """O que entra e o que sai, como multiconjunto (duas linhas iguais contam duas)."""
+    from collections import Counter
+    a, d = Counter(antes), Counter(depois)
+    return list((d - a).elements()), list((a - d).elements())
+
+
 def exibir_itens(itens) -> list[dict]:
     saida = []
     for i in itens:

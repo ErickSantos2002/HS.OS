@@ -176,4 +176,21 @@ describe("cartão do GestorHS (Expedição)", () => {
     expect(c.linhas).toContainEqual(["Pagamento", "em branco"]);
     expect(c.texto).toBeUndefined();
   });
+  it("alterar proposta: total antes → depois, uma linha por mudança, o que entra e o que sai", () => {
+    // O `PUT` substitui a lista inteira: o cartão tem que mostrar o que SAI,
+    // senão a pessoa aprova perder um aparelho sem ver.
+    const c = cartaoDaAcao("alterar_proposta", { proposta: 500, corpo: { condicao_pagamento: "60 dias" },
+      _exibir: { numero: 1234, cliente: "ACME", total_antes: 940, total_depois: 1335,
+        mudancas: [["Pagamento", "30 dias", "60 dias"]],
+        itens_entram: ["3 × CALIBRAÇÃO — R$ 395,00"], itens_saem: ["2 × CALIBRAÇÃO — R$ 395,00"],
+        aparelhos_entram: [], aparelhos_saem: ["Alcoolímetro X · série F3"],
+        lembretes: ["O texto de outros itens foi editado na tela."] } });
+    expect(c.verbo).toBe("Alterar proposta");
+    expect(c.titulo).toBe("Proposta 1234 · ACME");
+    expect(c.linhas).toEqual([["Total", "R$ 940,00 → R$ 1.335,00"], ["Pagamento", "30 dias → 60 dias"]]);
+    expect(c.checklists).toEqual([
+      { titulo: "Entram", itens: [{ texto: "3 × CALIBRAÇÃO — R$ 395,00" }] },
+      { titulo: "Saem", itens: [{ texto: "2 × CALIBRAÇÃO — R$ 395,00" }, { texto: "Alcoolímetro X · série F3" }] }]);
+    expect(c.texto).toEqual({ rotulo: "Lembretes", valor: "O texto de outros itens foi editado na tela." });
+  });
 });

@@ -295,6 +295,20 @@ async def _gestorhs_criar_proposta(email, bot, p, dono=None) -> str:
     return _com_pdf(f"Proposta {numero} criada." if numero else "Proposta criada.", r)
 
 
+async def _gestorhs_alterar_proposta(email, bot, p, dono=None) -> str:
+    """⚠️ Sem `destinatario`, nunca: no `PUT` ele reescreveria o cadastro. O
+    GestorHS guarda a versão anterior (com o PDF) sozinho."""
+    pid = int(p["proposta"])
+    corpo = _corpo_da_proposta(p.get("corpo") or {})
+    try:
+        r = await gestorhs.chamar(email, bot, f"/propostas/{pid}", metodo="PUT", json=corpo, dono=dono)
+    except gestorhs.ErroSistema as e:
+        raise _sem_funcao_proposta(e) from e
+    numero = ((r or {}).get("numero") if isinstance(r, dict) else None) or (p.get("_exibir") or {}).get("numero")
+    feito = f"Proposta {numero} alterada" if numero else "Proposta alterada"
+    return _com_pdf(f"{feito} (versão anterior guardada).", r)
+
+
 EXECUTORES: dict[tuple[str, str], Executor] = {
     ("taskhs", "comentar"): _taskhs_comentar,
     ("taskhs", "mover"): _taskhs_mover,
@@ -307,6 +321,7 @@ EXECUTORES: dict[tuple[str, str], Executor] = {
     ("gestorhs", "cadastrar_aparelho"): _gestorhs_cadastrar,
     ("gestorhs", "gerar_certificado"): _gestorhs_gerar_certificado,
     ("gestorhs", "criar_proposta"): _gestorhs_criar_proposta,
+    ("gestorhs", "alterar_proposta"): _gestorhs_alterar_proposta,
 }
 
 

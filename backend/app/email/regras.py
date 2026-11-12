@@ -21,6 +21,7 @@ FERRAMENTAS_BOT = ("lembrar", "taskhs_eu", "datacore_consultas", "datacore_consu
                    "docshs_consultas", "docshs_consultar", "gestorhs_consultas", "gestorhs_consultar",
                    "gestorhs_receber", "gestorhs_avancar_caixa", "gestorhs_fechar_caixa",
                    "gestorhs_cadastrar_aparelho", "gestorhs_gerar_certificado", "gestorhs_criar_proposta",
+                   "gestorhs_alterar_proposta",
                    "taskhs_minhas", "taskhs_quadros", "taskhs_quadro",
                    "taskhs_tarefa", "taskhs_buscar", "taskhs_membros_quadro", "taskhs_comentar",
                    "taskhs_mover", "taskhs_criar", "taskhs_atualizar", "taskhs_membros",
