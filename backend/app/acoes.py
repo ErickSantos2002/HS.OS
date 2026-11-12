@@ -10,7 +10,9 @@ import json
 from typing import Awaitable, Callable
 
 from app.gestorhs_escrita import texto_lote_parcial
-from app.sistemas import gestorhs, taskhs
+from app import hsgrowth_escrita as hge
+from app.config import settings
+from app.sistemas import gestorhs, hsgrowth, taskhs
 
 Executor = Callable[..., Awaitable[str]]
 
@@ -309,6 +311,197 @@ async def _gestorhs_alterar_proposta(email, bot, p, dono=None) -> str:
     return _com_pdf(f"{feito} (versão anterior guardada).", r)
 
 
+# ── HSGrowth (12/11/2026) ────────────────────────────────────────────────────
+# Spec `docs/superpowers/specs/2026-11-12-guardi-hsgrowth-vendas-design.md`.
+# CONTRATO DO PAYLOAD (quem prepara o cartão, Task 5, grava exatamente isto; datas
+# já em UTC, nada é recalculado aqui):
+#   hsgrowth_registrar: {card_id, campos?, campos_personalizados?: [{field_definition_id, value}],
+#       nota?, tarefas?: [{op:"criar", title, task_type, priority?, due_date?, description?, duration_minutes?}
+#       | {op:"alterar", task_id, title|description|priority|due_date|duration_minutes}  (task_type NUNCA)
+#       | {op:"concluir", task_id, valida: bool (OBRIGATÓRIO: True=realizada, False=tentativa sem resultado)}], mover_para?: list_id, _exibir: {card, link, aviso?}}
+#   hsgrowth_cliente: {card_id, cliente?: {id, campos}, contato?: {id, campos}, _exibir}
+#   hsgrowth_criar_lead: {titulo, list_id, assigned_to_id (o id do DONO lá, de /users/me, posto pelo
+#       servidor), cliente: {id}|{campos}, contato: {id}|{campos}, campos_do_card, _exibir}   (o CardCreate do HSGrowth aceita `person_id`: sem chamada de vínculo)
+#   hsgrowth_ganhar {card_id} · hsgrowth_perder {card_id, motivo} · hsgrowth_noshow {card_id, task_id}
+# ⚠️ Corpo = só as chaves das allowlists de `hsgrowth_escrita`, relidas uma a uma
+# (nunca `**p`): payload adulterado não leva `assigned_to_id` nem `is_won` ao CRM.
+# ⚠️ Lote PARA no primeiro erro e NÃO desfaz (nota e tarefa criadas são registro).
+
+# ⚠️ `alterar` nunca leva `task_type` (nem de payload adulterado): reunião virada
+# ligação e depois concluída pagaria comissão de reunião que não houve.
+_CAMPOS_TAREFA_CRIAR = ("title", "description", "task_type", "priority", "due_date", "duration_minutes")
+_CAMPOS_TAREFA_ALTERAR = tuple(c for c in _CAMPOS_TAREFA_CRIAR if c != "task_type")
+
+
+def _pegar(origem: dict, chaves) -> dict:
+    return {k: origem[k] for k in chaves if origem.get(k) is not None}
+
+
+def _link_hsg(p: dict) -> str:
+    return str((p.get("_exibir") or {}).get("link") or "")
+
+
+async def _hsg_lote(passos: list, entrou: list, link: str, alvo: str | None = None) -> None:
+    """Executa `passos` (nome, corrotina-fábrica) em ordem. Falhou: para e levanta
+    "Parou em <passo> (n de m): <erro>. Já entrou: <lista>." — sem desfazer."""
+    total = len(passos)
+    for n, (nome, fabrica) in enumerate(passos, 1):
+        try:
+            await fabrica()
+        except hsgrowth.ErroSistema as e:
+            msg = str(e)
+            # "proposta" sozinha casa a etapa "Diagnóstico e Proposta": a dica só
+            # vale para o anexo (Proposta Comercial) ou indo para Negociação.
+            if nome == "mover" and link and ("proposta comercial" in msg.lower()
+                                             or str(alvo or "").strip().lower() == "negociação"):
+                msg += f" — anexe a proposta no card pela tela: {link}"
+            if e.status == 409 and "gerente" not in msg.lower():
+                msg += " — fale com o gerente comercial"
+            ja = ", ".join(entrou) if entrou else "nada"
+            fim = f" Confira no card: {link}" if link and entrou else ""
+            raise hsgrowth.ErroSistema(
+                e.status, f"Parou em {nome} ({n} de {total}): {msg}. Já entrou: {ja}. "
+                          f"Nada foi desfeito.{fim}") from e
+
+
+def _id_ou_erro(r, o_que: str) -> int:
+    i = (r or {}).get("id") if isinstance(r, dict) else None
+    if not i:
+        raise hsgrowth.ErroSistema(502, f"o HSGrowth não devolveu o id do {o_que} criado")
+    return int(i)
+
+
+def _fim(entrou: list, p: dict) -> str:
+    ex = p.get("_exibir") or {}
+    txt = "Entrou no HSGrowth: " + ", ".join(entrou) + "."
+    if ex.get("link"):
+        txt += f" {ex['link']}"
+    if ex.get("aviso"):
+        txt += f" ⚠️ {hge.uma_linha(ex['aviso'], 300)}"
+    return txt
+
+
+async def _hsg(email, bot, dono, metodo, caminho, corpo=None, params=None):
+    return await hsgrowth.chamar(email, bot, caminho, params=params, dono=dono, metodo=metodo, json=corpo)
+
+
+async def _hsgrowth_registrar(email, bot, p, dono=None) -> str:
+    cid = int(p["card_id"])
+    entrou: list[str] = []
+    passos: list = []
+
+    def passo(nome, rotulo, metodo, caminho, corpo=None, params=None):
+        async def f():
+            await _hsg(email, bot, dono, metodo, caminho, corpo, params)
+            entrou.append(rotulo)
+        passos.append((nome, f))
+
+    campos = _pegar(p.get("campos") or {}, hge.CAMPOS_CARD)
+    if campos:
+        passo("campos", "campos do card", "PUT", f"/cards/{cid}", campos)
+    for c in p.get("campos_personalizados") or []:
+        passo("campo personalizado", "campo personalizado", "POST", f"/cards/{cid}/fields",
+              {"field_definition_id": int(c["field_definition_id"]), "value": c.get("value")})
+    if p.get("nota"):
+        passo("nota", "nota", "POST", "/card-notes", {"card_id": cid, "content": str(p["nota"])})
+    for t in p.get("tarefas") or []:
+        op = t.get("op")
+        if op == "criar":
+            passo("tarefa", "tarefa criada", "POST", "/card-tasks",
+                  {"card_id": cid, **_pegar(t, _CAMPOS_TAREFA_CRIAR)})
+        elif op == "alterar":
+            passo("tarefa", "tarefa alterada", "PUT", f"/card-tasks/{int(t['task_id'])}",
+                  _pegar(t, _CAMPOS_TAREFA_ALTERAR))
+        elif op == "concluir":
+            # ⚠️ `is_valid` do HSGrowth decide pontos de gamificação: nunca presumido.
+            if not isinstance(t.get("valida"), bool):
+                raise hsgrowth.ErroSistema(0, "cartão sem dizer se a tarefa foi realizada (`valida`); "
+                                              "nada foi enviado ao HSGrowth")
+            passo("tarefa", "tarefa concluída", "PATCH", f"/card-tasks/{int(t['task_id'])}/complete",
+                  {"is_completed": True, "is_valid": t["valida"]})
+    if p.get("mover_para"):
+        passo("mover", "card movido", "PUT", f"/cards/{cid}/move",
+              {"target_list_id": int(p["mover_para"])})
+    await _hsg_lote(passos, entrou, _link_hsg(p), (p.get("_exibir") or {}).get("etapa_para"))
+    return _fim(entrou, p)
+
+
+async def _hsgrowth_cliente(email, bot, p, dono=None) -> str:
+    entrou: list[str] = []
+    passos: list = []
+    cli, con = p.get("cliente"), p.get("contato")
+    if cli:
+        async def f1():
+            await _hsg(email, bot, dono, "PUT", f"/clients/{int(cli['id'])}",
+                       _pegar(cli.get("campos") or {}, hge.CAMPOS_CLIENTE))
+            entrou.append("cliente")
+        passos.append(("cliente", f1))
+    if con:
+        async def f2():
+            await _hsg(email, bot, dono, "PUT", f"/persons/{int(con['id'])}",
+                       _pegar(con.get("campos") or {}, hge.CAMPOS_CONTATO))
+            entrou.append("contato")
+        passos.append(("contato", f2))
+    await _hsg_lote(passos, entrou, _link_hsg(p))
+    return _fim(entrou, p)
+
+
+async def _hsgrowth_criar_lead(email, bot, p, dono=None) -> str:
+    dono_id = p.get("assigned_to_id")
+    if isinstance(dono_id, bool) or not isinstance(dono_id, int):
+        # Antes de qualquer passo: falhar no card deixaria cliente e contato criados à toa.
+        raise hsgrowth.ErroSistema(0, "cartão sem o dono do lead; nada foi enviado ao HSGrowth")
+    entrou: list[str] = []
+    est: dict = {}
+    cli, con = p.get("cliente") or {}, p.get("contato") or {}
+
+    async def f_cli():
+        if cli.get("id"):
+            est["cliente"] = int(cli["id"])
+            return
+        r = await _hsg(email, bot, dono, "POST", "/clients", _pegar(cli.get("campos") or {}, hge.CAMPOS_CLIENTE))
+        est["cliente"] = _id_ou_erro(r, "cliente")
+        entrou.append("cliente criado")
+
+    async def f_con():
+        if con.get("id"):
+            est["contato"] = int(con["id"])
+            return
+        corpo = {**_pegar(con.get("campos") or {}, hge.CAMPOS_CONTATO), "organization_id": est["cliente"]}
+        r = await _hsg(email, bot, dono, "POST", "/persons", corpo)
+        est["contato"] = _id_ou_erro(r, "contato")
+        entrou.append("contato criado")
+
+    async def f_card():
+        corpo = {**_pegar(p.get("campos_do_card") or {}, hge.CAMPOS_CARD), "title": str(p["titulo"]),
+                 "list_id": int(p["list_id"]), "client_id": est["cliente"], "person_id": est["contato"],
+                 "assigned_to_id": dono_id}
+        r = await _hsg(email, bot, dono, "POST", "/cards", corpo)
+        est["card"] = _id_ou_erro(r, "card")
+        entrou.append(f"card criado (id {est['card']})")
+
+    await _hsg_lote([("cliente", f_cli), ("contato", f_con), ("card", f_card)], entrou, "")
+    txt = "Lead criado no HSGrowth: " + ", ".join(entrou) + "."
+    if est.get("card"):
+        txt += f" {settings.HSGROWTH_URL.rstrip('/')}/cards/{est['card']}"
+    return txt
+
+
+async def _hsgrowth_ganhar(email, bot, p, dono=None) -> str:
+    await _hsg(email, bot, dono, "POST", f"/cards/{int(p['card_id'])}/win", {})
+    return "Negócio marcado como ganho."
+
+
+async def _hsgrowth_perder(email, bot, p, dono=None) -> str:
+    await _hsg(email, bot, dono, "POST", f"/cards/{int(p['card_id'])}/lose", {"loss_reason": str(p["motivo"])})
+    return "Negócio marcado como perdido."
+
+
+async def _hsgrowth_noshow(email, bot, p, dono=None) -> str:
+    await _hsg(email, bot, dono, "PATCH", f"/card-tasks/{int(p['task_id'])}/noshow")
+    return "Reunião marcada como no-show."
+
+
 EXECUTORES: dict[tuple[str, str], Executor] = {
     ("taskhs", "comentar"): _taskhs_comentar,
     ("taskhs", "mover"): _taskhs_mover,
@@ -322,6 +515,12 @@ EXECUTORES: dict[tuple[str, str], Executor] = {
     ("gestorhs", "gerar_certificado"): _gestorhs_gerar_certificado,
     ("gestorhs", "criar_proposta"): _gestorhs_criar_proposta,
     ("gestorhs", "alterar_proposta"): _gestorhs_alterar_proposta,
+    ("hsgrowth", "hsgrowth_registrar"): _hsgrowth_registrar,
+    ("hsgrowth", "hsgrowth_cliente"): _hsgrowth_cliente,
+    ("hsgrowth", "hsgrowth_criar_lead"): _hsgrowth_criar_lead,
+    ("hsgrowth", "hsgrowth_ganhar"): _hsgrowth_ganhar,
+    ("hsgrowth", "hsgrowth_perder"): _hsgrowth_perder,
+    ("hsgrowth", "hsgrowth_noshow"): _hsgrowth_noshow,
 }
 
 

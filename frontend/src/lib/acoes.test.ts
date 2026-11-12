@@ -3,7 +3,7 @@
  * um texto livre — os campos estruturados aparecem sempre.
  */
 import { describe, expect, it } from "vitest";
-import { cartaoDaAcao, nomeDoSistema, rotuloAcao } from "./acoes";
+import { cartaoDaAcao, dataBrasilia, nomeDoSistema, rotuloAcao } from "./acoes";
 
 describe("cartão de ação", () => {
   it("status", () => {
@@ -192,5 +192,87 @@ describe("cartão do GestorHS (Expedição)", () => {
       { titulo: "Entram", itens: [{ texto: "3 × CALIBRAÇÃO — R$ 395,00" }] },
       { titulo: "Saem", itens: [{ texto: "2 × CALIBRAÇÃO — R$ 395,00" }, { texto: "Alcoolímetro X · série F3" }] }]);
     expect(c.texto).toEqual({ rotulo: "Lembretes", valor: "O texto de outros itens foi editado na tela." });
+  });
+});
+
+describe("cartão do HSGrowth", () => {
+  it("o sistema tem nome", () => {
+    expect(nomeDoSistema("hsgrowth")).toBe("HSGrowth");
+  });
+  it("cartão do registrar mostra as quatro partes", () => {
+    // O vendedor confirma o que o cartão mostra: campo, nota, etapa e tarefas
+    // têm que estar todos lá, com valores do payload. Faltar uma parte seria
+    // aprovar o que não foi visto.
+    const c = cartaoDaAcao("hsgrowth_registrar", {
+      card_id: 7, campos: { value: 1500, modality: "locacao" }, nota: "Falei com o diretor.",
+      mover_para: 61, campos_personalizados: [{ field_definition_id: 3, value: "Sim" }],
+      tarefas: [{ op: "criar", title: "Ligar", task_type: "call", priority: "high", due_date: "2026-11-19T13:00:00Z" },
+                { op: "concluir", task_id: 9, valida: true }, { op: "concluir", task_id: 10, valida: false }],
+      _exibir: { card: "ACME", cliente: "ACME SA", antes: { value: 1000, modality: null },
+        campos_personalizados: ["Nº de bafômetros"], tarefas: ["Ligar", "Reunião X", "Ligar Y"],
+        etapa_para: "Qualificação", aviso: "Falta reunião agendada." } });
+    expect(c.verbo).toBe("Atualizar card");
+    expect(c.titulo).toBe("ACME");
+    expect(c.linhas).toEqual([
+      ["Cliente", "ACME SA"], ["Valor", "1500 (antes: 1000)"], ["Modalidade", "locacao (antes: (vazio))"],
+      ["Nº de bafômetros", "Sim"],
+      ["Nova tarefa", "Ligação · Ligar · prioridade Alta · 19/11/2026 10:00"],
+      ["Concluir", "Reunião X · realizada"], ["Concluir", "Ligar Y · tentativa sem resultado"],
+      ["Mover para", "Qualificação"], ["Atenção", "Falta reunião agendada."]]);
+    expect(c.texto).toEqual({ rotulo: "Nota", valor: "Falei com o diretor." });
+  });
+  it("perder mostra o motivo", () => {
+    const c = cartaoDaAcao("hsgrowth_perder", { card_id: 7, motivo: "Sem orçamento", _exibir: { card: "ACME" } });
+    expect(c.verbo).toBe("Marcar como PERDIDO");
+    expect(c.linhas).toEqual([["Motivo", "Sem orçamento"]]);
+    expect(cartaoDaAcao("hsgrowth_ganhar", { card_id: 7, _exibir: { card: "ACME" } }).verbo).toBe("Marcar como GANHO");
+    expect(cartaoDaAcao("hsgrowth_noshow", { card_id: 7, task_id: 2, _exibir: { card: "ACME", reuniao: "Demo" } }).verbo)
+      .toBe("Cliente não compareceu");
+  });
+  it("cliente mostra antes e depois", () => {
+    // O depois é o do payload (o que vai ao cadastro compartilhado); o antes, do `_exibir`.
+    const c = cartaoDaAcao("hsgrowth_cliente", { card_id: 7, cliente: { id: 4, campos: { sector: "Mineração" } },
+      contato: { id: 5, campos: { email: "a@b.com" } },
+      _exibir: { card: "ACME", antes: { cliente: { sector: null }, contato: { email: "velho@b.com" } },
+                 depois: { cliente: { sector: "FORJADO" } } } });
+    expect(c.linhas).toEqual([["Cliente · Setor", "(vazio) → Mineração"], ["Contato · E-mail", "velho@b.com → a@b.com"]]);
+  });
+  it("lead novo mostra cliente, contato e campos", () => {
+    const c = cartaoDaAcao("hsgrowth_criar_lead", { titulo: "Bafômetros", list_id: 61,
+      cliente: { campos: { name: "ACME", sector: "Mineração" } }, contato: { campos: { name: "Ana", phone: "11999" } },
+      campos_do_card: { value: 900 }, _exibir: { etapa: "Lead Novo", documento: "123", cliente: "ACME",
+        cliente_existente: false, contato: "Ana" } });
+    expect(c.verbo).toBe("Novo lead");
+    expect(c.titulo).toBe("Bafômetros");
+    expect(c.linhas).toContainEqual(["Cliente (novo)", "ACME"]);
+    expect(c.linhas).toContainEqual(["Contato (novo)", "Ana"]);
+    expect(c.linhas).toContainEqual(["Contato · Telefone", "11999"]);
+    expect(c.linhas).toContainEqual(["Valor", "900"]);
+  });
+  it("data da tarefa sai em horário de Brasília", () => {
+    expect(dataBrasilia("2026-11-19T13:00:00Z")).toBe("19/11/2026 10:00");
+    expect(dataBrasilia("2026-11-19T02:30:00Z")).toBe("18/11/2026 23:30");
+  });
+  it("previsão de fechamento do card sai em horário de Brasília, não no dia UTC", () => {
+    // `due_date` vai ao HSGrowth em UTC: 02:00Z do dia 20 é 23:00 do dia 19 em
+    // Brasília. Mostrar só a data UTC poria a previsão um dia depois.
+    const c = cartaoDaAcao("hsgrowth_registrar", { card_id: 7, campos: { due_date: "2026-11-20T02:00:00Z" },
+      _exibir: { card: "ACME", antes: { due_date: "2026-11-25T15:00:00Z" } } });
+    expect(c.linhas).toContainEqual(["Previsão", "19/11/2026 23:00 (antes: 25/11/2026 12:00)"]);
+  });
+  it("tarefa nova mostra o título do payload, sem _exibir", () => {
+    // O executor cria com o `title` do payload; mostrar outra coisa aprovaria o que não vai.
+    const c = cartaoDaAcao("hsgrowth_registrar", { card_id: 7,
+      tarefas: [{ op: "criar", title: "Enviar proposta", task_type: "email" }] });
+    expect(c.linhas).toEqual([["Nova tarefa", "E-mail · Enviar proposta"]]);
+  });
+  it("lead sem _exibir não inventa etapa nem cliente; cliente existente não lista campos", () => {
+    const c = cartaoDaAcao("hsgrowth_criar_lead", { titulo: "L", list_id: 61,
+      cliente: { campos: { name: "ACME", sector: "Mineração" } }, contato: { id: 5 }, campos_do_card: {} });
+    expect(c.linhas).toContainEqual(["Etapa", "etapa 61"]);
+    expect(c.linhas).toContainEqual(["Cliente (novo)", "ACME"]);
+    const e = cartaoDaAcao("hsgrowth_criar_lead", { titulo: "L", list_id: 61,
+      cliente: { id: 4, campos: { sector: "IGNORADO" } }, contato: { id: 5 }, campos_do_card: {} });
+    expect(e.linhas.some(([k]) => k.includes("Setor"))).toBe(false);
   });
 });

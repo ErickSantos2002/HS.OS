@@ -9,6 +9,7 @@
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-sistema erick-bot taskhs # só banco
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-docshs-todos [--aplicar] # só quem tem conta lá
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-gestorhs-todos [--aplicar] # idem, GestorHS
+    PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-hsgrowth-vendedores [--aplicar] # só salesperson, HSGrowth
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --aplicar                        # gateway
 
 Lê o `backend/.env` (banco, gateway, `ANEXOS_MCP_SEGREDO`, `GUARDRAILS_API_TOKEN`)
@@ -118,10 +119,11 @@ def _mascarar(novos: dict) -> dict:
                 "headers": "<GUARDRAILS_API_TOKEN>"} for n, e in novos.items()}
 
 
-_ROTULO = {"docshs": "DocsHS", "gestorhs": "GestorHS"}
+_ROTULO = {"docshs": "DocsHS", "gestorhs": "GestorHS", "hsgrowth": "HSGrowth"}
 
 
-async def _ligar_quem_tem_conta(conn, sistema: str, modulo, caminho_eu: str, aplicar: bool) -> int:
+async def _ligar_quem_tem_conta(conn, sistema: str, modulo, caminho_eu: str, aplicar: bool,
+                                 aceita=None) -> int:
     """Liga `sistema` só em quem TEM conta ativa lá (DocsHS e GestorHS, 11/11/2026).
 
     Ao contrário do DataCore, nem todo colaborador tem conta em todo sistema:
@@ -129,7 +131,8 @@ async def _ligar_quem_tem_conta(conn, sistema: str, modulo, caminho_eu: str, apl
     pergunta, e o AGENTS.md já promete a ferramenta. Pergunta `caminho_eu` com
     o token de cada dono — 200 entra, o resto é listado. Só GET; o sistema
     precisa estar com a chave pública do HS.OS no ar, senão todo mundo sai como
-    "sem conta"."""
+    "sem conta". `aceita(eu)` (opcional) decide, sobre a resposta do "eu", se a
+    pessoa entra nesta fase — o HSGrowth só liga para `salesperson`."""
     rotulo = _ROTULO[sistema]
     linhas = await conn.fetch(
         "SELECT a.agent_id, pr.email FROM public.agent_profiles a "
@@ -137,15 +140,21 @@ async def _ligar_quem_tem_conta(conn, sistema: str, modulo, caminho_eu: str, apl
         "  JOIN auth.users u ON u.id = a.dono_id "
         " WHERE a.dono_id IS NOT NULL AND u.is_active AND pr.email IS NOT NULL "
         "   AND NOT ($1 = ANY(coalesce(a.sistemas_ligados, '{}'))) ORDER BY a.agent_id", sistema)
-    com_conta, sem_conta = [], []
+    com_conta, sem_conta, fora_da_fase = [], [], []
     for l in linhas:
         try:
-            await modulo.chamar(l["email"], l["agent_id"], caminho_eu, dono=None)
+            eu = await modulo.chamar(l["email"], l["agent_id"], caminho_eu, dono=None)
+            if aceita is not None and not aceita(eu if isinstance(eu, dict) else {}):
+                papel = eu.get("role") if isinstance(eu, dict) else None
+                fora_da_fase.append(f"{l['agent_id']} (fora desta fase: {papel})")
+                continue
             com_conta.append(l["agent_id"])
         except modulo.ErroSistema as e:
             sem_conta.append(f"{l['agent_id']} ({e.status or 'sem resposta'})")
     print(f"Com conta no {rotulo}:", ", ".join(com_conta) or "(nenhum)")
     print(f"Sem conta no {rotulo} (ou inativo lá):", ", ".join(sem_conta) or "(nenhum)")
+    if aceita is not None:
+        print(f"{rotulo}: com conta, fora desta fase —", ", ".join(fora_da_fase) or "(nenhum)")
     if not aplicar:
         print("(ensaio — nada foi escrito)")
         return 0
@@ -171,6 +180,19 @@ async def _ligar_gestorhs_todos(conn, aplicar: bool) -> int:
     return await _ligar_quem_tem_conta(conn, "gestorhs", gestorhs, "/auth/me", aplicar)
 
 
+def _so_vendedor(eu: dict) -> bool:
+    """Fase 1 do HSGrowth: só a função `salesperson` (gerente e admin ficam fora)."""
+    return eu.get("role") == "salesperson"
+
+
+async def _ligar_hsgrowth_vendedores(conn, aplicar: bool) -> int:
+    """Spec 2026-11-12-guardi-hsgrowth-vendas: confere por `/users/me` e só
+    liga para quem tem conta lá E função de vendedor."""
+    from app.sistemas import hsgrowth
+    return await _ligar_quem_tem_conta(conn, "hsgrowth", hsgrowth, "/users/me", aplicar,
+                                       aceita=_so_vendedor)
+
+
 async def main() -> int:
     import os
 
@@ -183,7 +205,7 @@ async def main() -> int:
     ap.add_argument("--ligar-todos", action="store_true",
                     help="liga e-mail e TaskHS em TODOS os bots pessoais (só banco)")
     ap.add_argument("--ligar-sistema", nargs=2, metavar=("BOT", "SISTEMA"),
-                    help="acrescenta um sistema (taskhs, datacore, docshs, gestorhs) a sistemas_ligados de UM bot (só banco)")
+                    help="acrescenta um sistema (taskhs, datacore, docshs, gestorhs, hsgrowth) a sistemas_ligados de UM bot (só banco)")
     ap.add_argument("--ligar-datacore-todos", action="store_true",
                     help="acrescenta datacore a sistemas_ligados de TODOS os bots pessoais (só banco)")
     ap.add_argument("--ligar-docshs-todos", action="store_true",
@@ -192,6 +214,9 @@ async def main() -> int:
     ap.add_argument("--ligar-gestorhs-todos", action="store_true",
                     help="acrescenta gestorhs a sistemas_ligados dos bots cujo dono TEM conta ativa no "
                          "GestorHS (confere por /auth/me; ensaio sem --aplicar; só banco)")
+    ap.add_argument("--ligar-hsgrowth-vendedores", action="store_true",
+                    help="acrescenta hsgrowth a sistemas_ligados dos bots cujo dono TEM conta no HSGrowth "
+                         "com função salesperson (confere por /users/me; ensaio sem --aplicar; só banco)")
     a = ap.parse_args()
 
     await init_db()
@@ -218,6 +243,8 @@ async def main() -> int:
                 return await _ligar_docshs_todos(conn, a.aplicar)
             if a.ligar_gestorhs_todos:
                 return await _ligar_gestorhs_todos(conn, a.aplicar)
+            if a.ligar_hsgrowth_vendedores:
+                return await _ligar_hsgrowth_vendedores(conn, a.aplicar)
             if a.ligar_email:
                 ok = await conn.fetchval(
                     "UPDATE public.agent_profiles SET email_ligado = true "
@@ -226,8 +253,8 @@ async def main() -> int:
                 return 0 if ok else 1
             if a.ligar_sistema:
                 bot, sistema = a.ligar_sistema
-                if sistema not in ("taskhs", "datacore", "docshs", "gestorhs"):
-                    print("sistema desconhecido (por ora: taskhs, datacore, docshs, gestorhs)")
+                if sistema not in ("taskhs", "datacore", "docshs", "gestorhs", "hsgrowth"):
+                    print("sistema desconhecido (por ora: taskhs, datacore, docshs, gestorhs, hsgrowth)")
                     return 1
                 ok = await conn.fetchval(
                     "UPDATE public.agent_profiles SET sistemas_ligados = "
