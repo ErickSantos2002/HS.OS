@@ -227,7 +227,7 @@ def test_concluir_atividade_ja_concluida_recusa(crm):
 def test_contato_de_outro_cliente_recusa(crm):
     """Ligar ao card um contato de outra empresa faria o time ligar para a pessoa
     errada — e o requisito "contato" de lá passaria."""
-    with pytest.raises(ValueError, match="não é do cliente"):
+    with pytest.raises(ValueError, match="Maria.*outra empresa"):
         _ferramenta("hsgrowth_servicos_registrar", {"board_id": 1, "card_id": 7,
                                                     "campos": {"person_id": 56}})
     with pytest.raises(ValueError, match="contato"):
@@ -346,13 +346,45 @@ def test_ganho_na_ultima_etapa_leva_o_aviso_do_gestorhs(crm):
     """Sem o aviso a pessoa confirma o ganho sem saber que a caixa sai do
     Pós-Vendas."""
     crm["rotas"][C] = {**CARD, "list_id": 14,
-                       "business_info": {"proposal_number": 812, "order_number": 9, "from_collection": "nao"}}
+                       "business_info": {"proposal_number": 812, "order_number": "PED-9", "from_collection": "nao",
+                                         "origem": "Caixa liberada do laboratorio"}}
     _ferramenta("hsgrowth_servicos_ganhar", {"board_id": 1, "card_id": 7})
     p = crm["pendentes"][0][2]
     assert (p["de"], p["para"]) == (14, 19)
-    assert p["_exibir"]["aviso"] == ("Se este card veio do GestorHS, o ganho avisa o GestorHS e a caixa "
-                                     "vai para o Financeiro.")
+    assert p["_exibir"]["aviso"] == "O ganho avisa o GestorHS e a caixa vai para o Financeiro."
+    assert p["_exibir"]["proposta"] == {"numero": 812}
     _sem_escrita(crm)
+
+
+def test_ganho_de_card_que_nao_veio_do_gestorhs_nao_avisa(crm):
+    """O HSGrowth só avisa o GestorHS por card de OS liberada do laboratório (quadro
+    1); prometer o aviso nos outros ensina a pessoa a esperar uma caixa que não anda."""
+    crm["rotas"][C] = {**CARD, "list_id": 14,
+                       "business_info": {"proposal_number": 812, "order_number": "PED-9", "from_collection": "nao"}}
+    _ferramenta("hsgrowth_servicos_ganhar", {"board_id": 1, "card_id": 7})
+    assert "aviso" not in crm["pendentes"][0][2]["_exibir"]
+
+
+def test_ganho_na_cobranca_nunca_avisa_o_gestorhs(crm):
+    """No quadro 2 os cards do GestorHS são de cobrança (atrasados/calibração): o
+    ganho lá não mexe em caixa nenhuma, mesmo com `origem` preenchida."""
+    crm["rotas"]["/service-boards/2/cards/7"] = {**CARD, "list_id": 24, "business_info": {
+        "shipping_confirmed": "sim", "origem": "os liberada do laboratorio"}}
+    crm["rotas"]["/service-boards/2/lists"] = [
+        {"id": 21, "board_id": 2, "name": "Oportunidade Existente", "position": 0},
+        {"id": 24, "board_id": 2, "name": "Operações", "position": 3},
+        {"id": 29, "board_id": 2, "name": "Negócio Ganho", "position": 9, "is_done_stage": True}]
+    _ferramenta("hsgrowth_servicos_ganhar", {"board_id": 2, "card_id": 7})
+    p = crm["pendentes"][0][2]
+    assert (p["de"], p["para"]) == (24, 29) and "aviso" not in p["_exibir"]
+
+
+def test_contato_sem_empresa_pode_ser_ligado(crm):
+    """A tela liga contato sem empresa a qualquer card (174 assim em produção):
+    recusar travaria o requisito "contato" de Dados Preenchidos."""
+    crm["rotas"]["/persons/57"] = {"id": 57, "name": "Avulso", "organization_id": None}
+    out = _ferramenta("hsgrowth_servicos_registrar", {"board_id": 1, "card_id": 7, "campos": {"person_id": 57}})
+    assert "Preparado" in out and crm["pendentes"][0][2]["_exibir"]["contato_novo"] == "Avulso"
 
 
 def test_perder_exige_motivo_da_lista(crm):

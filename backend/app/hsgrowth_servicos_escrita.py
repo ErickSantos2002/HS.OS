@@ -36,7 +36,7 @@ CHAVES_NEGOCIO: dict[str, tuple[str, ...] | None] = {
     "form_answered": None,                                 # bool
     "closing_type": ("faturamento_direto", "pedido"),      # só quadro 1
     "proposal_number": None,                               # inteiro > 0, só quadro 1
-    "order_number": None,                                  # só quadro 1
+    "order_number": None,                                  # TEXTO livre (≤ 50), só quadro 1
     "from_collection": _SIM_NAO,                           # só quadro 1
     "shipping_confirmed": _SIM_NAO,                        # só quadro 2
 }
@@ -91,9 +91,18 @@ def negocio(d: dict, board_id: int) -> dict:
                 raise ValueError("`form_answered` tem que ser true ou false.")
             out[k] = v
         elif k == "proposal_number":
-            out[k] = _inteiro(v, k)
+            # É o `numero` da proposta no GestorHS (não um id do HSGrowth).
+            if isinstance(v, bool) or not isinstance(v, int) or v <= 0:
+                raise ValueError("`proposal_number` é o número da proposta no GestorHS (um número "
+                                 "inteiro, ex.: 812).")
+            out[k] = v
         elif k == "order_number":
-            out[k] = _inteiro(v, k)
+            # ⚠️ Texto livre lá (a tela é input text: "PED-2024/123", "061174-01", "035897"):
+            # virar int perderia zero à esquerda e recusaria pedido de verdade.
+            t = _texto(v, k, 50) if not isinstance(v, int) or isinstance(v, bool) else str(v)
+            if any(c in t for c in "\r\n\t"):
+                raise ValueError("`order_number` é uma linha só.")
+            out[k] = t
         else:
             out[k] = _opcao(v, CHAVES_NEGOCIO[k], k)
     return out

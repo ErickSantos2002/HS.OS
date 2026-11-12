@@ -39,10 +39,20 @@ def test_negocio_chave_desconhecida_e_tipos():
     """Chave fora da lista deixaria o agente gravar o que quisesse no business_info."""
     assert "status" in erro(r.negocio, {"status": "x"}, 1)
     assert r.negocio({"form_answered": True, "proposal_number": 12, "order_number": 5}, 1) == {
-        "form_answered": True, "proposal_number": 12, "order_number": 5}
+        "form_answered": True, "proposal_number": 12, "order_number": "5"}
     erro(r.negocio, {"form_answered": "sim"}, 1)
-    erro(r.negocio, {"proposal_number": 0}, 1)
-    erro(r.negocio, {"order_number": "PED-1"}, 1)
+    assert "número da proposta" in erro(r.negocio, {"proposal_number": 0}, 1)
+
+
+def test_order_number_e_texto_livre():
+    """Na tela de lá o nº do pedido é texto ("PED-2024/123", "061174-01", "035897"):
+    como inteiro, o pedido de verdade era recusado e o zero à esquerda sumia."""
+    for v in ("PED-1", "061174-01", "103.032", "1 - 4342594"):
+        assert r.negocio({"order_number": v}, 1) == {"order_number": v}
+    assert r.negocio({"order_number": " 035897 "}, 1) == {"order_number": "035897"}
+    erro(r.negocio, {"order_number": "a\nb"}, 1)
+    erro(r.negocio, {"order_number": "x" * 51}, 1)
+    erro(r.negocio, {"order_number": ""}, 1)
 
 
 def test_negocio_chave_de_outro_quadro():

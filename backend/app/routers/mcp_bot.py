@@ -122,7 +122,9 @@ _SV_BOARD = {"type": "integer", "enum": list(hgse_sv.QUADROS),
              "description": "1 (Serviços) ou 2 (Serviço - Cobrança)"}
 _SV_CARD = {"type": "integer", "description": "id do card. \"O card da X\": ache antes com "
             "hsgrowth_servicos_consultar buscar; vindo dois ou mais, PERGUNTE ao seu dono qual — nunca escolha"}
-_SV_NEGOCIO = "; ".join(f"{k} ({', '.join(v) if v else ('true/false' if k == 'form_answered' else 'número')})"
+_SV_TIPO_LIVRE = {"form_answered": "true/false", "proposal_number": "número da proposta no GestorHS",
+                  "order_number": "texto, como a pessoa disser (ex.: PED-2024/123, 035897)"}
+_SV_NEGOCIO = "; ".join(f"{k} ({', '.join(v) if v else _SV_TIPO_LIVRE[k]})"
                         for k, v in hgse_sv.CHAVES_NEGOCIO.items()) + (
     ". collection_type, acquisition_channel e shipping_confirmed só no quadro 2; closing_type, "
     "proposal_number, order_number e from_collection só no quadro 1")
@@ -338,11 +340,13 @@ FERRAMENTAS = [
        "tela deixa: no quadro 1, de Aguardando Pedido (com nº do pedido) ou de Proposta com "
        "Faturamento direto, sempre com nº da proposta e `from_collection`; no quadro 2, de Operações "
        "com envio confirmado. Faltou algo? Pergunte e grave antes com hsgrowth_servicos_registrar. "
-       "Se o card veio do GestorHS, o ganho avisa o GestorHS e a caixa vai para o Financeiro — diga "
-       "isso ao seu dono." + _HSG_FIM,
+       "Quando o cartão avisar que o ganho avisa o GestorHS (card de OS liberada do laboratório, "
+       "quadro 1), diga isso ao seu dono. O HSGrowth conclui as atividades pendentes do card, menos "
+       "as de follow-up." + _HSG_FIM,
        {"board_id": _SV_BOARD, "card_id": _SV_CARD}, ("board_id", "card_id")),
     _f("hsgrowth_servicos_perder", "Marcar um card de Serviços/Cobrança como PERDIDO, com o motivo que "
-       "o seu dono disser (anota \"Motivo da perda\" e move para Perdido)." + _HSG_FIM,
+       "o seu dono disser (anota \"Motivo da perda\" e move para Perdido). O HSGrowth conclui as "
+       "atividades pendentes do card, menos as de follow-up." + _HSG_FIM,
        {"board_id": _SV_BOARD, "card_id": _SV_CARD,
         "motivo": {"type": "string", "enum": list(hgse_sv.MOTIVOS_PERDA)}},
        ("board_id", "card_id", "motivo")),
@@ -2095,6 +2099,13 @@ async def _hsgrowth_servicos(conn, bot: str, nome: str, args: dict, ctx: dict) -
         card = await get(c_card)
         if not isinstance(card, dict):
             raise ValueError("resposta inesperada do HSGrowth")
+        # ⚠️ O HSGrowth acha o card só pelo id e ignora o quadro da rota: sem conferir a
+        # etapa, um card de kanban livre sairia com link de Serviços.
+        etapas = await get(f"/service-boards/{board}/lists")
+        if card.get("list_id") not in {e.get("id") for e in (etapas if isinstance(etapas, list) else [])
+                                       if isinstance(e, dict) and e.get("board_id", board) == board}:
+            raise _Recusa(f"O card {args.get('id')} não é do quadro {board} — ache o quadro certo com "
+                          "hsgrowth_servicos_consultar buscar.")
         dados = {**card, "produtos": await get(c_prod), "servicos": await get(c_serv)}
     elif chave == "cards":
         cards: list = []

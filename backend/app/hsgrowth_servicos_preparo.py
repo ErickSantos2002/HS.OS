@@ -25,14 +25,23 @@ from app.config import settings
 from app.hsgrowth_escrita import uma_linha
 from app.sistemas import gestorhs, hsgrowth
 
-__all__ = ["ESCRITAS", "TETO_ITENS", "AVISO_GANHO", "preparar"]
+__all__ = ["ESCRITAS", "TETO_ITENS", "AVISO_GANHO", "ORIGENS_DO_GESTORHS", "aviso_do_ganho", "preparar"]
 
 ESCRITAS = ("hsgrowth_servicos_registrar", "hsgrowth_servicos_itens", "hsgrowth_servicos_ganhar",
             "hsgrowth_servicos_perder", "hsgrowth_servicos_anexar_proposta")
 TETO_ITENS = 10
-# Até o HSGrowth expor `external_source` no card (item 3 de "Para o HSGrowth"),
-# o Guardi não sabe se o card veio do GestorHS: o aviso é condicional.
-AVISO_GANHO = "Se este card veio do GestorHS, o ganho avisa o GestorHS e a caixa vai para o Financeiro."
+# ⚠️ O HSGrowth só avisa o GestorHS no ganho de card com `external_source ==
+# "gestorhs.os"`, que existe SÓ no quadro 1 (os do quadro 2 são gestorhs.atrasados /
+# gestorhs.calibracao e nunca avisam). A API não expõe `external_source`, mas o
+# `business_info.origem` destes dois valores casa com gestorhs.os em 325 de 325
+# cards de produção (conferido em 12/11/2026).
+AVISO_GANHO = "O ganho avisa o GestorHS e a caixa vai para o Financeiro."
+ORIGENS_DO_GESTORHS = ("caixa liberada do laboratorio", "os liberada do laboratorio")
+
+
+def aviso_do_ganho(board: int, biz: dict) -> str | None:
+    origem = str((biz or {}).get("origem") or "").strip().lower()
+    return AVISO_GANHO if board == 1 and origem in ORIGENS_DO_GESTORHS else None
 _NOMES_QUADRO = {1: "Serviços", 2: "Cobrança"}
 
 
@@ -219,12 +228,14 @@ async def _registrar(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
         conferir = con_id if con_id is not None else (card.get("person_id") if cliente_novo else None)
         if conferir is not None:
             pessoa = await _cadastro(ctx, bot, "contato", conferir)
-            if pessoa.get("organization_id") != efetivo:
+            # Contato sem empresa a tela liga a qualquer card (174 assim em produção);
+            # o que não pode é o contato de OUTRA empresa.
+            if pessoa.get("organization_id") is not None and pessoa.get("organization_id") != efetivo:
                 if con_id is None:
                     raise ValueError(f"O contato atual do card ({uma_linha(pessoa.get('name'))}) não é do "
                                      "cliente novo: diga também o contato (person_id) do cliente.")
-                raise ValueError(f"O contato {con_id} não é do cliente do card — veja "
-                                 "hsgrowth_servicos_consultar contatos.")
+                raise ValueError(f"O contato {con_id} ({uma_linha(pessoa.get('name'))}) é de outra empresa, "
+                                 "não do cliente do card — veja hsgrowth_servicos_consultar contatos.")
             if con_id is not None and con_id != card.get("person_id"):
                 ex["contato_novo"] = uma_linha(pessoa.get("name")) or f"contato {con_id}"
         if cliente_novo is not None:
@@ -334,10 +345,12 @@ async def _ganhar(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
     biz = card.get("business_info") if isinstance(card.get("business_info"), dict) else {}
     mov = hgse.conferir_ganho(card, etapas, biz)
     ex = {**_exibir(card, board), "etapa_de": _nome_etapa(etapas, mov["de"]),
-          "etapa_para": _nome_etapa(etapas, mov["para"]), "valor": _valor(card.get("value")),
-          "aviso": AVISO_GANHO}
+          "etapa_para": _nome_etapa(etapas, mov["para"]), "valor": _valor(card.get("value"))}
+    aviso = aviso_do_ganho(board, biz)
+    if aviso:
+        ex["aviso"] = aviso
     if biz.get("proposal_number") is not None:
-        ex["proposta"] = uma_linha(biz.get("proposal_number"))
+        ex["proposta"] = {"numero": _valor(biz.get("proposal_number")) or uma_linha(biz.get("proposal_number"))}
     return ({"board_id": board, "card_id": cid, "de": mov["de"], "para": mov["para"], "_exibir": ex},
             uma_linha(f"HSGrowth Serviços · {ex['card']} — marcar como GANHO", 200))
 

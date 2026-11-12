@@ -317,12 +317,26 @@ describe("cartão do HSGrowth Serviços", () => {
     const c = cartaoDaAcao("hsgrowth_servicos_ganhar", { board_id: 1, card_id: 7, de: 5, para: 6,
       _exibir: { card: "ACME", etapa_de: "Aprovado", etapa_para: "Ganho", aviso: "Proposta não conferida." } });
     expect(c.verbo).toBe("Marcar como GANHO");
-    expect(c.linhas).toEqual([["Etapa", "Aprovado → Ganho"], ["Atenção", "Proposta não conferida."]]);
+    expect(c.linhas).toEqual([["Etapa", "Aprovado → Ganho"],
+      ["Atividades", "as pendentes são concluídas, menos follow-up"], ["Atenção", "Proposta não conferida."]]);
+  });
+  it("nº do pedido é texto: zero à esquerda e letras aparecem como vieram", () => {
+    const c = cartaoDaAcao("hsgrowth_servicos_registrar", { board_id: 1, card_id: 7,
+      negocio: { order_number: "035897" }, _exibir: { card: "ACME", negocio_antes: { order_number: "PED-1" } } });
+    expect(c.linhas).toContainEqual(["Nº do pedido", "PED-1 → 035897"]);
+  });
+    it("ganhar mostra o número da proposta que o servidor grava em `_exibir.proposta.numero`", () => {
+    const c = cartaoDaAcao("hsgrowth_servicos_ganhar", { board_id: 1, card_id: 7, de: 14, para: 19,
+      _exibir: { card: "ACME", etapa_de: "Aguardando Pedido", etapa_para: "Negócio Ganho", valor: 900,
+        proposta: { numero: 812 }, aviso: "O ganho avisa o GestorHS e a caixa vai para o Financeiro." } });
+    expect(c.linhas).toContainEqual(["Proposta", "812"]);
+    expect(c.linhas).toContainEqual(["Atenção", "O ganho avisa o GestorHS e a caixa vai para o Financeiro."]);
   });
   it("perder mostra o motivo do payload", () => {
     const c = cartaoDaAcao("hsgrowth_servicos_perder", { board_id: 2, card_id: 7, de: 5, para: 9, motivo: "Sem Conserto",
       _exibir: { card: "ACME", etapa_de: "Em andamento", etapa_para: "Perdido", motivo: "FORJADO" } });
-    expect(c.linhas).toEqual([["Motivo", "Sem Conserto"], ["Etapa", "Em andamento → Perdido"]]);
+    expect(c.linhas).toEqual([["Motivo", "Sem Conserto"], ["Etapa", "Em andamento → Perdido"],
+      ["Atividades", "as pendentes são concluídas, menos follow-up"]]);
   });
   it("anexar mostra número, arquivo e o que substitui", () => {
     const c = cartaoDaAcao("hsgrowth_servicos_anexar_proposta", { board_id: 1, card_id: 7, numero: 1234,

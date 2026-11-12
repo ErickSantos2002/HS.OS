@@ -312,6 +312,9 @@ const TIPO_ATIVIDADE_SV: Record<string, string> = {
   call: "Ligação", task: "Tarefa", follow_up: "Follow-up", email: "E-mail", whatsapp: "WhatsApp",
   linkedin: "LinkedIn", other: "Outro",
 };
+// Ganho e perda no HSGrowth concluem as atividades pendentes, menos follow-up
+// (`_complete_pending_activities` de lá). Texto fixo: não vem do `_exibir`.
+const FECHA_ATIVIDADES_SV: [string, string] = ["Atividades", "as pendentes são concluídas, menos follow-up"];
 const valorNegocioSV = (x: unknown) =>
   x === null || x === undefined || x === "" ? "(vazio)" : VALOR_NEGOCIO_SV[String(x)] ?? v(x);
 
@@ -377,11 +380,12 @@ function cartaoDoHSGrowthServicos(acao: string, p: Record<string, unknown>, ex: 
     if (ex.valor != null) linhas.push(["Valor", reais(ex.valor)]);
     const prop = ex.proposta as { numero?: unknown } | undefined;
     if (prop?.numero != null) linhas.push(["Proposta", v(prop.numero)]);
+    linhas.push(FECHA_ATIVIDADES_SV);
     return { verbo: "Marcar como GANHO", titulo: card + quadro, linhas: avisoLinha(comCliente(linhas)), checklists: [] };
   }
   if (acao === "hsgrowth_servicos_perder")
     return { verbo: "Marcar como PERDIDO", titulo: card + quadro,
-             linhas: comCliente([["Motivo", v(p.motivo)], trecho(p.de, p.para)]), checklists: [] };
+             linhas: comCliente([["Motivo", v(p.motivo)], trecho(p.de, p.para), FECHA_ATIVIDADES_SV]), checklists: [] };
   if (acao === "hsgrowth_servicos_anexar_proposta") {
     const prop = ex.proposta as { cliente?: unknown; valor?: unknown } | undefined;
     const linhas: [string, string][] = [["Proposta", v(p.numero)]];

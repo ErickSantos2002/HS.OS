@@ -193,10 +193,22 @@ def test_card_junta_produtos_e_servicos(chave, monkeypatch):
     chamadas = _roteia(monkeypatch, {
         "/service-boards/1/cards/7": {"id": 7, "title": "X", "list_id": 3},
         "/service-boards/1/cards/7/products": {"items": [{"product_name": "Bafometro"}], "total": 10},
-        "/service-boards/1/cards/7/services": {"items": [{"name": "Calibracao"}], "total": 20}})
+        "/service-boards/1/cards/7/services": {"items": [{"name": "Calibracao"}], "total": 20},
+        "/service-boards/1/lists": [{"id": 3, "board_id": 1, "name": "Proposta"}]})
     t = _consultar("card", board_id=1, id="7")
     assert "Bafometro" in t and "Calibracao" in t and "/servicos/1/cards/7" in t
-    assert len(chamadas) == 3
+    assert len(chamadas) == 4
+
+
+def test_card_de_outro_quadro_nao_sai_com_link_de_servicos(chave, monkeypatch):
+    """O HSGrowth acha o card só pelo id: um card de kanban livre pedido com
+    board_id=1 sairia com link de Serviços que abre a tela errada."""
+    from app.routers import mcp_bot
+    _roteia(monkeypatch, {
+        "/service-boards/1/cards/7": {"id": 7, "title": "X", "list_id": 99},
+        "/service-boards/1/lists": [{"id": 3, "board_id": 1, "name": "Proposta"}]})
+    with pytest.raises(mcp_bot._Recusa, match="não é do quadro"):
+        _consultar("card", board_id=1, id="7")
 
 
 def test_quadros_so_1_e_2():

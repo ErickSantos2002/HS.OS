@@ -548,23 +548,33 @@ def _sv(p: dict) -> str:
     return f"/service-boards/{int(p['board_id'])}/cards/{int(p['card_id'])}"
 
 
-async def _sv_reler(email, bot, dono, p: dict, de=None) -> dict:
-    """Relê o card e confere que ele é DO QUADRO do cartão; com `de`, recusa se a
-    etapa já não é a do cartão (nada escrito).
+async def _sv_ler(email, bot, dono, p: dict) -> tuple[dict, list[dict]]:
+    """Relê o card e as etapas do quadro e confere que o card é DO QUADRO do cartão.
     ⚠️ O HSGrowth acha o card só pelo id e ignora o `board_id` da rota: sem esta
     conferência, um `board_id` 1 abriria um card de quadro livre."""
     card = await _hsg(email, bot, dono, "GET", _sv(p))
     if not isinstance(card, dict):
         raise hsgrowth.ErroSistema(502, "o HSGrowth não devolveu o card")
-    etapas = await _hsg(email, bot, dono, "GET", f"/service-boards/{int(p['board_id'])}/lists")
-    ids = {e.get("id") for e in (etapas if isinstance(etapas, list) else []) if isinstance(e, dict)
-           and e.get("board_id", p["board_id"]) == p["board_id"]}
-    if card.get("list_id") not in ids:
+    lidas = await _hsg(email, bot, dono, "GET", f"/service-boards/{int(p['board_id'])}/lists")
+    etapas = [{**e, "board_id": e.get("board_id", p["board_id"])}
+              for e in (lidas if isinstance(lidas, list) else []) if isinstance(e, dict)
+              and e.get("board_id", p["board_id"]) == p["board_id"]]
+    if card.get("list_id") not in {e.get("id") for e in etapas}:
         raise hsgrowth.ErroSistema(0, f"o card {int(p['card_id'])} não é do quadro {int(p['board_id'])}; "
                                       "nada foi enviado ao HSGrowth")
+    return {**card, "board_id": p["board_id"]}, etapas
+
+
+async def _sv_reler(email, bot, dono, p: dict, de=None, aberto: bool = False) -> dict:
+    """`_sv_ler` + com `de`, recusa se a etapa já não é a do cartão; com `aberto`,
+    recusa se o card foi ganho/perdido desde o cartão (nada escrito)."""
+    card, etapas = await _sv_ler(email, bot, dono, p)
     if de is not None and card.get("list_id") != int(de):
         raise hsgrowth.ErroSistema(0, "alguém mexeu no card desde o cartão (a etapa mudou) — "
                                       "peça de novo; nada foi enviado ao HSGrowth")
+    if aberto and hgse.terminal(next((e for e in etapas if e.get("id") == card.get("list_id")), None)):
+        raise hsgrowth.ErroSistema(0, "o card foi encerrado (ganho ou perdido) desde o cartão; nele só "
+                                      "entram atividade e anotação novas — nada foi enviado ao HSGrowth")
     return card
 
 
@@ -577,7 +587,10 @@ def _sv_mover(passos, entrou, email, bot, dono, p, para):
 
 async def _hsgrowth_servicos_registrar(email, bot, p, dono=None) -> str:
     mov = p.get("mover") or None
-    card = await _sv_reler(email, bot, dono, p, mov["de"] if mov else None)
+    # Card encerrado só recebe atividade/anotação NOVA (a mesma regra do preparo).
+    mexe = bool(mov or p.get("negocio") or p.get("campos")
+                or any(isinstance(o, dict) and o.get("op") != "criar" for o in p.get("atividades") or []))
+    card = await _sv_reler(email, bot, dono, p, mov["de"] if mov else None, aberto=mexe)
     entrou: list[str] = []
     passos: list = []
     corpo = _pegar(p.get("campos") or {}, _CAMPOS_PUT_SERVICOS)
@@ -626,7 +639,7 @@ async def _hsgrowth_servicos_itens(email, bot, p, dono=None) -> str:
                 or (op["acao"] != "por" and (isinstance(op.get("item_id"), bool)
                                              or not isinstance(op.get("item_id"), int))):
             raise hsgrowth.ErroSistema(0, "item do cartão incompleto ou desconhecido; nada foi enviado ao HSGrowth")
-    await _sv_reler(email, bot, dono, p)
+    await _sv_reler(email, bot, dono, p, aberto=True)
     for op in p.get("ops") or []:
         produto = op.get("tipo") == "aparelho"
         rota, nome = ("products", "aparelho") if produto else ("services", "servico")
@@ -649,7 +662,19 @@ async def _hsgrowth_servicos_itens(email, bot, p, dono=None) -> str:
 
 
 async def _hsgrowth_servicos_ganhar(email, bot, p, dono=None) -> str:
-    await _sv_reler(email, bot, dono, p, p["de"])
+    card, etapas = await _sv_ler(email, bot, dono, p)
+    if card.get("list_id") != int(p["de"]):
+        raise hsgrowth.ErroSistema(0, "alguém mexeu no card desde o cartão (a etapa mudou) — "
+                                      "peça de novo; nada foi enviado ao HSGrowth")
+    # ⚠️ Os requisitos do ganho de novo, no card RELIDO: alguém pode ter apagado o nº do
+    # pedido depois do cartão, e para admin o HSGrowth não confere nada.
+    try:
+        mov = hgse.conferir_ganho(card, etapas, card.get("business_info") or {})
+    except ValueError as e:
+        raise hsgrowth.ErroSistema(0, f"{e} (o card mudou desde o cartão) — nada foi enviado ao HSGrowth") from e
+    if mov["para"] != int(p["para"]):
+        raise hsgrowth.ErroSistema(0, "a etapa de Ganho do quadro mudou desde o cartão — peça de novo; "
+                                      "nada foi enviado ao HSGrowth")
     entrou: list[str] = []
     passos: list = []
     _sv_mover(passos, entrou, email, bot, dono, p, p["para"])
@@ -712,7 +737,7 @@ async def baixar_pdf(url: str) -> bytes:
 async def _hsgrowth_servicos_anexar(email, bot, p, dono=None) -> str:
     _sv(p)
     pdf = await baixar_pdf(p["link_pdf"])
-    await _sv_reler(email, bot, dono, p)
+    await _sv_reler(email, bot, dono, p, aberto=True)
     nome = hge.uma_linha(p.get("nome_arquivo") or f"Proposta {p.get('numero')}", 120).replace("/", "-").replace("\\", "-")
     if not nome.lower().endswith(".pdf"):
         nome += ".pdf"

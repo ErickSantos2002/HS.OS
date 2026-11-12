@@ -929,9 +929,12 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   e no clique a etapa atual tem de ser a de origem do cartão, senão recusa sem
   gravar. ⚠️ **`business_info` é substituído inteiro lá**: o executor relê o card
   no clique e mescla só as chaves do cartão; `contact_info` nunca é tocado. ⚠️
-  **Ganho** segue a regra da tela (mais estrita que a API) e o cartão avisa que
-  o ganho avisa o GestorHS e a caixa vai ao Financeiro; card ganho/perdido só
-  aceita atividade/anotação nova. ⚠️ **Anexar proposta**: o PDF vem do GestorHS
+  **Ganho** segue a regra da tela (mais estrita que a API), reconferida no
+  clique. ⚠️ Só avisa o GestorHS (caixa ao Financeiro) card do **quadro 1** com
+  `business_info.origem` = OS/caixa liberada do laboratório (= `gestorhs.os`,
+  325 de 325); no quadro 2 nunca — e o cartão só diz isso nesse caso. Card
+  ganho/perdido só aceita atividade/anotação nova, no preparo e no clique.
+  ⚠️ `order_number` é **texto** lá ("PED-2024/123", "035897"), nunca int. ⚠️ **Anexar proposta**: o PDF vem do GestorHS
   (`link_pdf`), só https nos hosts de `GESTORHS_API_URL`/`GESTORHS_URL`, 443, sem
   redirecionamento, 10 MB, conferido como PDF, baixado no preparo e no clique;
   se o `CERT_PUBLIC_BASE_URL` do GestorHS for outro host em produção, recusa.

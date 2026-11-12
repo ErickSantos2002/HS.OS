@@ -144,7 +144,8 @@ def test_ganhar_confere_etapa(monkeypatch):
     """Ganhar com cartão velho ganharia um card que já andou."""
     out, reqs = _rodar(monkeypatch, "hsgrowth_servicos_ganhar", {**BASE, "de": 99, "para": 12})
     assert isinstance(out, hsgrowth.ErroSistema) and _escritas(reqs) == []
-    _, reqs = _rodar(monkeypatch, "hsgrowth_servicos_ganhar", {**BASE, "de": 10, "para": 12})
+    _, reqs = _rodar(monkeypatch, "hsgrowth_servicos_ganhar", {**BASE, "de": 14, "para": 19},
+                     card=CARD_GANHO, respostas=ETAPAS_GANHO)
     assert _escritas(reqs) == [("PUT", C + "/move")]
 
 
@@ -288,3 +289,45 @@ def test_card_de_outro_quadro_recusa_no_clique(monkeypatch, acao, extra):
                        pdf=_pdf_ok)
     assert isinstance(out, hsgrowth.ErroSistema) and "não é do quadro" in str(out)
     assert _escritas(reqs) == []
+
+
+CARD_GANHO = {"id": 7, "list_id": 14, "business_info": {"proposal_number": 812, "order_number": "PED-1",
+                                                        "from_collection": "nao"}}
+ETAPAS_GANHO = {("GET", "/service-boards/1/lists"): lambda: httpx.Response(200, json=[
+    {"id": 12, "board_id": 1, "name": "Proposta", "position": 3},
+    {"id": 14, "board_id": 1, "name": "Aguardando Pedido", "position": 4},
+    {"id": 18, "board_id": 1, "name": "Negócio Perdido", "position": 8, "is_lost_stage": True},
+    {"id": 19, "board_id": 1, "name": "Negócio Ganho", "position": 9, "is_done_stage": True}])}
+
+
+def test_ganhar_reconfere_requisito_no_clique(monkeypatch):
+    """Nº do pedido apagado entre o cartão e o clique: para admin o HSGrowth não
+    confere nada, e o ganho avisaria o GestorHS sem pedido."""
+    card = {**CARD_GANHO, "business_info": {"proposal_number": 812, "from_collection": "nao"}}
+    out, reqs = _rodar(monkeypatch, "hsgrowth_servicos_ganhar", {**BASE, "de": 14, "para": 19},
+                       card=card, respostas=ETAPAS_GANHO)
+    assert isinstance(out, hsgrowth.ErroSistema) and "pedido" in str(out)
+    assert _escritas(reqs) == []
+
+
+@pytest.mark.parametrize("acao,extra", [
+    ("hsgrowth_servicos_registrar", {"negocio": {"service_type": "ambos"}}),
+    ("hsgrowth_servicos_registrar", {"atividades": [{"op": "concluir", "activity_id": 31, "valida": True}]}),
+    ("hsgrowth_servicos_itens", {"ops": [{"tipo": "servico", "acao": "tirar", "item_id": 9}]}),
+    ("hsgrowth_servicos_anexar_proposta", {"numero": 5, "link_pdf": PDF, "nome_arquivo": "P.pdf"}),
+])
+def test_encerrado_desde_o_cartao_recusa_no_clique(monkeypatch, acao, extra):
+    """Card ganho entre o cartão e o clique: mexer no Resumo, nos itens ou na
+    proposta dele mudaria o que já foi faturado."""
+    out, reqs = _rodar(monkeypatch, acao, {**BASE, **extra}, card={**CARD_GANHO, "list_id": 19},
+                       respostas=ETAPAS_GANHO, pdf=_pdf_ok)
+    assert isinstance(out, hsgrowth.ErroSistema) and "encerrado" in str(out)
+    assert _escritas(reqs) == []
+
+
+def test_encerrado_ainda_recebe_anotacao_nova(monkeypatch):
+    """O acompanhamento depois do ganho é legítimo (a mesma regra do preparo)."""
+    p = {**BASE, "atividades": [{"op": "criar", "category": "anotacao", "description": "obrigado"}]}
+    _, reqs = _rodar(monkeypatch, "hsgrowth_servicos_registrar", p, card={**CARD_GANHO, "list_id": 19},
+                     respostas=ETAPAS_GANHO)
+    assert _escritas(reqs) == [("POST", C + "/activities")]
