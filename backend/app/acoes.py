@@ -9,8 +9,11 @@ from __future__ import annotations
 import json
 from typing import Awaitable, Callable
 
+import httpx
+
 from app.gestorhs_escrita import texto_lote_parcial
 from app import hsgrowth_escrita as hge
+from app import hsgrowth_servicos_escrita as hgse
 from app.config import settings
 from app.sistemas import gestorhs, hsgrowth, taskhs
 
@@ -502,6 +505,196 @@ async def _hsgrowth_noshow(email, bot, p, dono=None) -> str:
     return "Reunião marcada como no-show."
 
 
+# ── HSGrowth Serviços e Cobrança (12/11/2026) ────────────────────────────────
+# Spec `docs/superpowers/specs/2026-11-12-guardi-hsgrowth-servicos-design.md`.
+# CONTRATO DO PAYLOAD (quem prepara o cartão, Task 4, grava exatamente isto; datas
+# já em UTC; `board_id` 1 ou 2; os ids de etapa são `list_id`):
+#   hsgrowth_servicos_registrar: {board_id, card_id, negocio?: {chaves de CHAVES_NEGOCIO},
+#       campos?: {title, description, due_date, client_id, person_id}  (sem contact_info),
+#       atividades?: [{op:"criar", category:"atividade", activity_type, title, priority?,
+#                      description?, due_date?} | {op:"criar", category:"anotacao", description}
+#                     | {op:"concluir", activity_id, valida: bool}],
+#       mover?: {de, para}, _exibir: {link, aviso?, etapa_para?}}
+#       → reler o card (se `mover`, etapa atual == `de` ANTES de escrever nada) → um `PUT`
+#       com `campos` + `business_info` (= o do card relido ∪ `negocio`) → atividades →
+#       `PUT …/move {list_id: para}`.
+#   hsgrowth_servicos_itens: {board_id, card_id, ops: [{tipo: aparelho|servico,
+#       acao: por|alterar|tirar, item_id?, corpo?}]  (o retorno de `hgse.item`), _exibir}
+#       → `POST|PUT|DELETE …/products|services[/{item_id}]`.
+#   hsgrowth_servicos_ganhar: {board_id, card_id, de, para, _exibir}
+#   hsgrowth_servicos_perder: {board_id, card_id, de, para, motivo, _exibir}
+#       → anotação "Motivo da perda: <motivo>" e só então o move.
+#   hsgrowth_servicos_anexar_proposta: {board_id, card_id, numero, link_pdf, nome_arquivo, _exibir}
+#       → baixa o PDF (só host do GestorHS, https, sem redirect, ≤ 10 MB) e sobe em
+#       `POST …/activities/files?slot=proposta` (multipart `file`).
+# ⚠️ Corpo = só chaves de allowlist, nunca `**p`: payload adulterado não leva `list_id`,
+# `is_deleted`, `assigned_to_id` no PUT. Lote PARA no primeiro erro e NÃO desfaz.
+# ⚠️ Nomes reais lá (conferidos em ~/github/hsgrowth-sistema): o move do Serviços usa
+# `list_id` (o do Vendas usa `target_list_id`); o upload é `file` + query `slot`.
+
+_LIMITE_PDF = 10 * 1024 * 1024
+_transporte_pdf: httpx.AsyncBaseTransport | None = None   # trocável em teste
+# ⚠️ Allowlist PRÓPRIA do executor (não `hgse.CAMPOS_PUT`): `contact_info` fica de fora por
+# decisão de segurança — nunca chega ao PUT, nem de payload adulterado.
+_CAMPOS_PUT_SERVICOS = ("title", "description", "due_date", "client_id", "person_id")
+_CRIAR_ATIVIDADE = ("category", "activity_type", "title", "description", "priority", "due_date")
+
+
+def _sv(p: dict) -> str:
+    return f"/service-boards/{int(p['board_id'])}/cards/{int(p['card_id'])}"
+
+
+async def _sv_reler(email, bot, dono, p: dict, de=None) -> dict:
+    """Relê o card; com `de`, recusa se a etapa já não é a do cartão (nada escrito)."""
+    card = await _hsg(email, bot, dono, "GET", _sv(p))
+    if not isinstance(card, dict):
+        raise hsgrowth.ErroSistema(502, "o HSGrowth não devolveu o card")
+    if de is not None and card.get("list_id") != int(de):
+        raise hsgrowth.ErroSistema(0, "alguém mexeu no card desde o cartão (a etapa mudou) — "
+                                      "peça de novo; nada foi enviado ao HSGrowth")
+    return card
+
+
+def _sv_mover(passos, entrou, email, bot, dono, p, para):
+    async def f():
+        await _hsg(email, bot, dono, "PUT", _sv(p) + "/move", {"list_id": int(para)})
+        entrou.append("card movido")
+    passos.append(("mover", f))
+
+
+async def _hsgrowth_servicos_registrar(email, bot, p, dono=None) -> str:
+    mov = p.get("mover") or None
+    card = await _sv_reler(email, bot, dono, p, mov["de"] if mov else None)
+    entrou: list[str] = []
+    passos: list = []
+    corpo = _pegar(p.get("campos") or {}, _CAMPOS_PUT_SERVICOS)
+    negocio = _pegar(p.get("negocio") or {}, tuple(hgse.CHAVES_NEGOCIO))
+    if negocio:
+        # ⚠️ Mescla no CLIQUE: o card relido manda, o cartão só sobrepõe as suas chaves.
+        corpo["business_info"] = {**(card.get("business_info") or {}), **negocio}
+    if corpo:
+        async def put():
+            await _hsg(email, bot, dono, "PUT", _sv(p), corpo)
+            entrou.append("campos do card")
+        passos.append(("campos", put))
+    for op in p.get("atividades") or []:
+        def _f(op=op):
+            if op.get("op") == "concluir":
+                if not isinstance(op.get("valida"), bool):
+                    raise hsgrowth.ErroSistema(0, "cartão sem dizer se a atividade teve resultado "
+                                                  "(`valida`); nada foi enviado ao HSGrowth")
+                async def concluir():
+                    await _hsg(email, bot, dono, "PATCH", f"{_sv(p)}/activities/{int(op['activity_id'])}/complete",
+                               {"is_completed": True, "is_valid": op["valida"]})
+                    entrou.append("atividade concluída")
+                return ("atividade", concluir)
+            nota = op.get("category") == "anotacao"
+            async def criar():
+                await _hsg(email, bot, dono, "POST", f"{_sv(p)}/activities", _pegar(op, _CRIAR_ATIVIDADE))
+                entrou.append("anotação" if nota else "atividade criada")
+            return ("anotacao" if nota else "atividade", criar)
+        passos.append(_f())
+    if mov:
+        _sv_mover(passos, entrou, email, bot, dono, p, mov["para"])
+    await _hsg_lote(passos, entrou, _link_hsg(p), (p.get("_exibir") or {}).get("etapa_para"))
+    return _fim(entrou, p)
+
+
+async def _hsgrowth_servicos_itens(email, bot, p, dono=None) -> str:
+    entrou: list[str] = []
+    passos: list = []
+    for op in p.get("ops") or []:
+        produto = op.get("tipo") == "aparelho"
+        rota, nome = ("products", "aparelho") if produto else ("services", "servico")
+        chaves = ("product_id" if produto else "service_id", "quantity", "unit_price", "discount", "notes")
+        acao, iid = op.get("acao"), op.get("item_id")
+        metodo, caminho, corpo = {"por": ("POST", f"{_sv(p)}/{rota}", _pegar(op.get("corpo") or {}, chaves)),
+                                  "alterar": ("PUT", f"{_sv(p)}/{rota}/{int(iid or 0)}",
+                                              _pegar(op.get("corpo") or {}, chaves[1:])),
+                                  "tirar": ("DELETE", f"{_sv(p)}/{rota}/{int(iid or 0)}", None)}[acao]
+        rotulo = {"por": f"{nome} posto", "alterar": f"{nome} alterado", "tirar": f"{nome} tirado"}[acao]
+
+        def _f(metodo=metodo, caminho=caminho, corpo=corpo, rotulo=rotulo, nome=nome):
+            async def f():
+                await _hsg(email, bot, dono, metodo, caminho, corpo)
+                entrou.append(rotulo)
+            return (nome, f)
+        passos.append(_f())
+    await _hsg_lote(passos, entrou, _link_hsg(p))
+    return _fim(entrou, p)
+
+
+async def _hsgrowth_servicos_ganhar(email, bot, p, dono=None) -> str:
+    await _sv_reler(email, bot, dono, p, p["de"])
+    entrou: list[str] = []
+    passos: list = []
+    _sv_mover(passos, entrou, email, bot, dono, p, p["para"])
+    await _hsg_lote(passos, entrou, _link_hsg(p))
+    return "Negócio ganho no HSGrowth." + (f" {_link_hsg(p)}" if _link_hsg(p) else "")
+
+
+async def _hsgrowth_servicos_perder(email, bot, p, dono=None) -> str:
+    await _sv_reler(email, bot, dono, p, p["de"])
+    entrou: list[str] = []
+
+    async def nota():
+        await _hsg(email, bot, dono, "POST", f"{_sv(p)}/activities",
+                   {"category": "anotacao", "description": f"Motivo da perda: {p['motivo']}"})
+        entrou.append("motivo anotado")
+    passos: list = [("anotacao", nota)]
+    _sv_mover(passos, entrou, email, bot, dono, p, p["para"])
+    await _hsg_lote(passos, entrou, _link_hsg(p))
+    return "Negócio perdido no HSGrowth (motivo anotado)." + (f" {_link_hsg(p)}" if _link_hsg(p) else "")
+
+
+def _hosts_do_gestorhs() -> set[str]:
+    from urllib.parse import urlsplit
+    return {h for h in (urlsplit(u).hostname for u in (settings.GESTORHS_API_URL, settings.GESTORHS_URL)) if h}
+
+
+async def _baixar_pdf(url: str) -> bytes:
+    """O `link_pdf` do GestorHS é público e assinado (sem token). ⚠️ O servidor faz GET
+    nele: só https e só o host do GestorHS, sem seguir redirect (SSRF para a rede do
+    gateway), teto de 10 MB e tem que ser PDF."""
+    from urllib.parse import urlsplit
+    partes = urlsplit(str(url))
+    if partes.scheme != "https" or (partes.hostname or "") not in _hosts_do_gestorhs():
+        raise hsgrowth.ErroSistema(0, "o link do PDF não é do GestorHS; nada foi enviado ao HSGrowth")
+    try:
+        async with httpx.AsyncClient(timeout=30, transport=_transporte_pdf, follow_redirects=False) as c:
+            async with c.stream("GET", str(url)) as r:
+                if r.status_code != 200:
+                    raise hsgrowth.ErroSistema(0, f"não consegui baixar o PDF da proposta ({r.status_code}); "
+                                                  "nada foi enviado ao HSGrowth")
+                tipo = r.headers.get("content-type", "").lower()
+                dados = bytearray()
+                async for parte in r.aiter_bytes():
+                    dados += parte
+                    if len(dados) > _LIMITE_PDF:
+                        raise hsgrowth.ErroSistema(0, "o PDF da proposta passa de 10 MB; nada foi enviado ao HSGrowth")
+    except httpx.HTTPError as e:
+        raise hsgrowth.ErroSistema(0, f"não consegui baixar o PDF da proposta ({type(e).__name__}); "
+                                      "nada foi enviado ao HSGrowth") from e
+    if "pdf" not in tipo and not bytes(dados[:5]).startswith(b"%PDF"):
+        raise hsgrowth.ErroSistema(0, "o link da proposta não devolveu um PDF; nada foi enviado ao HSGrowth")
+    return bytes(dados)
+
+
+async def _hsgrowth_servicos_anexar(email, bot, p, dono=None) -> str:
+    pdf = await _baixar_pdf(p["link_pdf"])
+    nome = hge.uma_linha(p.get("nome_arquivo") or f"Proposta {p.get('numero')}", 120).replace("/", "-").replace("\\", "-")
+    if not nome.lower().endswith(".pdf"):
+        nome += ".pdf"
+    entrou: list[str] = []
+
+    async def f():
+        await hsgrowth.enviar_arquivo(email, bot, f"{_sv(p)}/activities/files", nome, pdf,
+                                      "application/pdf", params={"slot": "proposta"}, dono=dono)
+        entrou.append(f"proposta {p.get('numero')} anexada")
+    await _hsg_lote([("arquivo", f)], entrou, _link_hsg(p))
+    return _fim(entrou, p)
+
+
 EXECUTORES: dict[tuple[str, str], Executor] = {
     ("taskhs", "comentar"): _taskhs_comentar,
     ("taskhs", "mover"): _taskhs_mover,
@@ -521,6 +714,11 @@ EXECUTORES: dict[tuple[str, str], Executor] = {
     ("hsgrowth", "hsgrowth_ganhar"): _hsgrowth_ganhar,
     ("hsgrowth", "hsgrowth_perder"): _hsgrowth_perder,
     ("hsgrowth", "hsgrowth_noshow"): _hsgrowth_noshow,
+    ("hsgrowth_servicos", "hsgrowth_servicos_registrar"): _hsgrowth_servicos_registrar,
+    ("hsgrowth_servicos", "hsgrowth_servicos_itens"): _hsgrowth_servicos_itens,
+    ("hsgrowth_servicos", "hsgrowth_servicos_ganhar"): _hsgrowth_servicos_ganhar,
+    ("hsgrowth_servicos", "hsgrowth_servicos_perder"): _hsgrowth_servicos_perder,
+    ("hsgrowth_servicos", "hsgrowth_servicos_anexar_proposta"): _hsgrowth_servicos_anexar,
 }
 
 

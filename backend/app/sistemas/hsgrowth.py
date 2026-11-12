@@ -17,7 +17,7 @@ import httpx
 from app.config import settings
 from app.sistemas.taskhs import ErroSistema, chamar_sistema
 
-__all__ = ["ErroSistema", "chamar", "AUD"]
+__all__ = ["ErroSistema", "chamar", "enviar_arquivo", "AUD"]
 
 AUD = "hsgrowth"
 _transporte: httpx.AsyncBaseTransport | None = None   # trocável em teste
@@ -41,3 +41,12 @@ async def chamar(email: str, bot: str, caminho: str, params=None, dono: str | No
     return await chamar_sistema(AUD, "HSGrowth", settings.HSGROWTH_API_URL.rstrip("/"), _transporte,
                                 mensagens, email, bot, metodo, caminho, json=json, params=params,
                                 dono=dono)
+
+
+async def enviar_arquivo(email: str, bot: str, caminho: str, nome: str, conteudo: bytes,
+                         mime: str, params=None, dono: str | None = None) -> Any:
+    """POST multipart (campo `file`) — o upload de anexo do card. Mesmo token,
+    auditoria e mensagens de erro de escrita que `chamar`."""
+    return await chamar_sistema(AUD, "HSGrowth", settings.HSGROWTH_API_URL.rstrip("/"), _transporte,
+                                _MSG_ESCRITA, email, bot, "POST", caminho, params=params, dono=dono,
+                                files={"file": (nome, conteudo, mime)})
