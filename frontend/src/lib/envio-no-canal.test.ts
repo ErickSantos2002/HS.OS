@@ -9,8 +9,10 @@ const avisos = vi.hoisted(() => ({ notifyChannelRecipients: vi.fn(async (..._a: 
 const agentes = vi.hoisted(() => ({ startChannelAgentReplies: vi.fn((..._a: unknown[]) => undefined) }));
 vi.mock("@/lib/channel-notifications", () => avisos);
 vi.mock("@/lib/channel-agents", () => agentes);
+const avisoNaTela = vi.hoisted(() => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }));
+vi.mock("sonner", () => avisoNaTela);
 
-import { enviarGifNoCanal, publicarNaThread, publicarNoCanal, type ContextoDeEnvio } from "./envio-no-canal";
+import { enviarGifComAviso, enviarGifNoCanal, ERRO_DO_GIF, publicarNaThread, publicarNoCanal, type ContextoDeEnvio } from "./envio-no-canal";
 import { autorDaCitacao, montarResposta } from "@/lib/citacao";
 
 const ctx = (): ContextoDeEnvio => ({
@@ -76,5 +78,17 @@ describe("GIF", () => {
     await enviarGifNoCanal(c, { title: "", url: "u" });
     expect((c.sendMessage as ReturnType<typeof vi.fn>).mock.calls[0][7][0].name).toBe("gif.gif");
     expect(avisos.notifyChannelRecipients.mock.calls[0][0]).toMatchObject({ forceNotifyAll: true });
+  });
+
+  it("gravação recusada: o erro aparece na tela e ninguém é avisado de um GIF que não existe", async () => {
+    const c = { ...ctx(), sendMessage: vi.fn(async () => false) };
+    await enviarGifComAviso(c, { title: "x", url: "u" });
+    expect(avisoNaTela.toast.error).toHaveBeenCalledWith(ERRO_DO_GIF);
+    expect(avisos.notifyChannelRecipients).not.toHaveBeenCalled();
+  });
+
+  it("deu certo: sem erro na tela", async () => {
+    await enviarGifComAviso(ctx(), { title: "x", url: "u" });
+    expect(avisoNaTela.toast.error).not.toHaveBeenCalled();
   });
 });

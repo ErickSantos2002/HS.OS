@@ -38,7 +38,7 @@ import { fraseDeQuemEscreve, podeEscreverNoCanal } from "@/lib/canal-avisos";
 import { getAgentDisplayName } from "@/lib/channel-agents";
 import { getPendingAgentsForChannel, subscribeToChannelAgentPending } from "@/lib/channel-agent-pending";
 import {
-  anexosDoCanal, apagarNoCanal, apagarParaMimNoCanal, editarNoCanal, enviarAudioNoCanal, enviarGifNoCanal, publicarNoCanal,
+  anexosDoCanal, apagarNoCanal, apagarParaMimNoCanal, editarNoCanal, enviarAudioNoCanal, enviarGifComAviso, publicarNoCanal,
   type ContextoDeEnvio,
 } from "@/lib/envio-no-canal";
 import { casaBusca } from "@/lib/lista-de-conversas";
@@ -366,7 +366,7 @@ export function TelaConversaCanal({
       <FolhaDeGif
         aberta={folhaGif}
         aoFechar={() => setFolhaGif(false)}
-        aoEscolher={(gif) => { if (ctxEnvio) { colado.current = true; void enviarGifNoCanal(ctxEnvio, gif); } }}
+        aoEscolher={(gif) => { if (ctxEnvio) { colado.current = true; void enviarGifComAviso(ctxEnvio, gif); } }}
       />
       <FolhaDeAnexo
         aberta={folhaAnexo}

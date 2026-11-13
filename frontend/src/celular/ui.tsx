@@ -63,7 +63,10 @@ export function Avatar({
 
 /** Foto que não carrega (link velho, arquivo apagado) volta para a inicial, como no agente. */
 function AvatarDePessoa({ nome, chave, foto, tam }: { nome: string; chave: string; foto?: string | null; tam: Tam }) {
+  // Guarda QUAL foto quebrou: outra foto tenta de novo, e a mesma também
+  // quando volta depois de outra (A quebrada → B → A).
   const [quebrada, setQuebrada] = useState<string | null>(null);
+  useEffect(() => { setQuebrada(null); }, [foto]);
   const mostrar = foto && foto !== quebrada ? foto : null;
   return (
     <div className={`cel-av ${tam}`} style={{ background: corDoAvatar(chave) }} aria-hidden="true">

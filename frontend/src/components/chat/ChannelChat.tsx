@@ -26,7 +26,7 @@ import { acharCitada, autorDaCitacao, montarResposta, separarCitacao, trechoPara
 import { abrirCacheDeRespostas, consumirResposta } from "@/lib/resposta-rapida";
 import {
   anexosDoCanal, apagarNoCanal, apagarParaMimNoCanal, editarNoCanal, enviarAudioNoCanal, publicarAudioNaThread,
-  enviarGifNoCanal, publicarNaThread, publicarNoCanal, type ContextoDeEnvio,
+  enviarGifComAviso, publicarNaThread, publicarNoCanal, type ContextoDeEnvio,
 } from "@/lib/envio-no-canal";
 import VistoDaMensagem from "./VistoDaMensagem";
 import DadosDaMensagem from "./DadosDaMensagem";
@@ -1715,7 +1715,7 @@ export default function ChannelChat({
   const handleSendGif = useCallback(async (gif: GifResult) => {
     if (!ctxEnvio) return;
     shouldAutoScrollRef.current = true;
-    await enviarGifNoCanal(ctxEnvio, gif);
+    await enviarGifComAviso(ctxEnvio, gif);
   }, [ctxEnvio]);
 
   // Called by RichComposer on every input. Receives markdown + plain text + caret offset.
