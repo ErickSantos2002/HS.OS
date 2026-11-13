@@ -14,7 +14,7 @@
  * aparelho; nas outras abas e aparelhos a janela fecha pelo evento do banco.
  */
 import { useQueryClient } from "@tanstack/react-query";
-import { AlarmClock, BellOff, Check, MessageCircle } from "lucide-react";
+import { AlarmClock, BellOff, Check, MessageCircle, VolumeX } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -24,13 +24,15 @@ import { useAuthContext } from "@/contexts/auth-context";
 import { lembretesPendentes, responderLembrete, type LembretePendente } from "@/lib/agenda";
 import {
   chaveDoAviso,
+  ALARME_INTERVALO_MS,
+  alarmeTocando,
   compararAvisos,
-  deveTocar,
   fecharNotificacaoDoLembrete,
   mudaAJanela,
+  tituloDaAba,
 } from "@/lib/janela-de-lembrete";
 import { assinar } from "@/lib/realtime";
-import { tocarSomDeLembrete } from "@/lib/som-de-lembrete";
+import { prepararSom, tocarAlarme } from "@/lib/som-de-lembrete";
 
 const hora = (iso: string) => iso.slice(11, 16);
 
@@ -41,6 +43,8 @@ export function JanelaDeLembrete() {
   const [pendentes, setPendentes] = useState<LembretePendente[]>([]);
   const [recolhida, setRecolhida] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [silenciado, setSilenciado] = useState(false);
+  const [alarmeDesde, setAlarmeDesde] = useState<number | null>(null);
   const vistos = useRef(new Set<string>());
   const anteriores = useRef<LembretePendente[]>([]);
 
@@ -58,9 +62,43 @@ export function JanelaDeLembrete() {
     setPendentes(lista);
     if (novos.length > 0) {
       setRecolhida(false);
-      if (deveTocar(novos.length, document.visibilityState === "visible")) void tocarSomDeLembrete();
+      setSilenciado(false);
+      setAlarmeDesde(Date.now());
     }
+    if (lista.length === 0) setAlarmeDesde(null);
   }, []);
+
+  useEffect(() => prepararSom(), []);
+
+  // O alarme: toca já e repete enquanto pendente, também com a aba oculta.
+  const haPendente = pendentes.length > 0;
+  useEffect(() => {
+    const tocando = () =>
+      alarmeTocando({ pendente: haPendente, recolhida, silenciado, desde: alarmeDesde, agora: Date.now() });
+    if (!tocando()) return;
+    void tocarAlarme();
+    const id = window.setInterval(() => {
+      if (tocando()) void tocarAlarme();
+      else window.clearInterval(id);
+    }, ALARME_INTERVALO_MS);
+    return () => window.clearInterval(id);
+  }, [haPendente, recolhida, silenciado, alarmeDesde]);
+
+  // O título da aba pisca enquanto houver lembrete esperando resposta.
+  const tituloPendente = pendentes[0]?.titulo;
+  useEffect(() => {
+    if (!tituloPendente) return;
+    const base = document.title;
+    let aceso = false;
+    const id = window.setInterval(() => {
+      aceso = !aceso;
+      document.title = tituloDaAba(base, tituloPendente, aceso);
+    }, 1_000);
+    return () => {
+      window.clearInterval(id);
+      document.title = base;
+    };
+  }, [tituloPendente]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -167,6 +205,11 @@ export function JanelaDeLembrete() {
           <p className="text-xs text-muted-foreground/80">do seu {atual.agente_nome}</p>
         </div>
         <div className="grid grid-cols-2 gap-2">{botoes}</div>
+        {!silenciado && alarmeDesde !== null && (
+          <Button variant="ghost" size="sm" className="w-full" onClick={() => setSilenciado(true)}>
+            <VolumeX className="mr-1.5 h-4 w-4" /> Silenciar alarme
+          </Button>
+        )}
         <Button variant="ghost" size="sm" className="w-full" onClick={abrirConversa}>
           <MessageCircle className="mr-1.5 h-4 w-4" /> Abrir conversa
         </Button>

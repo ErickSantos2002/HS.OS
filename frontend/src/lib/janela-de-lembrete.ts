@@ -42,10 +42,31 @@ export function compararAvisos(
 }
 
 /**
- * Toca o som? Só para aviso novo e com a aba à vista — oculta, quem avisa é o
- * push (tocar duas vezes, uma no SO e outra numa aba escondida, é ruído).
+ * O alarme da janela (13/11/2026, pedido do Erick depois do teste): um toque
+ * só passava despercebido por quem não estava olhando a janela — e a
+ * notificação do sistema pode estar bloqueada no aparelho. Enquanto o
+ * lembrete estiver pendente, toca a cada `ALARME_INTERVALO_MS`, **também com a
+ * aba oculta** (é justamente quem não está olhando), até alguém responder,
+ * silenciar ou abrir a conversa — e no máximo por `ALARME_TETO_MS`: depois disso
+ * quem chama de novo é a insistência de 5 min do servidor, que é um aviso novo
+ * e recomeça o alarme.
  */
-export const deveTocar = (novos: number, visivel: boolean) => novos > 0 && visivel;
+export const ALARME_INTERVALO_MS = 3_000;
+export const ALARME_TETO_MS = 120_000;
+
+export function alarmeTocando(o: {
+  pendente: boolean;
+  recolhida: boolean;
+  silenciado: boolean;
+  desde: number | null;
+  agora: number;
+}): boolean {
+  return o.pendente && !o.recolhida && !o.silenciado && o.desde !== null && o.agora - o.desde < ALARME_TETO_MS;
+}
+
+/** O título da aba pisca com o lembrete: aparece na barra de tarefas mesmo com a janela atrás. */
+export const tituloDaAba = (base: string, lembrete: string, aceso: boolean) =>
+  aceso ? `⏰ LEMBRETE — ${lembrete}` : base;
 
 /** Fecha a notificação do SO de um lembrete (`tag: lembrete:<id>`). Nunca levanta. */
 export async function fecharNotificacaoDoLembrete(id: string): Promise<void> {
