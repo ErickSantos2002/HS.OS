@@ -28,7 +28,7 @@ function montar() {
       <AgentMessageList messages={mensagens} isAgentWorking={false} ttsPlaying={null}
         effectiveAgentId="nina" agentName="Nina" userAvatarUrl={null} userName="Ana"
         onSetLightboxSrc={() => {}} onSetActiveArtifact={() => {}} onOpenLiveArtifact={() => {}}
-        onRetry={() => {}} onTtsToggle={() => {}} activitiesByMessageId={{}} trailingActivities={[]} />
+        onRetry={() => {}} onTtsToggle={() => {}} activitiesByMessageId={{}} trailingActivities={[]} hoje="2026-11-13" />
     </MemoryRouter>,
   );
 }

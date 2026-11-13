@@ -1,4 +1,8 @@
 /** Cores e datas do app do celular — funções puras, fora dos componentes. */
+import type { ChannelMessage } from "@/hooks/use-channels";
+import type { Person } from "@/hooks/use-people";
+import { normalizeAgentId } from "@/lib/active-agents";
+import { getAgentDisplayName } from "@/lib/channel-agents";
 
 const CORES = ["#1885c8", "#0f8f84", "#5a54c7", "#c2721a", "#b84a6a", "#7c5cc4", "#2f8a52", "#c0533a", "#3a6fb0"];
 const CORES_DE_NOME = ["--n1", "--n2", "--n3", "--n4", "--n5"];
@@ -42,4 +46,10 @@ export function rotuloDoDia(iso: string, agora = new Date()): string {
 export function mesmoDia(a: string, b: string | undefined): boolean {
   if (!b) return false;
   return new Date(a).toDateString() === new Date(b).toDateString();
+}
+
+/** Nome de quem escreveu no canal: agente pelo nome de exibição, pessoa pelo cadastro. */
+export function nomeDoAutorNoCanal(m: ChannelMessage, pessoaPorId: Map<string, Person>): string {
+  if (m.author_type === "agent") return getAgentDisplayName(normalizeAgentId(m.author_id || ""));
+  return pessoaPorId.get(m.author_id)?.full_name || m.author_name || "Alguém";
 }

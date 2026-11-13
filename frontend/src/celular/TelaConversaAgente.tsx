@@ -5,15 +5,13 @@
  * (`useConversaAgente`); a marcação de lido é a mesma (`useConversaAtiva…`).
  * Aqui só mora a tela.
  */
-import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BrainCircuit, History, Paperclip, RotateCcw } from "lucide-react";
 
-import ArtifactMessage from "@/components/chat/ArtifactMessage";
 import ArtifactPanel from "@/components/chat/ArtifactPanel";
 import ChannelFilesPanel from "@/components/chat/ChannelFilesPanel";
 import { ContextWindowIndicator } from "@/components/chat/ContextWindowIndicator";
 import ConversasAnteriores from "@/components/chat/ConversasAnteriores";
-import { StreamingMarkdownContent } from "@/components/chat/MessageContent";
 import { SeloDoModelo } from "@/components/chat/SeloDoModelo";
 import { PainelEmbutido } from "@/components/chat/painel-embutido";
 import LiveArtifactViewer from "@/components/LiveArtifactViewer";
@@ -21,6 +19,8 @@ import { useAgents } from "@/hooks/use-agents";
 import { useAuthContext } from "@/contexts/auth-context";
 import { useChatMedia } from "@/hooks/use-chat-media";
 import { LIMITE_TEXTO_COMO_ANEXO, useConversaAgente } from "@/hooks/use-conversa-agente";
+import { useAcoesEstaveis } from "@/hooks/use-acoes-estaveis";
+import { useHoje } from "@/hooks/use-hoje";
 import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
 import { useMobileChatViewport } from "@/hooks/use-mobile-chat-viewport";
 import { usePersistentDraft } from "@/hooks/use-persistent-draft";
@@ -29,16 +29,14 @@ import { toCanonicalAgentId } from "@/lib/agent-id";
 import type { ArtifactType } from "@/lib/artifact-extractor";
 import { acrescentarCitacao } from "@/lib/conversas-anteriores";
 import type { ChatMessage } from "@/lib/mock-data";
-import { estadoNoAgente } from "@/lib/vistos";
-import { Bolha, Pensando } from "./Bolha";
 import { Cabecalho, Sobreposta } from "./Cabecalho";
-import { autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "@/lib/citacao";
+import { autorDaCitacao, montarResposta, trechoParaCitar, type Citacao } from "@/lib/citacao";
 import { Composer } from "./Composer";
 import { FolhaDeAcoes, FolhaDeAnexo, FolhaDeEmoji } from "./Folhas";
+import { BolhaPensandoDoAgente, ListaDoAgente, type AcoesDoAgente } from "./ListaDoAgente";
 import { Ampliada, MidiaDoAgente } from "./Midia";
 import type { Painel, Tela } from "./pilha";
 import { Avatar, Folha, MenuSuspenso } from "./ui";
-import { horaCurta, mesmoDia, rotuloDoDia } from "./formato";
 import { useMapaDmDoAgente } from "./use-lista";
 import { useLocation, useNavigate } from "react-router-dom";
 import { anteriorDaUrl, semPedido } from "./pedido-da-url";
@@ -124,6 +122,18 @@ export function TelaConversaAgente({
     }
   };
 
+  // Ações das bolhas num objeto estável: sem isso cada tecla no composer
+  // redesenhava todas as bolhas (ver `ListaDoAgente`).
+  const hoje = useHoje();
+  const acoesDaLista = useAcoesEstaveis<AcoesDoAgente>({
+    segurar: setAcoesDe,
+    responder,
+    tentarNovamente: (id) => conversa.handleRetry(id),
+    abrirArtefato: (a) => { setArtefato(a); setVivo(null); },
+    abrirVivo: (id) => { setVivo(id); setArtefato(null); },
+    ampliar: setAmpliada,
+  });
+
   const voltarDoPainel = aoVoltar;
   const parcial = streamingText && !PARCIAL_SEM_TEXTO.has(streamingText) ? streamingText : "";
   const sub = isAgentWorking ? "pensando…" : `Agente · ${agente?.specialty || agente?.department || "HS.OS"}`;
@@ -152,60 +162,8 @@ export function TelaConversaAgente({
         {mensagens.length === 0 && !isAgentWorking && (
           <div className="cel-vazio">Mande uma mensagem para {nome}.</div>
         )}
-        {mensagens.map((m, i) => {
-          const ant = mensagens[i - 1];
-          const novoDia = !ant || !mesmoDia(m.timestamp, ant.timestamp);
-          const eu = m.role === "user";
-          const inicio = novoDia || !ant || ant.role !== m.role;
-          const erro = !!m.isError || (!!m.content && m.content.startsWith("[error]"));
-          const { citacao, resto } = separarCitacao(m.content || "");
-          return (
-            <Fragment key={m.id}>
-              {novoDia && <div className="cel-dia">{rotuloDoDia(m.timestamp)}</div>}
-              <Bolha
-                id={m.id}
-                eu={eu}
-                inicio={inicio}
-                hora={horaCurta(m.timestamp)}
-                visto={eu ? estadoNoAgente(mensagens, i, isAgentWorking) : null}
-                erro={erro}
-                aoSegurar={() => setAcoesDe(m)}
-                aoResponder={erro ? undefined : () => responder(m)}
-                destaque={acoesDe?.id === m.id}
-              >
-                {citacao && <span className="cel-cit"><b>{citacao.autor}</b><span>{citacao.texto}</span></span>}
-                <div className="cel-texto">
-                  {erro ? (
-                    <p>{m.content.replace("[error] ", "").replace("[error]", "")}</p>
-                  ) : eu ? (
-                    resto && <p style={{ whiteSpace: "pre-wrap" }}>{resto}</p>
-                  ) : (
-                    <ArtifactMessage
-                      content={resto}
-                      agentId={m.agentId}
-                      className="text-[16px] leading-[1.38]"
-                      onArtifactClick={(a) => { setArtefato(a); setVivo(null); }}
-                      onLiveArtifactClick={(id) => { setVivo(id); setArtefato(null); }}
-                    />
-                  )}
-                </div>
-                {Array.isArray(m.media) && m.media.map((att, k) => (
-                  <MidiaDoAgente key={k} att={att} semente={`${m.id}:${k}`} aoAmpliar={setAmpliada} />
-                ))}
-                {erro && (
-                  <button type="button" className="cel-tentar" disabled={isAgentWorking} onClick={() => conversa.handleRetry(m.id)}>
-                    Tentar novamente
-                  </button>
-                )}
-              </Bolha>
-            </Fragment>
-          );
-        })}
-        {isAgentWorking && (
-          <Bolha id="pensando" eu={false} inicio={mensagens.at(-1)?.role !== "agent"} hora="">
-            {parcial ? <div className="cel-texto"><StreamingMarkdownContent text={parcial} className="text-[16px] leading-[1.38]" /></div> : <Pensando nome={nome} />}
-          </Bolha>
-        )}
+        <ListaDoAgente mensagens={mensagens} isAgentWorking={isAgentWorking} destaqueId={acoesDe?.id ?? null} hoje={hoje} acoes={acoesDaLista} />
+        {isAgentWorking && <BolhaPensandoDoAgente nome={nome} parcial={parcial} inicio={mensagens.at(-1)?.role !== "agent"} />}
       </div>
       <div style={{ paddingBottom: bottomOffset }}>
         <Composer
