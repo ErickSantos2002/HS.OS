@@ -34,6 +34,10 @@ export const CHANGELOG: ChangelogVersion[] = [
     date: "2026-11-13",
     changes: [
       {
+        kind: "novidade",
+        text: "O Guardi agora faz coisas no TalentHS por você: pedir ou cancelar uma ausência, pedir ajuste de ponto, lançar a batida esquecida, responder feedback, entrar ou sair de workshop. Para o RH, também aprovar ausências e ponto (várias de uma vez), escrever comunicado, pôr evento no calendário, montar PDI, lançar o realizado da meta e registrar curso. Nada acontece sem você confirmar no cartão — e, se algo mudou no TalentHS desde então, ele não grava e avisa.",
+      },
+      {
         kind: "correcao",
         text: "O Guardi passa a falar os horários de cards, e-mails e tarefas no horário de Brasília — antes vinham três horas adiantados.",
       },
