@@ -18,7 +18,7 @@ FERRAMENTAS_EMAIL = ("email_caixas", "email_listar", "email_ler", "email_enviar_
                      "email_preparar", "email_pendentes", "email_marcar_lido")
 # As do servidor `hsos-bot-<bot>` (memória, sistemas internos e agenda).
 FERRAMENTAS_BOT = ("lembrar", "taskhs_eu", "datacore_consultas", "datacore_consultar",
-                   "docshs_consultas", "docshs_consultar", "gestorhs_consultas", "gestorhs_consultar",
+                   "docshs_consultas", "docshs_consultar", "talenths_consultas", "talenths_consultar", "gestorhs_consultas", "gestorhs_consultar",
                    "hsgrowth_consultas", "hsgrowth_consultar",
                    "hsgrowth_registrar", "hsgrowth_cliente", "hsgrowth_criar_lead", "hsgrowth_ganhar",
                    "hsgrowth_perder", "hsgrowth_noshow",

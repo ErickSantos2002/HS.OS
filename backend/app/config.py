@@ -58,6 +58,8 @@ class Settings(BaseSettings):
     # O front do DocsHS; a API é `DOCSHS_URL + "/api/v1"` (o nginx de lá repassa).
     # Também é a base dos links que o Guardi entrega (`/documentos/<id>`).
     DOCSHS_URL: str = "https://docshs.healthsafetytech.com"
+    # TalentHS (RH): a API tem domínio próprio, sem prefixo. Spec 2026-11-13-guardi-talenths.
+    TALENTHS_API_URL: str = "https://talenthsapi.healthsafetytech.com"
     # GestorHS: DUAS URLs, ao contrário do DocsHS. A API (chamadas, sem prefixo)
     # e o front (só a base dos links `/app/...` que o Guardi entrega). Trocar
     # uma pela outra quebra os links ou faz a chamada receber o HTML da SPA.
