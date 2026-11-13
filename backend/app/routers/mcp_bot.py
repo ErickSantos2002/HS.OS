@@ -27,6 +27,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
+from app.fuso import em_brasilia
 from app import acoes
 from app.agenda import dominio, outlook
 from app.agenda.regras import FUSO, RegraInvalida, regra_de
@@ -2213,6 +2214,14 @@ async def _hsgrowth_servicos(conn, bot: str, nome: str, args: dict, ctx: dict) -
 
 
 async def executar(agent_id: str, nome: str, args: dict) -> tuple[str, bool]:
+    """Todo horário que sai daqui vai em Brasília (`app/fuso.py`): o agente
+    repetia o UTC dos sistemas, três horas adiantado. O HSGrowth grava sem fuso
+    e em UTC, por isso o seu texto converte também o carimbo ingênuo."""
+    texto, erro = await _executar_cru(agent_id, nome, args)
+    return em_brasilia(texto, sem_fuso_e_utc=nome.startswith("hsgrowth_")), erro
+
+
+async def _executar_cru(agent_id: str, nome: str, args: dict) -> tuple[str, bool]:
     agent_id = normalizar_agent_id(agent_id)
     try:
         async with sessao(role="service_role") as conn:
