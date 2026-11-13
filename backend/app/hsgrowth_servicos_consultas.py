@@ -73,6 +73,16 @@ CONSULTAS: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "contatos": ("/persons", "os contatos (pessoas). `search`", ("search",)),
 }
 
+# O que a pessoa diria ao Guardi para chegar a esta consulta — só para a tela
+# "Capacidade" (`app/capacidade.py`). Opcional: sem exemplo, a tela mostra só o
+# rótulo. O agente não lê isto: ele lê a descrição acima.
+EXEMPLOS: dict[str, str] = {
+    "cards": "quais cards de Cobrança estão atrasados?",
+    "pendencias": "quais atividades minhas estão pendentes?",
+    "buscar": "acha o card do aparelho de série 12345",
+    "painel": "como está o painel de Serviços este mês?",
+}
+
 _PEDE_BOARD = ("etapas", "cards", "card", "atividades")
 _PEDE_CARD = ("card", "atividades")
 
