@@ -1,16 +1,18 @@
 /**
- * As folhas de baixo do app do celular: ações da mensagem (segurar), emoji e
- * anexar. As ações vêm de `lib/acoes-da-mensagem.ts` — a mesma fonte da seta
+ * As folhas de baixo do app do celular: ações da mensagem (segurar), emoji,
+ * GIF e anexar. As ações vêm de `lib/acoes-da-mensagem.ts` — a mesma fonte da seta
  * do desktop; aqui só se acrescenta "Responder" (citar, o mesmo que deslizar).
  */
 import { lazy, Suspense } from "react";
 import { Camera, FileText, Image as ImageIcon, Library, Reply, Smile } from "lucide-react";
 
+import type { GifResult } from "@/components/chat/GifPicker";
 import type { AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
 import { REACOES_RAPIDAS } from "@/lib/acoes-do-toque";
 import { Folha } from "./ui";
 
 const EmojiPickerLargo = lazy(() => import("@/components/chat/EmojiPickerLargo"));
+const GifPicker = lazy(() => import("@/components/chat/GifPicker"));
 
 export function FolhaDeAcoes({
   aberta, aoFechar, acoes, aoReagir, aoResponder, aoMaisEmojis,
@@ -60,6 +62,20 @@ export function FolhaDeEmoji({ aberta, aoFechar, aoEscolher }: { aberta: boolean
       <div style={{ padding: "0 8px" }} data-sem-arrasto>
         <Suspense fallback={<div style={{ height: 320 }} />}>
           <EmojiPickerLargo onSelect={(e) => { aoEscolher(e); aoFechar(); }} altura={320} />
+        </Suspense>
+      </div>
+    </Folha>
+  );
+}
+
+/** O `GifPicker` do desktop, em largura total (spec 2026-11-03, C6). Escolher envia na hora, como lá. */
+export function FolhaDeGif({ aberta, aoFechar, aoEscolher }: { aberta: boolean; aoFechar: () => void; aoEscolher: (gif: GifResult) => void }) {
+  return (
+    <Folha aberta={aberta} aoFechar={aoFechar} rotulo="GIFs">
+      <h3>GIFs</h3>
+      <div data-sem-arrasto>
+        <Suspense fallback={<div style={{ height: "60dvh" }} />}>
+          <GifPicker onSelect={(g) => { aoFechar(); aoEscolher(g); }} className="w-full h-[60dvh]" />
         </Suspense>
       </div>
     </Folha>

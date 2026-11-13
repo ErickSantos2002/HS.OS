@@ -91,6 +91,36 @@ export async function publicarNoCanal(
   acordarAgentes(ctx, paraAvisos);
 }
 
+/** O que um GIF escolhido no `GifPicker` precisa: o título e a URL do Giphy. */
+export interface GifEscolhido {
+  title?: string | null;
+  url: string;
+}
+
+/**
+ * GIF: mensagem sem texto com um anexo `image/gif` apontando para o Giphy, e
+ * aviso "🎬 GIF". Não acorda agente — era assim no `ChannelChat`, de onde
+ * saiu em 13/11/2026 para o celular ganhar o mesmo botão.
+ */
+export async function enviarGifNoCanal(ctx: ContextoDeEnvio, gif: GifEscolhido): Promise<void> {
+  const nome = nomeDeQuemEscreve(ctx);
+  const anexos: ChannelAttachment[] = [{
+    name: `${gif.title || "gif"}.gif`,
+    url: gif.url,
+    size: 0,
+    mimeType: "image/gif",
+  }];
+  await ctx.sendMessage(ctx.canal.id, ctx.user.id, nome, "", "human", ctx.profile?.avatar_url || null, null, anexos);
+  await notifyChannelRecipients({
+    channelId: ctx.canal.id,
+    senderUserId: ctx.user.id,
+    authorName: nome,
+    contentPreview: "🎬 GIF",
+    contentText: "🎬 GIF",
+    forceNotifyAll: ctx.canal.type === "dm",
+  });
+}
+
 /** Resposta numa thread. Não acorda agente — era assim no `ChannelChat`. */
 export async function publicarNaThread(
   ctx: ContextoDeEnvio, texto: string, raiz: string, anexos?: ChannelAttachment[] | null, opcoes: OpcoesDeEnvio = {},

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { horaDaLista, linhaDaPrevia, montarLista, type ItemCelular } from "./lista";
+import { horaDaLista, itemDePessoa, linhaDaPrevia, montarLista, naoLidasPorChip, type ItemCelular } from "./lista";
 
 const AGORA = new Date(2026, 10, 3, 9, 50); // terça, 03/11/2026 09:50 local
 
@@ -87,5 +87,39 @@ describe("montarLista com a conversa pessoal", () => {
   it("respeita a busca", () => {
     expect(montarLista(comPessoal, "pessoa", "erick").map((i) => i.id)).toEqual(["cp"]);
     expect(montarLista(comPessoal, "pessoa", "marina").map((i) => i.id)).not.toContain("cp");
+  });
+});
+
+/**
+ * A pessoa saía sem foto no app (André e Lucas com a inicial) enquanto o
+ * desktop mostrava o `avatar_url`: o item era montado sem `foto`.
+ */
+describe("itemDePessoa", () => {
+  const pessoa = { id: "andre", full_name: "André Souza", email: "andre@hs.com", cargo: "Técnico", departamento: "Laboratório", avatar_url: "https://r2/andre.jpg" };
+
+  it("leva a foto da pessoa", () => {
+    const i = itemDePessoa(pessoa, { canalId: "dm9", previa: null, naoLidas: 2, silenciado: false });
+    expect(i).toMatchObject({ chave: "pessoa:andre", tipo: "pessoa", canalId: "dm9", nome: "André Souza", subtitulo: "Técnico · Laboratório", naoLidas: 2, foto: "https://r2/andre.jpg" });
+  });
+
+  it("sem foto fica null (a inicial aparece); sem nome, o e-mail", () => {
+    const i = itemDePessoa({ ...pessoa, full_name: null, avatar_url: null }, { canalId: null, previa: null, naoLidas: 0, silenciado: false });
+    expect(i.foto).toBeNull();
+    expect(i.nome).toBe("andre@hs.com");
+  });
+});
+
+/**
+ * Os chips não tinham contador: com 5 não lidas em canais a pessoa só via
+ * trocando de chip. A regra é a das abas do desktop: silenciada conta.
+ */
+describe("naoLidasPorChip", () => {
+  it("soma por chip, com a silenciada e a pessoal em Pessoas", () => {
+    const comPessoal = [...itens, item({ id: "eu", tipo: "pessoal", nome: "Eu (você)", naoLidas: 1 }), item({ id: "marina2", tipo: "pessoa", nome: "M", naoLidas: 2 })];
+    expect(naoLidasPorChip(comPessoal)).toEqual({ pessoa: 3, agente: 1, canal: 12 });
+  });
+
+  it("tudo lido dá zero em todos", () => {
+    expect(naoLidasPorChip(itens.map((i) => ({ ...i, naoLidas: 0 })))).toEqual({ pessoa: 0, agente: 0, canal: 0 });
   });
 });

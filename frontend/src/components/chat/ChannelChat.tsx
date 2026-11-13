@@ -26,7 +26,7 @@ import { acharCitada, autorDaCitacao, montarResposta, separarCitacao, trechoPara
 import { abrirCacheDeRespostas, consumirResposta } from "@/lib/resposta-rapida";
 import {
   anexosDoCanal, apagarNoCanal, apagarParaMimNoCanal, editarNoCanal, enviarAudioNoCanal, publicarAudioNaThread,
-  publicarNaThread, publicarNoCanal, type ContextoDeEnvio,
+  enviarGifNoCanal, publicarNaThread, publicarNoCanal, type ContextoDeEnvio,
 } from "@/lib/envio-no-canal";
 import VistoDaMensagem from "./VistoDaMensagem";
 import DadosDaMensagem from "./DadosDaMensagem";
@@ -75,7 +75,7 @@ import RichComposer, { type RichComposerHandle, type RichFormat } from "./RichCo
 import ImageLightbox from "./ImageLightbox";
 import GifPicker, { type GifResult } from "./GifPicker";
 import FileAttachmentPreviewDialog from "./FileAttachmentPreviewDialog";
-import { hasEveryoneMention, notifyChannelRecipients } from "@/lib/channel-notifications";
+import { hasEveryoneMention } from "@/lib/channel-notifications";
 import { MarkdownMessageContent, PlainMessageContent } from "./MessageContent";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
@@ -1710,27 +1710,13 @@ export default function ChannelChat({
   }, [channel.id, location.search]);
 
 
+  // O envio do GIF mora em `lib/envio-no-canal.ts` desde 13/11/2026 — o
+  // celular usa o mesmo.
   const handleSendGif = useCallback(async (gif: GifResult) => {
-    if (!user) return;
+    if (!ctxEnvio) return;
     shouldAutoScrollRef.current = true;
-    const displayName = (profile?.full_name && profile.full_name.trim()) || user.email?.split("@")[0] || "Usuário";
-    const avatarUrl = profile?.avatar_url || null;
-    const attachments: ChannelAttachment[] = [{
-      name: `${gif.title || "gif"}.gif`,
-      url: gif.url,
-      size: 0,
-      mimeType: "image/gif",
-    }];
-    await sendMessage(channel.id, user.id, displayName, "", "human", avatarUrl, null, attachments);
-    await notifyChannelRecipients({
-      channelId: channel.id,
-      senderUserId: user.id,
-      authorName: displayName,
-      contentPreview: "🎬 GIF",
-      contentText: "🎬 GIF",
-      forceNotifyAll: channel.type === "dm",
-    });
-  }, [channel.id, channel.type, profile?.avatar_url, profile?.full_name, sendMessage, user]);
+    await enviarGifNoCanal(ctxEnvio, gif);
+  }, [ctxEnvio]);
 
   // Called by RichComposer on every input. Receives markdown + plain text + caret offset.
   const handleComposerChange = useCallback(

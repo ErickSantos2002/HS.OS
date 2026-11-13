@@ -170,7 +170,7 @@ function TelaSilenciadas({ aoVoltar, aoAbrir }: { aoVoltar: () => void; aoAbrir:
           return (
             <div key={c.id} className="cel-item">
               <button type="button" style={{ display: "flex", alignItems: "center", gap: 14, flex: 1, minWidth: 0 }} onClick={() => aoAbrir({ tipo: "canal", id: c.id })}>
-                <Avatar tipo={c.type === "dm" ? "pessoa" : "canal"} nome={nome} chave={c.id} tam="sm" />
+                <Avatar tipo={c.type === "dm" ? "pessoa" : "canal"} nome={nome} chave={peers[c.id]?.peerId ?? c.id} foto={peers[c.id]?.peerAvatar} tam="sm" />
                 <span className="cel-nome" style={{ fontSize: 16, fontWeight: 600, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nome}</span>
               </button>
               <button type="button" className="cel-chip" onClick={() => void alternar(c.id, false)}>

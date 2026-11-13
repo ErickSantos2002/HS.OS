@@ -38,7 +38,7 @@ import { fraseDeQuemEscreve, podeEscreverNoCanal } from "@/lib/canal-avisos";
 import { getAgentDisplayName } from "@/lib/channel-agents";
 import { getPendingAgentsForChannel, subscribeToChannelAgentPending } from "@/lib/channel-agent-pending";
 import {
-  anexosDoCanal, apagarNoCanal, apagarParaMimNoCanal, editarNoCanal, enviarAudioNoCanal, publicarNoCanal,
+  anexosDoCanal, apagarNoCanal, apagarParaMimNoCanal, editarNoCanal, enviarAudioNoCanal, enviarGifNoCanal, publicarNoCanal,
   type ContextoDeEnvio,
 } from "@/lib/envio-no-canal";
 import { casaBusca } from "@/lib/lista-de-conversas";
@@ -47,7 +47,7 @@ import { Cabecalho, Sobreposta } from "./Cabecalho";
 import { ehPessoal, nomeDaConversaPessoal, PLACEHOLDER_PESSOAL } from "@/lib/conversa-pessoal";
 import { autorDaCitacao, montarResposta, trechoParaCitar, type Citacao } from "@/lib/citacao";
 import { Composer } from "./Composer";
-import { FolhaDeAcoes, FolhaDeAnexo, FolhaDeEmoji } from "./Folhas";
+import { FolhaDeAcoes, FolhaDeAnexo, FolhaDeEmoji, FolhaDeGif } from "./Folhas";
 import { ListaDoCanal, type AcoesDoCanal } from "./ListaDoCanal";
 import { nomeDoAutorNoCanal } from "./formato";
 import { Ampliada } from "./Midia";
@@ -156,6 +156,7 @@ export function TelaConversaCanal({
   const [acoesDe, setAcoesDe] = useState<ChannelMessage | null>(null);
   const [emojiPara, setEmojiPara] = useState<"composer" | ChannelMessage | null>(null);
   const [folhaAnexo, setFolhaAnexo] = useState(false);
+  const [folhaGif, setFolhaGif] = useState(false);
   const [menu, setMenu] = useState(false);
   const [ampliada, setAmpliada] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
@@ -327,6 +328,7 @@ export function TelaConversaCanal({
             aoGravar={editando ? undefined : async (blob) => { if (ctxEnvio) { colado.current = true; await enviarAudioNoCanal(ctxEnvio, blob); } }}
             aoAbrirAnexo={editando ? undefined : () => setFolhaAnexo(true)}
             aoAbrirEmoji={() => setEmojiPara("composer")}
+            aoAbrirGif={editando ? undefined : () => setFolhaGif(true)}
             anexos={media.staged}
             aoRemoverAnexo={media.removeStaged}
             resposta={editando ? { autor: "Editando a mensagem", texto: editando.content } : resposta}
@@ -360,6 +362,11 @@ export function TelaConversaCanal({
         aberta={emojiPara !== null}
         aoFechar={() => setEmojiPara(null)}
         aoEscolher={(e) => { if (emojiPara === "composer") setRascunho(rascunho + e); else if (emojiPara) reagir(emojiPara, e); }}
+      />
+      <FolhaDeGif
+        aberta={folhaGif}
+        aoFechar={() => setFolhaGif(false)}
+        aoEscolher={(gif) => { if (ctxEnvio) { colado.current = true; void enviarGifNoCanal(ctxEnvio, gif); } }}
       />
       <FolhaDeAnexo
         aberta={folhaAnexo}

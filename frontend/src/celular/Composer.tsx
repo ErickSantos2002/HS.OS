@@ -1,7 +1,8 @@
 /**
  * O composer do app do celular — spec 2026-11-03, item 3.
  *
- * Pílula com emoji, campo que cresce até ~6 linhas (132px) e clipe; ao lado,
+ * Pílula com emoji, campo que cresce até ~6 linhas (132px), GIF (canal e DM)
+ * e clipe; ao lado,
  * um botão redondo: microfone com o campo vazio, enviar com texto. Segurar o
  * microfone grava, deslizar para a esquerda cancela, soltar envia. Quem grava
  * é o `useAudioRecorder` de sempre; o que fazer com o áudio é de quem usa o
@@ -29,6 +30,8 @@ export interface PropsDoComposer {
   aoGravar?: (audio: Blob) => Promise<void> | void;
   aoAbrirAnexo?: () => void;
   aoAbrirEmoji?: () => void;
+  /** Só canal e DM — a conversa com agente não tem GIF, nem no desktop. */
+  aoAbrirGif?: () => void;
   anexos?: MediaAttachment[];
   aoRemoverAnexo?: (i: number) => void;
   resposta?: { autor: string; texto: string } | null;
@@ -44,7 +47,7 @@ function tempo(s: number) {
 }
 
 export function Composer({
-  placeholder, valor, aoMudar, aoEnviar, aoGravar, aoAbrirAnexo, aoAbrirEmoji, anexos = [], aoRemoverAnexo,
+  placeholder, valor, aoMudar, aoEnviar, aoGravar, aoAbrirAnexo, aoAbrirEmoji, aoAbrirGif, anexos = [], aoRemoverAnexo,
   resposta, aoCancelarResposta, ocupado, aoParar, campoRef,
 }: PropsDoComposer) {
   const proprio = useRef<HTMLTextAreaElement>(null);
@@ -177,6 +180,7 @@ export function Composer({
               enterKeyHint="enter"
               style={aoAbrirEmoji ? undefined : { paddingLeft: 16 }}
             />
+            {aoAbrirGif && <button type="button" className="cel-ib" onClick={aoAbrirGif} aria-label="Enviar GIF"><span className="cel-gif">GIF</span></button>}
             {aoAbrirAnexo && <button type="button" className="cel-ib" onClick={aoAbrirAnexo} aria-label="Anexar"><Paperclip /></button>}
           </div>
         )}

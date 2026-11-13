@@ -104,6 +104,7 @@ import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import MenuDaMensagem from "@/components/chat/MenuDaMensagem";
 import { acoesDaMensagemDoAgente } from "@/lib/acoes-da-mensagem";
 import { naoLidasDoAgente } from "@/lib/nao-lidas-do-agente";
+import { rotuloDoContador, somarNaoLidas } from "@/lib/contador-de-nao-lidas";
 import { LIMITE_TEXTO_COMO_ANEXO, useConversaAgente } from "@/hooks/use-conversa-agente";
 import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
 import { canalNaoResolve } from "@/lib/tela-cheia";
@@ -1778,7 +1779,7 @@ export default function ChatPage() {
     window.addEventListener(AGENT_UNREAD_EVENT, handler);
     return () => window.removeEventListener(AGENT_UNREAD_EVENT, handler);
   }, []);
-  const channelUnreadCount = useMemo(() => [...publicChannels, ...privateChannels].reduce((acc, c) => acc + (unreadByChannel[c.id] || 0), 0), [publicChannels, privateChannels, unreadByChannel]);
+  const channelUnreadCount = useMemo(() => somarNaoLidas([...publicChannels, ...privateChannels].map((c) => ({ naoLidas: unreadByChannel[c.id] || 0 }))), [publicChannels, privateChannels, unreadByChannel]);
 
   // Populate agent_id → DM channel_id mapping for badge display
   useEffect(() => {
@@ -1923,8 +1924,9 @@ export default function ChatPage() {
   const canalPessoal = canalPessoalId ? channels.find((c) => c.id === canalPessoalId) ?? null : null;
   const nomePessoal = nomeDaConversaPessoal(profile?.full_name, user?.email);
 
-  const pessoasNaoLidas = listaPessoas.reduce((acc, i) => acc + i.naoLidas, 0);
-  const agentesNaoLidas = listaAgentes.reduce((acc, i) => acc + i.naoLidas, 0);
+  // Regra do contador em `lib/contador-de-nao-lidas.ts` — a mesma do celular.
+  const pessoasNaoLidas = somarNaoLidas(listaPessoas);
+  const agentesNaoLidas = somarNaoLidas(listaAgentes);
   // A aba some para quem não tem agente liberado; quem a tinha como última
   // e perdeu o acesso cai em DMs.
   const temAgentes = agents.length > 0;
@@ -2240,7 +2242,7 @@ export default function ChatPage() {
           DMs
           {pessoasNaoLidas > 0 && (
             <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
-              {pessoasNaoLidas > 99 ? "99+" : pessoasNaoLidas}
+              {rotuloDoContador(pessoasNaoLidas)}
             </span>
           )}
         </TabsTrigger>
@@ -2249,7 +2251,7 @@ export default function ChatPage() {
             Agentes
             {agentesNaoLidas > 0 && (
             <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
-              {agentesNaoLidas > 99 ? "99+" : agentesNaoLidas}
+              {rotuloDoContador(agentesNaoLidas)}
             </span>
           )}
           </TabsTrigger>
@@ -2258,7 +2260,7 @@ export default function ChatPage() {
           Canais
           {channelUnreadCount > 0 && (
             <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
-              {channelUnreadCount > 99 ? "99+" : channelUnreadCount}
+              {rotuloDoContador(channelUnreadCount)}
             </span>
           )}
         </TabsTrigger>

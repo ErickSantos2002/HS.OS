@@ -19,7 +19,8 @@ import { findOrCreateDm, usePeople } from "@/hooks/use-people";
 import { getPermission, isEnabled } from "@/lib/browser-notifications";
 import { desligarNotificacoesDoAparelho, ligarNotificacoesDoAparelho } from "@/lib/notificacoes-do-aparelho";
 import { classificarAtividade, nomeDoAutor, textoDaAtividade, type TipoAtividade } from "./atividade";
-import { horaDaLista, linhaDaPrevia, montarLista, type ItemCelular, type TipoItem } from "./lista";
+import { rotuloDoContador } from "@/lib/contador-de-nao-lidas";
+import { horaDaLista, linhaDaPrevia, montarLista, naoLidasPorChip, type ItemCelular, type TipoItem } from "./lista";
 import type { Aba, Tela } from "./pilha";
 import { Avatar } from "./ui";
 import { useListaDoCelular } from "./use-lista";
@@ -73,6 +74,7 @@ function ListaDeConversas({ itens, aoAbrir }: { itens: ItemCelular[]; aoAbrir: (
   const [busca, setBusca] = useState("");
   const [abrindo, setAbrindo] = useState<string | null>(null);
   const lista = useMemo(() => montarLista(itens, filtro, busca), [itens, filtro, busca]);
+  const porChip = useMemo(() => naoLidasPorChip(itens), [itens]);
   const agora = new Date();
 
   const escolher = (f: TipoItem) => {
@@ -103,9 +105,15 @@ function ListaDeConversas({ itens, aoAbrir }: { itens: ItemCelular[]; aoAbrir: (
         <input type="search" placeholder="Buscar conversas e mensagens" value={busca} onChange={(e) => setBusca(e.target.value)} autoComplete="off" />
       </label>
       <div className="cel-chips" role="group" aria-label="Filtro">
-        {CHIPS.map(([k, r]) => (
-          <button key={k} type="button" className="cel-chip" aria-pressed={filtro === k} onClick={() => escolher(k)}>{r}</button>
-        ))}
+        {CHIPS.map(([k, r]) => {
+          const n = rotuloDoContador(porChip[k]);
+          return (
+            <button key={k} type="button" className="cel-chip" aria-pressed={filtro === k} onClick={() => escolher(k)}
+              aria-label={n ? `${r}, ${porChip[k]} não ${porChip[k] === 1 ? "lida" : "lidas"}` : undefined}>
+              {r}{n && <span className="cel-chip-n">{n}</span>}
+            </button>
+          );
+        })}
       </div>
       <div className="cel-rolar">
         <div className="cel-cartao-instalar"><InstalarApp variante="cartao" /></div>
