@@ -35,6 +35,10 @@ export const CHANGELOG: ChangelogVersion[] = [
     changes: [
       {
         kind: "melhoria",
+        text: "O Guardi ficou mais parceiro: depois de responder, oferece o próximo passo que ele mesmo pode dar, reconhece o que você concluiu e, quando algo trava, ajuda a achar o menor passo de hoje. Pergunta rápida continua com resposta rápida.",
+      },
+      {
+        kind: "melhoria",
         text: "O Guardi agora encontra os cards parados do TaskHS pela mesma régua do Dashboard: mais de 72 h úteis desde a criação, ou travados há mais de 24 h úteis na mesma lista, por setor. Basta perguntar \"quais cards estão atrasados?\" — vale para quem é administrador ou coordenador no TaskHS.",
       },
       {
