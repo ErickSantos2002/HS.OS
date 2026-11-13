@@ -94,6 +94,29 @@ GET /agente/capacidades          (com o token de agente de sempre: aud do sistem
 - Componente compartilhado entre desktop e celular (a regra do repo: lógica
   compartilhada, não copiada).
 
+### Segunda versão: por assunto (13/11/2026)
+
+O Erick abriu a primeira versão e o TalentHS de um colaborador saía com 42
+linhas cruas de "Consultar" — descrições escritas para o agente, com passos
+intermediários ("Uma pessoa pelo user_id", "Os ciclos de metas"). Pedido: "mais
+organizado, melhor separado, fácil de entender, e colorido".
+
+- Cada item de cada catálogo tem um **assunto** e uma **frase curta escrita à
+  mão**, ou a marca `INTERNO` (id, ciclo, tipo, "quem você é", lista de
+  referência). Tudo em `backend/app/capacidade_assuntos.py`, um arquivo para a
+  tela inteira — os catálogos seguem sendo texto do agente. Interno não aparece,
+  mas conta como pré-requisito de quem o declara em `requer` (sem os ciclos,
+  "a sua avaliação" não aparece). Teste falha se item novo de catálogo não
+  tiver assunto nem marca.
+- Resposta, por sistema: `{sistema, nome, papel, estado, assuntos: [{chave,
+  titulo, icone, cor, ve: [...], faz: [...], na_hora: [...], exemplos: [...]}]}`.
+  Assunto só aparece com ao menos um item liberado; exemplo só de item
+  liberado; `na_hora` = o que sai sem cartão (só no HS.OS). O HS.OS vira um
+  grupo só, "Memória, lembretes e e-mail".
+- Tela: cada sistema é um cartão com os ícones coloridos dos assuntos; aberto,
+  um bloco por assunto (faixa e ícone na cor dele), com "Vê" em texto corrido,
+  "Faz" em chips e "Experimente: …".
+
 ### Arquivos
 
 - `app/capacidade.py` (puro, testado): cruza `rotas` × catálogos e monta a

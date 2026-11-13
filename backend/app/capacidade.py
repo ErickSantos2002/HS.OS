@@ -17,6 +17,12 @@ completa. A tela não promete o que o login pode não fazer.
 meio). As rotas de cada ação são as que o executor de `app/acoes.py` chama
 SEMPRE; passo opcional (checklist, campo personalizado sem pedido) não entra.
 
+**A tela mostra ASSUNTOS, não itens** (13/11/2026, segunda versão): o que a
+pessoa lê — título, ícone, cor, frase curta de "vê" e "faz" — mora em
+`app/capacidade_assuntos.py`, escrito à mão. Item que é só passo do agente (id,
+ciclo, "quem você é") é `INTERNO`: não aparece, mas segue valendo como
+pré-requisito de quem o `requer`.
+
 Puro, testado em `tests/test_capacidade.py`.
 """
 from __future__ import annotations
@@ -24,6 +30,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from app import capacidade_assuntos as ax
 from app import datacore_consultas as dc
 from app import docshs_consultas as dh
 from app import gestorhs_consultas as gh
@@ -95,60 +102,14 @@ def permitido(item: Item, permitidas: set) -> bool:
     return bool(item.rotas) and all(chave_da_rota(m, t) in permitidas for m, t in item.rotas)
 
 
-# ── rótulo para quem usa ─────────────────────────────────────────────────────
-
-# Parêntese técnico: código, id, fórmula (`user = colaborador`) ou formato de data.
-_PARENTESE_TECNICO = re.compile(r"\s*\([^()]*(?:`|\bids?\b|=|AAAA)[^()]*\)")
-_COM_O_ID = re.compile(r",? (?:com o id|paginado)\b.*$")
-_DO_DONO = re.compile(r" do (?:seu )?dono\b")
-_ARTIGO = re.compile(r"\b(o|a|os|as|um|uma) (\w+)")
-_POSSESSIVO = {"o": "o seu {}", "a": "a sua {}", "os": "os seus {}", "as": "as suas {}",
-               "um": "um {} seu", "uma": "uma {} sua"}
-
-
-def _do_dono_para_seu(t: str) -> str:
-    """"as batidas de hoje do seu dono" → "as suas batidas de hoje": o possessivo
-    vai para o artigo mais próximo antes da expressão."""
-    m = _DO_DONO.search(t)
-    while m:
-        antes, depois = t[:m.start()], t[m.end():]
-        art = None
-        for art in _ARTIGO.finditer(antes):
-            pass
-        if art is None:
-            antes += " seu"
-        else:
-            antes = (antes[:art.start()] + _POSSESSIVO[art.group(1)].format(art.group(2))
-                     + antes[art.end():])
-        t = antes + depois
-        m = _DO_DONO.search(t)
-    return t
-
-
-def para_quem_usa(descricao: str) -> str:
-    """A descrição do catálogo foi escrita para o AGENTE ("os cards do seu dono.
-    `board_id` é OBRIGATÓRIO…"). Para a tela: a primeira frase, sem a parte
-    técnica, falando com a pessoa."""
-    t = _PARENTESE_TECNICO.sub("", str(descricao or ""))
-    for corte in (". ", "; ", " — "):
-        t = t.split(corte, 1)[0]
-    if t.count("(") > t.count(")"):          # o corte caiu dentro de um parêntese
-        t = t[:t.rfind("(")]
-    t = _COM_O_ID.sub("", t)
-    t = _do_dono_para_seu(t)
-    for de, para in (("para o seu dono", "para você"), ("o seu dono", "você"),
-                     ("seu dono", "você"), (" se ele ", " se você ")):
-        t = t.replace(de, para)
-    t = t.replace("`", "").strip().rstrip(".:,")
-    return t[:1].upper() + t[1:]
-
-
 # ── os catálogos, como itens ─────────────────────────────────────────────────
 
-def _de_consultas(consultas: dict, exemplos: dict, extras: dict | None = None) -> list[Item]:
+def _de_consultas(consultas: dict, exemplos: dict, extras: dict | None = None) -> dict[str, Item]:
+    """chave do catálogo → Item. O rótulo é a chave: o texto que a pessoa lê sai
+    de `capacidade_assuntos`, escrito à mão — a descrição do catálogo é do agente."""
     extras = extras or {}
-    return [Item(para_quem_usa(v[1]), (("GET", v[0]),) + tuple(extras.get(k, ())), exemplos.get(k))
-            for k, v in consultas.items()]
+    return {k: Item(k, (("GET", v[0]),) + tuple(extras.get(k, ())), exemplos.get(k))
+            for k, v in consultas.items()}
 
 
 _EU_DOCSHS = (("GET", "/auth/eu"),)
@@ -238,30 +199,30 @@ ACOES: dict[tuple[str, str], Item] = {
 }
 
 
-def _acoes_talenths() -> list[Item]:
-    itens = []
+def _acoes_talenths() -> dict[str, Item]:
+    itens = {}
     for nome, a in te.ACOES.items():
         rotas: tuple[Rota, ...] = ((a.metodo, a.rota),)
         if nome == "criar_pdi":
             # O plano nasce sem ações e elas entram uma a uma (`acoes._executor_talenths`).
             rotas += (("POST", te.ACOES["acrescentar_acao_pdi"].rota),)
-        itens.append(Item(para_quem_usa(a.desc), rotas, te.EXEMPLOS.get(nome)))
+        itens[nome] = Item(nome, rotas, te.EXEMPLOS.get(nome))
     return itens
 
 
-def _acoes_de(sistema: str) -> list[Item]:
-    return [i for (s, _), i in ACOES.items() if s == sistema]
+def _acoes_de(sistema: str) -> dict[str, Item]:
+    return {a: i for (s, a), i in ACOES.items() if s == sistema}
 
 
-def catalogo(sistema: str) -> tuple[list[Item], list[Item]]:
-    """(consultar, fazer) de um sistema, na ordem dos catálogos."""
+def catalogo(sistema: str) -> tuple[dict[str, Item], dict[str, Item]]:
+    """(consultar, fazer) de um sistema: chave do catálogo → Item."""
     if sistema == "taskhs":
-        return list(TASKHS_CONSULTAS.values()), _acoes_de("taskhs")
+        return dict(TASKHS_CONSULTAS), _acoes_de("taskhs")
     if sistema == "datacore":
-        return _de_consultas(dc.CONSULTAS, dc.EXEMPLOS), []
+        return _de_consultas(dc.CONSULTAS, dc.EXEMPLOS), {}
     if sistema == "docshs":
         return _de_consultas(dh.CONSULTAS, dh.EXEMPLOS,
-                             {k: _EU_DOCSHS for k in dh.CONSULTAS if dh.precisa_de_eu(k)}), []
+                             {k: _EU_DOCSHS for k in dh.CONSULTAS if dh.precisa_de_eu(k)}), {}
     if sistema == "gestorhs":
         return _de_consultas(gh.CONSULTAS, gh.EXEMPLOS), _acoes_de("gestorhs")
     if sistema == "hsgrowth":
@@ -276,31 +237,64 @@ def catalogo(sistema: str) -> tuple[list[Item], list[Item]]:
     raise ValueError(f"sistema desconhecido: {sistema}")
 
 
-def _saida(item: Item, **extra) -> dict:
-    d = {"rotulo": item.rotulo}
-    if item.exemplo:
-        d["exemplo"] = item.exemplo
-    return d | extra
+def _liberado(chave: str, onde: ax.Onde, itens: dict[str, Item], internos: dict[str, Item],
+              permitidas: set) -> bool:
+    """O item e os internos de que ele depende (`requer`) com todas as rotas
+    liberadas. ⚠️ Interno ausente do catálogo conta como NÃO liberado: um
+    `requer` com nome errado esconde o item em vez de prometê-lo."""
+    return permitido(itens[chave], permitidas) and all(
+        r in internos and permitido(internos[r], permitidas) for r in onde.requer)
+
+
+def montar_assuntos(assuntos, ve: list[tuple[ax.Onde, str | None]],
+                    faz: list[tuple[ax.Onde, str | None]]) -> list[dict]:
+    """Os assuntos que têm ao menos um item liberado, na ordem declarada.
+    `ve`/`faz` = (onde, exemplo do catálogo) dos itens JÁ liberados, na ordem do
+    mapa. Frase repetida (o item da lista e o "pelo id" dele) aparece uma vez.
+    Exemplos: até dois, primeiro um do "vê" e um do "faz" — só de item
+    liberado, para a tela nunca sugerir o que o login não faz."""
+    saida = []
+    for a in assuntos:
+        v = [(o, e) for o, e in ve if o.assunto == a.chave]
+        f = [(o, e) for o, e in faz if o.assunto == a.chave]
+        if not v and not f:
+            continue
+        exs_v = [o.exemplo or e for o, e in v if o.exemplo or e]
+        exs_f = [o.exemplo or e for o, e in f if o.exemplo or e]
+        exemplos = list(dict.fromkeys(exs_v[:1] + exs_f[:1] + exs_v[1:] + exs_f[1:]))[:2]
+        saida.append({
+            "chave": a.chave, "titulo": a.titulo, "icone": a.icone, "cor": a.cor,
+            "ve": list(dict.fromkeys(o.frase for o, _ in v)),
+            "faz": list(dict.fromkeys(o.frase for o, _ in f)),
+            "na_hora": list(dict.fromkeys(o.frase for o, _ in f if o.na_hora)),
+            "exemplos": exemplos,
+        })
+    return saida
 
 
 def montar_sistema(sistema: str, estado: str, resposta: dict | None = None) -> dict:
-    """Um sistema na resposta da rota. Só `ok` traz listas; nos outros estados
-    as listas vêm VAZIAS — nunca o catálogo inteiro."""
+    """Um sistema na resposta da rota, por assunto. Só `ok` traz assuntos; nos
+    outros estados a lista vem VAZIA — nunca o catálogo inteiro."""
     if estado not in ESTADOS:
         raise ValueError(f"estado desconhecido: {estado}")
     papel = None
-    consultar: list[dict] = []
-    fazer: list[dict] = []
+    assuntos: list[dict] = []
     if estado == "ok":
         resposta = resposta if isinstance(resposta, dict) else {}
         p = resposta.get("papel")
         papel = str(p)[:80] if isinstance(p, (str, int)) and str(p).strip() else None
         permitidas = rotas_permitidas(resposta.get("rotas"))
-        c, f = catalogo(sistema)
-        consultar = [_saida(i) for i in c if permitido(i, permitidas)]
-        fazer = [_saida(i, confirma=True) for i in f if permitido(i, permitidas)]
+        consultar, fazer = catalogo(sistema)
+        mapa_ve, mapa_faz = ax.VE[sistema], ax.FAZ[sistema]
+        internos = {k: consultar[k] for k, w in mapa_ve.items() if w == ax.INTERNO and k in consultar}
+
+        def liberados(mapa, itens):
+            return [(w, itens[k].exemplo) for k, w in mapa.items()
+                    if w != ax.INTERNO and k in itens and _liberado(k, w, itens, internos, permitidas)]
+        assuntos = montar_assuntos(ax.ASSUNTOS[sistema], liberados(mapa_ve, consultar),
+                                   liberados(mapa_faz, fazer))
     return {"sistema": sistema, "nome": SISTEMAS.get(sistema, sistema), "papel": papel,
-            "estado": estado, "consultar": consultar, "fazer": fazer}
+            "estado": estado, "assuntos": assuntos}
 
 
 def resposta_valida(r) -> bool:
@@ -325,35 +319,18 @@ def estado_do_erro(status: int | None) -> str:
 # ── o que é do próprio HS.OS ─────────────────────────────────────────────────
 
 def itens_do_hsos(email_ligado: bool, calendario: bool) -> list[dict]:
-    """Memória e agenda são de todo Guardi; e-mail só com `email_ligado`, e a
-    agenda do Outlook só se a conta concedeu o calendário. Tudo aqui sai na
-    hora, menos o e-mail para outras pessoas (cartão)."""
-    def i(rotulo, exemplo=None, **extra):
-        return {"rotulo": rotulo, **({"exemplo": exemplo} if exemplo else {}), **extra}
-
-    grupos = [
-        {"sistema": "memoria", "nome": "Memória", "papel": None, "estado": "ok",
-         "consultar": [i("O que você pediu para ele lembrar", "o que você lembra sobre mim?")],
-         "fazer": [i("Guardar uma preferência ou um jeito de fazer", "lembra que eu assino como Erick | TI",
-                     confirma=False)]},
-        {"sistema": "agenda", "nome": "Agenda e lembretes", "papel": None, "estado": "ok",
-         "consultar": [i("Os seus lembretes", "quais lembretes eu tenho?")],
-         "fazer": [i("Criar um lembrete, único ou de rotina", "me lembra amanhã às 9h de ligar para a Vale",
-                     confirma=False),
-                   i("Mudar ou apagar um lembrete", "muda o lembrete de sexta para as 10h", confirma=False)]},
-    ]
+    """Memória e lembretes são de todo Guardi; e-mail só com `email_ligado`, e a
+    agenda do Outlook só se a conta concedeu o calendário. Um "sistema" só, com
+    os assuntos — a tela o desenha como os outros. Quase tudo aqui sai na hora
+    (`na_hora`); o e-mail para outras pessoas espera o cartão."""
+    ve = {"memoria", "lembretes"}
+    faz = {"lembrar", "agenda_criar", "agenda_mudar"}
     if email_ligado:
-        consultar = [i("As suas caixas de e-mail", "de quais caixas você lê?"),
-                     i("Listar e ler e-mails", "quais e-mails não lidos eu tenho?"),
-                     i("Os e-mails que ele preparou e o que aconteceu com cada um")]
+        ve |= {"caixas", "emails", "preparados"}
+        faz |= {"preparar", "para_si", "marcar_lidos"}
         if calendario:
-            consultar.append(i("A sua agenda do Outlook", "o que eu tenho amanhã na agenda?"))
-        grupos.append({"sistema": "email", "nome": "E-mail", "papel": None, "estado": "ok",
-                       "consultar": consultar,
-                       "fazer": [i("Preparar um e-mail para outras pessoas", "responde ao João dizendo que "
-                                   "enviamos na sexta", confirma=True),
-                                 i("Mandar um e-mail para você mesmo", "me manda esse resumo por e-mail",
-                                   confirma=False),
-                                 i("Marcar e-mails como lidos", "marca como lidos os e-mails do fulano",
-                                   confirma=False)]})
-    return grupos
+            ve.add("outlook")
+    assuntos = montar_assuntos(ax.HSOS, [(w, None) for k, w in ax.HSOS_VE.items() if k in ve],
+                               [(w, None) for k, w in ax.HSOS_FAZ.items() if k in faz])
+    return [{"sistema": "hsos", "nome": "Memória, lembretes e e-mail", "papel": None, "estado": "ok",
+             "assuntos": assuntos}]
