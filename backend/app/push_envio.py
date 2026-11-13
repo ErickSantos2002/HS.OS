@@ -22,13 +22,16 @@ Quem recebe e o que a notificação diz mora em `app/push_regras.py`, puro.
 import asyncio
 import json
 import logging
+from datetime import datetime, timezone
 
 from pywebpush import WebPushException, webpush
 
 from app.config import settings
 from app.database import sessao
+from app.agenda import token_acao
 from app.push_regras import (Membro, destinatarios_canal, endpoint_de_push_valido,
-                              payload_agente, payload_canal)
+                              item_de_lembrete, payload_agente, payload_canal,
+                              payload_lembrete)
 
 logger = logging.getLogger(__name__)
 
@@ -192,10 +195,53 @@ async def enviar_para(user_id: str, payload: dict) -> dict:
     return resultado
 
 
+# O lembrete do recado, da PRÓPRIA pessoa: o título e a instrução atuais.
+_SQL_LEMBRETE = """
+    SELECT titulo, instrucao FROM public.lembretes
+     WHERE id = $1::uuid AND user_id = $2::uuid
+"""
+
+
+def _acoes_do_lembrete(lembrete_id: str, aviso_em: str) -> dict | None:
+    """Tokens de "adiar" e "feito" para o SW. Sem segredo ou sem aviso: nenhum."""
+    segredo = settings.LEMBRETE_ACAO_SEGREDO
+    if not segredo or not aviso_em:
+        return None
+    try:
+        instante = datetime.fromisoformat(aviso_em)
+        agora = datetime.now(timezone.utc)
+        return {a: token_acao.emitir(segredo, lembrete_id, instante, a, agora)
+                for a in token_acao.ACOES}
+    except ValueError:
+        return None
+
+
+async def _payload_do_lembrete(conn, linha, item: dict) -> dict | None:
+    lembrete = await conn.fetchrow(_SQL_LEMBRETE, item["id"], linha["user_id"])
+    if not lembrete:
+        return None  # apagado entre o recado e o push: vira push comum
+    aviso_em = item.get("aviso_em") or ""
+    return payload_lembrete(
+        lembrete_id=item["id"], titulo=lembrete["titulo"], instrucao=lembrete["instrucao"],
+        aviso_em=aviso_em, de_novo=bool(item.get("de_novo")),
+        acoes=_acoes_do_lembrete(item["id"], aviso_em))
+
+
 async def _alvos_da_resposta(conn, ident: str):
     linha = await conn.fetchrow(_SQL_RESPOSTA, ident)
     if not linha or not linha["recente"]:
         return None
+    media = linha["media"]
+    if isinstance(media, str):
+        try:
+            media = json.loads(media)
+        except ValueError:
+            media = None
+    item = item_de_lembrete(media)
+    if item:
+        payload = await _payload_do_lembrete(conn, linha, item)
+        if payload:
+            return payload, [linha["user_id"]]
     payload = payload_agente(agent_id=linha["agent_id"], agente_nome=linha["agente_nome"],
                              conteudo=linha["content"], anexos=linha["media"])
     return payload, [linha["user_id"]]

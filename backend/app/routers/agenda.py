@@ -13,8 +13,9 @@ from datetime import date, datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 
-from app.agenda import dominio, outlook
+from app.agenda import aviso, dominio, outlook, token_acao
 from app.agenda.regras import FUSO, RegraInvalida, regra_de
+from app.config import settings
 from app.database import sessao
 from app.dependencies import Usuario, usuario_atual
 
@@ -149,6 +150,74 @@ async def apagar(id: str, usuario: Usuario = Depends(usuario_atual)):
         if not await dominio.apagar(conn, usuario.id, lid):
             raise HTTPException(status.HTTP_404_NOT_FOUND, _NAO_ACHOU)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ── lembrete que chama atenção (spec 2026-11-13) ────────────────────────────
+
+class AvisoIn(BaseModel):
+    aviso_em: str
+
+
+class AcaoIn(BaseModel):
+    token: str
+
+
+def _instante(valor: str) -> datetime:
+    try:
+        d = datetime.fromisoformat(valor)
+    except (TypeError, ValueError) as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "`aviso_em` precisa ser data e hora ISO.") from e
+    if d.tzinfo is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "`aviso_em` precisa ter fuso.")
+    return d
+
+
+@router.get("/lembretes/pendentes")
+async def pendentes(usuario: Usuario = Depends(usuario_atual)):
+    """Avisados e não respondidos nas últimas 6 h: quem abre o app depois do
+    aviso também vê a janela."""
+    async with sessao(role="service_role") as conn:
+        linhas = await aviso.pendentes(conn, usuario.id, _agora())
+    return {"pendentes": [_saida(l) for l in linhas]}
+
+
+async def _reconhecer_com_login(id: str, dados: AvisoIn, acao: str, usuario: Usuario) -> dict:
+    lid = _uuid(id)
+    instante = _instante(dados.aviso_em)
+    async with sessao(role="service_role") as conn:
+        r = await aviso.reconhecer(conn, lid, instante, acao, _agora(), user_id=usuario.id)
+    return _saida(r)
+
+
+@router.post("/lembretes/{id}/adiar")
+async def adiar(id: str, dados: AvisoIn, usuario: Usuario = Depends(usuario_atual)):
+    return await _reconhecer_com_login(id, dados, "adiar", usuario)
+
+
+@router.post("/lembretes/{id}/feito")
+async def feito(id: str, dados: AvisoIn, usuario: Usuario = Depends(usuario_atual)):
+    return await _reconhecer_com_login(id, dados, "feito", usuario)
+
+
+@router.post("/lembretes/acao")
+async def acao_por_token(dados: AcaoIn):
+    """Botões da notificação, SEM login: o service worker não tem a sessão.
+
+    ⚠️ Rota pública. A autorização inteira é o token (`agenda/token_acao.py`):
+    ele só adia ou marca feito o lembrete e o aviso que assina. Token recusado
+    é 403 sem motivo; segundo clique é 200 com `aplicado: false`.
+    """
+    segredo = settings.LEMBRETE_ACAO_SEGREDO
+    if not segredo:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                            "Ações pela notificação desligadas (LEMBRETE_ACAO_SEGREDO ausente).")
+    try:
+        lid, instante, acao = token_acao.conferir(segredo, dados.token, _agora())
+    except token_acao.TokenInvalido as e:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Ação recusada.") from e
+    async with sessao(role="service_role") as conn:
+        r = await aviso.reconhecer(conn, lid, instante, acao, _agora())
+    return {"aplicado": r["aplicado"]}
 
 
 @router.get("/outlook")

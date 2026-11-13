@@ -18,6 +18,12 @@ HORIZONTE_MAX = timedelta(days=366)
 ATRASO_MAX = timedelta(hours=6)
 ADIAMENTO = timedelta(minutes=2)
 ADIAMENTO_MAX = timedelta(minutes=30)
+# Lembrete que chama atenção (spec 2026-11-13): "Adiar" fixo em 10 min, e sem
+# resposta o aviso toca de novo UMA vez depois de 5 min. A janela do app mostra
+# o que foi avisado e não respondido nas últimas 6 h.
+ADIAR = timedelta(minutes=10)
+INSISTENCIA = timedelta(minutes=5)
+JANELA_PENDENTE = timedelta(hours=6)
 
 _FORMATO_EM = "%Y-%m-%dT%H:%M"
 _HORA = re.compile(r"^([0-9]{1,2}):([0-9]{2})\Z")

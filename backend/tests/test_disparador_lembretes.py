@@ -7,11 +7,13 @@ o extra — adiado quando há outra conversa em curso com ele, cortado pelo teto
 diário. Conexão, sessão e `disparar_turno` falsos.
 """
 import asyncio
+import inspect
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
 from app import disparador_lembretes as d
-from app.agenda.regras import ADIAMENTO, TETO_TURNOS_DIA
+from app.agenda.regras import ADIAMENTO, INSISTENCIA, TETO_TURNOS_DIA
 from app.gateway.client import ErroGateway
 
 AGORA = datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)  # 09:00 em Brasília
@@ -123,6 +125,8 @@ class Conn:
             self.concluidos.append(a)
         elif sql == d.SQL_DESATIVAR:
             self.desativados.append(a)
+        elif sql == d.SQL_AVISO:
+            self.log.append(("aviso", a))
         else:
             raise AssertionError(sql)
 
@@ -222,6 +226,8 @@ def test_lembrete_que_quebra_nao_para_a_passada(monkeypatch):
 
     class ConnReserva:
         async def fetch(self, sql, *a):
+            if sql == d.SQL_RESERVAR_REAVISO:
+                return []
             assert sql == d.SQL_RESERVAR
             return [_lembrete(id="l-1"), _lembrete(id="l-2")]
 
@@ -259,6 +265,8 @@ def test_excecao_depois_do_recado_nao_regrava_o_recado():
     erros = []
 
     async def fetch(sql, *a):
+        if sql == d.SQL_RESERVAR_REAVISO:
+            return []
         assert sql == d.SQL_RESERVAR
         return [_lembrete()] if not erros else []
 
@@ -288,6 +296,8 @@ def test_excecao_em_lembrete_unico_encerra(monkeypatch):
 
     class C:
         async def fetch(self, sql, *a):
+            if sql == d.SQL_RESERVAR_REAVISO:
+                return []
             return [_lembrete(regra={"tipo": "unico", "em": "2026-11-10T09:00"})]
 
         async def fetchval(self, sql, *a):
@@ -338,7 +348,7 @@ def test_reserva_e_renovada_antes_de_cada_item():
     lembretes = [_lembrete(id="l-1", instrucao=None), _lembrete(id="l-2", instrucao=None)]
 
     async def fetch(sql, *a):
-        return lembretes
+        return lembretes if sql == d.SQL_RESERVAR else []
 
     conn.fetch = fetch
     asyncio.run(d.passada(_sessao(conn), AGORA, disparar=_disparar(log)))
@@ -362,7 +372,7 @@ def test_renovacao_sem_linha_pula_o_item():
     conn = Conn(log, renovado=None)
 
     async def fetch(sql, *a):
-        return [_lembrete()]
+        return [_lembrete()] if sql == d.SQL_RESERVAR else []
 
     conn.fetch = fetch
     assert asyncio.run(d.passada(_sessao(conn), AGORA, disparar=_disparar(log))) == 1
@@ -451,3 +461,167 @@ def test_intervalo_padrao_30_e_zero_desliga(monkeypatch):
     assert d.intervalo() == 30
     monkeypatch.setenv("DISPARADOR_LEMBRETES_SEGUNDOS", "0")
     assert d.intervalo() == 0
+
+
+# --- lembrete que chama atenção (spec 2026-11-13) ------------------------------
+#
+# Em 13/11/2026 a Sandra não percebeu o lembrete das 14:00: o push apareceu e
+# sumiu. Agora cada recado é um AVISO que espera "Adiar" ou "Feito"; sem
+# resposta, toca de novo UMA vez em 5 min.
+
+def test_recado_marca_o_aviso_e_a_insistencia_na_mesma_transacao():
+    """O aviso é gravado junto com o recado (mesmo commit): o push e a janela
+    nascem do recado e precisam achar o `aviso_em` que o token assina. Disparo
+    novo zera o estado do anterior — recorrente começa limpo."""
+    log = []
+    conn = Conn(log)
+    asyncio.run(d.disparar_um(_sessao(conn), _lembrete(instrucao=None), AGORA,
+                              disparar=_disparar(log)))
+    eventos = [e[0] for e in log]
+    i = eventos.index("recado")
+    assert eventos[i + 1] == "aviso"  # antes do commit do recado
+    assert eventos[i + 2] == "commit"
+    _, (lid, aviso_em, reaviso_em, carimbo) = log[i + 1]
+    assert (lid, aviso_em, reaviso_em) == ("l-1", AGORA, AGORA + INSISTENCIA)
+    assert carimbo == CARIMBO
+    media = json.loads(log[i][1][3])
+    assert media[0]["aviso_em"] == AGORA.isoformat() and media[0]["de_novo"] is False
+    sql = _sem_espaco(d.SQL_AVISO)
+    for trecho in ("reconhecido_em = NULL", "reconhecido_como = NULL", "reavisos = 0",
+                   "AND disparando_em = $4"):
+        assert trecho in sql
+
+
+def test_turno_adiado_nao_remarca_o_aviso():
+    """Na passada que só abre o turno adiado, o recado não sai de novo — e o
+    aviso também não pode ser remarcado, senão a insistência andaria junto."""
+    log = []
+    conn = Conn(log)
+    l = _lembrete(turno_pendente_desde=AGORA - timedelta(minutes=4))
+    asyncio.run(d.disparar_um(_sessao(conn), l, AGORA, disparar=_disparar(log)))
+    assert not any(e[0] in ("recado", "aviso") for e in log)
+
+
+def _reaviso(**kw):
+    base = {"id": "l-1", "user_id": "u-erick", "agent_id": "erick-bot",
+            "titulo": "Retornar contato para Hildon",
+            "reaviso_em": AGORA - timedelta(seconds=10), "reconhecido_em": None,
+            "reconhecido_como": None, "disparando_em": CARIMBO}
+    base.update(kw)
+    return base
+
+
+def test_sem_resposta_insiste_uma_vez_so():
+    """Anti-objetivo "insistência que vira spam": o re-aviso por silêncio não
+    marca outro re-aviso. Uma repetição, nunca laço."""
+    assert d.decidir_reaviso(_reaviso(), AGORA) == d.ReAviso(recado=True, reaviso_em=None)
+
+
+def test_adiar_vencido_avisa_de_novo_e_reinicia_a_insistencia():
+    """Adiar é ilimitado (quem adia está respondendo), e o novo aviso ganha a
+    sua própria insistência de 5 min."""
+    l = _reaviso(reconhecido_em=AGORA - timedelta(minutes=10), reconhecido_como="adiado")
+    assert d.decidir_reaviso(l, AGORA) == d.ReAviso(recado=True, reaviso_em=AGORA + INSISTENCIA)
+
+
+def test_feito_ou_atraso_grande_nao_avisa():
+    feito = _reaviso(reconhecido_em=AGORA, reconhecido_como="feito")
+    assert d.decidir_reaviso(feito, AGORA) == d.ReAviso(False, None)
+    velho = _reaviso(reaviso_em=AGORA - timedelta(hours=7))
+    assert d.decidir_reaviso(velho, AGORA) == d.ReAviso(False, None)
+
+
+class ConnReaviso:
+    def __init__(self, pega=True, ativo=True, guardi="erick-bot"):
+        self.pega, self.ativo, self.guardi = pega, ativo, guardi
+        self.log = []
+
+    async def fetchval(self, sql, *a):
+        if sql == d.SQL_DONO_ATIVO:
+            return self.ativo
+        if "agent_profiles" in sql and "dono_id" in sql:
+            return self.guardi
+        raise AssertionError(sql)
+
+    async def execute(self, sql, *a):
+        if sql == d.SQL_CONCLUIR_REAVISO:
+            self.log.append(("concluir", a))
+            return "UPDATE 1" if self.pega else "UPDATE 0"
+        if sql == d.SQL_RECADO:
+            self.log.append(("recado", a))
+            return "INSERT 0 1"
+        if sql == d.SQL_SOLTAR:
+            self.log.append(("soltar", a))
+            return "UPDATE 1"
+        raise AssertionError(sql)
+
+
+def _sessao_simples(conn):
+    @asynccontextmanager
+    async def falsa(**_):
+        yield conn
+    return falsa
+
+
+def test_reaviso_e_so_o_recado_sem_turno_do_guardi():
+    """Anti-objetivo "re-aviso gastando turno": `reavisar_um` não recebe
+    `disparar` — não há como abrir turno nem contar no teto de 12. O recado diz
+    "(de novo)" e leva o aviso novo, que é o que o token do push novo assina."""
+    conn = ConnReaviso()
+    assert asyncio.run(d.reavisar_um(_sessao_simples(conn), _reaviso(), AGORA)) is True
+    [concluir, recado] = conn.log
+    assert concluir[0] == "concluir" and recado[0] == "recado"  # UPDATE antes do INSERT
+    lid, de_novo, aviso_em, reaviso_em, carimbo, _reaviso_antigo, como = concluir[1]
+    assert (lid, de_novo, aviso_em, reaviso_em) == ("l-1", True, AGORA, None)
+    assert (carimbo, como) == (CARIMBO, None)
+    _, (_agent_id, _user_id, conteudo, media) = recado
+    assert conteudo == "⏰ Lembrete (de novo): Retornar contato para Hildon"
+    item = json.loads(media)[0]
+    assert item["type"] == "lembrete" and item["de_novo"] is True
+    assert item["aviso_em"] == AGORA.isoformat()
+    sql = _sem_espaco(d.SQL_CONCLUIR_REAVISO)
+    assert "reavisos = reavisos + CASE WHEN $2 THEN 1 ELSE 0 END" in sql
+    assert "disparar" not in inspect.signature(d.reavisar_um).parameters
+
+
+def test_clique_no_meio_ganha_e_o_recado_nao_sai():
+    """A pessoa clicou Feito entre a reserva e o re-aviso: a guarda do UPDATE
+    (mesmo `reaviso_em` e `reconhecido_como` da reserva) não pega a linha, o
+    recado não sai e a reserva é solta na hora — não fica 10 min presa."""
+    conn = ConnReaviso(pega=False)
+    assert asyncio.run(d.reavisar_um(_sessao_simples(conn), _reaviso(), AGORA)) is False
+    assert [e[0] for e in conn.log] == ["concluir", "soltar"]
+    sql = _sem_espaco(d.SQL_CONCLUIR_REAVISO)
+    for trecho in ("AND disparando_em = $5", "AND reaviso_em = $6",
+                   "AND reconhecido_como IS NOT DISTINCT FROM $7", "disparando_em = NULL"):
+        assert trecho in sql
+
+
+def test_dono_que_nao_vale_mais_limpa_sem_avisar():
+    conn = ConnReaviso(guardi="outro-bot")
+    assert asyncio.run(d.reavisar_um(_sessao_simples(conn), _reaviso(), AGORA)) is False
+    [(_, a)] = conn.log
+    assert a[1] is False and a[3] is None
+
+
+def test_reserva_do_reaviso_divide_o_lease_com_o_disparo():
+    """O re-aviso e o disparo normal usam o mesmo `disparando_em`: os 2 workers
+    e as duas filas se excluem pelo mesmo carimbo."""
+    sql = _sem_espaco(d.SQL_RESERVAR_REAVISO)
+    externo = sql.split("FOR UPDATE SKIP LOCKED)")[1].split("RETURNING")[0]
+    assert "l.ativo" in externo
+    assert "l.disparando_em IS NULL OR l.disparando_em < now() - interval '10 minutes'" in externo
+    for trecho in ("x.reaviso_em <= now()",
+                   "x.reconhecido_em IS NULL OR x.reconhecido_como = 'adiado'",
+                   "LIMIT 10"):
+        assert trecho in sql
+
+
+def test_passada_faz_os_reavisos_depois_dos_disparos():
+    conn = ConnReaviso()
+
+    async def fetch(sql, *a):
+        return [_reaviso()] if sql == d.SQL_RESERVAR_REAVISO else []
+    conn.fetch = fetch
+    assert asyncio.run(d.passada(_sessao_simples(conn), AGORA)) == 1
+    assert [e[0] for e in conn.log] == ["concluir", "recado"]

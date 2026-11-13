@@ -157,6 +157,19 @@ def test_editar_horario_ou_ativo_solta_reserva_e_adiamento():
         assert "turno_pendente_desde = NULL" in sql and "disparando_em = NULL" in sql, campos
 
 
+def test_pausar_ou_mudar_horario_cancela_o_reaviso():
+    """O "de novo" (adiar ou insistência) é do aviso do horário ANTIGO: pausado
+    ou com horário novo, tocar de novo daqui a 5 min seria lembrar do que a
+    pessoa acabou de mudar (spec 2026-11-13)."""
+    for campos in ({"regra": {"tipo": "diario", "hora": "18:00"}}, {"ativo": False}):
+        c = Conn(linha=linha())
+        run(d.editar(c, USER, "abc", AGORA, **campos))
+        assert "reaviso_em = NULL" in _update(c), campos
+    c = Conn(linha=linha())
+    run(d.editar(c, USER, "abc", AGORA, titulo="novo"))
+    assert "reaviso_em = NULL" not in _update(c).split("RETURNING")[0]
+
+
 def test_editar_so_titulo_nao_mexe_na_reserva():
     c = Conn(linha=linha())
     run(d.editar(c, USER, "abc", AGORA, titulo="novo"))

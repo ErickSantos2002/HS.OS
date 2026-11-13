@@ -14,7 +14,8 @@ from app.agenda.regras import FUSO, TETO_ATIVOS, RegraInvalida, proximo, validar
 
 _COLUNAS = (
     "id::text AS id, user_id::text AS user_id, agent_id, titulo, instrucao, regra, proximo_em, "
-    "ativo, criado_por, ultimo_disparo_em, ultimo_status, criado_em, atualizado_em"
+    "ativo, criado_por, ultimo_disparo_em, ultimo_status, criado_em, atualizado_em, "
+    "aviso_em, reconhecido_em, reconhecido_como, reaviso_em, reavisos"
 )
 _CAMPOS_EDITAVEIS = {"titulo", "regra", "instrucao", "ativo"}
 _NAO_ACHOU = "Lembrete não encontrado."
@@ -156,6 +157,9 @@ async def editar(conn, user_id: str, id: str, agora: datetime, **campos) -> dict
         # dela exige o carimbo e não grava por cima desta edição. `ativo` igual
         # ao atual é no-op: zerar ali reabriria um disparo em curso.
         colunas += ["turno_pendente_desde = NULL", "disparando_em = NULL"]
+        # Re-aviso (adiar/insistência) de um horário que mudou ou de lembrete
+        # pausado não deve mais tocar.
+        colunas.append("reaviso_em = NULL")
     row = await conn.fetchrow(
         f"UPDATE public.lembretes SET {', '.join(colunas)}, atualizado_em = now() "
         f"WHERE id = $1::uuid AND user_id = $2::uuid RETURNING {_COLUNAS}",

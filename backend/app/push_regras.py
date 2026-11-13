@@ -227,3 +227,41 @@ def payload_agente(*, agent_id: str, agente_nome: str, conteudo: str,
         "tag": f"agente:{agent_id}",
         "conversa": f"agente:{agent_id}",
     }
+
+
+def item_de_lembrete(media) -> dict | None:
+    """O item `{"type": "lembrete", …}` do recado do disparador, se houver.
+
+    É o que separa o recado do lembrete da resposta comum do Guardi: só ele sai
+    com `payload_lembrete`.
+    """
+    if not isinstance(media, list):
+        return None
+    for item in media:
+        if isinstance(item, dict) and item.get("type") == "lembrete" and item.get("id"):
+            return item
+    return None
+
+
+def payload_lembrete(*, lembrete_id: str, titulo: str, instrucao: str | None,
+                     aviso_em: str, de_novo: bool, acoes: dict | None) -> dict:
+    """O push do recado do lembrete (spec 2026-11-13, "Camada 1").
+
+    ⚠️ **Sem `conversa`**: o SW não cala lembrete para quem está olhando a
+    conversa — lembrete toca sempre (quem está olhando também recebe a janela).
+    `tag` por lembrete: o re-aviso substitui a notificação velha em vez de
+    empilhar. `acoes` são os tokens de "adiar" e "feito"; sem o segredo, vem
+    `None` e o SW mostra a notificação sem os botões.
+    """
+    payload = {
+        "tipo": "lembrete",
+        "lembrete_id": lembrete_id,
+        "aviso_em": aviso_em,
+        "title": f"⏰ {titulo}" + (" (de novo)" if de_novo else ""),
+        "body": previa(instrucao) or "Lembrete do seu Guardi.",
+        "url": "/agenda",
+        "tag": f"lembrete:{lembrete_id}",
+    }
+    if acoes:
+        payload["acoes"] = acoes
+    return payload

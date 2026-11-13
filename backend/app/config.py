@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     # porque o `.env` local também o tem (o `publicar-bots-mcp.py` precisa) e o
     # pydantic-settings recusa chave desconhecida — mostrando o valor no erro.
     ANEXOS_MCP_SEGREDO: str = ""
+    # Segredo do HMAC do token de ação do push de lembrete ("Adiar 10 min" /
+    # "Feito" clicados na notificação, sem login — spec 2026-11-13-lembrete-que-
+    # chama-atencao). Vazio: o push sai sem os botões e `POST /agenda/lembretes/
+    # acao` responde 503; a janela do app (com login) continua funcionando.
+    LEMBRETE_ACAO_SEGREDO: str = ""
     TASKHS_API_URL: str = "https://taskhsapi.healthsafetytech.com/api"
     DATACORE_API_URL: str = "https://tinyapi.healthsafetytech.com"
     # O front do DocsHS; a API é `DOCSHS_URL + "/api/v1"` (o nginx de lá repassa).
