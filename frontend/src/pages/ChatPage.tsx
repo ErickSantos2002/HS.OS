@@ -24,6 +24,8 @@ import { type ChatMessage, type MediaAttachment } from "@/lib/mock-data";
 import VistoDaMensagem from "@/components/chat/VistoDaMensagem";
 import { estadoNoAgente } from "@/lib/vistos";
 import ConversasAnteriores from "@/components/chat/ConversasAnteriores";
+import { CapacidadeNoSheet } from "@/components/guardi/Capacidade";
+import { ehMeuGuardi } from "@/lib/bots-pessoais";
 import ChannelFilesPanel from "@/components/chat/ChannelFilesPanel";
 import { acrescentarCitacao, semPedidoDaBusca } from "@/lib/conversas-anteriores";
 import { formatFileSize } from "@/lib/file-upload";
@@ -50,7 +52,7 @@ import {
   Send, User, Loader2, WifiOff,
   Mic, Paperclip, Image as ImageIcon,
   X, ZoomIn, Info, Volume2, Square,
-  RefreshCw, Hash, Lock, MessageCircle, Plus, RotateCcw, History, Search,
+  RefreshCw, Hash, Lock, MessageCircle, Plus, RotateCcw, History, Search, Sparkles,
 } from "lucide-react";
 import { usePendingAgentTask } from "@/hooks/use-pending-agent-task";
 import { playNotificationSound } from "@/lib/notification-sound";
@@ -742,6 +744,8 @@ export default function ChatPage() {
   const [anterioresAberto, setAnterioresAberto] = useState(false);
   // Painel "Arquivos" — o mesmo do canal (pedido da Lidisay, 15/10/2026).
   const [arquivosAberto, setArquivosAberto] = useState(false);
+  // "Capacidade" do Guardi (spec 2026-11-13): só no Guardi DO usuário.
+  const [capacidadeAberta, setCapacidadeAberta] = useState(false);
   const anteriorParam = searchParams.get("anterior");
   const mensagemParam = searchParams.get("message");
   useEffect(() => {
@@ -2018,6 +2022,12 @@ export default function ChatPage() {
               <History className="h-3 w-3" />
               <span>Conversas anteriores</span>
             </button>
+            {effectiveAgentId && ehMeuGuardi(selectedAgent, user?.id) && (
+              <button onClick={() => setCapacidadeAberta(true)} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors" title="O que o seu Guardi consegue fazer em cada sistema, com o seu login">
+                <Sparkles className="h-3 w-3" />
+                <span>Capacidade</span>
+              </button>
+            )}
             <button onClick={() => setArquivosAberto(true)} disabled={!effectiveAgentId} className="inline-flex items-center gap-1 rounded-full border border-border/40 px-2.5 py-1 text-[11px] text-muted-foreground hover:bg-secondary/50 hover:text-foreground transition-colors disabled:opacity-40" title="Arquivos trocados com este agente, inclusive em conversas anteriores">
               <Paperclip className="h-3 w-3" />
               <span>Arquivos</span>
@@ -2186,6 +2196,9 @@ export default function ChatPage() {
      original se perdeu. */
   const dialogoNovaConversa = (
       <>
+        {effectiveAgentId && ehMeuGuardi(selectedAgent, user?.id) && (
+          <CapacidadeNoSheet agentId={effectiveAgentId} open={capacidadeAberta} onOpenChange={setCapacidadeAberta} />
+        )}
         {effectiveAgentId && (
           <ConversasAnteriores
             agentId={effectiveAgentId}

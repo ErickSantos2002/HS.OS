@@ -37,6 +37,12 @@ describe("pilhaDaUrl", () => {
     expect(pilhaDaUrl("?agent=nina&painel=hack")).toHaveLength(2);
   });
 
+  it("Capacidade do Guardi é painel da conversa: o voltar do Android o fecha", () => {
+    expect(pilhaDaUrl("?agent=ana-bot&painel=capacidade").at(-1)).toEqual({ tipo: "painel", painel: "capacidade" });
+    expect(urlAoAbrir("?agent=ana-bot", { tipo: "painel", painel: "capacidade" })).toBe("/chat?agent=ana-bot&painel=capacidade");
+    expect(urlDoPai("?agent=ana-bot&painel=capacidade")).toBe("/chat?agent=ana-bot");
+  });
+
   it("painel das silenciadas sai do Eu, sem conversa", () => {
     expect(pilhaDaUrl("?aba=eu&painel=silenciados")).toEqual([
       { tipo: "inicio", aba: "eu" },
