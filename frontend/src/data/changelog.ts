@@ -35,6 +35,10 @@ export const CHANGELOG: ChangelogVersion[] = [
     changes: [
       {
         kind: "melhoria",
+        text: "O Guardi agora encontra os cards parados do TaskHS pela mesma régua do Dashboard: mais de 72 h úteis desde a criação, ou travados há mais de 24 h úteis na mesma lista, por setor. Basta perguntar \"quais cards estão atrasados?\" — vale para quem é administrador ou coordenador no TaskHS.",
+      },
+      {
+        kind: "melhoria",
         text: "No app do celular, Pessoas, Agentes e Canais mostram quantas mensagens não lidas há em cada um — dá para ver sem trocar de aba.",
       },
       {

@@ -274,6 +274,9 @@ pergunto — nunca preencho com o que parece provável.
 - Tarefas do TaskHS de {primeiro}: comece por `taskhs_minhas`; quadros com
   `taskhs_quadros`/`taskhs_quadro`. Comentar, mover, criar e atualizar
   **preparam um cartão** — só acontece quando {primeiro} confirmar.
+- Cards "atrasados", "parados" ou "travados" no TaskHS: `taskhs_parados`
+  (régua do Dashboard, por horas úteis — não pelo prazo, que quase ninguém
+  preenche); `regua="lista"` é o "travados por setor".
 - Checklist que já existe na tarefa: item novo vai por `adicionar_itens`
   (só os novos). **Nunca** crio outro checklist repetindo o que já está lá.
 - Arquivo ou imagem que {primeiro} manda chega como `[anexo: … id=…]`: abro

@@ -488,3 +488,65 @@ def test_minhas_vazia_explica_o_que_ficou_de_fora():
     assert "37" in vazio and "concluído" in vazio and "abertas=false" in vazio
     cheio = texto_minhas([{"id": 1, "title": "x", "list_id": 2}], 37)
     assert cheio.startswith("- card 1") and "37" not in cheio
+
+
+_DASH = {
+    "kpis": {"cards_ativos": 300},
+    "atrasados": [
+        {"card_id": 1, "list_id": 10, "board_id": 5, "board_title": "Lab", "list_title": "Em calibração",
+         "title": "OS 11700", "horas_uteis": 80.0},
+        {"card_id": 2, "list_id": 11, "board_id": 5, "board_title": "Lab", "list_title": "Aguardando",
+         "title": "OS 11701", "horas_uteis": 140.5},
+    ],
+    "travados_por_setor": [{"setor_id": 1, "nome": "Laboratório", "total": 1},
+                           {"setor_id": 2, "nome": "Financeiro", "total": 0}],
+    "travados_setor": [{"card_id": 2, "list_id": 11, "board_title": "Lab", "list_title": "Aguardando",
+                        "title": "OS 11701", "setor_id": 1, "horas_uteis": 30.2}],
+}
+
+
+def test_parados_usa_a_regua_do_dashboard_nao_o_prazo(amb, monkeypatch):
+    """O Gustavo (Qualidade) pediu os cards atrasados ao Guardi em 13/11/2026 e
+    ele só sabia olhar `prazo` — que quase ninguém preenche —, então dizia "nada
+    atrasado" com 124 no Dashboard. A régua é a do TaskHS (horas úteis), lida do
+    `GET /dashboard`, nunca recalculada aqui."""
+    chamadas = []
+
+    async def chamar(email, bot, metodo, caminho, json=None, params=None, dono=None):
+        chamadas.append((metodo, caminho, params))
+        return _DASH
+    monkeypatch.setattr(m.taskhs, "chamar", chamar)
+
+    texto, erro = _run("taskhs_parados", {})
+    assert not erro
+    assert chamadas == [("GET", "/dashboard", {"periodo": 7})]
+    assert "2 card(s) há mais de 72 h úteis" in texto
+    assert texto.index("card 2") < texto.index("card 1")  # mais parado primeiro
+
+    texto, _ = _run("taskhs_parados", {"regua": "lista", "setor": "laboratorio", "board_id": 5})
+    assert chamadas[-1][2] == {"periodo": 7, "board_id": 5}
+    assert "1 card(s) há mais de 24 h úteis na MESMA lista" in texto and "setor Laboratório" in texto
+
+    texto, _ = _run("taskhs_parados", {"regua": "lista", "setor": "Marte"})
+    assert "Nenhum setor" in texto and "Laboratório" in texto
+
+
+def test_parados_vazio_por_papel_nao_vira_nada_parado(amb, monkeypatch):
+    """O TaskHS ZERA as réguas para quem não é administrador nem coordenador. Sem
+    olhar o papel, o Guardi de um colaborador diria "nenhum card parado" — a
+    mesma mentira por omissão do prazo, com outra causa."""
+    async def chamar(email, bot, metodo, caminho, json=None, params=None, dono=None):
+        if caminho == "/auth/me":
+            return {"role": "colaborador"}
+        return {"kpis": {"cards_ativos": 300}, "atrasados": [], "travados_setor": [], "travados_por_setor": []}
+    monkeypatch.setattr(m.taskhs, "chamar", chamar)
+
+    texto, erro = _run("taskhs_parados", {})
+    assert erro and "coordenador" in texto
+
+
+def test_parados_corta_e_diz_que_cortou():
+    dash = {"atrasados": [{"card_id": i, "horas_uteis": float(i)} for i in range(100)]}
+    texto = m.texto_parados(dash, "criacao")
+    assert texto.startswith("100 card(s)") and "Mostrando os 60" in texto
+    assert texto.count("\n- card") == 60
