@@ -41,6 +41,8 @@ from app.routers.mcp_email import outro_turno_aberto
 from app import datacore_consultas as dc
 from app import docshs_consultas as dh
 from app import talenths_consultas as th
+from app import talenths_escrita as the
+from app import talenths_preparo as thp
 from app import gestorhs_consultas as gh
 from app import gestorhs_escrita as gw
 from app import gestorhs_propostas as gp
@@ -194,6 +196,23 @@ FERRAMENTAS = [
         "id": {"type": "string", "description": "só nas consultas que pedem id"},
         "parametros": {"type": "object", "description": "filtros da consulta (nome → valor)"}},
        ("consulta",)),
+    _f("talenths_acoes", "As ações que dá para PREPARAR no TalentHS (pedir ou cancelar ausência, "
+       "ajustar ou lançar ponto, responder feedback, workshop, integração; e, do RH: aprovar ausência e "
+       "ponto, comunicado, evento, pedido de feedback, PDI, realizado de meta, curso) com os campos de "
+       "cada uma e quem pode. Chame antes de talenths_preparar se não souber o nome da ação ou dos campos.",
+       {"acao": {"type": "string", "description": "opcional: só esta ação"}}),
+    _f("talenths_preparar", "Prepara UMA ação no TalentHS como o seu dono: confere lá o estado (o "
+       "pedido ainda pendente, a batida dele, o mês aberto) e recusa o que lá seria recusado. Pessoa "
+       "citada pelo nome: ache o user_id antes com talenths_consultar pessoas. As ações do RH (aprovar, "
+       "comunicado, PDI, meta) dependem do papel do seu dono lá: se o TalentHS recusar, diga isso, não "
+       "contorne. Comunicado nasce RASCUNHO; publicar é pedir `publicar: true` — e aí toda a empresa vê. "
+       "Aprovações aceitam `ids` (até 20) num cartão só." + _CONFIRMA,
+       {"acao": {"type": "string", "description": "uma das de talenths_acoes"},
+        "id": {"type": "string", "description": "o id do item, nas ações que pedem id"},
+        "ids": {"type": "array", "items": {"type": "string"}, "maxItems": 20,
+                "description": "só nas aprovações: vários ids num cartão"},
+        "campos": {"type": "object", "description": "os campos da ação (nome → valor)"}},
+       ("acao",)),
     _f("gestorhs_consultas", "As consultas do GestorHS (calibração: aparelhos dos clientes, clientes, "
        "OS, caixas, certificados e propostas) e os filtros de cada uma. Chame antes de "
        "gestorhs_consultar se não souber o nome da consulta ou dos filtros.",
@@ -1281,11 +1300,20 @@ async def _docshs(bot: str, nome: str, args: dict, ctx: dict) -> str:
     return como_dado_externo(dh.texto_do_retorno(dados, offset, limite), origem="DocsHS")
 
 
-async def _talenths(bot: str, nome: str, args: dict, ctx: dict) -> str:
+async def _talenths(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
     """O Guardi no TalentHS (spec 2026-11-13-guardi-talenths). Quem decide o que o
-    dono vê é o TalentHS, pelo papel dele lá; daqui só o catálogo."""
+    dono vê é o TalentHS, pelo papel dele lá; daqui só o catálogo. A escrita
+    (spec 2026-11-13-guardi-talenths-escrita) vira cartão: `talenths_preparar`
+    só LÊ o TalentHS e grava a pendência; o clique do dono executa."""
     if "talenths" not in ctx["sistemas"]:
         raise _Recusa("O TalentHS ainda não está ligado para mim.")
+    if nome == "talenths_acoes":
+        return the.texto_do_catalogo(str(args.get("acao") or "").strip())
+    if nome == "talenths_preparar":
+        payload, resumo, aviso = await thp.preparar(ctx, bot, args)
+        await acoes.criar_pendente(conn, ctx["dono"], bot, "talenths", f"talenths_{payload['acao']}",
+                                   payload, resumo)
+        return _preparado(ctx, resumo, "TalentHS", aviso, "Leia ao seu dono")
     if nome == "talenths_consultas":
         so = str(args.get("consulta") or "").strip()
         linhas = []
@@ -2275,7 +2303,7 @@ async def _executar_cru(agent_id: str, nome: str, args: dict) -> tuple[str, bool
             if nome.startswith("docshs_"):
                 return await _docshs(agent_id, nome, args or {}, ctx), False
             if nome.startswith("talenths_"):
-                return await _talenths(agent_id, nome, args or {}, ctx), False
+                return await _talenths(conn, agent_id, nome, args or {}, ctx), False
             if nome.startswith("gestorhs_"):
                 return await _gestorhs(conn, agent_id, nome, args or {}, ctx), False
             if nome.startswith("hsgrowth_servicos_"):
