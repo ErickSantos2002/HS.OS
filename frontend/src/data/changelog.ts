@@ -37,6 +37,10 @@ export const CHANGELOG: ChangelogVersion[] = [
         kind: "correcao",
         text: "Digitar nas conversas ficou leve de novo: em conversas longas as letras demoravam a aparecer.",
       },
+      {
+        kind: "correcao",
+        text: "No celular, digitar nas conversas também ficou leve.",
+      },
     ],
   },
   {

@@ -4,11 +4,10 @@
  * envio: `publicarNaThread`/`enviarAudioNoCanal` (os mesmos do desktop);
  * ações da resposta: `acoesDaRespostaNaThread` + Copiar.
  */
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ehPessoal } from "@/lib/conversa-pessoal";
 
-import { MarkdownMessageContent } from "@/components/chat/MessageContent";
 import { useAuthContext } from "@/contexts/auth-context";
 import { markThreadViewed, useThreadCounts, useThreadMessages } from "@/hooks/use-channel-threads";
 import { useChannelMembers, useChannelMessages, useChannels, type ChannelMessage } from "@/hooks/use-channels";
@@ -19,26 +18,22 @@ import { usePeople } from "@/hooks/use-people";
 import { usePersistentDraft } from "@/hooks/use-persistent-draft";
 import { useRecibos } from "@/hooks/use-recibos";
 import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
+import { useAcoesEstaveis } from "@/hooks/use-acoes-estaveis";
 import { acoesDaRespostaNaThread } from "@/lib/acoes-da-mensagem";
 import { acoesDoToque } from "@/lib/acoes-do-toque";
-import { normalizeAgentId } from "@/lib/active-agents";
 import { api } from "@/lib/api";
-import { idDoAnexoDeAudio } from "@/lib/audio-de-mensagem";
 import { fraseDeQuemEscreve, podeEscreverNoCanal } from "@/lib/canal-avisos";
-import { getAgentDisplayName } from "@/lib/channel-agents";
 import { copyToClipboard } from "@/lib/clipboard";
 import { anexosDoCanal, nomeDeQuemEscreve, apagarNoCanal, editarNoCanal, enviarAudioNoCanal, publicarNaThread, type ContextoDeEnvio } from "@/lib/envio-no-canal";
-import { estadoNoCanal } from "@/lib/vistos";
-import { AudioDoAnexo, Bolha, type ReacaoNaBolha } from "./Bolha";
 import { Cabecalho } from "./Cabecalho";
-import { autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "@/lib/citacao";
+import { autorDaCitacao, montarResposta, trechoParaCitar, type Citacao } from "@/lib/citacao";
 import { Composer } from "./Composer";
 import { FolhaDeAcoes, FolhaDeEmoji } from "./Folhas";
-import { Ampliada, MidiaDoCanal } from "./Midia";
-import { Avatar } from "./ui";
+import { ListaDoCanal, type AcoesDoCanal } from "./ListaDoCanal";
+import { nomeDoAutorNoCanal } from "./formato";
+import { Ampliada } from "./Midia";
 import { useMapaDmDoAgente } from "./use-lista";
 import { usePedidoDaUrl } from "./use-pedido-da-url";
-import { corDoNome, horaCurta, mesmoDia, rotuloDoDia } from "./formato";
 
 export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: string; raizId: string; ativa: boolean; aoVoltar: () => void }) {
   const { user, profile, role } = useAuthContext();
@@ -106,11 +101,7 @@ export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: stri
     focar: () => requestAnimationFrame(() => campoRef.current?.focus()),
   });
 
-  const nomeDoAutor = (m: ChannelMessage) => (m.author_type === "agent"
-    ? getAgentDisplayName(normalizeAgentId(m.author_id || ""))
-    : pessoaPorId.get(m.author_id)?.full_name || m.author_name || "Alguém");
-  const reacoesDe = (m: ChannelMessage): ReacaoNaBolha[] =>
-    (reactions[m.id] ?? []).map((r) => ({ emoji: r.emoji, quantos: r.count, minha: !!user && r.user_ids.includes(user.id) }));
+  const nomeDoAutor = (m: ChannelMessage) => nomeDoAutorNoCanal(m, pessoaPorId);
   const reagir = (m: ChannelMessage, e: string) => { if (user) void toggleReaction(m.id, e, user.id); };
   const responder = (m: ChannelMessage) => {
     setEditando(null);
@@ -144,48 +135,27 @@ export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: stri
     }
   };
 
-  const bolha = (m: ChannelMessage, i: number, lista: ChannelMessage[], ehRaiz = false) => {
-    const ant = lista[i - 1];
-    const novoDia = !ehRaiz && (!ant || !mesmoDia(m.created_at, ant.created_at));
-    const eu = m.author_id === user?.id;
-    const inicio = ehRaiz || novoDia || !ant || ant.author_id !== m.author_id;
-    const ehAgente = m.author_type === "agent";
-    const nome = nomeDoAutor(m);
-    const { citacao, resto } = separarCitacao(m.content || "");
-    const audioId = idDoAnexoDeAudio(m.audio_url);
-    const apagada = !!m.deleted_at;
-    return (
-      <Fragment key={m.id}>
-        {novoDia && <div className="cel-dia">{rotuloDoDia(m.created_at)}</div>}
-        <Bolha
-          id={m.id}
-          eu={eu}
-          inicio={inicio}
-          grupo
-          avatar={ehAgente
-            ? <Avatar tipo="agente" nome={nome} chave={normalizeAgentId(m.author_id || "")} tam="xs" />
-            : <Avatar tipo="pessoa" nome={nome} chave={m.author_id} foto={pessoaPorId.get(m.author_id)?.avatar_url ?? m.author_avatar} tam="xs" />}
-          autor={!eu && inicio ? { nome: `${nome}${ehAgente ? " ✦" : ""}`, cor: corDoNome(m.author_id) } : null}
-          hora={horaCurta(m.created_at)}
-          visto={eu && !ehRaiz ? estadoNoCanal(m.id, recibos) : null}
-          editada={!!m.edited_at && !apagada}
-          reacoes={reacoesDe(m)}
-          aoReagir={(e) => reagir(m, e)}
-          aoSegurar={apagada || m.id.startsWith("optimistic-") ? undefined : () => setAcoesDe(m)}
-          aoResponder={apagada || !podeEscrever ? undefined : () => responder(m)}
-          destaque={acoesDe?.id === m.id}
-        >
-          {apagada ? <p style={{ margin: 0, color: "var(--muted)", fontStyle: "italic" }}>Mensagem apagada</p> : (
-            <>
-              {citacao && <span className="cel-cit"><b>{citacao.autor}</b><span>{citacao.texto}</span></span>}
-              {m.audio_url && !ehAgente && <AudioDoAnexo id={audioId ?? undefined} url={audioId ? undefined : m.audio_url} semente={m.id} rotulo="voz" />}
-              {(m.attachments ?? []).map((a, k) => <MidiaDoCanal key={k} att={a} aoAmpliar={setAmpliada} />)}
-              {resto && <div className="cel-texto"><MarkdownMessageContent text={resto} highlightMentions className="text-[16px] leading-[1.38]" /></div>}
-            </>
-          )}
-        </Bolha>
-      </Fragment>
-    );
+  // Ações das bolhas num objeto estável: sem isso cada tecla no composer
+  // redesenhava todas as bolhas (ver `ListaDoCanal`).
+  const acoesDaLista = useAcoesEstaveis<AcoesDoCanal>({
+    reagir,
+    segurar: setAcoesDe,
+    responder,
+    abrirThread: () => {},
+    ampliar: setAmpliada,
+  });
+  const listaDaRaiz = useMemo(() => (raiz ? [raiz] : []), [raiz]);
+  const comuns = {
+    meuId: user?.id,
+    isDm: false,
+    isPessoal: false,
+    recibos,
+    reactions,
+    pessoaPorId,
+    resumoLigado: false,
+    podeEscrever,
+    destaqueId: acoesDe?.id ?? null,
+    acoes: acoesDaLista,
   };
 
   const acoesDe_ = acoesDe
@@ -205,9 +175,13 @@ export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: stri
     <>
       <Cabecalho aoVoltar={aoVoltar} titulo="Thread" sub={canal ? (ehPessoal(canal) ? "Suas anotações" : canal.type === "dm" ? "Conversa" : `#${canal.name}`) : ""} />
       <div ref={fundoRef} className="cel-fundo">
-        {raiz && <div style={{ padding: "4px 0 10px", borderBottom: "1px solid var(--line)", marginBottom: 6 }}>{bolha(raiz, 0, [raiz], true)}</div>}
+        {raiz && (
+          <div style={{ padding: "4px 0 10px", borderBottom: "1px solid var(--line)", marginBottom: 6 }}>
+            <ListaDoCanal modo="raiz" mensagens={listaDaRaiz} {...comuns} />
+          </div>
+        )}
         {respostas.length === 0 && raiz && <div className="cel-vazio" style={{ padding: 24 }}>Nenhuma resposta ainda.</div>}
-        {respostas.map((m, i) => bolha(m, i, respostas))}
+        <ListaDoCanal modo="thread" mensagens={respostas} {...comuns} />
       </div>
       <div style={{ paddingBottom: bottomOffset }}>
         {podeEscrever === false ? (
