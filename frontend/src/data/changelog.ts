@@ -35,6 +35,10 @@ export const CHANGELOG: ChangelogVersion[] = [
     changes: [
       {
         kind: "novidade",
+        text: "O Guardi agora consulta o TalentHS como você: férias e ausências, ponto, metas, PDI, avaliação, feedbacks, cursos e trilhas, benefícios, comunicados e aniversários. Ele vê só o que o seu login lá vê — e o RH, o que o RH vê.",
+      },
+      {
+        kind: "novidade",
         text: "O Guardi agora faz coisas no TalentHS por você: pedir ou cancelar uma ausência, pedir ajuste de ponto, lançar a batida esquecida, responder feedback, entrar ou sair de workshop. Para o RH, também aprovar ausências e ponto (várias de uma vez), escrever comunicado, pôr evento no calendário, montar PDI, lançar o realizado da meta e registrar curso. Nada acontece sem você confirmar no cartão — e, se algo mudou no TalentHS desde então, ele não grava e avisa.",
       },
       {
