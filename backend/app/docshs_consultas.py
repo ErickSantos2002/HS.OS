@@ -57,7 +57,8 @@ CONSULTAS: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "controle_de_treinamentos": ("/treinamentos/controle", "controle de treinamentos "
                                  "(FORM-SGI-006), encerrados por data `de`/`ate` "
                                  "(AAAA-MM-DD) — só a Qualidade", ("de", "ate") + _LOCAL),
-    "plano_de_treinamento": ("/planos-treinamento/{id}", "o plano anual de treinamento (id = ano)", ()),
+    "plano_de_treinamento": ("/planos-treinamento/{id}", "o plano anual de treinamento (id = ano) — "
+                             "só a Qualidade", ()),
     "leituras_por_pessoa": ("/leituras/por-pessoa", "leituras por pessoa (vencidas e pendentes) — "
                             "só a Qualidade", _LOCAL),
     "leituras_de_uma_pessoa": ("/leituras/por-pessoa/{id}", "as leituras de uma pessoa "
