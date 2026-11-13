@@ -23,6 +23,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
+from app.fuso import em_brasilia
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
 from app.email import assinatura, contas, graph
@@ -149,7 +150,7 @@ async def _rodar(conn, agent_id: str, nome: str, args: dict, ctx: dict) -> str:
                                    args.get("so_nao_lidos") is True)
         await contas.evento(conn, dono, agent_id, "listar", caixa)
         linhas = [f"- id={i.get('id')} | {'' if i.get('isRead') else '[NÃO LIDO] '}"
-                  f"{i.get('receivedDateTime', '')[:16]} | {_remetente(i)} | "
+                  f"{em_brasilia(i.get('receivedDateTime') or '')} | {_remetente(i)} | "
                   f"{i.get('subject') or '(sem assunto)'} | {(i.get('bodyPreview') or '')[:160]}"
                   for i in itens]
         return como_dado_externo("\n".join(linhas) or "(nenhum e-mail)")
@@ -162,7 +163,7 @@ async def _rodar(conn, agent_id: str, nome: str, args: dict, ctx: dict) -> str:
         texto = html_para_texto(corpo) if (msg.get("body") or {}).get("contentType", "").lower() == "html" \
             else html_para_texto(corpo.replace("<", "&lt;"))
         return como_dado_externo(f"De: {_remetente(msg)}\nAssunto: {msg.get('subject')}\n"
-                                 f"Data: {msg.get('receivedDateTime')}\n\n{texto}")
+                                 f"Data: {em_brasilia(msg.get('receivedDateTime') or '')}\n\n{texto}")
 
     if nome == "email_marcar_lido":
         caixa = escolher_caixa(args.get("caixa"), conta, ctx["extras"])
@@ -262,7 +263,7 @@ async def executar(agent_id: str, nome: str, args: dict) -> tuple[str, bool]:
     try:
         async with sessao(role="service_role") as conn:
             ctx = await _contexto(conn, agent_id)
-            return await _rodar(conn, agent_id, nome, args or {}, ctx), False
+            return em_brasilia(await _rodar(conn, agent_id, nome, args or {}, ctx)), False
     except _Recusa as e:
         return str(e), True
     except ValueError as e:

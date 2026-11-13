@@ -35,6 +35,10 @@ export const CHANGELOG: ChangelogVersion[] = [
     changes: [
       {
         kind: "correcao",
+        text: "O Guardi passa a falar os horários de cards, e-mails e tarefas no horário de Brasília — antes vinham três horas adiantados.",
+      },
+      {
+        kind: "correcao",
         text: "O Guardi agora sabe quando você confirma ou descarta um cartão dele, e para de perguntar de novo sobre o que você já decidiu.",
       },
       {
