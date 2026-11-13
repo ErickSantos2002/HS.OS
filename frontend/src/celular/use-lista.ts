@@ -28,7 +28,7 @@ import { semMarkdown } from "@/lib/previa-da-mensagem";
 import { assinar } from "@/lib/realtime";
 import { useConversaPessoal } from "@/hooks/use-conversa-pessoal";
 import { ehPessoal, nomeDaConversaPessoal } from "@/lib/conversa-pessoal";
-import type { ItemCelular } from "./lista";
+import { itemDePessoa, type ItemCelular } from "./lista";
 
 export interface PreviaDoCanal {
   channel_id: string;
@@ -168,14 +168,12 @@ export function useListaDoCelular() {
       const canalId = peerIdToChannelId[p.id] ?? null;
       // Conta desativada só fica se já havia conversa — o histórico é de quem ficou.
       if (p.status === "inactive" && !canalId) continue;
-      lista.push({
-        chave: `pessoa:${p.id}`, tipo: "pessoa", id: p.id, canalId, nome: p.full_name || p.email,
-        subtitulo: [p.cargo, p.departamento].filter(Boolean).join(" · "),
+      lista.push(itemDePessoa(p, {
+        canalId,
         previa: previaDe(canalId),
         naoLidas: canalId ? (unreadByChannel[canalId] || 0) : 0,
         silenciado: !!canalId && estaSilenciado(canalId),
-        pensando: false,
-      });
+      }));
     }
     // Conversa consigo mesmo (10/11/2026): item próprio, fixo no topo de
     // Pessoas (`montarLista`); nunca como canal "#Anotações".

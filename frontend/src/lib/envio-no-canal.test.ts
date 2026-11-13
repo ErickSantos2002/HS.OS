@@ -9,8 +9,10 @@ const avisos = vi.hoisted(() => ({ notifyChannelRecipients: vi.fn(async (..._a: 
 const agentes = vi.hoisted(() => ({ startChannelAgentReplies: vi.fn((..._a: unknown[]) => undefined) }));
 vi.mock("@/lib/channel-notifications", () => avisos);
 vi.mock("@/lib/channel-agents", () => agentes);
+const avisoNaTela = vi.hoisted(() => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }));
+vi.mock("sonner", () => avisoNaTela);
 
-import { publicarNaThread, publicarNoCanal, type ContextoDeEnvio } from "./envio-no-canal";
+import { enviarGifComAviso, enviarGifNoCanal, ERRO_DO_GIF, publicarNaThread, publicarNoCanal, type ContextoDeEnvio } from "./envio-no-canal";
 import { autorDaCitacao, montarResposta } from "@/lib/citacao";
 
 const ctx = (): ContextoDeEnvio => ({
@@ -48,4 +50,45 @@ describe("publicar com citação", () => {
 it("a citação grava o nome de verdade, nunca 'Você'", () => {
   expect(autorDaCitacao(true, "Erick Santos", "Erick Santos")).toBe("Erick Santos");
   expect(autorDaCitacao(false, "Erick Santos", "Rafael Lima")).toBe("Rafael Lima");
+});
+
+/**
+ * O GIF saiu do `ChannelChat` (13/11/2026) para o celular usar o mesmo envio.
+ * Sem o `forceNotifyAll` na DM o aviso seguia a regra de canal e a outra
+ * pessoa não era avisada; sem o "🎬 GIF" o push saía vazio.
+ */
+describe("GIF", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("grava um anexo image/gif sem texto e avisa com 🎬 GIF, sem acordar agente", async () => {
+    const c = ctx();
+    await enviarGifNoCanal(c, { title: "gato dançando", url: "https://media.giphy.com/x.gif" });
+    const args = (c.sendMessage as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(args.slice(0, 7)).toEqual(["c1", "u1", "Erick Santos", "", "human", null, null]);
+    expect(args[7]).toEqual([{ name: "gato dançando.gif", url: "https://media.giphy.com/x.gif", size: 0, mimeType: "image/gif" }]);
+    expect(avisos.notifyChannelRecipients.mock.calls[0][0]).toMatchObject({
+      channelId: "c1", senderUserId: "u1", authorName: "Erick Santos",
+      contentPreview: "🎬 GIF", contentText: "🎬 GIF", forceNotifyAll: false,
+    });
+    expect(agentes.startChannelAgentReplies).not.toHaveBeenCalled();
+  });
+
+  it("na DM avisa a outra pessoa sempre; sem título vira gif.gif", async () => {
+    const c = { ...ctx(), canal: { id: "d1", type: "dm" as const } };
+    await enviarGifNoCanal(c, { title: "", url: "u" });
+    expect((c.sendMessage as ReturnType<typeof vi.fn>).mock.calls[0][7][0].name).toBe("gif.gif");
+    expect(avisos.notifyChannelRecipients.mock.calls[0][0]).toMatchObject({ forceNotifyAll: true });
+  });
+
+  it("gravação recusada: o erro aparece na tela e ninguém é avisado de um GIF que não existe", async () => {
+    const c = { ...ctx(), sendMessage: vi.fn(async () => false) };
+    await enviarGifComAviso(c, { title: "x", url: "u" });
+    expect(avisoNaTela.toast.error).toHaveBeenCalledWith(ERRO_DO_GIF);
+    expect(avisos.notifyChannelRecipients).not.toHaveBeenCalled();
+  });
+
+  it("deu certo: sem erro na tela", async () => {
+    await enviarGifComAviso(ctx(), { title: "x", url: "u" });
+    expect(avisoNaTela.toast.error).not.toHaveBeenCalled();
+  });
 });

@@ -30,6 +30,24 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.11.0",
+    date: "2026-11-13",
+    changes: [
+      {
+        kind: "melhoria",
+        text: "No app do celular, Pessoas, Agentes e Canais mostram quantas mensagens não lidas há em cada um — dá para ver sem trocar de aba.",
+      },
+      {
+        kind: "novidade",
+        text: "GIFs no celular: o botão GIF ao lado do clipe, nos canais e nas conversas com pessoas.",
+      },
+      {
+        kind: "melhoria",
+        text: "O app do celular agora mostra a foto das pessoas na lista de conversas e nas silenciadas, como no computador. Foto que não carrega volta para a inicial.",
+      },
+    ],
+  },
+  {
     version: "2.10.1",
     date: "2026-11-13",
     changes: [

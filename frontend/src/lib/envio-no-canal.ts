@@ -21,7 +21,7 @@ type SendMessage = (
   channelId: string, authorId: string, authorName: string, content: string,
   authorType?: "human" | "agent", authorAvatar?: string | null, audioUrl?: string | null,
   attachments?: ChannelAttachment[] | null, threadId?: string | null,
-) => Promise<void>;
+) => Promise<void | boolean>;
 
 export interface ContextoDeEnvio {
   canal: Pick<Channel, "id" | "type">;
@@ -89,6 +89,53 @@ export async function publicarNoCanal(
     forceNotifyAll: ctx.canal.type === "dm",
   });
   acordarAgentes(ctx, paraAvisos);
+}
+
+/** O que um GIF escolhido no `GifPicker` precisa: o título e a URL do Giphy. */
+export interface GifEscolhido {
+  title?: string | null;
+  url: string;
+}
+
+export const ERRO_DO_GIF = "Não consegui enviar o GIF.";
+
+/** O envio do GIF com o erro na tela — o mesmo no desktop e no celular. */
+export async function enviarGifComAviso(ctx: ContextoDeEnvio, gif: GifEscolhido): Promise<void> {
+  try {
+    await enviarGifNoCanal(ctx, gif);
+  } catch (erro) {
+    console.error("GIF:", erro);
+    toast.error(ERRO_DO_GIF);
+  }
+}
+
+/**
+ * GIF: mensagem sem texto com um anexo `image/gif` apontando para o Giphy, e
+ * aviso "🎬 GIF". Não acorda agente — era assim no `ChannelChat`, de onde
+ * saiu em 13/11/2026 para o celular ganhar o mesmo botão.
+ *
+ * ⚠️ Lança se a gravação falhar: o `sendMessage` engole o erro (tira a bolha
+ * otimista e devolve `false`), e o GIF sumia sem aviso — e ainda avisava os
+ * outros de uma mensagem que não existia. Quem chama mostra o erro.
+ */
+export async function enviarGifNoCanal(ctx: ContextoDeEnvio, gif: GifEscolhido): Promise<void> {
+  const nome = nomeDeQuemEscreve(ctx);
+  const anexos: ChannelAttachment[] = [{
+    name: `${gif.title || "gif"}.gif`,
+    url: gif.url,
+    size: 0,
+    mimeType: "image/gif",
+  }];
+  const gravou = await ctx.sendMessage(ctx.canal.id, ctx.user.id, nome, "", "human", ctx.profile?.avatar_url || null, null, anexos);
+  if (gravou === false) throw new Error("GIF não gravado");
+  await notifyChannelRecipients({
+    channelId: ctx.canal.id,
+    senderUserId: ctx.user.id,
+    authorName: nome,
+    contentPreview: "🎬 GIF",
+    contentText: "🎬 GIF",
+    forceNotifyAll: ctx.canal.type === "dm",
+  });
 }
 
 /** Resposta numa thread. Não acorda agente — era assim no `ChannelChat`. */

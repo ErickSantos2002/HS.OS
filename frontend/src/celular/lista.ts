@@ -7,6 +7,8 @@
  * (`lista-de-conversas.ts`), não lida não sobe para o topo — no celular o
  * contador já salta aos olhos e a conversa não muda de lugar ao ser lida.
  */
+import type { Person } from "@/hooks/use-people";
+import { somarNaoLidas } from "@/lib/contador-de-nao-lidas";
 import { casaBusca } from "@/lib/lista-de-conversas";
 
 export type TipoItem = "pessoa" | "agente" | "canal";
@@ -38,8 +40,31 @@ export interface ItemCelular {
   naoLidas: number;
   silenciado: boolean;
   pensando: boolean;
-  /** Foto — hoje só a da conversa pessoal (a própria). */
+  /** Foto da pessoa (`avatar_url`) ou a própria, na conversa pessoal. Agente e canal não usam. */
   foto?: string | null;
+}
+
+/** Item de uma pessoa (com ou sem DM ainda). Leva a foto, como a lateral do desktop. */
+export function itemDePessoa(
+  p: Pick<Person, "id" | "full_name" | "email" | "cargo" | "departamento" | "avatar_url">,
+  { canalId, previa, naoLidas, silenciado }: { canalId: string | null; previa: PreviaCelular | null; naoLidas: number; silenciado: boolean },
+): ItemCelular {
+  return {
+    chave: `pessoa:${p.id}`, tipo: "pessoa", id: p.id, canalId, nome: p.full_name || p.email,
+    subtitulo: [p.cargo, p.departamento].filter(Boolean).join(" · "),
+    previa, naoLidas, silenciado, pensando: false,
+    foto: p.avatar_url ?? null,
+  };
+}
+
+/**
+ * O contador de cada chip, pela regra do desktop (`somarNaoLidas`: silenciada
+ * conta, como nas abas DMs/Agentes/Canais de lá). A conversa pessoal fica em
+ * Pessoas, onde aparece.
+ */
+export function naoLidasPorChip(itens: ItemCelular[]): Record<TipoItem, number> {
+  const chip = (t: TipoItem) => itens.filter((i) => i.tipo === t || (t === "pessoa" && i.tipo === "pessoal"));
+  return { pessoa: somarNaoLidas(chip("pessoa")), agente: somarNaoLidas(chip("agente")), canal: somarNaoLidas(chip("canal")) };
 }
 
 export function montarLista(itens: ItemCelular[], filtro: TipoItem, busca: string): ItemCelular[] {

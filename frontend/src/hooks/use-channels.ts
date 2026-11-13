@@ -383,6 +383,9 @@ export function useChannelMessages(channelId: string | null) {
       }
       console.error("Send message error:", error);
     }
+    // Falhou = `false` (a mensagem otimista já saiu da tela). Quem chama e
+    // não confere segue como antes; o GIF confere (13/11/2026).
+    return !error;
   }, []);
 
   /** Tira da tela na hora; quem chama grava no servidor e, se falhar, `reexibir`. */

@@ -81,6 +81,8 @@
 .cel-chips::-webkit-scrollbar { display: none; }
 .cel-chip { min-height: 34px; padding: 0 14px; border-radius: 17px; background: var(--surface); color: var(--muted); font-size: 14px; font-weight: 500; white-space: nowrap; }
 .cel-chip[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.cel-chip { display: inline-flex; align-items: center; gap: 6px; }
+.cel-chip-n { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 700; display: grid; place-items: center; font-variant-numeric: tabular-nums; }
 
 /* ---------- avatares ---------- */
 .cel-av { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 19px; color: #fff; flex: none; position: relative; }
@@ -196,6 +198,7 @@
 .cel-compor { display: flex; align-items: flex-end; gap: 6px; padding: 6px 8px calc(8px + env(safe-area-inset-bottom, 0px)); background: var(--chat); flex: none; }
 .cel-campo { flex: 1; min-width: 0; background: var(--bg); border-radius: 24px; display: flex; align-items: flex-end; box-shadow: var(--shadow); min-height: 48px; }
 .cel-campo .cel-ib { width: 44px; height: 48px; color: var(--muted); }
+.cel-campo .cel-gif { font-size: 11px; font-weight: 700; letter-spacing: .06em; line-height: 1; border: 1.5px solid currentColor; border-radius: 4px; padding: 2px 3px; }
 .cel-campo textarea { flex: 1; min-width: 0; border: 0; background: none; resize: none; font: inherit; font-size: 16px; line-height: 22px; padding: 13px 0; max-height: 132px; color: var(--fg); outline: none; }
 .cel-campo textarea::placeholder { color: var(--muted); }
 .cel-enviar { width: 48px; height: 48px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; flex: none; touch-action: none; transition: transform .15s, background .15s; }
