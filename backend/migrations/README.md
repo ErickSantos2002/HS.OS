@@ -19,6 +19,7 @@ Schema do Postgres próprio, extraído do Supabase e validado em Postgres puro.
 | `024_coletor_respostas.sql` | `agent_runs.tela_perguntou_em`, `coletando_em`, `coleta_encerrada_em` e `coleta_tentativas` para o coletor de respostas. **Não aplicada.** ⚠️ Superusuário: `~/aplicar-hsos-024.py` |
 | `025_silenciar_canal.sql` | `channel_members.silenciado`. **Não aplicada.** ⚠️ Superusuário: `~/aplicar-hsos-025.py` |
 | `026_remover_push_morto.sql` | Remove `notifications_send_push` / `trigger_send_push_on_notification` (chamava a edge da dn.ia). **Não aplicada.** ⚠️ Superusuário: `~/aplicar-hsos-026.py` |
+| `036_lembrete_reconhecido.sql` | Lembrete que chama atenção: `lembretes.aviso_em`, `reconhecido_em`, `reconhecido_como`, `reaviso_em`, `reavisos` (Adiar/Feito e insistência de 5 min). **Não aplicada.** ⚠️ Superusuário: `~/projetos/bancos/.venv/bin/python ~/aplicar-hsos-036.py` |
 | ⚠️ `008_pessoas_talenths.sql` | **Não é deste banco** — ver abaixo. |
 | `_origem/` | Dump de origem + script de regeração + export do SQL editor |
 
