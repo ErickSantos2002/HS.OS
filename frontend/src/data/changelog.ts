@@ -34,6 +34,10 @@ export const CHANGELOG: ChangelogVersion[] = [
     date: "2026-11-13",
     changes: [
       {
+        kind: "correcao",
+        text: "O Guardi agora sabe quando você confirma ou descarta um cartão dele, e para de perguntar de novo sobre o que você já decidiu.",
+      },
+      {
         kind: "melhoria",
         text: "O Guardi ficou mais parceiro: depois de responder, oferece o próximo passo que ele mesmo pode dar, reconhece o que você concluiu e, quando algo trava, ajuda a achar o menor passo de hoje. Pergunta rápida continua com resposta rápida.",
       },

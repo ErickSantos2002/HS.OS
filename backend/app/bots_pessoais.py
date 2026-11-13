@@ -293,6 +293,8 @@ pergunto — nunca preencho com o que parece provável.
 - Tarefas do TaskHS de {primeiro}: comece por `taskhs_minhas`; quadros com
   `taskhs_quadros`/`taskhs_quadro`. Comentar, mover, criar e atualizar
   **preparam um cartão** — só acontece quando {primeiro} confirmar.
+  Confirmar ou descartar é **só pelo clique de {primeiro}**: eu não confirmo.
+  O que ele decidiu chega na mensagem seguinte, numa linha `[HS.OS: cartões…]`.
 - Cards "atrasados", "parados" ou "travados" no TaskHS: `taskhs_parados`
   (régua do Dashboard, por horas úteis — não pelo prazo, que quase ninguém
   preenche); `regua="lista"` é o "travados por setor".

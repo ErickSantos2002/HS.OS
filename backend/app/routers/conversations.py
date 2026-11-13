@@ -634,6 +634,58 @@ def _ids_validos(media: list[dict] | None) -> list[str]:
     return ids
 
 
+# ⚠️ **O Guardi não via o clique no cartão.** Ele prepara a ação, a pessoa
+# confirma ou descarta no HS.OS, e nada disso voltava à sessão: em 13/11/2026 o
+# `erick-bot` seguiu perguntando "confirmo ou descarto?" duas mensagens depois
+# de o card já ter sido criado. O que a pessoa decidiu desde o último envio vai
+# junto do próximo, escrito pelo servidor — nunca pelo payload do cliente.
+SQL_DECISOES_DESDE_O_ULTIMO_ENVIO = """
+SELECT a.status, a.resumo, a.erro
+  FROM public.acoes_pendentes a
+ WHERE a.user_id = $1::uuid AND a.agent_id = $2
+   AND a.status IN ('feita', 'cancelada', 'erro')
+   AND a.decidido_em > now() - interval '1 day'
+   AND a.decidido_em > COALESCE(
+         (SELECT max(r.criado_em) FROM public.agent_runs r
+           WHERE r.user_id = $1::uuid AND r.agent_id = $2), '-infinity')
+ ORDER BY a.decidido_em
+ LIMIT 10
+"""
+
+_ROTULO_DECISAO = {"feita": "confirmado e feito", "cancelada": "descartado",
+                   "erro": "confirmado, mas falhou"}
+
+
+def _uma_linha(t: str | None, teto: int) -> str:
+    t = " ".join(str(t or "").split())
+    return t if len(t) <= teto else t[: teto - 1] + "…"
+
+
+def mensagem_com_decisoes(texto: str, decisoes: list[dict]) -> str:
+    """O texto + o que a pessoa fez com os cartões desde a última mensagem."""
+    if not decisoes:
+        return texto
+    linhas = []
+    for d in decisoes:
+        linha = f"- {_ROTULO_DECISAO.get(d['status'], d['status'])}: {_uma_linha(d['resumo'], 200)}"
+        if d["status"] == "erro" and d.get("erro"):
+            linha += f" ({_uma_linha(d['erro'], 200)})"
+        linhas.append(linha)
+    return (f"{texto}\n\n[HS.OS: cartões que a pessoa já decidiu desde a sua última mensagem — "
+            "não pergunte de novo sobre eles]\n" + "\n".join(linhas))
+
+
+async def _decisoes_desde_o_ultimo_envio(agent_id: str, user_id: str) -> list[dict]:
+    """Melhor esforço: falhar aqui não pode impedir a mensagem de sair."""
+    try:
+        async with sessao(role="service_role") as conn:
+            return [dict(l) for l in await conn.fetch(SQL_DECISOES_DESDE_O_ULTIMO_ENVIO,
+                                                      user_id, agent_id)]
+    except Exception:
+        logger.warning("decisões de cartão para %s/%s não lidas", agent_id, user_id, exc_info=True)
+        return []
+
+
 class EnvioIn(BaseModel):
     content: str = Field(min_length=1)
     media: list[dict] | None = None
@@ -1253,6 +1305,8 @@ async def disparar_turno(agent_id: str, user_id: str, mensagem: str,
     if not c.configurado:
         raise GatewayNaoConfigurado("Gateway não configurado.")
 
+    # Antes de gravar o run deste envio: é o run anterior que marca o "desde".
+    mensagem = mensagem_com_decisoes(mensagem, await _decisoes_desde_o_ultimo_envio(agent_id, user_id))
     chave = _chave_sessao(agent_id, user_id)
     cliente = obter_cliente(c.url, c.token)
     seq_antes = await _ultimo_seq(
