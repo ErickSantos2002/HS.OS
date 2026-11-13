@@ -30,6 +30,25 @@ export interface Lembrete {
   criado_por: "pessoa" | "guardi";
   ultimo_disparo_em: string | null;
   ultimo_status: StatusLembrete | null;
+  /** Lembrete que chama atenção (spec 2026-11-13): o último aviso e o que a
+   *  pessoa fez com ele. Opcionais — ausentes antes da migração 036. */
+  aviso_em?: string | null;
+  reconhecido_em?: string | null;
+  reconhecido_como?: "feito" | "adiado" | null;
+  reaviso_em?: string | null;
+  reavisos?: number;
+}
+
+/** Avisado e ainda sem Adiar/Feito — o que a janela do app mostra. */
+export interface LembretePendente {
+  id: string;
+  titulo: string;
+  instrucao: string | null;
+  agent_id: string;
+  agente_nome: string;
+  /** ISO em Brasília, com microssegundos: volta ao servidor como veio. */
+  aviso_em: string;
+  reavisos: number;
 }
 
 export interface EventoOutlook {
@@ -149,6 +168,24 @@ const STATUS: Record<StatusLembrete, string> = {
 };
 export const rotuloStatus = (s: StatusLembrete) => STATUS[s] ?? s;
 
+/** "14:05" de um ISO de Brasília. */
+const hora = (iso: string) => iso.slice(11, 16);
+
+/**
+ * O que a pessoa fez com o último aviso, para a linha "Último disparo …" da
+ * `/agenda`: "Feito às 14:05", "Adiado para 14:10", "Avisado de novo às 14:05
+ * — sem resposta". `null` enquanto não há o que dizer (aviso ainda dentro dos
+ * 5 min, ou lembrete de antes da 036): a linha fica só com o status.
+ */
+export function descreverResposta(l: Lembrete): string | null {
+  if (l.reconhecido_como === "feito" && l.reconhecido_em) return `Feito às ${hora(l.reconhecido_em)}`;
+  if (l.reconhecido_como === "adiado" && l.reaviso_em) return `Adiado para ${hora(l.reaviso_em)}`;
+  if (!l.reconhecido_como && l.aviso_em && (l.reavisos ?? 0) > 0) {
+    return `Avisado de novo às ${hora(l.aviso_em)} — sem resposta`;
+  }
+  return null;
+}
+
 /** "09/11 às 14:05" de um ISO de Brasília. */
 export const quandoLegivel = (iso: string) => descreverRegra({ tipo: "unico", em: iso.slice(0, 16) });
 
@@ -250,3 +287,14 @@ export const apagarLembrete = (id: string) =>
 /** `ate` é inclusivo quando é data pura; a janela vai até 62 dias. */
 export const eventosOutlook = (de: string, ate: string) =>
   api<{ estado: EstadoOutlook; eventos: EventoOutlook[] }>(`/agenda/outlook${janela(de, ate)}`);
+
+// ── lembrete que chama atenção (spec 2026-11-13) ───────────────────────
+
+export const lembretesPendentes = () =>
+  api<{ pendentes: LembretePendente[] }>("/agenda/lembretes/pendentes").then((r) => r.pendentes);
+/** Responde ao aviso `aviso_em`; resposta a aviso já respondido volta `aplicado: false`. */
+export const responderLembrete = (id: string, acao: "adiar" | "feito", aviso_em: string) =>
+  api<{ aplicado: boolean }>(`/agenda/lembretes/${encodeURIComponent(id)}/${acao}`, {
+    method: "POST",
+    body: { aviso_em },
+  });

@@ -1018,6 +1018,21 @@ continua negado aos Guardis (os 560 disparos da `nina`); a agenda é do HS.OS.
   pessoa responde ao recado enquanto o turno do lembrete ainda roda, o run novo vira
   fronteira no coletor (`SQL_RESERVAR_RUNS`) e as duas respostas podem sair coladas
   numa bolha, ou a do lembrete só aparecer no `/recuperar`.
+- **Lembrete que chama atenção (13/11/2026, `036`)** — spec
+  `docs/superpowers/specs/2026-11-13-lembrete-que-chama-atencao-design.md`. Cada
+  recado é um AVISO (`aviso_em`, gravado na mesma transação do recado) que espera
+  "Adiar 10 min" ou "Feito"; sem resposta, `reavisar_um` regrava `⏰ Lembrete (de
+  novo)` UMA vez em 5 min; adiar vencido avisa de novo e reinicia a insistência.
+  ⚠️ **Re-aviso é só o recado**: não chama o Guardi nem conta no teto de 12. Mesmo
+  lease `disparando_em` do disparo. A regra de Adiar/Feito é `app/agenda/aviso.py`
+  (só sobre o aviso ATUAL não respondido — o segundo clique é inócuo).
+  Push do recado sai por `payload_lembrete` (sem `conversa`: o SW não o cala para
+  quem olha; `requireInteraction`). ⚠️ **Os botões da notificação não têm login**:
+  `POST /agenda/lembretes/acao` só aceita o token de `app/agenda/token_acao.py`
+  (HMAC de `LEMBRETE_ACAO_SEGREDO`, escopo lembrete+aviso+ação, 24 h); sem a env o
+  push sai sem botões e a rota responde 503. Janela no app:
+  `components/agenda/JanelaDeLembrete.tsx`, montada na `CascaDoApp` (vale nas duas
+  cascas), lista vinda de `GET /agenda/lembretes/pendentes`, som por Web Audio.
 - ⚠️ **O teto de 30 conta só lembrete que ainda vai disparar** (`ativo AND proximo_em IS
   NOT NULL`): único já disparado fica `ativo` com `proximo_em` nulo e não ocupa vaga.
 - **Produção, só depois do deploy** (migração `032` antes): `publicar-bots-mcp.py`

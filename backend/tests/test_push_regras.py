@@ -204,3 +204,30 @@ def test_endpoint_dos_servicos_de_push_passa(url):
 ])
 def test_endpoint_fora_da_lista_e_recusado(url):
     assert not endpoint_de_push_valido(url)
+
+
+# ── lembrete (spec 2026-11-13) ──────────────────────────────────────────────
+
+def test_item_de_lembrete_so_casa_o_recado_do_disparador():
+    """A resposta comum do Guardi (com anexo, áudio etc.) não pode virar push
+    de lembrete persistente — só o recado com `media.type = "lembrete"`."""
+    from app.push_regras import item_de_lembrete
+    assert item_de_lembrete(None) is None
+    assert item_de_lembrete([{"type": "file", "id": "x"}]) is None
+    assert item_de_lembrete([{"type": "lembrete"}]) is None
+    assert item_de_lembrete([{"type": "audio"}, {"type": "lembrete", "id": "l"}])["id"] == "l"
+
+
+def test_payload_lembrete():
+    from app.push_regras import payload_lembrete
+    p = payload_lembrete(lembrete_id="l-1", titulo="Ligar", instrucao=None,
+                         aviso_em="2026-11-13T17:00:00+00:00", de_novo=False,
+                         acoes={"adiar": "a", "feito": "f"})
+    assert p == {"tipo": "lembrete", "lembrete_id": "l-1",
+                 "aviso_em": "2026-11-13T17:00:00+00:00", "title": "⏰ Ligar",
+                 "body": "Lembrete do seu Guardi.", "url": "/agenda", "tag": "lembrete:l-1",
+                 "acoes": {"adiar": "a", "feito": "f"}}
+    longo = payload_lembrete(lembrete_id="l-1", titulo="Ligar", instrucao="**x** " * 100,
+                             aviso_em="", de_novo=True, acoes=None)
+    assert len(longo["body"]) <= 140 and "**" not in longo["body"]
+    assert longo["title"] == "⏰ Ligar (de novo)" and "acoes" not in longo

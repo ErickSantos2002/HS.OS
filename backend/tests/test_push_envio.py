@@ -3,6 +3,7 @@
 Conexão e `webpush` falsos — nada sai para a rede nem para o banco.
 """
 import asyncio
+import json
 import threading
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
@@ -267,3 +268,77 @@ def test_inscricao_antiga_com_endpoint_interno_e_pulada_e_apagada(monkeypatch):
     assert r == {"enviados": 1, "inscricoes": 2, "removidas": 1}
     apagou = [a for s, a in conn.executado if "DELETE" in s]
     assert apagou == [(["s1"],)]
+
+
+# ── lembrete que chama atenção (spec 2026-11-13) ────────────────────────────
+#
+# O push do recado do lembrete é diferente do push de resposta: fica na tela
+# até a pessoa decidir, e os botões da notificação funcionam sem login. A
+# resposta seguinte do Guardi continua sendo push comum.
+
+LEMBRETE = "22222222-2222-2222-2222-222222222222"
+AVISO = "2026-11-13T17:00:27.123456+00:00"
+
+
+def _recado_de_lembrete(de_novo=False):
+    media = [{"type": "lembrete", "id": LEMBRETE, "name": "Hildon", "aviso_em": AVISO,
+              "de_novo": de_novo, "mimeType": "", "base64": ""}]
+    return {
+        "FROM public.conversations c": {
+            "id": MSG, "agent_id": "sandra-bot", "user_id": UID,
+            "content": "⏰ Lembrete: Retornar contato para Hildon",
+            "media": json.dumps(media), "recente": True, "agente_nome": "Sandra-Guardi"},
+        "FROM public.lembretes": {"titulo": "Retornar contato para Hildon",
+                                  "instrucao": "Ligar e confirmar a proposta."},
+        "INSERT INTO public.push_enviados": lambda _m, us: [{"user_id": u} for u in us]}
+
+
+def test_recado_de_lembrete_sai_com_payload_proprio_e_tokens(monkeypatch):
+    """Sem `conversa` (o SW não cala lembrete para quem olha), `tag` por
+    lembrete (o re-aviso substitui a notificação velha) e um token por ação,
+    cada um conferível só para ESTE lembrete e ESTE aviso."""
+    from datetime import datetime, timezone
+
+    from app.agenda import token_acao
+    monkeypatch.setattr(p.settings, "LEMBRETE_ACAO_SEGREDO", "z" * 64)
+    conn = Conn(_recado_de_lembrete())
+    monkeypatch.setattr(p, "sessao", _sessao_com(conn))
+    enviados = _capturar_envios(monkeypatch)
+    asyncio.run(p.processar("conversations", MSG))
+    [(uid, payload)] = enviados
+    assert uid == UID
+    assert payload["tipo"] == "lembrete" and payload["lembrete_id"] == LEMBRETE
+    assert payload["title"] == "⏰ Retornar contato para Hildon"
+    assert payload["body"] == "Ligar e confirmar a proposta."
+    assert payload["tag"] == f"lembrete:{LEMBRETE}" and "conversa" not in payload
+    agora = datetime.now(timezone.utc)
+    for acao in ("adiar", "feito"):
+        lid, aviso_em, a = token_acao.conferir("z" * 64, payload["acoes"][acao], agora)
+        assert (lid, aviso_em.isoformat(), a) == (LEMBRETE, AVISO, acao)
+    # o lembrete é buscado pelo dono da conversa, não só pelo id do media
+    [(sql, args)] = [e for e in conn.executado if "FROM public.lembretes" in e[0]]
+    assert args == (LEMBRETE, UID) and "user_id = $2::uuid" in sql
+
+
+def test_sem_segredo_o_lembrete_sai_sem_botoes(monkeypatch):
+    """O backend sobe sem `LEMBRETE_ACAO_SEGREDO`: o push sai, persistente,
+    só não traz os botões (que bateriam numa rota que responde 503)."""
+    monkeypatch.setattr(p.settings, "LEMBRETE_ACAO_SEGREDO", "")
+    conn = Conn(_recado_de_lembrete(de_novo=True))
+    monkeypatch.setattr(p, "sessao", _sessao_com(conn))
+    enviados = _capturar_envios(monkeypatch)
+    asyncio.run(p.processar("conversations", MSG))
+    [(_, payload)] = enviados
+    assert "acoes" not in payload and payload["tipo"] == "lembrete"
+    assert payload["title"].endswith("(de novo)")
+
+
+def test_lembrete_apagado_vira_push_comum(monkeypatch):
+    r = _recado_de_lembrete()
+    r["FROM public.lembretes"] = None
+    conn = Conn(r)
+    monkeypatch.setattr(p, "sessao", _sessao_com(conn))
+    enviados = _capturar_envios(monkeypatch)
+    asyncio.run(p.processar("conversations", MSG))
+    [(_, payload)] = enviados
+    assert payload["tag"] == "agente:sandra-bot" and "tipo" not in payload

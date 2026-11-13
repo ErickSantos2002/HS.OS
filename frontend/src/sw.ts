@@ -7,6 +7,15 @@ import {
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import { LISTA_NEGADA } from "./lib/navegacao-do-app";
 import { CACHE_RESPOSTA, clienteDaResposta, guardarResposta } from "./lib/resposta-rapida";
+import {
+  ehLembrete,
+  enviarAcaoDoLembrete,
+  notificacaoDoLembrete,
+  respeitaQuemOlha,
+  tokenDaAcao,
+} from "./lib/notificacao-de-lembrete";
+
+const BASE_API = import.meta.env.VITE_API_URL || "/api";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -157,10 +166,25 @@ self.addEventListener("push", (event) => {
 
   event.waitUntil(
     (async () => {
+      // ---- Lembrete (spec 2026-11-13): fica na tela até Adiar ou Feito ----
+      // ⚠️ Não passa pelo `alguemOlhando`: lembrete toca mesmo com a conversa
+      // aberta — quem está olhando também recebe a janela do app.
+      if (ehLembrete(payload)) {
+        const { titulo, opcoes } = notificacaoDoLembrete(payload);
+        await self.registration.showNotification(titulo, opcoes);
+        await atualizarBadge();
+        return;
+      }
+
       const apple = ehWebKitDaApple();
       // ⚠️ Não notificar quem está olhando — mas só fora do iOS, onde push
       // sem notificação revoga a inscrição.
-      if (payload.conversa && !apple && (await alguemOlhando(payload.conversa))) {
+      if (
+        respeitaQuemOlha(payload) &&
+        payload.conversa &&
+        !apple &&
+        (await alguemOlhando(payload.conversa))
+      ) {
         return;
       }
 
@@ -219,6 +243,17 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil(
     (async () => {
+      // ---- Lembrete: Adiar 10 min / Feito, SEM abrir o app ----
+      // O SW não tem o login; o token do payload só serve para este lembrete,
+      // neste aviso, nesta ação. Falhou (rede, token vencido)? Abre a agenda
+      // para a pessoa decidir lá.
+      const token = tokenDaAcao(action, event.notification.data);
+      if (token) {
+        if (!(await enviarAcaoDoLembrete(token, BASE_API))) await focarOuAbrir("/agenda");
+        await atualizarBadge();
+        return;
+      }
+
       // ---- Marcar como lida (só canal/DM; esclarecimento 1) ----
       if (action === "mark_read" && data.channel_id) {
         const abertas = await janelas();

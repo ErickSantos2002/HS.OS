@@ -4,12 +4,14 @@
  *
  * O app do celular fica FORA do `AppLayout`, mas precisa do que ele montava
  * para todo mundo: as notificações (contador, som, push), a presença e o
- * catálogo de agentes.
+ * catálogo de agentes. A janela de lembrete (spec 2026-11-13) fica aqui,
+ * fora das duas, para valer em ambas.
  */
 import { useEffect, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 
 import { AppLayout } from "@/components/AppLayout";
+import { JanelaDeLembrete } from "@/components/agenda/JanelaDeLembrete";
 import { NotificationsProvider } from "@/components/NotificationsProvider";
 import { NovidadesProvider } from "@/components/novidades/NovidadesProvider";
 import { useAuthContext } from "@/contexts/auth-context";
@@ -48,6 +50,9 @@ export function CascaDoApp({ children }: { children: ReactNode }) {
   return (
     <NovidadesProvider>
       {usaAppCelular(isMobile, pathname) ? <AppCelularComServicos /> : <AppLayout>{children}</AppLayout>}
+      {/* Fora das duas cascas: uma janela só, valendo no desktop e no celular,
+          e que não remonta (nem toca o som de novo) ao trocar de casca. */}
+      <JanelaDeLembrete />
     </NovidadesProvider>
   );
 }
