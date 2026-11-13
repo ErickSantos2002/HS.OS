@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.10.1",
+    date: "2026-11-13",
+    changes: [
+      {
+        kind: "correcao",
+        text: "Digitar nas conversas ficou leve de novo: em conversas longas as letras demoravam a aparecer.",
+      },
+    ],
+  },
+  {
     version: "2.10.0",
     date: "2026-11-12",
     changes: [

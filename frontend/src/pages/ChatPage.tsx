@@ -835,6 +835,16 @@ export default function ChatPage() {
 
   const [activeArtifact, setActiveArtifact] = useState<{ type: ArtifactType; code: string } | null>(null);
   const [activeLiveArtifactId, setActiveLiveArtifactId] = useState<string | null>(null);
+  // Estáveis para o memo do `AgentMessageList` segurar: escritos inline, cada
+  // tecla no composer redesenhava a conversa inteira (13/11/2026).
+  const abrirArtefato = useCallback((a: { type: ArtifactType; code: string; title?: string } | null) => {
+    setActiveArtifact(a);
+    if (a) setActiveLiveArtifactId(null);
+  }, []);
+  const abrirArtefatoVivo = useCallback((id: string) => {
+    setActiveLiveArtifactId(id);
+    setActiveArtifact(null);
+  }, []);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const agentShouldAutoScrollRef = useRef(true);
@@ -2071,8 +2081,8 @@ export default function ChatPage() {
             userAvatarUrl={profile?.avatar_url ?? null}
             userName={profile?.full_name ?? null}
             onSetLightboxSrc={setLightboxSrc}
-            onSetActiveArtifact={(a) => { setActiveArtifact(a); if (a) setActiveLiveArtifactId(null); }}
-            onOpenLiveArtifact={(id) => { setActiveLiveArtifactId(id); setActiveArtifact(null); }}
+            onSetActiveArtifact={abrirArtefato}
+            onOpenLiveArtifact={abrirArtefatoVivo}
             onRetry={handleRetry}
             onTtsToggle={handleTtsToggle}
             activitiesByMessageId={finalActivitiesByMessageId}

@@ -6,6 +6,7 @@ import { usePeople } from "@/hooks/use-people";
 import { fraseDeQuemEscreve, podeEscreverNoCanal } from "@/lib/canal-avisos";
 import { useMessageReactions } from "@/hooks/use-message-reactions";
 import { usePersistentDraft } from "@/hooks/use-persistent-draft";
+import { useAcoesEstaveis } from "@/hooks/use-acoes-estaveis";
 import { useAuthContext } from "@/contexts/auth-context";
 import { getAgentDisplayName } from "@/lib/channel-agents";
 import { getPendingAgentsForChannel, subscribeToChannelAgentPending } from "@/lib/channel-agent-pending";
@@ -757,6 +758,173 @@ function EditingBubble({
     </div>
   );
 }
+
+// ─── Lista de mensagens (memo) ──────────────────────────────
+// Digitar redesenhava TODAS as bolhas (13/11/2026): o estado do composer mora
+// no `ChannelChat`, e a lista passava funções criadas na hora a cada bolha, o
+// que derrotava o `memo`. Numa DM de 200 mensagens eram 35–65 ms por tecla.
+// Agora a lista e cada item são `memo`, as ações vêm num objeto estável
+// (`useAcoesEstaveis`) que recebe a mensagem como argumento, e o resto são
+// referências de estado ou primitivos. Teste: `ChannelChat.digitacao.test.tsx`.
+
+type ReacoesDaMensagem = { emoji: string; user_ids: string[]; count: number }[];
+type AnexoParaPrever = { name: string; url: string; size?: number; mimeType?: string };
+
+/** Ações da lista; todas recebem a mensagem (ou o id) e têm identidade estável. */
+export interface AcoesDaLista {
+  reagir: (msgId: string, emoji: string) => void;
+  editar: (msgId: string) => void;
+  salvarEdicao: (msgId: string, conteudo: string) => void;
+  cancelarEdicao: () => void;
+  apagar: (msgId: string) => void;
+  responder: (msg: ChannelMessage) => void;
+  irParaCitada: (msgId: string, citacao: Citacao) => void;
+  marcarNaoLida: (msg: ChannelMessage) => Promise<boolean> | boolean;
+  marcarLida: (msgId: string) => void;
+  abrirImagem: (src: string, alt: string) => void;
+  preverAnexo: (anexo: AnexoParaPrever) => void;
+  dadosDaMensagem: (msgId: string) => void;
+  apagarParaMim: (msg: ChannelMessage) => void;
+}
+
+/** `?? []` criava um array novo por render e derrotava o memo da bolha. */
+const SEM_REACOES: ReacoesDaMensagem = [];
+
+const ItemDaMensagem = memo(function ItemDaMensagem({
+  msg,
+  editando,
+  acoes,
+  podeResponder,
+  ...resto
+}: {
+  msg: ChannelMessage;
+  editando: boolean;
+  acoes: AcoesDaLista;
+  podeResponder: boolean;
+  currentUserId: string;
+  resumoLigado: boolean;
+  msgReactions: ReacoesDaMensagem;
+  isMarkedUnread: boolean;
+  threadMeta: ThreadMeta | null;
+  threadHasUnread: boolean;
+  userNameById: Map<string, string>;
+  authorStatus: { emoji: string; label: string; setAt?: string | null } | null;
+  visto: EstadoDoVisto | undefined;
+  continuacao: boolean;
+}) {
+  // Só são recriadas quando a própria mensagem muda.
+  const h = useMemo(() => ({
+    salvar: (conteudo: string) => acoes.salvarEdicao(msg.id, conteudo),
+    reagir: (emoji: string) => acoes.reagir(msg.id, emoji),
+    editar: () => acoes.editar(msg.id),
+    apagar: () => acoes.apagar(msg.id),
+    responder: () => acoes.responder(msg),
+    citacao: (c: Citacao) => acoes.irParaCitada(msg.id, c),
+    marcarNaoLida: () => acoes.marcarNaoLida(msg),
+    marcarLida: () => acoes.marcarLida(msg.id),
+    dados: () => acoes.dadosDaMensagem(msg.id),
+    apagarParaMim: () => acoes.apagarParaMim(msg),
+  }), [acoes, msg]);
+
+  if (editando) {
+    return <EditingBubble msg={msg} onSave={h.salvar} onCancel={acoes.cancelarEdicao} />;
+  }
+  return (
+    <MessageBubble
+      msg={msg}
+      {...resto}
+      onToggleReaction={h.reagir}
+      onEdit={h.editar}
+      onDelete={h.apagar}
+      onReply={podeResponder ? h.responder : undefined}
+      onCitacaoClick={h.citacao}
+      onMarkUnread={h.marcarNaoLida}
+      onMarkRead={h.marcarLida}
+      onImageClick={acoes.abrirImagem}
+      onAttachmentPreview={acoes.preverAnexo}
+      onDadosDaMensagem={h.dados}
+      onApagarParaMim={h.apagarParaMim}
+    />
+  );
+});
+
+export const ListaDeMensagensDoCanal = memo(function ListaDeMensagensDoCanal({
+  mensagens,
+  editandoId,
+  meuId,
+  meuNome,
+  resumoLigado,
+  podeEscrever,
+  reactions,
+  threadCounts,
+  threadViewedVersion,
+  marcadasNaoLidas,
+  userNameById,
+  statusByUserId,
+  isPessoal,
+  recibos,
+  acoes,
+}: {
+  mensagens: ChannelMessage[];
+  editandoId: string | null;
+  meuId: string;
+  /** Nome de quem vê: resposta de thread minha não acende "não lida". */
+  meuNome: string;
+  resumoLigado: boolean;
+  podeEscrever: boolean;
+  reactions: Record<string, ReacoesDaMensagem>;
+  threadCounts: Record<string, ThreadMeta>;
+  /** Só força o recálculo do "thread não lida" quando uma thread é vista. */
+  threadViewedVersion: number;
+  marcadasNaoLidas: Set<string>;
+  userNameById: Map<string, string>;
+  statusByUserId: Map<string, { emoji: string; label: string; setAt: string | null } | null>;
+  isPessoal: boolean;
+  recibos: Record<string, string>;
+  acoes: AcoesDaLista;
+}) {
+  return (
+    <>
+      {mensagens.map((msg, index) => {
+        const previousMessage = mensagens[index - 1];
+        const showDateDivider = shouldShowDateDivider(msg.created_at, previousMessage?.created_at);
+        const continuacao = continuaSequencia(msg, previousMessage);
+        const tc = threadCounts[msg.id];
+
+        return (
+          <Fragment key={msg.id}>
+            {showDateDivider && <DateDivider date={msg.created_at} />}
+            {/* O space-y-4 da lista separa as sequências; dentro de uma, as
+                mensagens ficam coladas (marginTop inline vence o seletor). */}
+            <div data-message-index={index} data-message-id={msg.id} style={continuacao ? { marginTop: "0.125rem" } : undefined}>
+              <ItemDaMensagem
+                msg={msg}
+                editando={editandoId === msg.id}
+                acoes={acoes}
+                podeResponder={podeEscrever}
+                currentUserId={meuId}
+                resumoLigado={resumoLigado}
+                msgReactions={reactions[msg.id] ?? SEM_REACOES}
+                isMarkedUnread={marcadasNaoLidas.has(msg.id)}
+                threadMeta={tc ?? null}
+                threadHasUnread={
+                  !!tc &&
+                  threadViewedVersion >= 0 &&
+                  new Date(tc.lastReplyAt).getTime() > getThreadLastViewed(msg.id) &&
+                  tc.lastAuthorName !== meuNome
+                }
+                userNameById={userNameById}
+                authorStatus={statusByUserId.get(msg.author_id) ?? null}
+                visto={msg.author_id === meuId && !isPessoal ? estadoNoCanal(msg.id, recibos) : undefined}
+                continuacao={continuacao}
+              />
+            </div>
+          </Fragment>
+        );
+      })}
+    </>
+  );
+});
 
 
 // ─── Main Channel Chat ──────────────────────────────────────
@@ -1636,6 +1804,24 @@ export default function ChannelChat({
     });
   }, [channel.id, esconder, reexibir]);
 
+  // Identidade estável: é o que deixa o memo da lista segurar enquanto se
+  // digita (13/11/2026). As funções abaixo podem mudar à vontade.
+  const acoesDaLista = useAcoesEstaveis<AcoesDaLista>({
+    reagir: (msgId, emoji) => { if (user) void toggleReaction(msgId, emoji, user.id); },
+    editar: (msgId) => setEditingId(msgId),
+    salvarEdicao: (msgId, conteudo) => { void handleEditSave(msgId, conteudo); },
+    cancelarEdicao: () => setEditingId(null),
+    apagar: (msgId) => setDeleteConfirmId(msgId),
+    responder,
+    irParaCitada,
+    marcarNaoLida: (m) => handleMarkUnread(m.id, m.author_name, m.content || ""),
+    marcarLida: clearMarkedUnread,
+    abrirImagem: (src, alt) => setLightboxImage({ src, alt }),
+    preverAnexo: setPreviewAttachment,
+    dadosDaMensagem: (msgId) => setDadosDaMensagemId(msgId),
+    apagarParaMim: (m) => { void apagarParaMim(m); },
+  });
+
   const handleSendThreadReply = useCallback(async (content: string, rootMessageId: string, attachments?: ChannelAttachment[] | null) => {
     if (!ctxEnvio) return;
     if (sendingRef.current) return;
@@ -1850,61 +2036,23 @@ export default function ChannelChat({
         ) : messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Nenhuma mensagem ainda. Comece a conversa!</div>
         ) : (
-          messages.map((msg, index) => {
-            const previousMessage = messages[index - 1];
-            const showDateDivider = shouldShowDateDivider(msg.created_at, previousMessage?.created_at);
-            const continuacao = continuaSequencia(msg, previousMessage);
-
-            return (
-              <Fragment key={msg.id}>
-                {showDateDivider && <DateDivider date={msg.created_at} />}
-                {/* O space-y-4 da lista separa as sequências; dentro de uma, as
-                    mensagens ficam coladas (marginTop inline vence o seletor). */}
-                <div data-message-index={index} data-message-id={msg.id} style={continuacao ? { marginTop: "0.125rem" } : undefined}>
-                  {editingId === msg.id ? (
-                    <EditingBubble
-                      msg={msg}
-                      onSave={(content) => handleEditSave(msg.id, content)}
-                      onCancel={() => setEditingId(null)}
-                    />
-                  ) : (
-                    <MessageBubble
-                      msg={msg}
-                      currentUserId={user?.id ?? ""}
-                      resumoLigado={resumoLigado}
-                      msgReactions={reactions[msg.id] ?? []}
-                      onToggleReaction={(emoji) => user && toggleReaction(msg.id, emoji, user.id)}
-                      onEdit={() => setEditingId(msg.id)}
-                      onDelete={() => setDeleteConfirmId(msg.id)}
-                      onReply={podeEscrever ? () => responder(msg) : undefined}
-                      onCitacaoClick={(c) => irParaCitada(msg.id, c)}
-                      onMarkUnread={() =>
-                        handleMarkUnread(msg.id, msg.author_name, msg.content || "")
-                      }
-                      isMarkedUnread={markedUnreadIds.has(msg.id)}
-                      onMarkRead={() => clearMarkedUnread(msg.id)}
-                      onImageClick={(src, alt) => setLightboxImage({ src, alt })}
-                      onAttachmentPreview={setPreviewAttachment}
-                      threadMeta={threadCounts[msg.id] ?? null}
-                      threadHasUnread={
-                        !!threadCounts[msg.id] &&
-                        threadViewedVersion >= 0 &&
-                        new Date(threadCounts[msg.id].lastReplyAt).getTime() > getThreadLastViewed(msg.id) &&
-                        threadCounts[msg.id].lastAuthorName !== (profile?.full_name ?? "")
-                      }
-                      userNameById={userNameById}
-                      authorStatus={statusByUserId.get(msg.author_id) ?? null}
-                      visto={msg.author_id === user?.id && !isPessoal ? estadoNoCanal(msg.id, recibos) : undefined}
-                      onDadosDaMensagem={() => setDadosDaMensagemId(msg.id)}
-                      onApagarParaMim={() => { void apagarParaMim(msg); }}
-                      continuacao={continuacao}
-                    />
-                  )}
-                </div>
-              </Fragment>
-
-            );
-          })
+          <ListaDeMensagensDoCanal
+            mensagens={messages}
+            editandoId={editingId}
+            meuId={user?.id ?? ""}
+            meuNome={profile?.full_name ?? ""}
+            resumoLigado={resumoLigado}
+            podeEscrever={podeEscrever}
+            reactions={reactions}
+            threadCounts={threadCounts}
+            threadViewedVersion={threadViewedVersion}
+            marcadasNaoLidas={markedUnreadIds}
+            userNameById={userNameById}
+            statusByUserId={statusByUserId}
+            isPessoal={isPessoal}
+            recibos={recibos}
+            acoes={acoesDaLista}
+          />
         )}
         {pendingAgentIds.length > 0 && (
           <div className="flex flex-col gap-0">
