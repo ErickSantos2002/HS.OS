@@ -1,4 +1,5 @@
 import { assinar } from "@/lib/realtime";
+import { useHoje } from "@/hooks/use-hoje";
 import React, { Fragment, useState, useRef, useEffect, useCallback, useMemo, useLayoutEffect } from "react";
 import { useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { api } from "@/lib/api";
@@ -433,6 +434,8 @@ interface AgentMessageListProps {
   activitiesByMessageId?: Record<string, AgentActivity[]>;
   /** Trailing activities not yet tied to any agent reply (live turn). */
   trailingActivities?: AgentActivity[];
+  /** `useHoje()`: a lista memo não redesenha sozinha à meia-noite. */
+  hoje: string;
 }
 
 export const AgentMessageList = React.memo(function AgentMessageList({
@@ -450,6 +453,7 @@ export const AgentMessageList = React.memo(function AgentMessageList({
   onTtsToggle,
   activitiesByMessageId,
   trailingActivities,
+  hoje,
 }: AgentMessageListProps) {
   const lastAgentIndex = (() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -476,7 +480,7 @@ export const AgentMessageList = React.memo(function AgentMessageList({
 
         return (
           <Fragment key={msg.id}>
-            {showDateDivider && <DateDivider date={msg.timestamp} />}
+            {showDateDivider && <DateDivider date={msg.timestamp} hoje={hoje} />}
             <div
               data-message-id={msg.id}
               className={`flex gap-3 group relative px-3 py-1.5 -mx-3 ${isOwn ? "flex-row-reverse" : ""}`}
@@ -833,6 +837,7 @@ export default function ChatPage() {
     return () => window.removeEventListener("keydown", aoTeclar);
   }, [selection, navigate]);
 
+  const hoje = useHoje();
   const [activeArtifact, setActiveArtifact] = useState<{ type: ArtifactType; code: string } | null>(null);
   const [activeLiveArtifactId, setActiveLiveArtifactId] = useState<string | null>(null);
   // Estáveis para o memo do `AgentMessageList` segurar: escritos inline, cada
@@ -2086,6 +2091,7 @@ export default function ChatPage() {
             onRetry={handleRetry}
             onTtsToggle={handleTtsToggle}
             activitiesByMessageId={finalActivitiesByMessageId}
+            hoje={hoje}
           />
 
           {isAgentWorking && finalTrailingActivities.length > 0 && (

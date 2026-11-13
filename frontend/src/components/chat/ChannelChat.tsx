@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 import { Fragment, memo, useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from "react";
 import { useChannelMessages, useChannelMembers, Channel, ChannelMessage, ChannelAttachment } from "@/hooks/use-channels";
 import { usePeople } from "@/hooks/use-people";
+import { useHoje } from "@/hooks/use-hoje";
 import { fraseDeQuemEscreve, podeEscreverNoCanal } from "@/lib/canal-avisos";
 import { useMessageReactions } from "@/hooks/use-message-reactions";
 import { usePersistentDraft } from "@/hooks/use-persistent-draft";
@@ -863,6 +864,7 @@ export const ListaDeMensagensDoCanal = memo(function ListaDeMensagensDoCanal({
   statusByUserId,
   isPessoal,
   recibos,
+  hoje,
   acoes,
 }: {
   mensagens: ChannelMessage[];
@@ -881,6 +883,8 @@ export const ListaDeMensagensDoCanal = memo(function ListaDeMensagensDoCanal({
   statusByUserId: Map<string, { emoji: string; label: string; setAt: string | null } | null>;
   isPessoal: boolean;
   recibos: Record<string, string>;
+  /** `useHoje()`: a lista memo não redesenha sozinha à meia-noite. */
+  hoje: string;
   acoes: AcoesDaLista;
 }) {
   return (
@@ -893,7 +897,7 @@ export const ListaDeMensagensDoCanal = memo(function ListaDeMensagensDoCanal({
 
         return (
           <Fragment key={msg.id}>
-            {showDateDivider && <DateDivider date={msg.created_at} />}
+            {showDateDivider && <DateDivider date={msg.created_at} hoje={hoje} />}
             {/* O space-y-4 da lista separa as sequências; dentro de uma, as
                 mensagens ficam coladas (marginTop inline vence o seletor). */}
             <div data-message-index={index} data-message-id={msg.id} style={continuacao ? { marginTop: "0.125rem" } : undefined}>
@@ -1806,6 +1810,7 @@ export default function ChannelChat({
 
   // Identidade estável: é o que deixa o memo da lista segurar enquanto se
   // digita (13/11/2026). As funções abaixo podem mudar à vontade.
+  const hoje = useHoje();
   const acoesDaLista = useAcoesEstaveis<AcoesDaLista>({
     reagir: (msgId, emoji) => { if (user) void toggleReaction(msgId, emoji, user.id); },
     editar: (msgId) => setEditingId(msgId),
@@ -2051,6 +2056,7 @@ export default function ChannelChat({
             statusByUserId={statusByUserId}
             isPessoal={isPessoal}
             recibos={recibos}
+            hoje={hoje}
             acoes={acoesDaLista}
           />
         )}

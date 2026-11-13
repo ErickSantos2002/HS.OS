@@ -14,6 +14,7 @@ import { Fragment, memo, useCallback } from "react";
 
 import ArtifactMessage from "@/components/chat/ArtifactMessage";
 import { StreamingMarkdownContent } from "@/components/chat/MessageContent";
+import { agoraDoDia } from "@/hooks/use-hoje";
 import type { ArtifactType } from "@/lib/artifact-extractor";
 import { separarCitacao } from "@/lib/citacao";
 import type { ChatMessage } from "@/lib/mock-data";
@@ -33,13 +34,16 @@ export interface AcoesDoAgente {
 }
 
 export const ListaDoAgente = memo(function ListaDoAgente({
-  mensagens, isAgentWorking, destaqueId, acoes,
+  mensagens, isAgentWorking, destaqueId, hoje, acoes,
 }: {
   mensagens: ChatMessage[];
   isAgentWorking: boolean;
   destaqueId: string | null;
+  /** `useHoje()`: o "Hoje"/"Ontem" muda à meia-noite mesmo sem render. */
+  hoje: string;
   acoes: AcoesDoAgente;
 }) {
+  const agora = agoraDoDia(hoje);
   return (
     <>
       {mensagens.map((m, i) => {
@@ -51,7 +55,7 @@ export const ListaDoAgente = memo(function ListaDoAgente({
           <ItemDoAgente
             key={m.id}
             m={m}
-            novoDia={novoDia}
+            rotuloDia={novoDia ? rotuloDoDia(m.timestamp, agora) : null}
             inicio={novoDia || !ant || ant.role !== m.role}
             eu={eu}
             erro={erro}
@@ -69,10 +73,11 @@ export const ListaDoAgente = memo(function ListaDoAgente({
 });
 
 const ItemDoAgente = memo(function ItemDoAgente({
-  m, novoDia, inicio, eu, erro, visto, trabalhando, destaque, acoes,
+  m, rotuloDia, inicio, eu, erro, visto, trabalhando, destaque, acoes,
 }: {
   m: ChatMessage;
-  novoDia: boolean;
+  /** Separador de dia acima da bolha, já calculado contra `hoje`; `null` = sem. */
+  rotuloDia: string | null;
   inicio: boolean;
   eu: boolean;
   erro: boolean;
@@ -86,7 +91,7 @@ const ItemDoAgente = memo(function ItemDoAgente({
   const { citacao, resto } = separarCitacao(m.content || "");
   return (
     <Fragment>
-      {novoDia && <div className="cel-dia">{rotuloDoDia(m.timestamp)}</div>}
+      {rotuloDia && <div className="cel-dia">{rotuloDia}</div>}
       <Bolha
         id={m.id}
         eu={eu}

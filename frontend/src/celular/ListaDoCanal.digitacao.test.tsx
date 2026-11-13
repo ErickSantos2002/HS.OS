@@ -17,8 +17,8 @@
  *
  * O contador é a `Bolha`, embrulhada: cada render de item cria uma.
  */
-import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const renders = vi.hoisted(() => {
   (globalThis as Record<string, unknown>).DOMMatrix ??= class {};
@@ -33,18 +33,20 @@ vi.mock("./Bolha", async (original) => {
   return { ...real, Bolha: Contada };
 });
 vi.mock("@/hooks/use-agent-avatar", () => ({
-  useResolvedAgentAvatar: () => null,
+  useResolvedAgentAvatar: () => ({ avatar: null }),
   useAgentAvatar: () => ({ avatar: null }),
 }));
 
 import { useAcoesEstaveis } from "@/hooks/use-acoes-estaveis";
+import { useCatalogoDeAgentes } from "@/hooks/use-catalogo-de-agentes";
+import { setAgentCatalog } from "@/lib/agent-catalog";
 import type { ChannelMessage } from "@/hooks/use-channels";
 import type { Person } from "@/hooks/use-people";
 import { ListaDoCanal, type AcoesDoCanal } from "./ListaDoCanal";
 
-function mensagem(id: string, conteudo: string, autor = "outra"): ChannelMessage {
+function mensagem(id: string, conteudo: string, autor = "outra", tipo = "human"): ChannelMessage {
   return {
-    id, channel_id: "c1", author_id: autor, author_type: "human", author_name: "Ana",
+    id, channel_id: "c1", author_id: autor, author_type: tipo, author_name: "Ana",
     author_avatar: null, content: conteudo, thread_id: null, created_at: `2026-11-13T10:0${id.slice(1)}:00Z`,
     audio_url: null, edited_at: null, deleted_at: null, attachments: null,
   } as unknown as ChannelMessage;
@@ -59,13 +61,15 @@ const PESSOAS = new Map<string, Person>();
 const NINGUEM_PENSANDO: string[] = [];
 
 function Conversa({
-  texto, mensagens, aoReagir,
+  texto, mensagens, aoReagir, hoje = "2026-11-13",
 }: {
   texto: string;
   mensagens: ChannelMessage[];
   aoReagir: (m: ChannelMessage, emoji: string) => void;
+  hoje?: string;
 }) {
   const nada = () => {};
+  const catalogo = useCatalogoDeAgentes();
   const acoes = useAcoesEstaveis<AcoesDoCanal>({
     reagir: aoReagir,
     segurar: nada,
@@ -90,6 +94,8 @@ function Conversa({
         podeEscrever
         destaqueId={null}
         agentesPensando={NINGUEM_PENSANDO}
+        catalogo={catalogo}
+        hoje={hoje}
         acoes={acoes}
       />
     </>
@@ -99,6 +105,9 @@ function Conversa({
 describe("digitar no celular não redesenha as bolhas do canal", () => {
   beforeEach(() => {
     renders.bolhas = 0;
+  });
+  afterEach(() => {
+    setAgentCatalog([]);
   });
 
   it("uma tecla no composer não redesenha nenhuma bolha", () => {
@@ -134,5 +143,38 @@ describe("digitar no celular não redesenha as bolhas do canal", () => {
     fireEvent.click(screen.getByText("👍"));
     expect(velho).not.toHaveBeenCalled();
     expect(novo).toHaveBeenCalledWith(MENSAGENS[0], "👍");
+  });
+
+  it("o catálogo de agentes chega depois: a bolha do agente troca de nome, e só ela redesenha", () => {
+    // O nome do agente sai de um cache de módulo preenchido depois do 1º
+    // render. Com a lista em memo, nada a redesenhava: a bolha ficava com o
+    // nome provisório ("Nina Bot") e um Guardi renomeado não mudava.
+    const comAgente = [...MENSAGENS, mensagem("m4", "sou o agente", "nina-bot", "agent")];
+    const aoReagir = vi.fn();
+    const { rerender } = render(<Conversa texto="" mensagens={comAgente} aoReagir={aoReagir} />);
+    expect(screen.getByText("Nina Bot ✦")).toBeInTheDocument();
+    renders.bolhas = 0;
+
+    act(() => {
+      setAgentCatalog([{ id: "nina-bot", name: "Nina-Guardi", emoji: null, color: null, isLeader: false, sortOrder: null }]);
+    });
+    expect(screen.getByText("Nina-Guardi ✦")).toBeInTheDocument();
+    expect(renders.bolhas).toBe(1);
+
+    renders.bolhas = 0;
+    rerender(<Conversa texto="x" mensagens={comAgente} aoReagir={aoReagir} />);
+    expect(renders.bolhas).toBe(0);
+  });
+
+  it("virou o dia: 'Hoje' passa a 'Ontem' e só a bolha com o separador redesenha", () => {
+    const aoReagir = vi.fn();
+    const { rerender } = render(<Conversa texto="" mensagens={MENSAGENS} aoReagir={aoReagir} hoje="2026-11-13" />);
+    expect(screen.getByText("Hoje")).toBeInTheDocument();
+    renders.bolhas = 0;
+
+    rerender(<Conversa texto="" mensagens={MENSAGENS} aoReagir={aoReagir} hoje="2026-11-14" />);
+    expect(screen.getByText("Ontem")).toBeInTheDocument();
+    expect(screen.queryByText("Hoje")).not.toBeInTheDocument();
+    expect(renders.bolhas).toBe(1);
   });
 });

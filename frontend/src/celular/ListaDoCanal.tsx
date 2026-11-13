@@ -18,6 +18,7 @@ import { Fragment, memo, useCallback, useMemo } from "react";
 import { MarkdownMessageContent } from "@/components/chat/MessageContent";
 import type { ThreadMeta } from "@/hooks/use-channel-threads";
 import type { ChannelMessage } from "@/hooks/use-channels";
+import { agoraDoDia } from "@/hooks/use-hoje";
 import type { Reaction } from "@/hooks/use-message-reactions";
 import type { Person } from "@/hooks/use-people";
 import { normalizeAgentId } from "@/lib/active-agents";
@@ -54,7 +55,7 @@ export type ModoDaLista = "canal" | "thread" | "raiz";
 
 export const ListaDoCanal = memo(function ListaDoCanal({
   modo, mensagens, meuId, isDm, isPessoal, recibos, reactions, threadCounts = SEM_THREADS, pessoaPorId,
-  resumoLigado, podeEscrever, destaqueId, agentesPensando = NINGUEM, acoes,
+  resumoLigado, podeEscrever, destaqueId, agentesPensando = NINGUEM, catalogo, hoje, acoes,
 }: {
   modo: ModoDaLista;
   mensagens: ChannelMessage[];
@@ -69,8 +70,17 @@ export const ListaDoCanal = memo(function ListaDoCanal({
   podeEscrever: boolean;
   destaqueId: string | null;
   agentesPensando?: string[];
+  /**
+   * `useCatalogoDeAgentes()`. Não é lido aqui: o nome do agente sai do cache
+   * de módulo (`getAgentDisplayName`), e a prop só existe para a lista memo
+   * redesenhar quando o catálogo chega ou um Guardi é renomeado.
+   */
+  catalogo: unknown;
+  /** `useHoje()`: o "Hoje"/"Ontem" muda à meia-noite mesmo sem render. */
+  hoje: string;
   acoes: AcoesDoCanal;
 }) {
+  const agora = agoraDoDia(hoje);
   const noCanal = modo === "canal";
   const grupo = noCanal ? !isDm && !isPessoal : true;
   return (
@@ -86,7 +96,7 @@ export const ListaDoCanal = memo(function ListaDoCanal({
           <ItemDoCanal
             key={m.id}
             m={m}
-            novoDia={novoDia}
+            rotuloDia={novoDia ? rotuloDoDia(m.created_at, agora) : null}
             inicio={inicio}
             eu={eu}
             grupo={grupo}
@@ -105,13 +115,12 @@ export const ListaDoCanal = memo(function ListaDoCanal({
           />
         );
       })}
-      {agentesPensando.map((a) => <BolhaPensandoNoCanal key={`pensando-${a}`} agente={a} isDm={isDm} />)}
+      {agentesPensando.map((a) => <BolhaPensandoNoCanal key={`pensando-${a}`} agente={a} nome={getAgentDisplayName(a)} isDm={isDm} />)}
     </>
   );
 });
 
-const BolhaPensandoNoCanal = memo(function BolhaPensandoNoCanal({ agente, isDm }: { agente: string; isDm: boolean }) {
-  const nome = getAgentDisplayName(agente);
+const BolhaPensandoNoCanal = memo(function BolhaPensandoNoCanal({ agente, nome, isDm }: { agente: string; nome: string; isDm: boolean }) {
   return (
     <Bolha id={`pensando-${agente}`} eu={false} inicio grupo={!isDm} hora=""
       avatar={<Avatar tipo="agente" nome={nome} chave={agente} tam="xs" />}
@@ -122,11 +131,12 @@ const BolhaPensandoNoCanal = memo(function BolhaPensandoNoCanal({ agente, isDm }
 });
 
 const ItemDoCanal = memo(function ItemDoCanal({
-  m, novoDia, inicio, eu, grupo, mostrarAutor, nomeAutor, fotoAutor, visto, reacoes, meuId, thread,
+  m, rotuloDia, inicio, eu, grupo, mostrarAutor, nomeAutor, fotoAutor, visto, reacoes, meuId, thread,
   mostrarResumo, podeResponder, destaque, naThread, acoes,
 }: {
   m: ChannelMessage;
-  novoDia: boolean;
+  /** Separador de dia acima da bolha, já calculado contra `hoje`; `null` = sem. */
+  rotuloDia: string | null;
   inicio: boolean;
   eu: boolean;
   grupo: boolean;
@@ -169,7 +179,7 @@ const ItemDoCanal = memo(function ItemDoCanal({
 
   return (
     <Fragment>
-      {novoDia && <div className="cel-dia">{rotuloDoDia(m.created_at)}</div>}
+      {rotuloDia && <div className="cel-dia">{rotuloDia}</div>}
       <Bolha
         id={m.id}
         eu={eu}

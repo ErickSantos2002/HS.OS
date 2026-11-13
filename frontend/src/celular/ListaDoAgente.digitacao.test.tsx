@@ -45,12 +45,13 @@ const MENSAGENS = [
 ];
 
 function Conversa({
-  texto, mensagens, aoTentar, trabalhando = false,
+  texto, mensagens, aoTentar, trabalhando = false, hoje = "2026-11-13",
 }: {
   texto: string;
   mensagens: ChatMessage[];
   aoTentar: (id: string) => void;
   trabalhando?: boolean;
+  hoje?: string;
 }) {
   const nada = () => {};
   const acoes = useAcoesEstaveis<AcoesDoAgente>({
@@ -64,7 +65,7 @@ function Conversa({
   return (
     <>
       <input aria-label="composer" value={texto} readOnly />
-      <ListaDoAgente mensagens={mensagens} isAgentWorking={trabalhando} destaqueId={null} acoes={acoes} />
+      <ListaDoAgente mensagens={mensagens} isAgentWorking={trabalhando} destaqueId={null} hoje={hoje} acoes={acoes} />
       {trabalhando && <BolhaPensandoDoAgente nome="Nina" parcial="" inicio />}
     </>
   );
@@ -108,5 +109,17 @@ describe("digitar para o agente no celular não redesenha as bolhas", () => {
     fireEvent.click(screen.getByText("Tentar novamente"));
     expect(velho).not.toHaveBeenCalled();
     expect(novo).toHaveBeenCalledWith(UUID(3));
+  });
+
+  it("virou o dia: 'Hoje' passa a 'Ontem' e só a bolha com o separador redesenha", () => {
+    // Com a lista em memo, nada redesenhava o separador à meia-noite.
+    const aoTentar = vi.fn();
+    const { rerender } = render(<Conversa texto="" mensagens={MENSAGENS} aoTentar={aoTentar} hoje="2026-11-13" />);
+    expect(screen.getByText("Hoje")).toBeInTheDocument();
+    renders.bolhas = 0;
+
+    rerender(<Conversa texto="" mensagens={MENSAGENS} aoTentar={aoTentar} hoje="2026-11-14" />);
+    expect(screen.getByText("Ontem")).toBeInTheDocument();
+    expect(renders.bolhas).toBe(1);
   });
 });

@@ -23,6 +23,8 @@ import { useThreadCounts } from "@/hooks/use-channel-threads";
 import { useChannelMembers, useChannelMessages, useChannels, type ChannelMessage } from "@/hooks/use-channels";
 import { useChatMedia } from "@/hooks/use-chat-media";
 import { useAcoesEstaveis } from "@/hooks/use-acoes-estaveis";
+import { useCatalogoDeAgentes } from "@/hooks/use-catalogo-de-agentes";
+import { useHoje } from "@/hooks/use-hoje";
 import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
 import { useMessageReactions } from "@/hooks/use-message-reactions";
 import { useMobileChatViewport } from "@/hooks/use-mobile-chat-viewport";
@@ -245,6 +247,8 @@ export function TelaConversaCanal({
   const reagir = (m: ChannelMessage, emoji: string) => { if (user) void toggleReaction(m.id, emoji, user.id); };
   // Ações das bolhas num objeto estável: sem isso cada tecla no composer
   // redesenhava todas as bolhas (ver `ListaDoCanal`).
+  const catalogo = useCatalogoDeAgentes();
+  const hoje = useHoje();
   const acoesDaLista = useAcoesEstaveis<AcoesDoCanal>({
     reagir,
     segurar: setAcoesDe,
@@ -305,6 +309,8 @@ export function TelaConversaCanal({
           podeEscrever={podeEscrever}
           destaqueId={acoesDe?.id ?? null}
           agentesPensando={agentesPensando}
+          catalogo={catalogo}
+          hoje={hoje}
           acoes={acoesDaLista}
         />
       </div>

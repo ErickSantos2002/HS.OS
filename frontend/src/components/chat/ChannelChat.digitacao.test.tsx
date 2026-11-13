@@ -65,11 +65,12 @@ const STATUS = new Map<string, { emoji: string; label: string; setAt: string | n
 const SEM_RECIBOS = {};
 
 function Conversa({
-  texto, mensagens, aoReagir,
+  texto, mensagens, aoReagir, hoje = "2026-11-13",
 }: {
   texto: string;
   mensagens: ChannelMessage[];
   aoReagir: (msgId: string, emoji: string) => void;
+  hoje?: string;
 }) {
   const nada = () => {};
   const acoes = useAcoesEstaveis<AcoesDaLista>({
@@ -105,6 +106,7 @@ function Conversa({
         statusByUserId={STATUS}
         isPessoal={false}
         recibos={SEM_RECIBOS}
+        hoje={hoje}
         acoes={acoes}
       />
     </>
@@ -149,5 +151,19 @@ describe("digitar não redesenha as mensagens do canal", () => {
     fireEvent.click(screen.getByText("👍"));
     expect(velho).not.toHaveBeenCalled();
     expect(novo).toHaveBeenCalledWith("m1", "👍");
+  });
+
+  it("virou o dia: o separador passa de 'Hoje' para 'Ontem' sem redesenhar bolha", () => {
+    // Com a lista em memo, nada redesenhava o separador à meia-noite: a
+    // conversa aberta de um dia para o outro dizia "Hoje" para as de ontem.
+    const aoReagir = vi.fn();
+    const { rerender } = render(<Conversa texto="" mensagens={MENSAGENS} aoReagir={aoReagir} hoje="2026-11-13" />);
+    expect(screen.getByText("Hoje")).toBeInTheDocument();
+    renders.bolhas = 0;
+
+    rerender(<Conversa texto="" mensagens={MENSAGENS} aoReagir={aoReagir} hoje="2026-11-14" />);
+    expect(screen.getByText("Ontem")).toBeInTheDocument();
+    expect(screen.queryByText("Hoje")).not.toBeInTheDocument();
+    expect(renders.bolhas).toBe(0);
   });
 });

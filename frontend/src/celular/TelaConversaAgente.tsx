@@ -20,6 +20,7 @@ import { useAuthContext } from "@/contexts/auth-context";
 import { useChatMedia } from "@/hooks/use-chat-media";
 import { LIMITE_TEXTO_COMO_ANEXO, useConversaAgente } from "@/hooks/use-conversa-agente";
 import { useAcoesEstaveis } from "@/hooks/use-acoes-estaveis";
+import { useHoje } from "@/hooks/use-hoje";
 import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
 import { useMobileChatViewport } from "@/hooks/use-mobile-chat-viewport";
 import { usePersistentDraft } from "@/hooks/use-persistent-draft";
@@ -123,6 +124,7 @@ export function TelaConversaAgente({
 
   // Ações das bolhas num objeto estável: sem isso cada tecla no composer
   // redesenhava todas as bolhas (ver `ListaDoAgente`).
+  const hoje = useHoje();
   const acoesDaLista = useAcoesEstaveis<AcoesDoAgente>({
     segurar: setAcoesDe,
     responder,
@@ -160,7 +162,7 @@ export function TelaConversaAgente({
         {mensagens.length === 0 && !isAgentWorking && (
           <div className="cel-vazio">Mande uma mensagem para {nome}.</div>
         )}
-        <ListaDoAgente mensagens={mensagens} isAgentWorking={isAgentWorking} destaqueId={acoesDe?.id ?? null} acoes={acoesDaLista} />
+        <ListaDoAgente mensagens={mensagens} isAgentWorking={isAgentWorking} destaqueId={acoesDe?.id ?? null} hoje={hoje} acoes={acoesDaLista} />
         {isAgentWorking && <BolhaPensandoDoAgente nome={nome} parcial={parcial} inicio={mensagens.at(-1)?.role !== "agent"} />}
       </div>
       <div style={{ paddingBottom: bottomOffset }}>

@@ -19,6 +19,8 @@ import { usePersistentDraft } from "@/hooks/use-persistent-draft";
 import { useRecibos } from "@/hooks/use-recibos";
 import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
 import { useAcoesEstaveis } from "@/hooks/use-acoes-estaveis";
+import { useCatalogoDeAgentes } from "@/hooks/use-catalogo-de-agentes";
+import { useHoje } from "@/hooks/use-hoje";
 import { acoesDaRespostaNaThread } from "@/lib/acoes-da-mensagem";
 import { acoesDoToque } from "@/lib/acoes-do-toque";
 import { api } from "@/lib/api";
@@ -137,6 +139,8 @@ export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: stri
 
   // Ações das bolhas num objeto estável: sem isso cada tecla no composer
   // redesenhava todas as bolhas (ver `ListaDoCanal`).
+  const catalogo = useCatalogoDeAgentes();
+  const hoje = useHoje();
   const acoesDaLista = useAcoesEstaveis<AcoesDoCanal>({
     reagir,
     segurar: setAcoesDe,
@@ -155,6 +159,8 @@ export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: stri
     resumoLigado: false,
     podeEscrever,
     destaqueId: acoesDe?.id ?? null,
+    catalogo,
+    hoje,
     acoes: acoesDaLista,
   };
 
