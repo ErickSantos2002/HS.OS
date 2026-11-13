@@ -144,8 +144,9 @@ CONSULTAS: dict[str, tuple[str, str, tuple[str, ...], tuple[str, ...]]] = {
 }
 
 # O que a pessoa diria ao Guardi para chegar a esta consulta — só para a tela
-# "Capacidade" (`app/capacidade.py`). Opcional: sem exemplo, a tela mostra só o
-# rótulo. O agente não lê isto: ele lê a descrição acima.
+# "Capacidade" (`app/capacidade.py`). Opcional: o "Experimente" de cada assunto
+# (`app/capacidade_assuntos.py`) sai daqui quando o mapa não traz um. O agente
+# não lê isto: ele lê a descrição acima.
 EXEMPLOS: dict[str, str] = {
     "minhas_ausencias": "quais ausências eu pedi?",
     "calendario_de_ausencias": "quem está de férias esta semana?",

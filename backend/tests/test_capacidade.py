@@ -17,6 +17,7 @@ from fastapi import HTTPException
 from app import acoes
 from app import agente_token as at
 from app import capacidade as cap
+from app import capacidade_assuntos as ax
 from app import talenths_escrita as te
 from app.dependencies import Usuario
 from app.routers import mcp_bot
@@ -27,8 +28,21 @@ ANA = Usuario("u-ana", "ana@hs.com", "colaborador")
 ADMIN = Usuario("u-admin", "ti@hs.com", "administrador")
 
 
-def _nomes(itens):
-    return [i["rotulo"] for i in itens]
+def _ve(s):
+    return [f for a in s["assuntos"] for f in a["ve"]]
+
+
+def _faz(s):
+    return [f for a in s["assuntos"] for f in a["faz"]]
+
+
+def _assunto(s, chave):
+    return next((a for a in s["assuntos"] if a["chave"] == chave), None)
+
+
+def _todas_as_rotas(sistema):
+    consultar, fazer = cap.catalogo(sistema)
+    return [list(r) for i in list(consultar.values()) + list(fazer.values()) for r in i.rotas]
 
 
 # --- o casamento das rotas -------------------------------------------------------
@@ -48,10 +62,10 @@ def test_nome_do_parametro_nao_conta():
 def test_consulta_com_parametro_de_outro_nome_aparece():
     resp = {"papel": "Comercial", "rotas": [["GET", "/ordens/{id}"], ["GET", "/caixas"]]}
     s = cap.montar_sistema("gestorhs", "ok", resp)
-    assert "Uma OS pelo id (traz a caixa em que está)" in _nomes(s["consultar"])
-    assert "As caixas" in _nomes(s["consultar"])
-    assert "As OS" not in _nomes(s["consultar"])     # `/ordens` sem id não veio
-    assert s["papel"] == "Comercial" and s["fazer"] == []
+    assert "a fase e a caixa de cada OS" in _ve(s)
+    assert "as caixas e a fase de cada uma" in _ve(s)
+    assert "as OS" not in _ve(s)     # `/ordens` sem id não veio
+    assert s["papel"] == "Comercial" and _faz(s) == []
 
 
 def test_acao_com_varias_rotas_so_aparece_com_todas():
@@ -59,9 +73,10 @@ def test_acao_com_varias_rotas_so_aparece_com_todas():
     o cartão pararia no meio e deixaria cliente e contato criados à toa."""
     duas = {"rotas": [["POST", "/clients"], ["POST", "/persons"]]}
     tres = {"rotas": duas["rotas"] + [["POST", "/cards"]]}
-    assert "Criar um lead novo" not in _nomes(cap.montar_sistema("hsgrowth", "ok", duas)["fazer"])
-    feito = cap.montar_sistema("hsgrowth", "ok", tres)["fazer"]
-    assert "Criar um lead novo" in _nomes(feito) and all(i["confirma"] for i in feito)
+    assert "criar um lead novo" not in _faz(cap.montar_sistema("hsgrowth", "ok", duas))
+    s = cap.montar_sistema("hsgrowth", "ok", tres)
+    assert "criar um lead novo" in _faz(s)
+    assert all(a["na_hora"] == [] for a in s["assuntos"])   # sistema externo: tudo vira cartão
 
 
 def test_criar_pdi_exige_tambem_acrescentar_acao():
@@ -69,8 +84,8 @@ def test_criar_pdi_exige_tambem_acrescentar_acao():
     sairia vazio e a pessoa veria "Parou na ação 1"."""
     so_plano = {"rotas": [["POST", "/pdi/plans"]]}
     com_acoes = {"rotas": [["POST", "/pdi/plans"], ["POST", "/pdi/plans/{plan_id}/actions"]]}
-    assert "Montar o PDI de uma pessoa, com as ações" not in _nomes(cap.montar_sistema("talenths", "ok", so_plano)["fazer"])
-    assert "Montar o PDI de uma pessoa, com as ações" in _nomes(cap.montar_sistema("talenths", "ok", com_acoes)["fazer"])
+    assert "montar o PDI de alguém" not in _faz(cap.montar_sistema("talenths", "ok", so_plano))
+    assert "montar o PDI de alguém" in _faz(cap.montar_sistema("talenths", "ok", com_acoes))
 
 
 def test_talenths_user_x_rh():
@@ -78,16 +93,18 @@ def test_talenths_user_x_rh():
     "aprovar"; o RH vê "aprovar". Quem decide é a lista que o TalentHS devolve."""
     user = {"papel": "Colaborador", "rotas": [["GET", "/absences/my"], ["POST", "/absences/request"]]}
     rh = {"papel": "RH", "rotas": user["rotas"] + [["PUT", "/absences/{request_id}/approve"]]}
-    u = cap.montar_sistema("talenths", "ok", user)
-    assert "Os seus pedidos de férias e ausência, com a situação de cada um" in _nomes(u["consultar"])
-    assert any(i.get("exemplo") == "quais ausências eu pedi?" for i in u["consultar"])
-    assert "Aprovar pedidos de ausência pendentes" not in _nomes(u["fazer"])
-    assert "Aprovar pedidos de ausência pendentes" in _nomes(cap.montar_sistema("talenths", "ok", rh)["fazer"])
+    u = _assunto(cap.montar_sistema("talenths", "ok", user), "ausencias")
+    assert u["titulo"] == "Férias e ausências"
+    assert u["ve"] == ["os seus pedidos de férias e ausência"]
+    assert u["faz"] == ["pedir folga, férias ou ausência"]
+    assert u["exemplos"] == ["quais ausências eu pedi?", "pede folga na terça"]
+    r = _assunto(cap.montar_sistema("talenths", "ok", rh), "ausencias")
+    assert "aprovar pedidos pendentes" in r["faz"]
 
 
 def test_rotas_mal_formadas_nao_viram_permissao():
     resp = {"rotas": [["GET"], "GET /clientes/", ["GET", 3], None, ["GET", "/estoque/"]]}
-    assert _nomes(cap.montar_sistema("datacore", "ok", resp)["consultar"]) == ["Produtos em estoque, com quantidade e preço"]
+    assert _ve(cap.montar_sistema("datacore", "ok", resp)) == ["os produtos em estoque, com quantidade e preço"]
 
 
 @pytest.mark.parametrize("estado", ["sem_conta", "fora_do_ar", "sem_resposta_de_capacidade"])
@@ -95,7 +112,7 @@ def test_fora_do_ok_nunca_traz_a_lista(estado):
     """Anti-objetivo da spec: sistema que não respondeu NUNCA aparece com a lista
     completa — seria afirmar o que o login pode não fazer."""
     s = cap.montar_sistema("talenths", estado, {"rotas": [["GET", "/absences/my"]]})
-    assert s["consultar"] == [] and s["fazer"] == [] and s["estado"] == estado
+    assert s["assuntos"] == [] and s["estado"] == estado
 
 
 def test_estado_de_cada_erro():
@@ -104,6 +121,109 @@ def test_estado_de_cada_erro():
         assert cap.estado_do_erro(st) == "fora_do_ar"
     for st in (404, 403, 422):
         assert cap.estado_do_erro(st) == "sem_resposta_de_capacidade"
+
+
+# --- os assuntos ------------------------------------------------------------------
+
+def test_todo_item_tem_assunto_ou_e_interno():
+    """A primeira versão da tela listava as consultas cruas; esta agrupa por
+    assunto com frase escrita à mão. O risco novo é o oposto: consulta ou ação
+    nova no catálogo SEM entrada em `capacidade_assuntos` sumiria da tela em
+    silêncio — o Guardi a faria e ninguém saberia. Toda chave tem que estar lá,
+    com assunto ou com `INTERNO` de propósito; e chave que saiu do catálogo não
+    pode sobrar lá."""
+    for sistema in cap.SISTEMAS:
+        consultar, fazer = cap.catalogo(sistema)
+        assert set(consultar) == set(ax.VE[sistema]), (sistema, set(consultar) ^ set(ax.VE[sistema]))
+        assert set(fazer) == set(ax.FAZ[sistema]), (sistema, set(fazer) ^ set(ax.FAZ[sistema]))
+        assert all(w != ax.INTERNO for w in ax.FAZ[sistema].values()), sistema   # ação nunca é passo
+
+
+def test_assuntos_bem_formados():
+    """Assunto citado por item existe; assunto declarado tem item (senão nunca
+    aparece e ninguém percebe); cor e ícone são os que a tela sabe desenhar
+    (fora da lista, o front cai no cinza e o bloco perde o destaque); `requer`
+    aponta para item INTERNO do mesmo sistema — nome errado esconderia o item."""
+    grupos = [(s, ax.ASSUNTOS[s], {**ax.VE[s], **ax.FAZ[s]}, ax.VE[s]) for s in cap.SISTEMAS]
+    grupos.append(("hsos", ax.HSOS, {**ax.HSOS_VE, **ax.HSOS_FAZ}, {}))
+    for sistema, assuntos, mapa, ve in grupos:
+        chaves = [a.chave for a in assuntos]
+        assert len(chaves) == len(set(chaves)), sistema
+        usados = {w.assunto for w in mapa.values() if w != ax.INTERNO}
+        assert usados == set(chaves), (sistema, usados ^ set(chaves))
+        assert len(assuntos) <= 9, sistema
+        for a in assuntos:
+            assert a.cor in ax.CORES and a.icone in ax.ICONES, (sistema, a)
+            assert len(a.titulo) <= 28, a.titulo
+        for w in mapa.values():
+            if w == ax.INTERNO:
+                continue
+            for r in w.requer:
+                assert ve.get(r) == ax.INTERNO, (sistema, r)
+
+
+def test_frase_curta_para_quem_usa():
+    """O feedback que gerou esta versão: frase escrita para o agente ("Uma
+    pessoa pelo user_id", "`board_id` é OBRIGATÓRIO"). A frase da tela é curta,
+    sem código, sem id, sem "seu dono", e começa minúscula (a tela a põe como
+    chip ou lista corrida)."""
+    mapas = [m for s in cap.SISTEMAS for m in (ax.VE[s], ax.FAZ[s])] + [ax.HSOS_VE, ax.HSOS_FAZ]
+    for m in mapas:
+        for w in m.values():
+            if w == ax.INTERNO:
+                continue
+            f = w.frase
+            assert len(f) <= 70, f
+            assert "`" not in f and "dono" not in f and " id" not in f and "_" not in f, f
+            assert f[0].islower(), f
+
+
+def test_interno_some_mas_segue_valendo_como_requisito():
+    """"Os ciclos de avaliação" é passo do agente: não aparece. Mas a avaliação
+    pede `cycle_id`, que só sai dele — sem os ciclos liberados, "a sua avaliação"
+    falharia no primeiro uso, então também não aparece."""
+    so_ciclo = cap.montar_sistema("talenths", "ok", {"rotas": [["GET", "/evaluations/cycles"]]})
+    assert so_ciclo["assuntos"] == []
+    sem_ciclo = cap.montar_sistema("talenths", "ok", {"rotas": [["GET", "/evaluations/my"]]})
+    assert sem_ciclo["assuntos"] == []
+    com = cap.montar_sistema("talenths", "ok", {"rotas": [["GET", "/evaluations/my"],
+                                                          ["GET", "/evaluations/cycles"]]})
+    assert _ve(com) == ["a sua avaliação"]
+
+
+def test_o_print_do_erick_vira_assuntos():
+    """O TalentHS com tudo liberado saía com dezenas de linhas cruas. Agora são
+    os nove assuntos, sem nenhum passo interno, e frase repetida (a lista e o
+    "pelo id" dela) aparece uma vez só."""
+    s = cap.montar_sistema("talenths", "ok", {"papel": "RH", "rotas": _todas_as_rotas("talenths")})
+    assert [a["titulo"] for a in s["assuntos"]] == [a.titulo for a in ax.ASSUNTOS["talenths"]]
+    ve = _ve(s)
+    assert len(ve) == len(set(ve))
+    for proibido in ("pelo user_id", "ciclos de metas", "tipos de ausência", "quem você é"):
+        assert all(proibido not in f.lower() for f in ve), proibido
+    for a in s["assuntos"]:
+        assert 1 <= len(a["exemplos"]) <= 2, a["chave"]
+
+
+def test_exemplo_so_de_item_liberado():
+    """"Experimente: aprova as férias da Ana" para quem não pode aprovar seria a
+    tela mandando a pessoa esbarrar num 403."""
+    user = {"rotas": [["GET", "/absences/my"]]}
+    a = _assunto(cap.montar_sistema("talenths", "ok", user), "ausencias")
+    assert a["exemplos"] == ["quais ausências eu pedi?"] and a["faz"] == []
+
+
+def test_todo_sistema_tem_assunto_com_tudo_liberado():
+    """Com tudo liberado, todo assunto declarado aparece (nenhum `requer` com nome
+    torto o esconde) e cada um tem ao menos um "Experimente: …" — o pedido do
+    Erick era a pessoa entender o que dizer, não só o que existe."""
+    for sistema in cap.SISTEMAS:
+        s = cap.montar_sistema(sistema, "ok", {"rotas": _todas_as_rotas(sistema)})
+        assert [a["chave"] for a in s["assuntos"]] == [a.chave for a in ax.ASSUNTOS[sistema]], sistema
+        for a in s["assuntos"]:
+            assert 1 <= len(a["exemplos"]) <= 2, (sistema, a["chave"])
+    for a in _hsos(True, True)["assuntos"]:
+        assert a["exemplos"], a["chave"]
 
 
 # --- os catálogos -----------------------------------------------------------------
@@ -132,22 +252,13 @@ def test_exemplos_so_de_itens_que_existem():
     assert set(te.EXEMPLOS) <= set(te.ACOES)
 
 
-def test_todo_item_tem_rota_e_rotulo():
+def test_todo_item_tem_rota():
     for sistema in cap.SISTEMAS:
         consultar, fazer = cap.catalogo(sistema)
         assert consultar
-        for i in consultar + fazer:
-            assert i.rotulo and i.rotas, (sistema, i)
-            assert "`" not in i.rotulo and "seu dono" not in i.rotulo, i.rotulo
-        assert all(m == "GET" for i in consultar for m, _ in i.rotas)
-
-
-def test_rotulo_fala_com_quem_usa():
-    assert cap.para_quem_usa("as batidas de hoje do seu dono e o resumo do dia") == \
-        "As suas batidas de hoje e o resumo do dia"
-    assert cap.para_quem_usa("os cards do dono (como vendedor ou SDR) em um quadro. `board_id` é "
-                             "OBRIGATÓRIO") == "Os seus cards (como vendedor ou SDR) em um quadro"
-    assert cap.para_quem_usa("quem o seu dono é no DocsHS (nome, papel)") == "Quem você é no DocsHS (nome, papel)"
+        for i in list(consultar.values()) + list(fazer.values()):
+            assert i.rotas, (sistema, i)
+        assert all(m == "GET" for i in consultar.values() for m, _ in i.rotas)
 
 
 def test_consultas_que_pedem_o_eu_exigem_a_rota_dele():
@@ -155,21 +266,32 @@ def test_consultas_que_pedem_o_eu_exigem_a_rota_dele():
     consulta falharia mesmo com o histórico liberado."""
     so_hist = {"rotas": [["GET", "/treinamentos/pessoas/{pessoa_id}/historico"]]}
     com_eu = {"rotas": so_hist["rotas"] + [["GET", "/auth/eu"]]}
-    assert "O seu histórico de treinamentos" not in _nomes(cap.montar_sistema("docshs", "ok", so_hist)["consultar"])
-    assert "O seu histórico de treinamentos" in _nomes(cap.montar_sistema("docshs", "ok", com_eu)["consultar"])
+    assert "o seu histórico de treinamentos" not in _ve(cap.montar_sistema("docshs", "ok", so_hist))
+    assert "o seu histórico de treinamentos" in _ve(cap.montar_sistema("docshs", "ok", com_eu))
 
 
 # --- o que é do HS.OS --------------------------------------------------------------
 
+def _hsos(email, cal):
+    [g] = cap.itens_do_hsos(email, cal)
+    return g
+
+
 def test_email_so_com_email_ligado():
-    assert [g["sistema"] for g in cap.itens_do_hsos(False, True)] == ["memoria", "agenda"]
-    com = cap.itens_do_hsos(True, False)
-    email = next(g for g in com if g["sistema"] == "email")
-    assert "A sua agenda do Outlook" not in _nomes(email["consultar"])
-    email_cal = next(g for g in cap.itens_do_hsos(True, True) if g["sistema"] == "email")
-    assert "A sua agenda do Outlook" in _nomes(email_cal["consultar"])
-    # Só o e-mail para outras pessoas espera o clique; o resto sai na hora.
-    assert {i["rotulo"]: i["confirma"] for i in email["fazer"]}["Preparar um e-mail para outras pessoas"] is True
+    assert [a["chave"] for a in _hsos(False, True)["assuntos"]] == ["memoria", "lembretes"]
+    assert [a["chave"] for a in _hsos(True, False)["assuntos"]] == ["memoria", "lembretes", "email"]
+    assert [a["chave"] for a in _hsos(True, True)["assuntos"]] == ["memoria", "lembretes", "email", "outlook"]
+
+
+def test_hsos_diz_o_que_sai_na_hora():
+    """Só o e-mail para outras pessoas espera o clique; o resto sai na hora — e
+    a tela precisa dizer qual é qual, senão a pessoa espera um cartão que não vem."""
+    email = next(a for a in _hsos(True, False)["assuntos"] if a["chave"] == "email")
+    assert "preparar e-mails para outras pessoas" in email["faz"]
+    assert "preparar e-mails para outras pessoas" not in email["na_hora"]
+    assert "mandar um e-mail para você mesmo" in email["na_hora"]
+    lembretes = next(a for a in _hsos(False, False)["assuntos"] if a["chave"] == "lembretes")
+    assert lembretes["na_hora"] == lembretes["faz"]
 
 
 # --- a rota -------------------------------------------------------------------------
@@ -250,7 +372,7 @@ def test_cada_sistema_com_o_seu_estado(amb):
     }
     r = _por(asyncio.run(rota.capacidade_do_guardi("ana-bot", usuario=ANA)))
     assert r["talenths"]["estado"] == "ok" and r["talenths"]["papel"] == "Colaborador"
-    assert _nomes(r["talenths"]["consultar"]) == ["Os seus pedidos de férias e ausência, com a situação de cada um"]
+    assert _ve(r["talenths"]) == ["os seus pedidos de férias e ausência"]
     assert r["gestorhs"]["estado"] == "fora_do_ar"
     assert r["docshs"]["estado"] == "sem_conta"
     assert r["datacore"]["estado"] == "sem_resposta_de_capacidade"
@@ -271,7 +393,7 @@ def test_timeout_e_fora_do_ar(amb, monkeypatch):
     monkeypatch.setattr(talenths, "_transporte", httpx.MockTransport(lento))
     amb["respostas"]["gestorhs"] = httpx.Response(200, json={"papel": "Expedição", "rotas": [["GET", "/caixas"]]})
     r = _por(asyncio.run(rota.capacidade_do_guardi("ana-bot", usuario=ANA)))
-    assert r["talenths"]["estado"] == "fora_do_ar" and r["talenths"]["consultar"] == []
+    assert r["talenths"]["estado"] == "fora_do_ar" and r["talenths"]["assuntos"] == []
     assert r["gestorhs"]["estado"] == "ok"
 
 
@@ -281,26 +403,25 @@ def test_hsgrowth_uma_chamada_para_vendas_e_servicos(amb):
         ["GET", "/service-boards/{board_id}/cards"], ["GET", "/card-tasks"], ["GET", "/users/me"]]})
     r = _por(asyncio.run(rota.capacidade_do_guardi("ana-bot", usuario=ANA)))
     assert amb["pedidos"] == [("hsgrowth", "GET", "/agente/capacidades")]
-    assert _nomes(r["hsgrowth"]["consultar"]) == ["As suas tarefas"]
-    assert _nomes(r["hsgrowth_servicos"]["consultar"]) == ["Os cards de um quadro"]
+    assert _ve(r["hsgrowth"]) == ["as suas tarefas"]
+    assert _ve(r["hsgrowth_servicos"]) == ["os cards de Serviços e de Cobrança"]
 
 
 def test_sistema_nao_ligado_nem_e_chamado(amb):
     amb["linha"]["sistemas_ligados"] = []
     r = asyncio.run(rota.capacidade_do_guardi("ana-bot", usuario=ANA))
     assert r["sistemas"] == [] and amb["pedidos"] == []
-    assert [g["sistema"] for g in r["no_hsos"]] == ["memoria", "agenda"]
+    assert [a["chave"] for g in r["no_hsos"] for a in g["assuntos"]] == ["memoria", "lembretes"]
 
 
 def test_email_na_rota_so_com_email_ligado(amb):
     amb["linha"]["sistemas_ligados"] = []
     amb["calendario"] = True
     r = asyncio.run(rota.capacidade_do_guardi("ana-bot", usuario=ANA))
-    assert "email" not in [g["sistema"] for g in r["no_hsos"]]
+    assert "email" not in [a["chave"] for a in r["no_hsos"][0]["assuntos"]]
     amb["linha"]["email_ligado"] = True
     r = asyncio.run(rota.capacidade_do_guardi("ana-bot", usuario=ANA))
-    email = next(g for g in r["no_hsos"] if g["sistema"] == "email")
-    assert "A sua agenda do Outlook" in _nomes(email["consultar"])
+    assert [a["chave"] for a in r["no_hsos"][0]["assuntos"]][-2:] == ["email", "outlook"]
 
 
 def test_cache_atualizar_e_invalidacao(amb, monkeypatch):
