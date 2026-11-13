@@ -953,6 +953,22 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   a partir da seção "Para os outros repositórios" da spec. O TaskHS já está
   pronto (`48832b0`, v2.13.0, sem deploy).
 
+### "Capacidade" do Guardi — 13/11/2026
+
+Botão ao lado de "Conversas anteriores" (⋮ no celular): o que o Guardi alcança,
+por sistema e por assunto, **só o que o login do dono permite**. Spec
+`docs/superpowers/specs/2026-11-13-capacidade-do-guardi-design.md`.
+
+- ⚠️ **Quem diz o que o login pode é cada sistema**, por `GET /agente/capacidades`
+  (token de agente) → `{papel, rotas: [[método, template]]}`. O HS.OS só cruza com os
+  catálogos (`app/capacidade.py`) — **nunca copie regra de permissão para cá**.
+  No ar nos seis (TaskHS, TalentHS, DocsHS, GestorHS, HSGrowth, DataCore).
+- Texto da tela é `app/capacidade_assuntos.py`, separado do texto para o agente.
+  ⚠️ **Consulta ou ação nova no Guardi exige entrada lá** (assunto ou `INTERNO`) —
+  `test_todo_item_tem_assunto_ou_e_interno` quebra sem ela. **Sistema novo** precisa
+  da rota de capacidades do lado de lá, senão aparece "ainda não sei dizer".
+- Só o dono vê (404 até para admin). Não gasta token de modelo; cache de 5 min.
+
 ### Agenda e lembretes do Guardi — 09/11/2026
 
 Spec: `docs/superpowers/specs/2026-11-09-agenda-lembretes-design.md`. Nasceu de um
