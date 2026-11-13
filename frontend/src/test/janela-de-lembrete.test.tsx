@@ -29,7 +29,10 @@ vi.mock("@/lib/realtime", () => ({
     };
   },
 }));
-vi.mock("@/lib/som-de-lembrete", () => ({ tocarSomDeLembrete: vi.fn(async () => undefined) }));
+vi.mock("@/lib/som-de-lembrete", () => ({
+  tocarAlarme: vi.fn(async () => undefined),
+  prepararSom: vi.fn(() => () => undefined),
+}));
 vi.mock("@/lib/agenda", () => ({
   lembretesPendentes: vi.fn(async () => estado.pendentes),
   responderLembrete: vi.fn(async (id: string, acao: string, aviso: string) => {
@@ -40,6 +43,7 @@ vi.mock("@/lib/agenda", () => ({
 }));
 
 import { JanelaDeLembrete } from "@/components/agenda/JanelaDeLembrete";
+import { tocarAlarme } from "@/lib/som-de-lembrete";
 
 const AVISO = "2026-11-13T14:00:27.123456-03:00";
 const hildon = {
@@ -58,6 +62,7 @@ function montar() {
 }
 
 beforeEach(() => {
+  vi.mocked(tocarAlarme).mockClear();
   estado.pendentes = [];
   estado.respondidos = [];
   estado.ouvinte = null;
@@ -112,5 +117,29 @@ describe("JanelaDeLembrete", () => {
     fireEvent.click(screen.getByRole("button", { name: /Adiar 10 min/ }));
     await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
     expect(estado.respondidos).toEqual([["l-1", "adiar", AVISO]]);
+  });
+
+  it("alarme toca e repete enquanto pendente; Silenciar cala sem dispensar", async () => {
+    // 13/11/2026: um toque só passava despercebido por quem não olhava a janela.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      estado.pendentes = [hildon];
+      montar();
+      await screen.findByText("Retornar contato para Hildon");
+      await waitFor(() => expect(tocarAlarme).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        vi.advanceTimersByTime(3_100);
+      });
+      expect(tocarAlarme).toHaveBeenCalledTimes(2);
+
+      fireEvent.click(screen.getByRole("button", { name: /Silenciar alarme/ }));
+      await act(async () => {
+        vi.advanceTimersByTime(10_000);
+      });
+      expect(tocarAlarme).toHaveBeenCalledTimes(2);
+      expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

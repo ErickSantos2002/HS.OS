@@ -40,15 +40,37 @@ function toque(ctx: AudioContext, freq: number, inicio: number, duracao: number)
   osc.stop(inicio + duracao + 0.02);
 }
 
-export async function tocarSomDeLembrete(): Promise<void> {
+/**
+ * Desbloqueia o áudio no primeiro clique ou tecla na página. O navegador só
+ * deixa tocar som de uma página que já recebeu interação; sem isto, o alarme
+ * de um lembrete que chega com o HS.OS em segundo plano sairia mudo. Chamado
+ * uma vez, na montagem da janela de lembrete.
+ */
+export function prepararSom(): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  const destravar = () => {
+    const ctx = obterContexto();
+    if (ctx && ctx.state === "suspended") void ctx.resume().catch(() => undefined);
+  };
+  window.addEventListener("pointerdown", destravar, { passive: true });
+  window.addEventListener("keydown", destravar);
+  return () => {
+    window.removeEventListener("pointerdown", destravar);
+    window.removeEventListener("keydown", destravar);
+  };
+}
+
+/** Um ciclo do alarme: três toques, mais firmes que o aviso de mensagem. */
+export async function tocarAlarme(): Promise<void> {
   const ctx = obterContexto();
   if (!ctx) return;
   try {
     if (ctx.state === "suspended") await ctx.resume();
     if (ctx.state !== "running") return;
     const t = ctx.currentTime + 0.01;
-    toque(ctx, 880, t, 0.22);
-    toque(ctx, 1318.5, t + 0.25, 0.32);
+    toque(ctx, 988, t, 0.18);
+    toque(ctx, 988, t + 0.24, 0.18);
+    toque(ctx, 1318.5, t + 0.48, 0.3);
   } catch {
     // áudio é acessório
   }

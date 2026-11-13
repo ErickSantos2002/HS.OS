@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.13.0",
+    date: "2026-11-13",
+    changes: [
+      {
+        kind: "melhoria",
+        text: "O lembrete agora toca como alarme: repete enquanto estiver esperando sua resposta, mesmo com o HS.OS em segundo plano, e o nome da aba pisca \"⏰ LEMBRETE\". Para calar sem dispensar, use \"Silenciar alarme\".",
+      },
+    ],
+  },
+  {
     version: "2.12.0",
     date: "2026-11-13",
     changes: [

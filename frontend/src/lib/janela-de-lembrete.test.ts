@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { chaveDoAviso, compararAvisos, deveTocar, mudaAJanela } from "./janela-de-lembrete";
+import { ALARME_TETO_MS, alarmeTocando, chaveDoAviso, compararAvisos, mudaAJanela, tituloDaAba } from "./janela-de-lembrete";
 
 const a1 = { id: "l-1", aviso_em: "2026-11-13T14:00:27.1-03:00" };
 const a1DeNovo = { id: "l-1", aviso_em: "2026-11-13T14:05:30.2-03:00" };
@@ -39,9 +39,19 @@ describe("janela de lembrete", () => {
     expect(mudaAJanela(null)).toBe(false);
   });
 
-  it("som só para aviso novo com a aba à vista (oculta, quem avisa é o push)", () => {
-    expect(deveTocar(1, true)).toBe(true);
-    expect(deveTocar(1, false)).toBe(false);
-    expect(deveTocar(0, true)).toBe(false);
+  it("alarme toca enquanto pendente e para ao responder, silenciar, recolher ou no teto", () => {
+    // 13/11/2026: um toque só passava despercebido por quem não olhava a janela.
+    const base = { pendente: true, recolhida: false, silenciado: false, desde: 0, agora: 1_000 };
+    expect(alarmeTocando(base)).toBe(true);
+    expect(alarmeTocando({ ...base, pendente: false })).toBe(false);
+    expect(alarmeTocando({ ...base, silenciado: true })).toBe(false);
+    expect(alarmeTocando({ ...base, recolhida: true })).toBe(false);
+    expect(alarmeTocando({ ...base, desde: null })).toBe(false);
+    expect(alarmeTocando({ ...base, agora: ALARME_TETO_MS + 1 })).toBe(false);
+  });
+
+  it("título da aba pisca com o lembrete", () => {
+    expect(tituloDaAba("HS.OS", "Ligar para Hildon", true)).toBe("⏰ LEMBRETE — Ligar para Hildon");
+    expect(tituloDaAba("HS.OS", "Ligar para Hildon", false)).toBe("HS.OS");
   });
 });
