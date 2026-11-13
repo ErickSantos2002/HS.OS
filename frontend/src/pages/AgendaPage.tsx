@@ -27,7 +27,7 @@ import { ErroApi } from "@/lib/api";
 import {
   agruparPorPeriodo, apagarLembrete, descreverRegra, diaEmBrasilia, diasComLembrete, diasDoEvento,
   editarLembrete, eventosOutlook, lembreteNoDia, listarLembretes, periodoDoDia, quandoLegivel,
-  rotuloStatus, somarDias, type EventoOutlook, type Lembrete,
+  descreverResposta, rotuloStatus, somarDias, type EventoOutlook, type Lembrete,
 } from "@/lib/agenda";
 import { cn } from "@/lib/utils";
 
@@ -235,6 +235,8 @@ export default function AgendaPage() {
 function ItemLembrete({ l, aoEditar, aoPausar, aoApagar }: { l: Lembrete; aoEditar: () => void; aoPausar: () => void; aoApagar: () => void }) {
   const recorrente = l.regra.tipo !== "unico";
   const falhou = l.ultimo_status === "perdido" || l.ultimo_status === "erro";
+  // O que a pessoa fez com o aviso (spec 2026-11-13). Falha continua mostrando o status.
+  const resposta = falhou ? null : descreverResposta(l);
   return (
     <div className={cn("flex items-start gap-3 rounded-xl border bg-card/60 px-3 py-2.5", l.ativo ? "border-border/40" : "border-border/20 opacity-70")}>
       <CalendarClock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -255,7 +257,7 @@ function ItemLembrete({ l, aoEditar, aoPausar, aoApagar }: { l: Lembrete; aoEdit
         {l.ultimo_disparo_em || l.ultimo_status ? (
           <p className={cn("text-[11px]", falhou ? "text-destructive" : "text-muted-foreground")}>
             Último disparo{l.ultimo_disparo_em && <> {quandoLegivel(l.ultimo_disparo_em)}</>}
-            {l.ultimo_status && <> · {rotuloStatus(l.ultimo_status)}</>}
+            {resposta ? <> · {resposta}</> : l.ultimo_status && <> · {rotuloStatus(l.ultimo_status)}</>}
           </p>
         ) : null}
       </div>

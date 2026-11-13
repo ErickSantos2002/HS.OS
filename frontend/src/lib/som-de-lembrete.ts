@@ -1,0 +1,55 @@
+/**
+ * O som da janela de lembrete (spec 2026-11-13): dois toques curtos e suaves,
+ * sintetizados pela Web Audio API — sem arquivo para baixar nem cache para
+ * errar. Respeita o "silenciar aba/site" do navegador, porque sai pelo mesmo
+ * caminho de áudio da página.
+ *
+ * ⚠️ A política de autoplay pode deixar o `AudioContext` suspenso até a
+ * primeira interação com a página. Nesse caso não toca e não reclama: o
+ * cartão aparece do mesmo jeito, e o push do sistema já tocou.
+ */
+
+let contexto: AudioContext | null = null;
+
+function obterContexto(): AudioContext | null {
+  if (contexto) return contexto;
+  const Ctor =
+    typeof window !== "undefined"
+      ? window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      : undefined;
+  if (!Ctor) return null;
+  try {
+    contexto = new Ctor();
+  } catch {
+    contexto = null;
+  }
+  return contexto;
+}
+
+function toque(ctx: AudioContext, freq: number, inicio: number, duracao: number) {
+  const osc = ctx.createOscillator();
+  const ganho = ctx.createGain();
+  osc.type = "sine";
+  osc.frequency.value = freq;
+  // Ataque e queda rápidos: sem o "clique" de ligar e desligar o oscilador seco.
+  ganho.gain.setValueAtTime(0.0001, inicio);
+  ganho.gain.exponentialRampToValueAtTime(0.25, inicio + 0.02);
+  ganho.gain.exponentialRampToValueAtTime(0.0001, inicio + duracao);
+  osc.connect(ganho).connect(ctx.destination);
+  osc.start(inicio);
+  osc.stop(inicio + duracao + 0.02);
+}
+
+export async function tocarSomDeLembrete(): Promise<void> {
+  const ctx = obterContexto();
+  if (!ctx) return;
+  try {
+    if (ctx.state === "suspended") await ctx.resume();
+    if (ctx.state !== "running") return;
+    const t = ctx.currentTime + 0.01;
+    toque(ctx, 880, t, 0.22);
+    toque(ctx, 1318.5, t + 0.25, 0.32);
+  } catch {
+    // áudio é acessório
+  }
+}

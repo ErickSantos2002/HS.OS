@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   agruparPorPeriodo,
   descreverRegra,
+  descreverResposta,
   diasComLembrete,
   ocorreNoDia,
   regraDoFormulario,
@@ -134,5 +135,27 @@ describe("regraDoFormulario", () => {
       .toEqual({ repetir: { tipo: "semanal", dias: [0, 2], hora: "08:00" } });
     expect(regraDoFormulario({ modo: "repetir", data: "", hora: "09:00", tipo: "mensal", dias: [], dia: 5 }))
       .toEqual({ repetir: { tipo: "mensal", dia: 5, hora: "09:00" } });
+  });
+});
+
+describe("o que a pessoa fez com o aviso (spec 2026-11-13)", () => {
+  // "Entregue" dizia só que o recado saiu — a Sandra tinha o lembrete
+  // "entregue" e não o viu. A linha passa a dizer o que ela fez com ele.
+  const r = { tipo: "unico", em: "2026-11-13T14:00" } as const;
+  const base = { regra: r, ultimo_disparo_em: "2026-11-13T14:00:27-03:00", ultimo_status: "entregue" as const };
+
+  it("feito, adiado e avisado de novo sem resposta", () => {
+    expect(descreverResposta(lembrete({ ...base, reconhecido_como: "feito",
+      reconhecido_em: "2026-11-13T14:05:10.123-03:00" }))).toBe("Feito às 14:05");
+    expect(descreverResposta(lembrete({ ...base, reconhecido_como: "adiado",
+      reconhecido_em: "2026-11-13T14:00:40-03:00", reaviso_em: "2026-11-13T14:10:40-03:00" })))
+      .toBe("Adiado para 14:10");
+    expect(descreverResposta(lembrete({ ...base, aviso_em: "2026-11-13T14:05:30-03:00", reavisos: 1 })))
+      .toBe("Avisado de novo às 14:05 — sem resposta");
+  });
+
+  it("aviso recém-saído ou lembrete antigo fica com o status de sempre", () => {
+    expect(descreverResposta(lembrete({ ...base, aviso_em: "2026-11-13T14:00:27-03:00", reavisos: 0 }))).toBeNull();
+    expect(descreverResposta(lembrete(base))).toBeNull();
   });
 });

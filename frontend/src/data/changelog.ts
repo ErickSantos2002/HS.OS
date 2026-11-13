@@ -35,6 +35,10 @@ export const CHANGELOG: ChangelogVersion[] = [
     changes: [
       {
         kind: "melhoria",
+        text: "Lembrete agora chama atenção de verdade: a notificação fica na tela até você escolher \"Adiar 10 min\" ou \"Feito\" (dá para clicar ali mesmo, sem abrir o HS.OS), e com o HS.OS aberto aparece uma janela no centro, com som. Se você não responder em 5 minutos, ele avisa de novo — uma vez só. Na Agenda, cada lembrete mostra o que você fez: \"Feito às 14:05\", \"Adiado para 14:10\".",
+      },
+      {
+        kind: "melhoria",
         text: "A tela \"Capacidade\" do Guardi ficou organizada por assunto: em vez de uma lista longa e técnica, cada sistema mostra blocos coloridos como Férias e ausências, Ponto ou Metas e PDI, cada um dizendo em poucas palavras o que o Guardi vê, o que ele faz por você e uma frase para experimentar. Passos internos, que só o Guardi usa, saíram da tela.",
       },
     ],
