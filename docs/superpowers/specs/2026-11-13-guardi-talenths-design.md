@@ -154,9 +154,8 @@ Filtros **lidos do `/openapi.json` público** e escritos no catálogo, com teste
 - O retorno passa por `como_dado_externo(..., origem="TalentHS")`, teto de 12
   mil caracteres; lista crua pagina do nosso lado.
 - Horários passam pelo `app/fuso.py` (já é o funil do `mcp_bot.executar`).
-  ⚠️ O construtor confere se o TalentHS devolve carimbo **sem fuso** em alguma
-  rota (ponto, sobretudo): se sim, decidir se é UTC ou Brasília olhando o
-  código de lá antes de ligar `sem_fuso_e_utc` para `talenths_`.
+  Conferido em 13/11/2026: **toda** coluna de data-hora do TalentHS é
+  `timestamptz`, então a API devolve com fuso e a conversão vale sem exceção.
 - A `description` do `talenths_consultar` diz: o que volta é a visão do dono
   (403 é a permissão dele lá — diga isso, não contorne); "do time" no TalentHS
   é a **empresa inteira** e só o RH vê; não recalcule saldo, horas ou
@@ -198,7 +197,7 @@ O Erick abre `cl talenths` e entrega esta seção.
    `department_id`.
 7. Changelog do TalentHS (`ChangelogModal.tsx`) e deploy do backend.
 
-## Do lado do HS.OS
+## Do lado do HS.OS — feito em 13/11/2026 (`guardi-talenths`), sem deploy
 
 - `app/sistemas/talenths.py`: `chamar(...)` por `chamar_sistema` com
   `AUD = "talenths"`, base `settings.TALENTHS_API_URL`, mensagens próprias

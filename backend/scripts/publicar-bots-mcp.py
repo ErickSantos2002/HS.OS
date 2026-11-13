@@ -9,6 +9,7 @@
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-sistema erick-bot taskhs # só banco
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-docshs-todos [--aplicar] # só quem tem conta lá
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-gestorhs-todos [--aplicar] # idem, GestorHS
+    PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-talenths-todos [--aplicar] # idem, TalentHS
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-hsgrowth-vendedores [--aplicar] # só salesperson, HSGrowth
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-hsgrowth-servicos [--aplicar] # só service, HSGrowth Serviços
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --aplicar                        # gateway
@@ -120,7 +121,7 @@ def _mascarar(novos: dict) -> dict:
                 "headers": "<GUARDRAILS_API_TOKEN>"} for n, e in novos.items()}
 
 
-_ROTULO = {"docshs": "DocsHS", "gestorhs": "GestorHS", "hsgrowth": "HSGrowth",
+_ROTULO = {"docshs": "DocsHS", "talenths": "TalentHS", "gestorhs": "GestorHS", "hsgrowth": "HSGrowth",
            "hsgrowth_servicos": "HSGrowth (Serviços)"}
 
 
@@ -176,6 +177,12 @@ async def _ligar_docshs_todos(conn, aplicar: bool) -> int:
     return await _ligar_quem_tem_conta(conn, "docshs", docshs, "/auth/eu", aplicar)
 
 
+async def _ligar_talenths_todos(conn, aplicar: bool) -> int:
+    """Spec 2026-11-13-guardi-talenths: confere por `/auth/me`."""
+    from app.sistemas import talenths
+    return await _ligar_quem_tem_conta(conn, "talenths", talenths, "/auth/me", aplicar)
+
+
 async def _ligar_gestorhs_todos(conn, aplicar: bool) -> int:
     """Spec 2026-11-11-guardi-gestorhs: confere por `/auth/me` (o "eu" de lá)."""
     from app.sistemas import gestorhs
@@ -220,12 +227,15 @@ async def main() -> int:
     ap.add_argument("--ligar-todos", action="store_true",
                     help="liga e-mail e TaskHS em TODOS os bots pessoais (só banco)")
     ap.add_argument("--ligar-sistema", nargs=2, metavar=("BOT", "SISTEMA"),
-                    help="acrescenta um sistema (taskhs, datacore, docshs, gestorhs, hsgrowth, hsgrowth_servicos) a sistemas_ligados de UM bot (só banco)")
+                    help="acrescenta um sistema (taskhs, datacore, docshs, talenths, gestorhs, hsgrowth, hsgrowth_servicos) a sistemas_ligados de UM bot (só banco)")
     ap.add_argument("--ligar-datacore-todos", action="store_true",
                     help="acrescenta datacore a sistemas_ligados de TODOS os bots pessoais (só banco)")
     ap.add_argument("--ligar-docshs-todos", action="store_true",
                     help="acrescenta docshs a sistemas_ligados dos bots cujo dono TEM conta ativa no "
                          "DocsHS (confere por /auth/eu; ensaio sem --aplicar; só banco)")
+    ap.add_argument("--ligar-talenths-todos", action="store_true",
+                    help="acrescenta talenths a sistemas_ligados dos bots cujo dono TEM conta ativa no "
+                         "TalentHS (confere por /auth/me; ensaio sem --aplicar; só banco)")
     ap.add_argument("--ligar-gestorhs-todos", action="store_true",
                     help="acrescenta gestorhs a sistemas_ligados dos bots cujo dono TEM conta ativa no "
                          "GestorHS (confere por /auth/me; ensaio sem --aplicar; só banco)")
@@ -259,6 +269,8 @@ async def main() -> int:
                 return 0
             if a.ligar_docshs_todos:
                 return await _ligar_docshs_todos(conn, a.aplicar)
+            if a.ligar_talenths_todos:
+                return await _ligar_talenths_todos(conn, a.aplicar)
             if a.ligar_gestorhs_todos:
                 return await _ligar_gestorhs_todos(conn, a.aplicar)
             if a.ligar_hsgrowth_vendedores:
@@ -273,8 +285,8 @@ async def main() -> int:
                 return 0 if ok else 1
             if a.ligar_sistema:
                 bot, sistema = a.ligar_sistema
-                if sistema not in ("taskhs", "datacore", "docshs", "gestorhs", "hsgrowth", "hsgrowth_servicos"):
-                    print("sistema desconhecido (por ora: taskhs, datacore, docshs, gestorhs, hsgrowth, hsgrowth_servicos)")
+                if sistema not in ("taskhs", "datacore", "docshs", "talenths", "gestorhs", "hsgrowth", "hsgrowth_servicos"):
+                    print("sistema desconhecido (por ora: taskhs, datacore, docshs, talenths, gestorhs, hsgrowth, hsgrowth_servicos)")
                     return 1
                 ok = await conn.fetchval(
                     "UPDATE public.agent_profiles SET sistemas_ligados = "
