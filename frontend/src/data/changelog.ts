@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.12.0",
+    date: "2026-11-13",
+    changes: [
+      {
+        kind: "melhoria",
+        text: "A tela \"Capacidade\" do Guardi ficou organizada por assunto: em vez de uma lista longa e técnica, cada sistema mostra blocos coloridos como Férias e ausências, Ponto ou Metas e PDI, cada um dizendo em poucas palavras o que o Guardi vê, o que ele faz por você e uma frase para experimentar. Passos internos, que só o Guardi usa, saíram da tela.",
+      },
+    ],
+  },
+  {
     version: "2.11.0",
     date: "2026-11-13",
     changes: [
