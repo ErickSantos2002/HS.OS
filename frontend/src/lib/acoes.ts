@@ -47,7 +47,9 @@ const legivel = (k: string, x: unknown) =>
   k === "priority" ? PRIORIDADE[String(x)] ?? v(x) : k === "due_date" ? prazo(x) : v(x);
 
 /** Nome do sistema no cabeçalho do cartão. */
-const SISTEMA: Record<string, string> = { taskhs: "TaskHS", gestorhs: "GestorHS", hsgrowth: "HSGrowth", hsgrowth_servicos: "HSGrowth" };
+const SISTEMA: Record<string, string> = {
+  taskhs: "TaskHS", gestorhs: "GestorHS", hsgrowth: "HSGrowth", hsgrowth_servicos: "HSGrowth", talenths: "TalentHS",
+};
 export const nomeDoSistema = (s?: string) => (s ? SISTEMA[s] ?? s : "");
 
 const TIPO_SERVICO: Record<string, string> = { C: "calibração", M: "manutenção", A: "calibração e manutenção" };
@@ -398,6 +400,220 @@ function cartaoDoHSGrowthServicos(acao: string, p: Record<string, unknown>, ex: 
   return null;
 }
 
+// ── TalentHS (13/11/2026, spec 2026-11-13-guardi-talenths-escrita) ─────────────
+
+const VERBO_TH: Record<string, string> = {
+  pedir_ausencia: "Pedir ausência", cancelar_ausencia: "Cancelar pedido de ausência",
+  ajustar_ponto: "Pedir ajuste de ponto", lancar_batida: "Lançar batida",
+  responder_feedback: "Responder feedback", inscrever_workshop: "Inscrever no workshop",
+  sair_do_workshop: "Sair do workshop", concluir_tarefa_onboarding: "Tarefa de integração",
+  aprovar_ausencia: "Aprovar ausência", recusar_ausencia: "Recusar ausência",
+  aprovar_ajuste_ponto: "Aprovar ajuste de ponto", recusar_ajuste_ponto: "Recusar ajuste de ponto",
+  confirmar_batida: "Confirmar batida", recusar_batida: "Recusar batida",
+  criar_comunicado: "Novo comunicado", editar_comunicado: "Editar comunicado",
+  criar_evento: "Novo evento", editar_evento: "Editar evento", pedir_feedback: "Pedir feedback",
+  criar_pdi: "Novo PDI", editar_pdi: "Editar PDI", acrescentar_acao_pdi: "Nova ação no PDI",
+  atualizar_acao_pdi: "Atualizar ação do PDI", lancar_realizado_meta: "Lançar realizado",
+  comentar_meta: "Comentar meta", registrar_curso: "Registrar curso", atribuir_onboarding: "Abrir integração",
+};
+const BATIDA_TH: Record<string, string> = { in: "entrada", out: "saída" };
+const STATUS_TH: Record<string, string> = {
+  draft: "rascunho", published: "publicado", active: "aberto", closed: "fechado",
+  pending: "pendente", in_progress: "em andamento", done: "concluída",
+};
+const TIPO_EVENTO_TH: Record<string, string> = {
+  event: "Evento", holiday: "Feriado", deadline: "Prazo", meeting: "Reunião", training: "Treinamento",
+};
+const ALVO_TH: Record<string, string> = { todos: "toda a empresa", departamento: "departamento", pessoa: "pessoa" };
+const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
+  "outubro", "novembro", "dezembro"];
+
+/** Período: datas (AAAA-MM-DD) e, se for parte do dia, os horários. */
+function periodoTH(o: Record<string, unknown>): string {
+  const ini = o.start_date, fim = o.end_date;
+  let t = !fim || fim === ini ? prazo(ini) : `${prazo(ini)} a ${prazo(fim)}`;
+  if (o.start_time && o.end_time) t += `, das ${v(o.start_time)} às ${v(o.end_time)}`;
+  return t;
+}
+const numeroBR = (x: unknown) => (typeof x === "number" ? String(x).replace(".", ",") : vazioHSG(x));
+/** "antes → depois" quando o servidor mandou o antes; senão só o valor novo. */
+const mudaTH = (antes: Record<string, unknown>, k: string, x: unknown, fmt: (y: unknown) => string = vazioHSG) =>
+  k in antes ? `${fmt(antes[k])} → ${fmt(x)}` : fmt(x);
+const textoTH = (x: unknown) => (x === null || x === undefined ? "" : String(x));
+
+type Partes = { titulo: string; linhas: [string, string][]; texto?: CartaoDaAcao["texto"];
+                checklists?: CartaoDaAcao["checklists"] };
+
+/** As aprovações em lote: a lista INTEIRA vai no cartão — aprovar o que não
+ *  aparece é justamente o que o cartão existe para evitar. */
+function loteTH(nome: string, p: Record<string, unknown>, ex: Record<string, unknown>): Partes | null {
+  const c = (p.campos as Record<string, unknown> | undefined) ?? {};
+  const itens = (ex.itens as Record<string, unknown>[] | undefined) ?? [];
+  const n = ((p.ids as string[] | undefined) ?? []).length;
+  const s = textoTH;
+  const nota: [string, string][] = c.note ? [["Observação", v(c.note)]] : [];
+  if (nome === "aprovar_ausencia" || nome === "recusar_ausencia")
+    return { titulo: plural(n, "pedido", "pedidos"), linhas: nota, checklists: [{ titulo: "Pedidos",
+      itens: itens.map((i) => ({ texto: [s(i.pessoa), s(i.tipo), s(i.datas)].filter(Boolean).join(" · ") })) }] };
+  if (nome === "aprovar_ajuste_ponto" || nome === "recusar_ajuste_ponto")
+    return { titulo: plural(n, "ajuste", "ajustes"), linhas: nota, checklists: [{ titulo: "Ajustes",
+      itens: itens.map((i) => ({ texto: `${s(i.pessoa)} · ${i.de ? dataBrasilia(i.de) : "?"} → `
+        + `${i.para ? dataBrasilia(i.para) : "?"}${i.motivo ? ` · ${s(i.motivo)}` : ""}` })) }] };
+  if (nome === "confirmar_batida" || nome === "recusar_batida")
+    return { titulo: plural(n, "batida", "batidas"), linhas: [], checklists: [{ titulo: "Batidas",
+      itens: itens.map((i) => ({ texto: [s(i.pessoa), BATIDA_TH[s(i.tipo)] ?? s(i.tipo),
+        i.quando ? dataBrasilia(i.quando) : "", s(i.motivo)].filter(Boolean).join(" · ") })) }] };
+  return null;
+}
+
+/** O que é do próprio dono: ausência, ponto, feedback, workshop, integração. */
+function doColaboradorTH(nome: string, c: Record<string, unknown>, ex: Record<string, unknown>): Partes | null {
+  const s = textoTH;
+  if (nome === "pedir_ausencia")
+    return { titulo: s(ex.tipo) || "Ausência",
+             linhas: [["Quando", periodoTH(c)], ...(c.reason ? [["Motivo", v(c.reason)] as [string, string]] : [])] };
+  if (nome === "cancelar_ausencia")
+    return { titulo: s(ex.tipo) || "Pedido de ausência", linhas: ex.datas ? [["Quando", s(ex.datas)]] : [] };
+  if (nome === "ajustar_ponto")
+    return { titulo: `Batida de ${BATIDA_TH[s(ex.tipo)] ?? "ponto"}`,
+             linhas: [["De", ex.batida ? dataBrasilia(ex.batida) : "?"], ["Para", dataBrasilia(c.requested_punched_at)],
+                      ["Motivo", v(c.reason)], ["Quem decide", "o RH"]] };
+  if (nome === "lancar_batida")
+    return { titulo: `Batida de ${BATIDA_TH[s(c.kind)] ?? v(c.kind)}`,
+             linhas: [["Horário", dataBrasilia(c.punched_at)], ["Motivo", v(c.reason)], ["Quem decide", "o RH"]] };
+  if (nome === "responder_feedback") {
+    const ant = ex.anterior as { rating?: unknown } | undefined;
+    const linhas: [string, string][] = ex.pergunta ? [["Pergunta", s(ex.pergunta)]] : [];
+    linhas.push(["Nota", ant ? `${vazioHSG(ant.rating)} → ${v(c.rating)}` : v(c.rating)]);
+    return { titulo: s(ex.pedido) || "Feedback", linhas,
+             texto: c.comment ? { rotulo: "Comentário", valor: v(c.comment) } : undefined };
+  }
+  if (nome === "inscrever_workshop" || nome === "sair_do_workshop") {
+    const linhas: [string, string][] = [];
+    if (ex.quando) linhas.push(["Quando", dataBrasilia(ex.quando)]);
+    if (ex.local) linhas.push(["Local", s(ex.local)]);
+    return { titulo: s(ex.workshop) || "Workshop", linhas };
+  }
+  if (nome === "concluir_tarefa_onboarding")
+    return { titulo: s(ex.tarefa) || "Tarefa",
+             linhas: [...(ex.pessoa ? [["De", s(ex.pessoa)] as [string, string]] : []),
+                      ["Marcar como", c.concluir ? "concluída" : "em aberto (reabrir)"]] };
+  return null;
+}
+
+/** Comunicado e calendário: o que toda a empresa vê. */
+function comunicacaoTH(nome: string, c: Record<string, unknown>, ex: Record<string, unknown>): Partes | null {
+  const s = textoTH;
+  const antes = (ex.antes as Record<string, unknown> | undefined) ?? {};
+  const linhas: [string, string][] = [];
+  if (nome === "criar_comunicado" || nome === "editar_comunicado") {
+    const novo = nome === "criar_comunicado";
+    if (!novo && c.title) linhas.push(["Título", mudaTH(antes, "title", c.title)]);
+    if (c.category) linhas.push(["Categoria", mudaTH(antes, "category", c.category)]);
+    else if (novo) linhas.push(["Categoria", "Geral"]);
+    if ("publicar" in c || novo)
+      linhas.push(["Situação", c.publicar ? "PUBLICADO — toda a empresa vê" : "rascunho (ninguém vê ainda)"]);
+    else if (antes.status) linhas.push(["Situação", `${STATUS_TH[s(antes.status)] ?? s(antes.status)} (mantém)`]);
+    return { titulo: s(c.title ?? ex.comunicado), linhas,
+             texto: c.content ? { rotulo: novo ? "Texto" : "Novo texto (substitui o atual)", valor: v(c.content) }
+                              : undefined };
+  }
+  if (nome === "criar_evento" || nome === "editar_evento") {
+    const novo = nome === "criar_evento";
+    if (!novo && c.title) linhas.push(["Título", mudaTH(antes, "title", c.title)]);
+    if (c.start_date || c.end_date) {
+      const ini = c.start_date ?? antes.start_date;
+      linhas.push(["Quando", periodoTH({ start_date: ini, end_date: c.end_date ?? (novo ? ini : antes.end_date) })]);
+    }
+    if (c.event_type) linhas.push(["Tipo", TIPO_EVENTO_TH[s(c.event_type)] ?? v(c.event_type)]);
+    if ("all_day" in c) linhas.push(["Dia inteiro", v(c.all_day)]);
+    linhas.push(["Quem vê", "toda a empresa"]);
+    return { titulo: s(c.title ?? ex.evento), linhas,
+             texto: c.description ? { rotulo: "Descrição", valor: v(c.description) } : undefined };
+  }
+  if (nome === "pedir_feedback")
+    return { titulo: v(c.title), linhas: [["Para", s(ex.alvo) || ALVO_TH[s(c.alvo)] || v(c.alvo)]],
+             texto: { rotulo: "Pergunta", valor: v(c.question) } };
+  return null;
+}
+
+/** PDI, metas, cursos e integração de outra pessoa (o RH). */
+function desenvolvimentoTH(nome: string, c: Record<string, unknown>, ex: Record<string, unknown>): Partes | null {
+  const s = textoTH;
+  const antes = (ex.antes as Record<string, unknown> | undefined) ?? {};
+  const linhas: [string, string][] = [];
+  const pessoa = () => { linhas.push(["Pessoa", s(ex.pessoa) || `user_id ${v(c.user_id)}`]); };
+  const descricao = (rotulo = "Descrição") => (c.description ? { rotulo, valor: v(c.description) } : undefined);
+  if (nome === "criar_pdi") {
+    pessoa();
+    if (ex.ciclo) linhas.push(["Ciclo", s(ex.ciclo)]);
+    const acoes = (c.acoes as Record<string, unknown>[] | undefined) ?? [];
+    const checklists = acoes.length ? [{ titulo: "Ações", itens: acoes.map((a) => ({
+      texto: [v(a.title), a.due_date ? `até ${prazo(a.due_date)}` : "", a.how ? `como: ${v(a.how)}` : ""]
+        .filter(Boolean).join(" · ") })) }] : [];
+    return { titulo: v(c.title), linhas, checklists, texto: descricao() };
+  }
+  if (nome === "editar_pdi") {
+    if (ex.pessoa) linhas.push(["Pessoa", s(ex.pessoa)]);
+    if (c.title) linhas.push(["Título", mudaTH(antes, "title", c.title)]);
+    if ("fechar" in c)
+      linhas.push(["Situação", `${STATUS_TH[s(antes.status)] ?? "?"} → ${c.fechar ? "fechado" : "aberto"}`]);
+    return { titulo: s(ex.plano) || "PDI", linhas, texto: descricao("Nova descrição (substitui a atual)") };
+  }
+  if (nome === "acrescentar_acao_pdi" || nome === "atualizar_acao_pdi") {
+    const nova = nome === "acrescentar_acao_pdi";
+    if (ex.pessoa) linhas.push(["Pessoa", s(ex.pessoa)]);
+    if (ex.plano) linhas.push(["PDI", s(ex.plano)]);
+    if (!nova && c.title) linhas.push(["Título", mudaTH(antes, "title", c.title)]);
+    if (c.status) linhas.push(["Situação", mudaTH(antes, "status", c.status, (y) => STATUS_TH[s(y)] ?? vazioHSG(y))]);
+    if (c.due_date) linhas.push(["Prazo", mudaTH(antes, "due_date", c.due_date, (y) => (y ? prazo(y) : "(vazio)"))]);
+    if (c.how) linhas.push(["Como", v(c.how)]);
+    return { titulo: nova ? v(c.title) : s(ex.acao) || "Ação do PDI", linhas, texto: descricao() };
+  }
+  if (nome === "lancar_realizado_meta") {
+    linhas.push(["Mês", MESES[Number(c.mes) - 1] ?? v(c.mes)]);
+    if (ex.planejado != null) linhas.push(["Planejado", numeroBR(ex.planejado)]);
+    linhas.push(["Realizado", mudaTH(antes, "actual_value", c.actual_value, numeroBR)]);
+    if (!c.comment && antes.comment) linhas.push(["Comentário", `${s(antes.comment)} (mantém)`]);
+    return { titulo: s(ex.meta) || "Meta", linhas,
+             texto: c.comment ? { rotulo: "Comentário (substitui o do mês)", valor: v(c.comment) } : undefined };
+  }
+  if (nome === "comentar_meta")
+    return { titulo: s(ex.meta) || "Meta", linhas, texto: { rotulo: "Comentário", valor: v(c.texto) } };
+  if (nome === "registrar_curso") {
+    pessoa();
+    linhas.push(["Área", v(c.area)]);
+    if (ex.catalogo) linhas.push(["Do catálogo", s(ex.catalogo)]);
+    if (c.hours != null) linhas.push(["Carga horária", `${numeroBR(c.hours)} h`]);
+    linhas.push(["Concluído em", c.completed_at ? prazo(c.completed_at) : "hoje"]);
+    return { titulo: v(c.course_title), linhas };
+  }
+  if (nome === "atribuir_onboarding") {
+    linhas.push(["Modelo", ex.modelo ? `${s(ex.modelo)} (${plural(Number(ex.tarefas ?? 0), "tarefa", "tarefas")})`
+      : "nenhum — checklist vazio"]);
+    linhas.push(["Início", c.started_at ? prazo(c.started_at) : "hoje"]);
+    return { titulo: s(ex.pessoa) || `user_id ${v(c.user_id)}`, linhas };
+  }
+  return null;
+}
+
+/** TalentHS. Os VALORES vêm do payload (`campos`, o que o servidor executa); o
+ *  `_exibir` só dá nome ao que é id (pessoa, tipo, plano, meta) e o "antes".
+ *  Os avisos do servidor (já nasce aprovado, publica para a empresa) viram
+ *  linhas "Atenção" no fim. */
+function cartaoDoTalentHS(acao: string, p: Record<string, unknown>, ex: Record<string, unknown>): CartaoDaAcao | null {
+  if (!acao.startsWith("talenths_")) return null;
+  const nome = acao.slice("talenths_".length);
+  const c = (p.campos as Record<string, unknown> | undefined) ?? {};
+  const partes = loteTH(nome, p, ex) ?? doColaboradorTH(nome, c, ex) ?? comunicacaoTH(nome, c, ex)
+    ?? desenvolvimentoTH(nome, c, ex);
+  if (!partes) return null;
+  const linhas = [...partes.linhas];
+  for (const a of (ex.avisos as string[] | undefined) ?? []) linhas.push(["Atenção", a]);
+  return { verbo: VERBO_TH[nome] ?? nome, titulo: partes.titulo, linhas, checklists: partes.checklists ?? [],
+           texto: partes.texto };
+}
+
 interface ItemDaProposta { descricao?: string; sku?: string; quantidade?: number; preco_un?: number }
 
 /** `1335` → `R$ 1.335,00`, sem `Intl` (o espaço dele é NBSP e varia por ambiente). */
@@ -495,6 +711,8 @@ export function cartaoDaAcao(acao: string, p: Record<string, unknown>): CartaoDa
   if (growth) return growth;
   const servicos = cartaoDoHSGrowthServicos(acao, p, ex);
   if (servicos) return servicos;
+  const talent = cartaoDoTalentHS(acao, p, ex);
+  if (talent) return talent;
   return { verbo: acao, titulo: "", checklists: [],
            linhas: Object.entries(p).filter(([k]) => k !== "_exibir").map(([k, x]) => [k, JSON.stringify(x)]) };
 }

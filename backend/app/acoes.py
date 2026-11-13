@@ -14,8 +14,10 @@ import httpx
 from app.gestorhs_escrita import texto_lote_parcial
 from app import hsgrowth_escrita as hge
 from app import hsgrowth_servicos_escrita as hgse
+from app import talenths_escrita as te
+from app import talenths_preparo as tp
 from app.config import settings
-from app.sistemas import gestorhs, hsgrowth, taskhs
+from app.sistemas import gestorhs, hsgrowth, talenths, taskhs
 
 Executor = Callable[..., Awaitable[str]]
 
@@ -751,6 +753,92 @@ async def _hsgrowth_servicos_anexar(email, bot, p, dono=None) -> str:
     return _fim(entrou, p)
 
 
+# ── TalentHS (spec 2026-11-13-guardi-talenths-escrita) ───────────────────────
+# Um executor genérico com a tabela de `app/talenths_escrita.py`. O payload é
+# {acao, id|ids, campos, _marca, _exibir}: o que executa são os CAMPOS gravados;
+# o caminho e o corpo saem do catálogo, nunca do payload.
+#
+# ⚠️ No clique, RELÊ antes de gravar (`talenths_preparo.conferir`, a mesma do
+# preparo): recusa nova ou `_marca` diferente = nada é gravado. Lote e PDI
+# executam em ordem e, se falharem no meio, PARAM e NÃO desfazem — dizendo o
+# que entrou (a regra do GestorHS).
+
+def _rotulo_th(ex: dict, i: int | None = None) -> str:
+    if i is not None:
+        it = ((ex.get("itens") or [])[i:i + 1] or [{}])[0]
+        partes = [it.get("pessoa"), it.get("tipo") if "datas" in it else None, it.get("datas")]
+        return " · ".join(str(x) for x in partes if x) or f"item {i + 1}"
+    return ""
+
+
+async def _th(email, bot, dono, metodo, caminho, corpo=None, files=None):
+    return await talenths.chamar(email, bot, caminho, dono=dono, metodo=metodo, json=corpo, files=files)
+
+
+def _executor_talenths(acao: str) -> Executor:
+    async def executar(email, bot, p, dono=None) -> str:
+        pedido = {k: p[k] for k in ("acao", "id", "ids", "campos") if k in p}
+        if pedido.get("acao") != acao:
+            raise talenths.ErroSistema(409, "o cartão não corresponde à ação gravada")
+        campos = pedido.get("campos") or {}
+
+        async def get(caminho, params=None):
+            return await talenths.chamar(email, bot, caminho, params=params, dono=dono)
+
+        try:
+            est = await tp.conferir(get, pedido)
+        except ValueError as e:
+            raise talenths.ErroSistema(409, f"Não gravei nada: {e}") from e
+        mudou = tp.diferencas(p.get("_marca") or {}, est["marca"])
+        if mudou:
+            raise talenths.ErroSistema(
+                409, "Mudou no TalentHS desde o cartão (" + "; ".join(mudou[:5]) + "). Não gravei nada — "
+                     "peça ao Guardi um cartão novo.")
+        a = te.ACOES[acao]
+        ex = p.get("_exibir") or {}
+        verbo = tp.VERBOS[acao]
+
+        if "ids" in pedido:
+            ids, entrou = pedido["ids"], []
+            for n, ident in enumerate(ids):
+                try:
+                    await _th(email, bot, dono, a.metodo, te.rota(acao, ident, campos), te.corpo(acao, campos))
+                except talenths.ErroSistema as e:
+                    ja = "; ".join(entrou) if entrou else "nada"
+                    raise talenths.ErroSistema(
+                        e.status, f"Parou no item {n + 1} de {len(ids)} ({_rotulo_th(ex, n)}): {e}. "
+                                  f"Já entrou: {ja}. Nada foi desfeito.") from e
+                entrou.append(_rotulo_th(ex, n))
+            return f"Feito no TalentHS — {verbo}: " + "; ".join(entrou) + "."
+
+        if acao == "criar_pdi":
+            plano = await _th(email, bot, dono, "POST", "/pdi/plans", te.corpo_do_plano(campos))
+            pid = (plano or {}).get("id") if isinstance(plano, dict) else None
+            if not pid:
+                raise talenths.ErroSistema(502, "o TalentHS não devolveu o id do PDI criado — confira lá antes "
+                                                "de repetir")
+            acoes_pdi = campos.get("acoes") or []
+            for n, ac in enumerate(acoes_pdi):
+                try:
+                    await _th(email, bot, dono, "POST", te.rota("acrescentar_acao_pdi", str(pid), {}),
+                              te.corpo_da_acao_pdi(ac))
+                except talenths.ErroSistema as e:
+                    raise talenths.ErroSistema(
+                        e.status, f"Parou na ação {n + 1} de {len(acoes_pdi)} (“{ac.get('title')}”): {e}. "
+                                  f"Já entrou: o PDI e {n} ação(ões). Nada foi desfeito.") from e
+            return (f"Feito no TalentHS — PDI “{campos.get('title')}” criado para {ex.get('pessoa') or 'a pessoa'}"
+                    f" com {len(acoes_pdi)} ação(ões).")
+
+        caminho = te.rota(acao, pedido.get("id"), campos)
+        if acao == "comentar_meta":
+            # Multipart com o campo de formulário `body` e nenhum arquivo.
+            await _th(email, bot, dono, "POST", caminho, files={"body": (None, campos["texto"])})
+        else:
+            await _th(email, bot, dono, a.metodo, caminho, te.corpo(acao, campos, est["atual"]))
+        return f"Feito no TalentHS — {tp.resumo(pedido, ex).removeprefix('TalentHS · ')}."
+    return executar
+
+
 EXECUTORES: dict[tuple[str, str], Executor] = {
     ("taskhs", "comentar"): _taskhs_comentar,
     ("taskhs", "mover"): _taskhs_mover,
@@ -775,6 +863,9 @@ EXECUTORES: dict[tuple[str, str], Executor] = {
     ("hsgrowth_servicos", "hsgrowth_servicos_ganhar"): _hsgrowth_servicos_ganhar,
     ("hsgrowth_servicos", "hsgrowth_servicos_perder"): _hsgrowth_servicos_perder,
     ("hsgrowth_servicos", "hsgrowth_servicos_anexar_proposta"): _hsgrowth_servicos_anexar,
+    # Prefixo `talenths_`: não colide com os nomes do TaskHS/GestorHS (o
+    # `cartaoDaAcao` do front despacha pelo nome).
+    **{("talenths", f"talenths_{a}"): _executor_talenths(a) for a in te.ACOES},
 }
 
 

@@ -346,3 +346,79 @@ describe("cartão do HSGrowth Serviços", () => {
       ["Arquivo", "Proposta 1234.pdf"], ["Substitui", "Proposta 1200.pdf"], ["Atenção", "substitui Proposta 1200.pdf"]]);
   });
 });
+
+describe("cartão do TalentHS", () => {
+  it("sistema no cabeçalho e verbo por ação", () => {
+    expect(nomeDoSistema("talenths")).toBe("TalentHS");
+    expect(cartaoDaAcao("talenths_aprovar_ausencia", { acao: "aprovar_ausencia", ids: [], campos: {} }).verbo)
+      .toBe("Aprovar ausência");
+  });
+  it("ausência parcial mostra dia e horários do payload; aviso vira Atenção", () => {
+    const c = cartaoDaAcao("talenths_pedir_ausencia", {
+      acao: "pedir_ausencia",
+      campos: { type_id: "t", start_date: "2026-11-17", start_time: "13:00", end_time: "18:00", reason: "obra" },
+      _exibir: { tipo: "Folga", avisos: ["“Folga” não pede aprovação: o pedido já nasce APROVADO."] } });
+    expect(c.titulo).toBe("Folga");
+    expect(c.linhas).toEqual([["Quando", "17/11/2026, das 13:00 às 18:00"], ["Motivo", "obra"],
+      ["Atenção", "“Folga” não pede aprovação: o pedido já nasce APROVADO."]]);
+  });
+  it("lote de aprovação mostra a lista INTEIRA", () => {
+    // Aprovar o que o cartão não mostrou é o que a releitura no clique e o cartão evitam.
+    const c = cartaoDaAcao("talenths_aprovar_ausencia", {
+      acao: "aprovar_ausencia", ids: ["a", "b"], campos: { note: "ok" },
+      _exibir: { itens: [{ pessoa: "Paulo", tipo: "Férias", datas: "2026-12-01 a 2026-12-10" },
+                         { pessoa: "Erick", tipo: "Folga", datas: "2026-11-17" }] } });
+    expect(c.titulo).toBe("2 pedidos");
+    expect(c.checklists[0].itens.map((i) => i.texto))
+      .toEqual(["Paulo · Férias · 2026-12-01 a 2026-12-10", "Erick · Folga · 2026-11-17"]);
+    expect(c.linhas).toEqual([["Observação", "ok"]]);
+  });
+  it("horário do ponto em Brasília, com ou sem fuso no texto", () => {
+    const c = cartaoDaAcao("talenths_ajustar_ponto", {
+      acao: "ajustar_ponto", id: "b", campos: { requested_punched_at: "2026-11-12T08:00:00-03:00", reason: "trânsito" },
+      _exibir: { batida: "2026-11-12T11:02:00+00:00", tipo: "in" } });
+    expect(c.titulo).toBe("Batida de entrada");
+    expect(c.linhas.slice(0, 2)).toEqual([["De", "12/11/2026 08:02"], ["Para", "12/11/2026 08:00"]]);
+  });
+  it("comunicado: rascunho por padrão; publicado é dito com todas as letras", () => {
+    const rascunho = cartaoDaAcao("talenths_criar_comunicado", {
+      acao: "criar_comunicado", campos: { title: "Feriado", content: "Dia 20" } });
+    expect(rascunho.linhas).toContainEqual(["Situação", "rascunho (ninguém vê ainda)"]);
+    expect(rascunho.texto).toEqual({ rotulo: "Texto", valor: "Dia 20" });
+    const publicado = cartaoDaAcao("talenths_criar_comunicado", {
+      acao: "criar_comunicado", campos: { title: "Feriado", content: "Dia 20", publicar: true } });
+    expect(publicado.linhas).toContainEqual(["Situação", "PUBLICADO — toda a empresa vê"]);
+  });
+  it("editar comunicado sem `publicar` diz que mantém a situação", () => {
+    const c = cartaoDaAcao("talenths_editar_comunicado", {
+      acao: "editar_comunicado", id: "x", campos: { title: "Feriado (20/11)" },
+      _exibir: { comunicado: "Feriado", antes: { title: "Feriado", status: "published" } } });
+    expect(c.linhas).toEqual([["Título", "Feriado → Feriado (20/11)"], ["Situação", "publicado (mantém)"]]);
+  });
+  it("evento sempre diz que toda a empresa vê", () => {
+    const c = cartaoDaAcao("talenths_criar_evento", {
+      acao: "criar_evento", campos: { title: "Feriado", start_date: "2026-11-20", event_type: "holiday" } });
+    expect(c.linhas).toEqual([["Quando", "20/11/2026"], ["Tipo", "Feriado"], ["Quem vê", "toda a empresa"]]);
+  });
+  it("realizado mostra o antes e que o comentário fica", () => {
+    const c = cartaoDaAcao("talenths_lancar_realizado_meta", {
+      acao: "lancar_realizado_meta", id: "m", campos: { mes: 11, actual_value: 95.5 },
+      _exibir: { meta: "Faturamento", planejado: 100, antes: { actual_value: 80, comment: "parcial" } } });
+    expect(c.titulo).toBe("Faturamento");
+    expect(c.linhas).toEqual([["Mês", "novembro"], ["Planejado", "100"], ["Realizado", "80 → 95,5"],
+      ["Comentário", "parcial (mantém)"]]);
+  });
+  it("PDI novo lista as ações com prazo e mostra a pessoa pelo nome", () => {
+    const c = cartaoDaAcao("talenths_criar_pdi", {
+      acao: "criar_pdi", campos: { user_id: "u", title: "Liderança",
+        acoes: [{ title: "Curso" }, { title: "Mentoria", due_date: "2026-12-15" }] },
+      _exibir: { pessoa: "Paulo Lima", ciclo: "2026" } });
+    expect(c.linhas).toEqual([["Pessoa", "Paulo Lima"], ["Ciclo", "2026"]]);
+    expect(c.checklists[0].itens.map((i) => i.texto)).toEqual(["Curso", "Mentoria · até 15/12/2026"]);
+  });
+  it("tarefa de integração diz o estado pedido, não um toggle", () => {
+    const c = cartaoDaAcao("talenths_concluir_tarefa_onboarding", {
+      acao: "concluir_tarefa_onboarding", id: "t", campos: { concluir: false }, _exibir: { tarefa: "Ler o manual" } });
+    expect(c.linhas).toEqual([["Marcar como", "em aberto (reabrir)"]]);
+  });
+});

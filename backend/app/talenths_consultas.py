@@ -60,6 +60,12 @@ CONSULTAS: dict[str, tuple[str, str, tuple[str, ...], tuple[str, ...]]] = {
                           _LOCAL, ()),
     "calendario_de_ausencias": ("/absences/calendar", "quem está ausente (ausências aprovadas "
                                 "da empresa)", _LOCAL, ()),
+    # Leituras da escrita (spec 2026-11-13-guardi-talenths-escrita): o id do
+    # evento para `editar_evento` e o do modelo para `atribuir_onboarding`.
+    "eventos": ("/calendar/events", "os eventos do calendário da empresa, com o id de cada um",
+                _LOCAL, ()),
+    "modelos_de_onboarding": ("/onboarding/templates", "os modelos de checklist de integração, com as "
+                              "tarefas — só o RH", _LOCAL, ()),
     "calendario": ("/calendar/feed", "o calendário da empresa (eventos; o RH vê também as "
                    "ausências)", _LOCAL, ()),
     "meu_ponto_hoje": ("/timeclock/my/today", "as batidas de hoje do seu dono e o resumo do dia",

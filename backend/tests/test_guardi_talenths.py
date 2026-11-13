@@ -131,7 +131,7 @@ def test_sem_talenths_ligado_recusa_sem_rede(chave, monkeypatch):
         lambda r: chamadas.append(r) or httpx.Response(200, json={})))
     for nome in ("talenths_consultas", "talenths_consultar"):
         with pytest.raises(mcp_bot._Recusa):
-            asyncio.run(mcp_bot._talenths("ana-bot", nome, {"consulta": "eu"},
+            asyncio.run(mcp_bot._talenths(None, "ana-bot", nome, {"consulta": "eu"},
                                           {**_CTX, "sistemas": ["taskhs"]}))
     assert chamadas == []
 
@@ -141,7 +141,7 @@ def test_consulta_vira_get_e_dado_externo(chave, monkeypatch):
     reqs = []
     monkeypatch.setattr(talenths, "_transporte", httpx.MockTransport(
         lambda r: reqs.append(r) or httpx.Response(200, json=[{"id": "a1", "status": "pending"}])))
-    t = asyncio.run(mcp_bot._talenths("ana-bot", "talenths_consultar",
+    t = asyncio.run(mcp_bot._talenths(None, "ana-bot", "talenths_consultar",
                                       {"consulta": "minhas_ausencias"}, _CTX))
     assert reqs[0].url.path == "/absences/my" and reqs[0].url.query == b""
     assert "DADO_EXTERNO" in t and "origem: TalentHS" in t and "pending" in t
@@ -153,13 +153,13 @@ def test_filtro_errado_nao_gasta_chamada(chave, monkeypatch):
     monkeypatch.setattr(talenths, "_transporte", httpx.MockTransport(
         lambda r: reqs.append(r) or httpx.Response(200, json={})))
     with pytest.raises(ValueError):
-        asyncio.run(mcp_bot._talenths("ana-bot", "talenths_consultar", {"consulta": "metas"}, _CTX))
+        asyncio.run(mcp_bot._talenths(None, "ana-bot", "talenths_consultar", {"consulta": "metas"}, _CTX))
     assert reqs == []
 
 
 def test_lista_de_consultas_marca_obrigatorios(chave):
     from app.routers import mcp_bot
-    t = asyncio.run(mcp_bot._talenths("ana-bot", "talenths_consultas", {"consulta": "metas"}, _CTX))
+    t = asyncio.run(mcp_bot._talenths(None, "ana-bot", "talenths_consultas", {"consulta": "metas"}, _CTX))
     assert "cycle_id*" in t and "minhas_ausencias" not in t
 
 

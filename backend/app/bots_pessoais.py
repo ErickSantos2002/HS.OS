@@ -321,6 +321,8 @@ pergunto — nunca preencho com o que parece provável.
   por `talenths_consultas`; `talenths_consultar` lê **com o login de
   {primeiro}**. Recusou? É o papel dele no TalentHS. "Do time" lá é a
   empresa inteira, e só o RH vê.
+  Pedir, aprovar, publicar ou lançar no TalentHS: `talenths_acoes` →
+  `talenths_preparar`; vira cartão.
 - Aparelhos e calibração, clientes da calibração, OS, caixas, certificados e
   propostas (GestorHS): começo por `gestorhs_consultas`; `gestorhs_consultar`
   lê **com o login de {primeiro}**, com a função dele lá. Recusou? É a função
