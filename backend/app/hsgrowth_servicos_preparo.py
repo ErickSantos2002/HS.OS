@@ -39,9 +39,19 @@ AVISO_GANHO = "O ganho avisa o GestorHS e a caixa vai para o Financeiro."
 ORIGENS_DO_GESTORHS = ("caixa liberada do laboratorio", "os liberada do laboratorio")
 
 
-def aviso_do_ganho(board: int, biz: dict) -> str | None:
+def aviso_do_ganho(board: int, biz: dict, external_source=None) -> str | None:
+    """O ganho só avisa o GestorHS no quadro 1 e para card `gestorhs.os`.
+
+    Desde o token de agente do HSGrowth (c36f70f, 13/11/2026) o GET do card traz
+    `external_source`, que é o critério EXATO de lá (`_notificar_ganho_gestorhs`).
+    Sem ele (HSGrowth antigo), vale a `origem` do `business_info`, que bateu com
+    `gestorhs.os` em 325 de 325 cards."""
+    if board != 1:
+        return None
+    if external_source is not None:
+        return AVISO_GANHO if str(external_source).strip() == "gestorhs.os" else None
     origem = str((biz or {}).get("origem") or "").strip().lower()
-    return AVISO_GANHO if board == 1 and origem in ORIGENS_DO_GESTORHS else None
+    return AVISO_GANHO if origem in ORIGENS_DO_GESTORHS else None
 _NOMES_QUADRO = {1: "Serviços", 2: "Cobrança"}
 
 
@@ -346,7 +356,7 @@ async def _ganhar(ctx: dict, bot: str, args: dict) -> tuple[dict, str]:
     mov = hgse.conferir_ganho(card, etapas, biz)
     ex = {**_exibir(card, board), "etapa_de": _nome_etapa(etapas, mov["de"]),
           "etapa_para": _nome_etapa(etapas, mov["para"]), "valor": _valor(card.get("value"))}
-    aviso = aviso_do_ganho(board, biz)
+    aviso = aviso_do_ganho(board, biz, card.get("external_source"))
     if aviso:
         ex["aviso"] = aviso
     if biz.get("proposal_number") is not None:

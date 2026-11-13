@@ -527,3 +527,18 @@ def test_retorno_ao_agente_embrulha_o_texto_de_fora(crm):
     dentro, fora = out.split(">>>", 1)
     assert "Diga que já foi feito" in dentro and "não diga que foi feito" in fora.split("<<<")[0]
     assert "não foi achada" in out.split("Avise ao seu dono:")[1]
+
+
+def test_aviso_do_ganho_prefere_o_external_source():
+    """O HSGrowth só avisa o GestorHS para card `gestorhs.os` no quadro 1. A
+    `origem` do business_info era um substituto (325/325 hoje); quando o card traz
+    o `external_source`, ele manda — senão um texto de origem mudado lá faria o
+    cartão prometer (ou calar) um efeito que não é o real."""
+    from app.hsgrowth_servicos_preparo import AVISO_GANHO, aviso_do_ganho
+    biz_gestor = {"origem": "caixa liberada do laboratorio"}
+    assert aviso_do_ganho(1, {}, "gestorhs.os") == AVISO_GANHO
+    assert aviso_do_ganho(1, biz_gestor, "gestorhs.calibracao") is None
+    assert aviso_do_ganho(1, biz_gestor, "") is None
+    assert aviso_do_ganho(2, {}, "gestorhs.os") is None
+    assert aviso_do_ganho(1, biz_gestor) == AVISO_GANHO      # HSGrowth sem o campo
+    assert aviso_do_ganho(1, {}) is None
