@@ -29,7 +29,7 @@ FERRAMENTAS_BOT = ("lembrar", "taskhs_eu", "datacore_consultas", "datacore_consu
                    "gestorhs_cadastrar_aparelho", "gestorhs_gerar_certificado", "gestorhs_criar_proposta",
                    "gestorhs_alterar_proposta",
                    "taskhs_minhas", "taskhs_quadros", "taskhs_quadro",
-                   "taskhs_tarefa", "taskhs_buscar", "taskhs_membros_quadro", "taskhs_comentar",
+                   "taskhs_tarefa", "taskhs_buscar", "taskhs_parados", "taskhs_membros_quadro", "taskhs_comentar",
                    "taskhs_mover", "taskhs_criar", "taskhs_atualizar", "taskhs_membros",
                    "agenda_criar", "agenda_listar", "agenda_editar", "agenda_apagar")
 

@@ -462,6 +462,14 @@ FERRAMENTAS = [
     _f("taskhs_tarefa", "Detalhe de uma tarefa, com os checklists e os ids dos itens." + _DADO, {"list_id": _INT, "card_id": _INT},
        ("list_id", "card_id")),
     _f("taskhs_buscar", "Busca tarefas pelo texto." + _DADO, {"q": {"type": "string"}}, ("q",)),
+    _f("taskhs_parados", "Cards PARADOS/atrasados pelas réguas do Dashboard do TaskHS (a da "
+       "Qualidade) — NÃO usa prazo, que quase ninguém preenche. `regua`=\"criacao\" (padrão): mais de "
+       "72 h úteis desde a criação, fora das listas de concluído. `regua`=\"lista\": mais de 24 h úteis "
+       "na MESMA lista, somados pelo setor da lista (\"travados por setor\"); `setor` filtra pelo "
+       "nome. Sem `board_id`, todos os quadros. Só administrador e coordenador do TaskHS veem." + _DADO,
+       {"regua": {"type": "string", "enum": ["criacao", "lista"]},
+        "board_id": {**_INT, "description": "opcional: só este quadro (taskhs_quadros)"},
+        "setor": {"type": "string", "description": "opcional, régua \"lista\": nome do setor (ex.: Laboratório)"}}),
     _f("taskhs_membros_quadro", "Quem é membro de um quadro, com o user_id de cada pessoa — só "
        "elas podem entrar numa tarefa do quadro." + _DADO, {"board_id": _INT}, ("board_id",)),
     _f("taskhs_comentar", "Comentar numa tarefa." + _CONFIRMA,
@@ -866,6 +874,60 @@ def texto_minhas(abertas: list[dict], fechadas: int) -> str:
             "como de concluído, quem corrige é o dono do quadro, no TaskHS.")
 
 
+_TETO_PARADOS = 60
+
+
+def _sem_acento(t: str) -> str:
+    import unicodedata
+    return "".join(ch for ch in unicodedata.normalize("NFD", t or "") if unicodedata.category(ch) != "Mn").lower()
+
+
+def _tempo_util(h) -> str:
+    """Horas úteis do TaskHS contam 24 h por dia de semana: 2025.4 h ≈ 84 dias úteis."""
+    h = float(h or 0)
+    return f"{h:.0f} h úteis (~{h / 24:.0f} dias úteis)" if h >= 48 else f"{h:.0f} h úteis"
+
+
+def texto_parados(dash: dict, regua: str, setor: str | None = None) -> str:
+    """O retorno do `taskhs_parados`, a partir do `GET /dashboard` do TaskHS.
+
+    ⚠️ 13/11/2026: o Gustavo (Qualidade) pediu ao Guardi os cards "atrasados" e
+    o bot só tinha `prazo` para olhar — campo que quase ninguém preenche, então a
+    resposta era "nenhum atrasado" com 124 no Dashboard. Atraso no TaskHS é a
+    régua da Qualidade: horas ÚTEIS desde a criação (72 h) ou na lista atual
+    (24 h, por setor). Quem calcula é o TaskHS; aqui só se formata, para o número
+    do Guardi e o da tela nunca divergirem.
+    """
+    if regua == "lista":
+        itens = list(dash.get("travados_setor") or [])
+        nomes = {t.get("setor_id"): t.get("nome") for t in dash.get("travados_por_setor") or []}
+        if setor:
+            alvo = _sem_acento(setor).strip()
+            ids = {i for i, n in nomes.items() if alvo in _sem_acento(n or "")}
+            if not ids:
+                return (f"Nenhum setor com o nome \"{setor}\" neste recorte. Setores: "
+                        + (", ".join(n for n in nomes.values() if n) or "nenhum") + ".")
+            itens = [t for t in itens if t.get("setor_id") in ids]
+        resumo = ", ".join(f"{t.get('nome')} {t.get('total')}" for t in dash.get("travados_por_setor") or []
+                           if t.get("total"))
+        cab = (f"{len(itens)} card(s) há mais de 24 h úteis na MESMA lista (só listas com setor, fora "
+               f"das de concluído)." + (f" Por setor: {resumo}." if resumo and not setor else ""))
+        linhas = [f"- card {t.get('card_id')} (lista {t.get('list_id')} '{t.get('list_title')}', quadro "
+                  f"'{t.get('board_title')}', setor {nomes.get(t.get('setor_id'), '?')}) | {t.get('title')} | "
+                  f"{_tempo_util(t.get('horas_uteis'))} na lista" for t in itens[:_TETO_PARADOS]]
+    else:
+        itens = sorted(dash.get("atrasados") or [], key=lambda t: -(t.get("horas_uteis") or 0))
+        cab = (f"{len(itens)} card(s) há mais de 72 h úteis desde a criação (só dias de semana, fora "
+               f"das listas de concluído).")
+        linhas = [f"- card {t.get('card_id')} (lista {t.get('list_id')} '{t.get('list_title')}', quadro "
+                  f"'{t.get('board_title')}') | {t.get('title')} | {_tempo_util(t.get('horas_uteis'))} desde a criação"
+                  for t in itens[:_TETO_PARADOS]]
+    if len(itens) > _TETO_PARADOS:
+        cab += (f" Mostrando os {_TETO_PARADOS} mais parados; para ver o resto, filtre por board_id"
+                + (" ou setor." if regua == "lista" else "."))
+    return "\n".join([cab, *linhas])
+
+
 def _marcar_itens(v, card: dict) -> list[dict]:
     """Só item que EXISTE no card relido — o cartão mostra o texto dele, e um
     id inventado viraria 404 depois do clique do dono."""
@@ -995,6 +1057,25 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
         return como_dado_externo_taskhs("\n".join(
             f"- card {r.get('card_id')} (lista {r.get('list_id')}, quadro '{r.get('board_title')}') | "
             f"{r.get('title') or r.get('card_title')}" for r in (rs or [])[:30]) or "(nada)")
+
+    if nome == "taskhs_parados":
+        regua = "lista" if args.get("regua") == "lista" else "criacao"
+        params = {"periodo": 7}
+        if args.get("board_id") not in (None, ""):
+            params["board_id"] = _int(args, "board_id")
+        dash = await taskhs.chamar(em, bot, "GET", "/dashboard", params=params, dono=ctx["dono"]) or {}
+        vazio = not (dash.get("atrasados") or dash.get("travados_setor") or dash.get("travados_por_setor"))
+        if vazio and (dash.get("kpis") or {}).get("cards_ativos"):
+            # O TaskHS zera as réguas para quem não é administrador nem coordenador
+            # (v2.12.1, pedido da Qualidade) — vazio aqui não quer dizer "nada parado".
+            eu = await taskhs.chamar(em, bot, "GET", "/auth/me", dono=ctx["dono"]) or {}
+            if eu.get("role") not in ("administrador", "coordenador"):
+                raise _Recusa("As réguas de cards parados do TaskHS só aparecem para administrador e "
+                              "coordenador de lá — o papel do seu dono no TaskHS não as vê.")
+        if dash.get("fora_do_alerta"):
+            return como_dado_externo_taskhs("Este quadro está marcado no TaskHS como fora do alerta: "
+                                            "os cards dele não entram nas réguas de parados.")
+        return como_dado_externo_taskhs(texto_parados(dash, regua, args.get("setor")))
 
     if nome == "taskhs_membros_quadro":
         ms = await taskhs.chamar(em, bot, "GET", f"/boards/{_int(args, 'board_id')}/members", dono=ctx["dono"])
