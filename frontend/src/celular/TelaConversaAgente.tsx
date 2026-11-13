@@ -6,12 +6,13 @@
  * Aqui só mora a tela.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BrainCircuit, History, Paperclip, RotateCcw } from "lucide-react";
+import { BrainCircuit, History, Paperclip, RotateCcw, Sparkles } from "lucide-react";
 
 import ArtifactPanel from "@/components/chat/ArtifactPanel";
 import ChannelFilesPanel from "@/components/chat/ChannelFilesPanel";
 import { ContextWindowIndicator } from "@/components/chat/ContextWindowIndicator";
 import ConversasAnteriores from "@/components/chat/ConversasAnteriores";
+import Capacidade from "@/components/guardi/Capacidade";
 import { SeloDoModelo } from "@/components/chat/SeloDoModelo";
 import { PainelEmbutido } from "@/components/chat/painel-embutido";
 import LiveArtifactViewer from "@/components/LiveArtifactViewer";
@@ -27,6 +28,7 @@ import { usePersistentDraft } from "@/hooks/use-persistent-draft";
 import { acoesDaMensagemDoAgente } from "@/lib/acoes-da-mensagem";
 import { toCanonicalAgentId } from "@/lib/agent-id";
 import type { ArtifactType } from "@/lib/artifact-extractor";
+import { ehMeuGuardi } from "@/lib/bots-pessoais";
 import { acrescentarCitacao } from "@/lib/conversas-anteriores";
 import type { ChatMessage } from "@/lib/mock-data";
 import { Cabecalho, Sobreposta } from "./Cabecalho";
@@ -190,6 +192,10 @@ export function TelaConversaAgente({
         itens={[
           { rotulo: "Arquivos da conversa", icone: <Paperclip />, aoEscolher: () => aoAbrir({ tipo: "painel", painel: "arquivos" }) },
           { rotulo: "Conversas anteriores", icone: <History />, aoEscolher: () => aoAbrir({ tipo: "painel", painel: "anteriores" }) },
+          // Só no Guardi DO usuário: a rota responde 404 a qualquer outro.
+          ...(ehMeuGuardi(agente, user?.id)
+            ? [{ rotulo: "Capacidade", icone: <Sparkles />, aoEscolher: () => aoAbrir({ tipo: "painel", painel: "capacidade" }) }]
+            : []),
           { rotulo: "Modelo e contexto", icone: <BrainCircuit />, aoEscolher: () => aoAbrir({ tipo: "painel", painel: "contexto" }) },
           { rotulo: "Nova conversa", icone: <RotateCcw />, aoEscolher: () => setConfirmarNova(true) },
         ]}
@@ -225,6 +231,13 @@ export function TelaConversaAgente({
           <PainelEmbutido>
             <ChannelFilesPanel endpoint={`/conversations/${agentId}/arquivos`} open onClose={voltarDoPainel} />
           </PainelEmbutido>
+        </Sobreposta>
+      )}
+      {painel === "capacidade" && (
+        <Sobreposta titulo="Capacidade" aoVoltar={voltarDoPainel}>
+          <div className="cel-painel-conteudo">
+            <Capacidade agentId={agentId} aberto />
+          </div>
         </Sobreposta>
       )}
       {painel === "contexto" && (

@@ -68,6 +68,18 @@ CONSULTAS: dict[str, tuple[str, str, tuple[str, ...]]] = {
                      "verificação deles — só a Qualidade", _LOCAL),
 }
 
+# O que a pessoa diria ao Guardi para chegar a esta consulta — só para a tela
+# "Capacidade" (`app/capacidade.py`). Opcional: sem exemplo, a tela mostra só o
+# rótulo. O agente não lê isto: ele lê a descrição acima.
+EXEMPLOS: dict[str, str] = {
+    "documentos": "acha o procedimento de calibração",
+    "minhas_leituras": "tenho leitura pendente?",
+    "minhas_pendencias": "o que eu tenho para fazer no DocsHS?",
+    "meus_treinamentos": "quais treinamentos eu já fiz?",
+    "treinamentos": "quais treinamentos estão abertos este ano?",
+    "leituras_por_pessoa": "quem está com leitura vencida?",
+}
+
 # Consultas cuja resposta traz documento ou treinamento — e onde está o id.
 _LINK_DE_ID = {"documentos": "/documentos/", "documento": "/documentos/",
                "treinamentos": "/treinamentos/", "treinamento": "/treinamentos/"}

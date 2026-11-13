@@ -56,6 +56,19 @@ CONSULTAS: dict[str, tuple[str, str]] = {
     "itens_da_nota_de_entrada": ("/notas_entrada/{id}/itens", "itens de uma nota de entrada (id da nota)"),
 }
 
+# O que a pessoa diria ao Guardi para chegar a esta consulta — só para a tela
+# "Capacidade" (`app/capacidade.py`). Opcional: sem exemplo, a tela mostra só o
+# rótulo. O agente não lê isto: ele lê a descrição acima.
+EXEMPLOS: dict[str, str] = {
+    "clientes": "procura o cliente Vale no DataCore",
+    "estoque": "quantos bafômetros temos em estoque?",
+    "faturamento_resumo": "quanto faturamos neste trimestre?",
+    "vendas": "quais vendas saíram ontem?",
+    "contas_receber_resumo": "quanto temos a receber este mês?",
+    "contas_pagar_resumo": "quanto temos a pagar este mês?",
+    "inadimplencia_resumo": "como está a inadimplência?",
+}
+
 
 def caminho_da_consulta(chave: str, ident: str | None) -> str:
     if chave not in CONSULTAS:

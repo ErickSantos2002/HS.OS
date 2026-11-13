@@ -11,6 +11,15 @@ export function ehBotPessoal(a: object): boolean {
   return !!dono(a);
 }
 
+/**
+ * O Guardi DE QUEM ESTÁ LOGADO — não um Guardi qualquer. A "Capacidade" só
+ * aparece aqui: ela descreve as permissões de uma pessoa nos sistemas dela, e a
+ * rota responde 404 a qualquer outro (inclusive o administrador).
+ */
+export function ehMeuGuardi(a: object | null | undefined, userId: string | null | undefined): boolean {
+  return !!a && !!userId && dono(a) === userId;
+}
+
 export function soEspecialistas<T extends object>(lista: T[]): T[] {
   return lista.filter((a) => !ehBotPessoal(a));
 }

@@ -143,6 +143,21 @@ CONSULTAS: dict[str, tuple[str, str, tuple[str, ...], tuple[str, ...]]] = {
     "relatorio_cursos": ("/reports/learning", "relatório da Universidade — só o RH", _LOCAL, ()),
 }
 
+# O que a pessoa diria ao Guardi para chegar a esta consulta — só para a tela
+# "Capacidade" (`app/capacidade.py`). Opcional: sem exemplo, a tela mostra só o
+# rótulo. O agente não lê isto: ele lê a descrição acima.
+EXEMPLOS: dict[str, str] = {
+    "minhas_ausencias": "quais ausências eu pedi?",
+    "calendario_de_ausencias": "quem está de férias esta semana?",
+    "ausencias_do_time": "quais pedidos de ausência estão pendentes?",
+    "meu_ponto_hoje": "como está o meu ponto hoje?",
+    "meu_pdi": "como está o meu PDI?",
+    "meus_cursos": "quais cursos eu estou fazendo?",
+    "meus_beneficios": "quais benefícios eu tenho?",
+    "aniversarios": "quem faz aniversário este mês?",
+    "comunicados": "quais são os comunicados recentes?",
+}
+
 
 def caminho_da_consulta(chave: str, ident: str | None) -> str:
     if chave not in CONSULTAS:

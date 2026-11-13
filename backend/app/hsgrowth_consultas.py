@@ -94,6 +94,17 @@ CONSULTAS: dict[str, tuple[str, str, tuple[str, ...]]] = {
                           "aviso de parcerias: se o cliente do card está com algum parceiro", ()),
 }
 
+# O que a pessoa diria ao Guardi para chegar a esta consulta — só para a tela
+# "Capacidade" (`app/capacidade.py`). Opcional: sem exemplo, a tela mostra só o
+# rótulo. O agente não lê isto: ele lê a descrição acima.
+EXEMPLOS: dict[str, str] = {
+    "meus_cards": "quais cards meus estão parados há 7 dias?",
+    "minhas_tarefas": "quais tarefas eu tenho hoje?",
+    "tarefas_atrasadas": "tenho tarefa atrasada?",
+    "buscar": "acha o card da Ambev",
+    "receita": "puxa os dados da Receita deste CNPJ",
+}
+
 # Onde cada consulta devolve a lista de itens, quando a resposta é um envelope.
 _ENVELOPE = {"meus_cards": "cards", "minhas_tarefas": "tasks"}
 _LINK_LISTA = {"meus_cards": "cards", "buscar": "vendas"}   # chave → envelope com cards

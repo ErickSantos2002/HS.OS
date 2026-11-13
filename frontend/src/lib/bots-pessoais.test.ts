@@ -5,7 +5,7 @@
  * trabalha para uma pessoa só (spec 2026-11-05-bots-pessoais-cascas).
  */
 import { describe, expect, it } from "vitest";
-import { ehBotPessoal, levaInstrucoesDeArtefato, soBotsPessoais, soEspecialistas } from "./bots-pessoais";
+import { ehBotPessoal, ehMeuGuardi, levaInstrucoesDeArtefato, soBotsPessoais, soEspecialistas } from "./bots-pessoais";
 
 const iris = { id: "iris", donoId: null };
 const andre = { id: "andre-bot", donoId: "u-andre" };
@@ -42,5 +42,18 @@ describe("levaInstrucoesDeArtefato", () => {
   });
   it("agente que o cache ainda não tem segue como antes", () => {
     expect(levaInstrucoesDeArtefato([], "nina")).toBe(true);
+  });
+});
+
+describe("ehMeuGuardi", () => {
+  it("só o Guardi de quem está logado — a Capacidade descreve as permissões de UMA pessoa", () => {
+    // O botão no Guardi de outra pessoa (o admin abre conversa com qualquer bot)
+    // levaria a um 404: a rota é só do dono, nem o administrador vê.
+    expect(ehMeuGuardi(andre, "u-andre")).toBe(true);
+    expect(ehMeuGuardi(andre, "u-admin")).toBe(false);
+    expect(ehMeuGuardi(iris, "u-andre")).toBe(false);
+    expect(ehMeuGuardi(undefined, "u-andre")).toBe(false);
+    expect(ehMeuGuardi(andre, undefined)).toBe(false);
+    expect(ehMeuGuardi({ id: "x", donoId: null }, null)).toBe(false);
   });
 });

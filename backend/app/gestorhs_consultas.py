@@ -85,6 +85,18 @@ CONSULTAS: dict[str, tuple[str, str, tuple[str, ...]]] = {
                  "`q` (nome ou sku)", ("q",) + _LOCAL),
 }
 
+# O que a pessoa diria ao Guardi para chegar a esta consulta — só para a tela
+# "Capacidade" (`app/capacidade.py`). Opcional: sem exemplo, a tela mostra só o
+# rótulo. O agente não lê isto: ele lê a descrição acima.
+EXEMPLOS: dict[str, str] = {
+    "aparelhos": "quais aparelhos da Vale vencem nos próximos 90 dias?",
+    "ordem": "em que fase está a OS 11700?",
+    "certificados_da_ordem": "me manda o certificado da OS 11700",
+    "clientes": "acha o cliente pelo CNPJ",
+    "caixas": "quais caixas estão abertas?",
+    "propostas": "qual foi a última proposta da Vale?",
+}
+
 # Consultas cuja resposta traz algo que tem tela no front — e o prefixo dela.
 # Propostas não têm página por proposta lá: o link vai para a lista.
 _LINK = {"aparelhos": "/app/equipamentos/", "aparelho": "/app/equipamentos/",

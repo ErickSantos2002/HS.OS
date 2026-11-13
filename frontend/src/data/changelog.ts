@@ -35,6 +35,10 @@ export const CHANGELOG: ChangelogVersion[] = [
     changes: [
       {
         kind: "novidade",
+        text: "Botão \"Capacidade\" na conversa com o seu Guardi (no celular, no ⋮): mostra os sistemas que ele alcança e, em cada um, o que ele consegue consultar e fazer com o SEU login — com exemplos do que dizer. Sistema que ainda não informa isso aparece avisando, sem prometer nada.",
+      },
+      {
+        kind: "novidade",
         text: "O Guardi agora consulta o TalentHS como você: férias e ausências, ponto, metas, PDI, avaliação, feedbacks, cursos e trilhas, benefícios, comunicados e aniversários. Ele vê só o que o seu login lá vê — e o RH, o que o RH vê.",
       },
       {

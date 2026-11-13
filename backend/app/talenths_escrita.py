@@ -213,6 +213,24 @@ ACOES: dict[str, Acao] = {
          "started_at": Campo("data", desc="início; padrão: hoje")}),
 }
 
+# O que a pessoa diria ao Guardi para chegar a esta ação — só para a tela
+# "Capacidade" (`app/capacidade.py`). Opcional: sem exemplo, a tela mostra só o
+# rótulo. O agente não lê isto: ele lê a descrição acima.
+EXEMPLOS: dict[str, str] = {
+    "pedir_ausencia": "pede folga na terça",
+    "cancelar_ausencia": "cancela o meu pedido de férias de dezembro",
+    "ajustar_ponto": "a minha entrada de ontem foi 8h, não 8h20",
+    "lancar_batida": "esqueci de bater a saída ontem às 18h",
+    "responder_feedback": "responde o feedback com nota 4",
+    "inscrever_workshop": "me inscreve no workshop de Excel",
+    "aprovar_ausencia": "aprova as férias da Ana",
+    "aprovar_ajuste_ponto": "aprova os ajustes de ponto pendentes",
+    "criar_comunicado": "escreve um comunicado sobre o feriado",
+    "criar_evento": "põe a confraternização no calendário dia 19",
+    "criar_pdi": "monta o PDI do João com três ações",
+    "lancar_realizado_meta": "lança 120 no realizado de outubro da meta de vendas",
+}
+
 
 # ── validação ────────────────────────────────────────────────────────────────
 

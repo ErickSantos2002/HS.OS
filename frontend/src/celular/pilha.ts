@@ -13,7 +13,7 @@
  */
 
 export type Aba = "conversas" | "atividade" | "eu";
-export type Painel = "arquivos" | "anteriores" | "contexto" | "participantes" | "busca" | "silenciados";
+export type Painel = "arquivos" | "anteriores" | "contexto" | "capacidade" | "participantes" | "busca" | "silenciados";
 
 export type Tela =
   | { tipo: "inicio"; aba: Aba }
@@ -23,7 +23,7 @@ export type Tela =
   | { tipo: "painel"; painel: Painel };
 
 const ABAS: Aba[] = ["conversas", "atividade", "eu"];
-const PAINEIS: Painel[] = ["arquivos", "anteriores", "contexto", "participantes", "busca", "silenciados"];
+const PAINEIS: Painel[] = ["arquivos", "anteriores", "contexto", "capacidade", "participantes", "busca", "silenciados"];
 
 export function pilhaDaUrl(search: string, agenteDoCanal?: (canalId: string) => string | null): Tela[] {
   const p = new URLSearchParams(search);
