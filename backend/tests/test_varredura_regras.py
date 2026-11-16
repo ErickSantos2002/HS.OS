@@ -4,6 +4,7 @@ Cada teste tranca um defeito que custaria uma varredura errada: rodar em
 feriado, passar do teto de pedidas, aceitar número que o agente inventou ou
 chamar de "novidade" um sistema que só voltou do ar com zero.
 """
+import json
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -79,9 +80,29 @@ def test_pedida_com_menos_de_30_min_recusada():
     assert pode_pedir([], agora)[0]
 
 
-def test_validar_descarta_sistema_desconhecido():
-    r = validar_numeros({"taskhs": {"atrasadas": 2}, "banco": {"x": 1}})
-    assert r == {"taskhs": {"atrasadas": 2}}
+def test_validar_recusa_sistema_desconhecido_com_exemplo():
+    """Descartar em silêncio custou a 1ª varredura real (16/11/2026): o Guardi
+    mandou as contagens noutro formato, tudo sumiu e gravou `numeros: {}` — o
+    quadro da Nina ficou sem totais e a tarde nunca acharia novidade. Recusar
+    com o exemplo faz o agente corrigir e chamar de novo."""
+    with pytest.raises(ValueError) as e:
+        validar_numeros({"taskhs": {"atrasadas": 2}, "banco": {"x": 1}})
+    assert "banco" in str(e.value) and '"taskhs"' in str(e.value)
+
+
+def test_validar_recusa_numeros_vazios():
+    with pytest.raises(ValueError) as e:
+        validar_numeros({})
+    assert '"email"' in str(e.value)
+
+
+def test_validar_aceita_so_falhas():
+    assert validar_numeros({"falhas": ["taskhs"]}) == {"falhas": ["taskhs"]}
+
+
+def test_validar_aceita_formato_do_exemplo():
+    from app.varredura.regras import EXEMPLO_NUMEROS
+    assert validar_numeros(json.loads(EXEMPLO_NUMEROS))["email"] == {"nao_lidos_3d": 4}
 
 
 def test_validar_recusa_negativo():

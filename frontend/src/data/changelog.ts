@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.14.1",
+    date: "2026-11-16",
+    changes: [
+      {
+        kind: "correcao",
+        text: "O resumo do seu Guardi fala só do que é seu (não do sistema inteiro) e termina com uma única sugestão do que ele pode preparar.",
+      },
+    ],
+  },
+  {
     version: "2.14.0",
     date: "2026-11-16",
     changes: [

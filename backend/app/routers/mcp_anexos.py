@@ -130,7 +130,9 @@ _FERRAMENTAS = [{
         "sistema, quem ficou SEM varredura e o motivo, e um resumo curto por pessoa. Com "
         "`pessoa` (nome, primeiro nome ou e-mail), traz o resumo inteiro dela. NÃO invente "
         "número: quem ficou sem varredura, diga que ficou sem; nunca trate falta de registro "
-        "como zero pendência. `dia` é AAAA-MM-DD (padrão: hoje)."
+        "como zero pendência. NUNCA publique o resultado com `publicar_pagina` (o link é "
+        "público e isto traz cliente e e-mail de cada pessoa): responda só no chat. "
+        "`dia` é AAAA-MM-DD (padrão: hoje)."
     ),
     "inputSchema": {
         "type": "object",

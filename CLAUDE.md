@@ -1052,6 +1052,14 @@ Spec e plano: `docs/superpowers/specs/2026-11-16-varredura-do-guardi-design.md` 
 plano ao lado, em `plans/`). Cada Guardi confere sozinho as pendências do dono
 (TaskHS, HSGrowth, GestorHS, e-mail) e registra um resumo; a Nina reúne o da equipe.
 
+⚠️ **Lições da 1ª varredura real (16/11/2026, `erick-bot`):** o validador
+descartava em silêncio chave fora de `taskhs/hsgrowth/gestorhs/email` e gravou
+`numeros: {}` — hoje recusa com `EXEMPLO_NUMEROS` (em `regras.py`, também na
+descrição da ferramenta) e recusa vazio. O Guardi citou total do sistema ("11.559
+OS") como pendência e fez duas ofertas. E a **Nina publicou o quadro com
+`publicar_pagina`** — link público com remetente e assunto de e-mail: a proibição
+está na descrição de `pendencias_da_equipe`, no topo do retorno e no texto do quadro.
+
 - ⚠️ **Porta única, de novo:** todo turno sai por `disparar_turno(..., prefixo=
   "hsos-varredura-")`, e a varredura é uma etapa da `passada` do
   `disparador_lembretes` (`app/varredura/`). Nenhum `chat.send` novo, nenhum laço

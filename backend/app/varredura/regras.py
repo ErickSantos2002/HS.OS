@@ -23,8 +23,12 @@ SISTEMAS = {"taskhs", "hsgrowth", "gestorhs", "email"}
 
 _PADRAO = {"manha": time(7, 30), "tarde": time(13, 30), "quadro": time(8, 30)}
 _HORA = re.compile(r"^([0-9]{1,2}):([0-9]{2})\Z")
-_CHAVE = re.compile(r"^[a-z_]{1,30}\Z")
+_CHAVE = re.compile(r"^[a-z0-9_]{1,30}\Z")
 _MAX_CHAVES = 8
+# O formato que o Guardi copia. Vai na descrição da ferramenta e na recusa.
+EXEMPLO_NUMEROS = ('{"taskhs": {"abertas": 4, "atrasadas": 0, "sem_prazo": 4}, '
+                   '"hsgrowth": {"tarefas_atrasadas": 1, "cards_parados": 1}, '
+                   '"gestorhs": {"minhas_os": 0}, "email": {"nao_lidos_3d": 4}, "falhas": []}')
 
 
 def _pascoa(ano: int) -> date:
@@ -110,9 +114,18 @@ def pode_pedir(pedidas_hoje: list[datetime], agora: datetime) -> tuple[bool, str
 
 
 def validar_numeros(n: dict) -> dict:
-    """Mantém só o que a varredura sabe contar; recusa o que foge da forma."""
+    """Recusa o que foge da forma, com o exemplo — nunca descarta em silêncio.
+
+    ⚠️ Até 16/11/2026 chave desconhecida era descartada: na 1ª varredura real o
+    Guardi mandou outro formato e gravou `{}`, sem aviso. Recusando, ele corrige.
+    """
+    exemplo = f" Exemplo: {EXEMPLO_NUMEROS}"
     if not isinstance(n, dict):
-        raise ValueError("`numeros` deve ser um objeto com um item por sistema.")
+        raise ValueError("`numeros` deve ser um objeto com um item por sistema." + exemplo)
+    desconhecidos = sorted(k for k in n if k != "falhas" and k not in SISTEMAS)
+    if desconhecidos:
+        raise ValueError(f"`numeros` só aceita {sorted(SISTEMAS)} e `falhas`; veio "
+                         f"{desconhecidos}." + exemplo)
     saida: dict = {}
     for sis, val in n.items():
         if sis == "falhas":
@@ -126,10 +139,13 @@ def validar_numeros(n: dict) -> dict:
                 raise ValueError(f"`{sis}` aceita no máximo {_MAX_CHAVES} contagens.")
             for k, c in val.items():
                 if not isinstance(k, str) or not _CHAVE.match(k):
-                    raise ValueError(f"Nome de contagem inválido em `{sis}`: {k!r} (use a-z e _, até 30).")
+                    raise ValueError(f"Nome de contagem inválido em `{sis}`: {k!r} (use a-z, 0-9 e _, até 30).")
                 if isinstance(c, bool) or not isinstance(c, int) or c < 0:
                     raise ValueError(f"`{sis}.{k}` deve ser um inteiro maior ou igual a zero.")
             saida[sis] = dict(val)
+    if not any(k in SISTEMAS for k in saida) and not saida.get("falhas"):
+        raise ValueError("`numeros` veio vazio: informe as contagens de cada sistema que você "
+                         "leu (ou o sistema em `falhas`)." + exemplo)
     return saida
 
 
