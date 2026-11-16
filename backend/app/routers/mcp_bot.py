@@ -19,6 +19,7 @@ separação de domínio `"bot:" + id`.
 """
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -31,6 +32,7 @@ from app.fuso import em_brasilia
 from app import acoes
 from app.agenda import dominio, outlook
 from app.agenda.regras import FUSO, RegraInvalida, regra_de
+from app.varredura import dominio as varredura
 from app.bots_pessoais import _linha
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
@@ -569,6 +571,16 @@ FERRAMENTAS = [
         "quando": _QUANDO, "repetir": _REPETIR, "instrucao": {"type": "string", "maxLength": 2000},
         "pausado": {"type": "boolean"}}, ("id",)),
     _f("agenda_apagar", "Apaga um lembrete (id do agenda_listar).", {"id": {"type": "string"}}, ("id",)),
+    _f("varredura_registrar", "Só existe DENTRO de uma varredura (o turno autônomo que pede o resumo das "
+       "pendências do seu dono); fora dela recusa. Chame UMA vez, no fim, com o `resumo` (até 4.000 "
+       "caracteres) e os `numeros` (contagens por assunto, ex.: tarefas atrasadas, e-mails não lidos). "
+       "Os números saem das consultas que você fez, NUNCA estimados. Sistema que falhou ou não "
+       "respondeu entra em `numeros.falhas` (lista com o nome dele) e você o diz no resumo "
+       "(\"não consegui ler o X\"). Do e-mail pode entrar assunto e remetente, nunca o corpo. "
+       "O retorno traz a `instrucao` do que responder à pessoa.",
+       {"resumo": {"type": "string", "maxLength": 4000},
+        "numeros": {"type": "object", "description": "contagens inteiras por assunto; `falhas`: lista "
+                    "dos sistemas que não consegui ler"}}, ("resumo", "numeros")),
 ]
 NOMES = tuple(f["name"] for f in FERRAMENTAS)
 assert NOMES == FERRAMENTAS_BOT, "FERRAMENTAS do servidor e FERRAMENTAS_BOT divergiram"
@@ -784,6 +796,27 @@ async def _agenda_editar(conn, args: dict, ctx: dict) -> str:
     linha = await dominio.editar(conn, ctx["dono"], lid, _agora(), **campos)
     estado = " (pausado)" if not linha.get("ativo") else ""
     return f"Lembrete atualizado: {linha['titulo']} — {_quando_texto(linha.get('proximo_em'))}{estado}."
+
+
+async def _varredura_registrar(conn, bot: str, args: dict, ctx: dict) -> str:
+    """O Guardi entrega o resumo da varredura. ⚠️ A guarda de "há varredura em curso"
+    é do domínio (`LookupError`): fora dela nada é gravado. O que responder à pessoa
+    sai daqui, não do modelo: tarde sem novidade = calar (NO_REPLY)."""
+    resumo = args.get("resumo")
+    if not isinstance(resumo, str) or not resumo.strip():
+        raise _Recusa("resumo precisa ser um texto.")
+    numeros = args.get("numeros")
+    if not isinstance(numeros, dict):
+        raise _Recusa("numeros precisa ser um objeto.")
+    try:
+        r = await varredura.registrar(conn, bot, ctx["dono"], resumo, numeros)
+    except LookupError as e:
+        raise _Recusa("Não há varredura em curso para registrar.") from e
+    calar = r["status"] == "nada_novo"
+    return json.dumps({
+        "status": r["status"], "novidade": r["novidade"], "o_que_mudou": r["o_que_mudou"],
+        "instrucao": "Responda só NO_REPLY." if calar
+        else "Escreva à pessoa o cardápio do dia, curto."}, ensure_ascii=False)
 
 
 async def _agenda(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
@@ -2296,6 +2329,8 @@ async def _executar_cru(agent_id: str, nome: str, args: dict) -> tuple[str, bool
             ctx = await _contexto(conn, agent_id)
             if nome == "lembrar":
                 return await _lembrar(agent_id, str((args or {}).get("fato") or "")), False
+            if nome == "varredura_registrar":
+                return await _varredura_registrar(conn, agent_id, args or {}, ctx), False
             if nome.startswith("agenda_"):
                 return await _agenda(conn, agent_id, nome, args or {}, ctx), False
             if nome.startswith("datacore_"):
