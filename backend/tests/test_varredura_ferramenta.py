@@ -69,6 +69,20 @@ def test_fora_de_varredura_recusa_sem_gravar(amb, monkeypatch):
     assert len(chamadas) == 1  # tentou; o domínio recusou antes de qualquer UPDATE
 
 
+def test_fora_do_turno_do_dono_recusa_sem_chamar_o_registro(amb, monkeypatch):
+    """O registro só vale dentro do turno que o disparador abriu em nome do
+    dono. Sem turno (sessão da Nina, admin conversando com o bot alheio,
+    instrução plantada que roda depois), a guarda de `_contexto` recusa antes
+    de o domínio ser chamado — nada chega à `varreduras`."""
+    async def sem_turno(conn, agent_id, user_id):
+        return False
+    monkeypatch.setattr(m, "turno_em_curso", sem_turno)
+    chamadas = _registrar_falso(
+        monkeypatch, retorno={"status": "entregue", "novidade": True, "o_que_mudou": []})
+    texto, erro = _run({"resumo": "oi", "numeros": {}})
+    assert erro and "enquanto Erick está conversando comigo" in texto and chamadas == []
+
+
 def test_numeros_invalidos_recusa_com_mensagem(amb, monkeypatch):
     _registrar_falso(monkeypatch, erro=ValueError("numeros.x precisa ser inteiro"))
     texto, erro = _run({"resumo": "oi", "numeros": {"x": "a"}})
