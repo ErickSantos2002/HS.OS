@@ -185,3 +185,17 @@ def test_reserva_respeita_teto_de_simultaneas():
     c = C()
     rodar(d.reservar(c))
     assert c.args == (False, TETO_SIMULTANEO)
+
+
+def test_do_dia_leva_os_sistemas_ligados():
+    """O quadro precisa separar "não ligado" (escolha) de "não leu" (falha)."""
+    class C:
+        async def fetch(self, sql, *a):
+            if "agent_profiles" in sql:
+                return [{"user_id": "u1", "agent_id": "ana-bot", "nome": "Ana", "cargo": "X",
+                         "departamento": "Y", "email": "a@hs.com",
+                         "sistemas_ligados": ["taskhs", "hsgrowth_servicos", "datacore"],
+                         "email_ligado": True}]
+            return []
+    r = rodar(d.do_dia(C(), "2026-11-16"))
+    assert r[0]["sistemas"] == ["email", "hsgrowth", "taskhs"]

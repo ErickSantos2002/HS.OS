@@ -76,10 +76,12 @@ _PEDIDA = "A Nina pediu este resumo; a pessoa vai ver isto."
 
 _QUADRO = (
     "Chame `pendencias_da_equipe` e escreva o quadro da equipe de hoje: uma "
-    "linha por pessoa com o que está atrasado e o que vence logo, e no fim os "
+    "linha para CADA pessoa da lista (todas, mesmo sem pendência — confira a "
+    "contagem antes de enviar), com o que está atrasado e o que vence logo, e no fim os "
     "destaques. Nunca invente número — use só o que a ferramenta devolveu. Diga "
     "nominalmente quem ficou sem varredura hoje e por quê (sistema fora, o "
-    "Guardi não registrou, pulada). Responda aqui no chat — NUNCA publique "
+    "Guardi não registrou, pulada). Sistema \"não ligado\" é escolha da "
+    "empresa, não falha — não o trate como problema. Responda aqui no chat — NUNCA publique "
     "em página (`publicar_pagina` gera link público)."
 )
 

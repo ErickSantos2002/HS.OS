@@ -13,7 +13,7 @@ import logging
 from datetime import datetime
 
 from app.email.cifra import cifrar, decifrar
-from app.varredura.regras import (FUSO, TETO_RESUMO, TETO_SIMULTANEO, Config, config, dia_util,
+from app.varredura.regras import (FUSO, TETO_RESUMO, TETO_SIMULTANEO, chaves_ligadas, Config, config, dia_util,
                                   horario, novidade, pode_pedir, validar_numeros,
                                   velha)
 
@@ -137,7 +137,8 @@ SQL_FECHAR = """
 
 SQL_GUARDIS = """
     SELECT ap.dono_id::text AS user_id, ap.agent_id,
-           p.full_name AS nome, p.cargo, p.departamento, u.email
+           p.full_name AS nome, p.cargo, p.departamento, u.email,
+           ap.sistemas_ligados, ap.email_ligado
       FROM public.agent_profiles ap
       JOIN auth.users u ON u.id = ap.dono_id AND u.is_active
       LEFT JOIN public.profiles p ON p.id = ap.dono_id
@@ -281,7 +282,8 @@ async def do_dia(conn, dia, user_id: str | None = None) -> list[dict]:
         escolhida = (entregues or cand or [None])[-1]
         item = {"user_id": g["user_id"], "nome": g["nome"], "cargo": g["cargo"],
                 "departamento": g["departamento"], "agent_id": g["agent_id"],
-                "email": g.get("email")}
+                "email": g.get("email"),
+                "sistemas": chaves_ligadas(g.get("sistemas_ligados"), bool(g.get("email_ligado")))}
         if escolhida is None:
             item.update(tipo=None, status="sem_varredura", hora=None, numeros=None, resumo=None)
         else:

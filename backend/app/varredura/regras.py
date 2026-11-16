@@ -184,14 +184,20 @@ _LIGADO_PARA_CHAVE = {"taskhs": "taskhs", "gestorhs": "gestorhs",
                       "hsgrowth": "hsgrowth", "hsgrowth_servicos": "hsgrowth"}
 
 
+def chaves_ligadas(ligados: list[str] | None, email_ligado: bool) -> list[str]:
+    """As chaves de `numeros` que este Guardi alcança (o resto é "não ligado")."""
+    chaves = {_LIGADO_PARA_CHAVE[s] for s in (ligados or []) if s in _LIGADO_PARA_CHAVE}
+    if email_ligado:
+        chaves.add("email")
+    return sorted(chaves)
+
+
 def sistemas_faltando(numeros: dict, ligados: list[str], email_ligado: bool) -> list[str]:
     """Os sistemas da varredura que o Guardi tem e não contou nem pôs em `falhas`.
 
     ⚠️ Na 2ª varredura real (16/11/2026) o Guardi pulou CRM e GestorHS em
     silêncio; o quadro da Nina mostraria a pessoa "sem pendência" ali.
     """
-    esperados = {_LIGADO_PARA_CHAVE[s] for s in ligados if s in _LIGADO_PARA_CHAVE}
-    if email_ligado:
-        esperados.add("email")
+    esperados = set(chaves_ligadas(ligados, email_ligado))
     vieram = {k for k in numeros if k in SISTEMAS} | set(numeros.get("falhas") or [])
     return sorted(esperados - vieram)
