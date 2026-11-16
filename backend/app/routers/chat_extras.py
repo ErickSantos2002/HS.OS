@@ -278,6 +278,9 @@ class NotificacaoOut(BaseModel):
     id: str
     user_id: str
     channel_id: str | None = None
+    # ⚠️ Sem isto a tela não acende a não lida de conversa com agente ao
+    # carregar (ver tests/test_notificacoes_agente.py).
+    agent_id: str | None = None
     message_id: str | None = None
     author_name: str | None = None
     content_preview: str | None = None
@@ -286,7 +289,7 @@ class NotificacaoOut(BaseModel):
 
 
 _COLUNAS_NOTIF = """
-    id::text AS id, user_id::text AS user_id, channel_id::text AS channel_id,
+    id::text AS id, user_id::text AS user_id, channel_id::text AS channel_id, agent_id,
     message_id::text AS message_id, author_name, content_preview, read,
     to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at
 """
