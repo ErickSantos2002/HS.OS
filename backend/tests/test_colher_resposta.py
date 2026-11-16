@@ -233,3 +233,87 @@ def test_erro_de_gateway_vira_erro_na_tela_e_excecao_no_coletor(ambiente):
     with pytest.raises(c.ErroGateway):
         asyncio.run(c.colher_resposta(CFG, "nina", "run-1", "agent:nina:x", 10, UID,
                                       levantar_erro_gateway=True))
+
+
+# ── Varredura do Guardi (spec 2026-11-16) ──────────────────────────────────
+
+# A tarde sem novidade: o Guardi narra, chama as ferramentas e termina em
+# `NO_REPLY`. Depois de limpo o `NO_REPLY`, o turno final fica vazio.
+_TARDE_SEM_NOVIDADE = [
+    {"role": "user", "content": "[Conferência da tarde — Erick]", "__openclaw": {"seq": 11}},
+    {"role": "assistant", "content": "Vou conferir o TaskHS e o e-mail.",
+     "__openclaw": {"seq": 12}},
+    {"role": "toolCall", "content": "varredura_registrar", "__openclaw": {"seq": 13}},
+    {"role": "toolResult", "content": '{"novidade": false}', "__openclaw": {"seq": 14}},
+    {"role": "assistant", "content": "NO_REPLY", "__openclaw": {"seq": 15}},
+]
+
+
+def _colher_run(run_id):
+    return asyncio.run(c.colher_resposta(CFG, "erick-bot", run_id, "agent:erick-bot:x",
+                                         10, UID))
+
+
+def test_tarde_no_reply_nao_grava_a_narracao(ambiente):
+    """Antes, o `NO_REPLY` limpo deixava o turno final vazio e o recuo do
+    `_texto_da_resposta` pegava TODO o texto do turno — a pessoa recebia
+    "Vou conferir o TaskHS e o e-mail." como mensagem, com push, às 16h, num
+    dia sem nada novo. Para run de varredura não há recuo: vazio é silêncio."""
+    ambiente.gateway = Gateway({"status": "ok"}, _TARDE_SEM_NOVIDADE)
+    r = _colher_run("hsos-varredura-abc")
+    assert r.status == "erro"          # o coletor encerra o run
+    assert ambiente.conn.updates == [] and ambiente.audios == [] and ambiente.publicados == []
+
+
+def test_run_comum_mantem_o_recuo_de_hoje(ambiente):
+    """O mesmo histórico num run da tela (`hsos-`) continua caindo no recuo —
+    engolir a resposta de quem responde antes da ferramenta seria pior."""
+    ambiente.gateway = Gateway({"status": "ok"}, _TARDE_SEM_NOVIDADE)
+    r = _colher_run("hsos-123")
+    assert r.status == "pronta" and r.message.content == "Vou conferir o TaskHS e o e-mail."
+
+
+class _ConnVarredura(Conn):
+    def __init__(self, falha=False):
+        super().__init__()
+        self.falha = falha
+        self.varredura = []
+
+    async def execute(self, sql, *a):
+        if "varreduras" in sql:
+            if self.falha:
+                raise RuntimeError("permission denied for table varreduras")
+            self.varredura.append((" ".join(sql.split()), a))
+
+
+def test_quadro_gravado_vira_entregue(ambiente):
+    """O quadro da Nina não passa pelo `varredura_registrar` (não tem números):
+    sem isto ele ficava `rodando` até o fechamento o marcar `sem_registro`, e
+    a war-room dizia que o quadro nunca saiu."""
+    ambiente.conn = _ConnVarredura()
+    ambiente.gateway = Gateway({"status": "ok"}, [
+        {"role": "assistant", "content": "Quadro de hoje…", "__openclaw": {"seq": 12}}])
+    r = _colher_run("hsos-varredura-q1")
+    assert r.status == "pronta"
+    [(sql, args)] = ambiente.conn.varredura
+    assert "status = 'entregue'" in sql and "entregue_em = now()" in sql
+    assert "tipo = 'quadro'" in sql and "status = 'rodando'" in sql
+    assert args == ("hsos-varredura-q1",)
+
+
+def test_run_comum_nao_toca_varreduras(ambiente):
+    ambiente.conn = _ConnVarredura()
+    ambiente.gateway = Gateway({"status": "ok"}, [
+        {"role": "assistant", "content": "Olá!", "__openclaw": {"seq": 12}}])
+    assert _colher_run("hsos-123").status == "pronta"
+    assert ambiente.conn.varredura == []
+
+
+def test_falha_ao_marcar_o_quadro_nao_derruba_a_resposta(ambiente):
+    """Best-effort: a resposta já foi gravada e publicada; perder o status do
+    quadro é um log, não um 500 nem uma resposta que some."""
+    ambiente.conn = _ConnVarredura(falha=True)
+    ambiente.gateway = Gateway({"status": "ok"}, [
+        {"role": "assistant", "content": "Quadro de hoje…", "__openclaw": {"seq": 12}}])
+    r = _colher_run("hsos-varredura-q1")
+    assert r.status == "pronta" and ambiente.publicados

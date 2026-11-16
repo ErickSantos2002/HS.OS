@@ -31,6 +31,8 @@ from app.varredura.regras import ADIAMENTO, ADIAMENTO_MAX, velha
 
 logger = logging.getLogger(__name__)
 
+# O `colher_resposta` reconhece a varredura por este prefixo (sem recuo de
+# texto, quadro vira `entregue`); `test_varredura_disparo` tranca os dois iguais.
 PREFIXO_RUN = "hsos-varredura-"
 
 SQL_ATENDIDO_PELA_NINA = """
