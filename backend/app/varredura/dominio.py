@@ -66,9 +66,14 @@ SQL_RESERVAR = """
 SQL_MARCAR = """
     UPDATE public.varreduras
        SET status = $2,
+           -- Solta o lease em todo status menos `rodando`: o SQL_RODANDO usa o
+           -- carimbo como janela de 30 min, e o adiamento de 2 min precisa do
+           -- lease livre para a próxima passada reservar.
+           disparando_em = CASE WHEN $2 = 'rodando' THEN disparando_em ELSE NULL END,
            run_id = COALESCE($4, run_id),
            proximo_em = COALESCE($5, proximo_em),
-           turno_pendente_desde = COALESCE($6, turno_pendente_desde)
+           turno_pendente_desde = CASE WHEN $7 THEN NULL
+                                       ELSE COALESCE($6, turno_pendente_desde) END
      WHERE id = $1::uuid AND disparando_em = $3
     RETURNING id
 """
@@ -92,7 +97,7 @@ SQL_MANHA = """
 
 SQL_REGISTRAR = """
     UPDATE public.varreduras
-       SET resumo_cifrado = $2, numeros = $3::jsonb, status = $4, entregue_em = now()
+       SET resumo_cifrado = $2, numeros = $3, status = $4, entregue_em = now()
      WHERE id = $1::uuid
 """
 
@@ -101,12 +106,13 @@ SQL_REGISTRAR = """
 SQL_FECHAR = """
     UPDATE public.varreduras v SET status = 'sem_registro'
      WHERE v.status = 'rodando'
-       AND EXISTS (
-           SELECT 1 FROM public.agent_runs r
-            WHERE r.run_id = v.run_id
-              AND (r.message_id IS NOT NULL
-                   OR r.coleta_encerrada_em IS NOT NULL
-                   OR r.criado_em < now() - interval '30 minutes'))
+       AND (v.disparando_em < now() - interval '30 minutes'
+            OR EXISTS (
+               SELECT 1 FROM public.agent_runs r
+                WHERE r.run_id = v.run_id
+                  AND (r.message_id IS NOT NULL
+                       OR r.coleta_encerrada_em IS NOT NULL
+                       OR r.criado_em < now() - interval '30 minutes')))
 """
 
 SQL_GUARDIS = """
@@ -189,8 +195,9 @@ async def reservar(conn) -> list[dict]:
 
 
 async def marcar(conn, id: str, status: str, carimbo, run_id: str | None = None,
-                 proximo_em=None, pendente_desde=None) -> bool:
-    r = await conn.fetchval(SQL_MARCAR, id, status, carimbo, run_id, proximo_em, pendente_desde)
+                 proximo_em=None, pendente_desde=None, limpar_pendente: bool = False) -> bool:
+    r = await conn.fetchval(SQL_MARCAR, id, status, carimbo, run_id, proximo_em,
+                            pendente_desde, limpar_pendente)
     return r is not None
 
 
@@ -209,15 +216,13 @@ async def registrar(conn, agent_id: str, user_id: str, resumo: str, numeros: dic
         m = await conn.fetchrow(SQL_MANHA, user_id, linha["dia"])
         manha = None
         if m is not None:
-            manha = m["numeros"]
-            if isinstance(manha, str):
-                manha = json.loads(manha)
+            manha = m["numeros"]  # o codec jsonb do pool já devolve dict
         tem, mudou = novidade(manha, numeros)
         status = "entregue" if tem else "nada_novo"
     else:
         tem = True
     await conn.execute(SQL_REGISTRAR, linha["id"], cifrar(resumo[:TETO_RESUMO]),
-                       json.dumps(numeros), status)
+                       numeros, status)
     return {"status": status, "novidade": tem, "o_que_mudou": mudou}
 
 
@@ -254,11 +259,8 @@ async def do_dia(conn, dia, user_id: str | None = None) -> list[dict]:
         if escolhida is None:
             item.update(tipo=None, status="sem_varredura", hora=None, numeros=None, resumo=None)
         else:
-            n = escolhida["numeros"]
-            if isinstance(n, str):
-                n = json.loads(n)
             item.update(tipo=escolhida["tipo"], status=escolhida["status"],
-                        hora=escolhida["hora"], numeros=n,
+                        hora=escolhida["hora"], numeros=escolhida["numeros"],
                         resumo=_decifrar(escolhida["resumo_cifrado"]))
         saida.append(item)
     return saida

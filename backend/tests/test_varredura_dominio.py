@@ -137,3 +137,34 @@ def test_pedir_do_admin_nao_conta_no_teto():
     c = Conn(pedidas=[SEG - timedelta(hours=3), SEG - timedelta(minutes=1)])
     ok, _ = rodar(d.pedir(c, "u1", SEG, por="agenda"))
     assert ok is True and c.exec[0][1][3] == "agenda"
+
+
+def test_registrar_passa_o_dict_ao_codec_jsonb():
+    """O pool já codifica jsonb com json.dumps; passar string gravava string jsonb."""
+    c = Conn(rodando=RODANDO)
+    n = {"taskhs": {"atrasadas": 3}}
+    rodar(d.registrar(c, "erick-bot", "u1", "x", n))
+    assert c.exec[0][1][2] == n
+
+
+def test_marcar_solta_o_lease_fora_de_rodando_e_limpa_pendente():
+    """Adiamento de 2 min só funciona com o lease livre; `rodando` mantém o
+    carimbo (janela do SQL_RODANDO). `limpar_pendente` zera o adiamento."""
+    assert "CASE WHEN $2 = 'rodando' THEN disparando_em ELSE NULL END" in d.SQL_MARCAR
+    assert "CASE WHEN $7 THEN NULL" in d.SQL_MARCAR
+
+    visto = []
+
+    class C:
+        async def fetchval(self, sql, *a):
+            visto.append(a)
+            return "id"
+    assert rodar(d.marcar(C(), "v-1", "entregue", SEG, limpar_pendente=True)) is True
+    assert visto[0][-1] is True
+
+
+def test_fechar_sem_registro_pega_rodando_antigo_sem_run():
+    """Run nunca gravado (run_id nulo) não casa com o EXISTS: o corte de 30 min
+    no próprio `disparando_em` é o que o fecha."""
+    assert "v.disparando_em < now() - interval '30 minutes'" in d.SQL_FECHAR
+    assert "OR EXISTS" in d.SQL_FECHAR
