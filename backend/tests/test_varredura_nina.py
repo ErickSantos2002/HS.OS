@@ -181,8 +181,8 @@ def test_falha_no_formatador_vira_mensagem(monkeypatch):
 
 
 def test_quadro_avisa_para_nao_publicar_em_pagina():
-    """Na 1ª conversa real a Nina publicou o quadro com `publicar_pagina`
-    (link público, com remetente e assunto de e-mail). O aviso vai no topo
-    do retorno, que ela sempre lê."""
+    """A Nina monta painel por conta própria; se usasse `publicar_pagina`, o
+    link seria público, com remetente e assunto de e-mail. O aviso vai no
+    topo do retorno, que ela sempre lê."""
     from app.varredura.quadro import AVISO_SEM_PAGINA, formatar_equipe
     assert formatar_equipe([], None).startswith(AVISO_SEM_PAGINA)

@@ -1056,9 +1056,10 @@ plano ao lado, em `plans/`). Cada Guardi confere sozinho as pendências do dono
 descartava em silêncio chave fora de `taskhs/hsgrowth/gestorhs/email` e gravou
 `numeros: {}` — hoje recusa com `EXEMPLO_NUMEROS` (em `regras.py`, também na
 descrição da ferramenta) e recusa vazio. O Guardi citou total do sistema ("11.559
-OS") como pendência e fez duas ofertas. E a **Nina publicou o quadro com
-`publicar_pagina`** — link público com remetente e assunto de e-mail: a proibição
-está na descrição de `pendencias_da_equipe`, no topo do retorno e no texto do quadro.
+OS") como pendência e fez duas ofertas. A Nina montou o quadro como HTML dentro da
+mensagem (o "Ver artefato" do chat — fica na conversa, NÃO é página pública); por
+precaução, `pendencias_da_equipe` proíbe `publicar_pagina` (link público com
+remetente e assunto de e-mail) na descrição, no topo do retorno e no texto do quadro.
 
 - ⚠️ **Porta única, de novo:** todo turno sai por `disparar_turno(..., prefixo=
   "hsos-varredura-")`, e a varredura é uma etapa da `passada` do

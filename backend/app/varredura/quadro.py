@@ -81,9 +81,9 @@ AVISO_SEM_PAGINA = ("NUNCA publique isto em página (publicar_pagina gera link p
 def formatar_equipe(linhas: list[dict], pessoa: str | None, teto: int = TETO_RETORNO) -> str:
     entregues = [l for l in linhas if _entregue(l)]
     sem = [l for l in linhas if not _entregue(l)]
-    # ⚠️ Na 1ª conversa real (16/11/2026) a Nina publicou isto em `publicar_pagina`,
-    # que gera link PÚBLICO — com remetente e assunto de e-mail. A regra vai no
-    # próprio retorno, que ela lê sempre, além da descrição da ferramenta.
+    # ⚠️ A Nina gosta de montar painel (na 1ª conversa real, 16/11/2026, fez HTML
+    # dentro da mensagem). `publicar_pagina` geraria link PÚBLICO com remetente e
+    # assunto de e-mail — a proibição vai no próprio retorno, que ela lê sempre.
     out = [AVISO_SEM_PAGINA,
            f"{len(entregues)} de {len(linhas)} entregues (varreduras do dia)."]
     tot = _totais(linhas)
