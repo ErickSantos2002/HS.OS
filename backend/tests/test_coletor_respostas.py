@@ -191,3 +191,54 @@ def test_quem_acabou_de_ser_colhido_vai_para_o_fim_da_fila():
     assert "ORDER BY a.coletando_em NULLS FIRST, a.criado_em" in sql
     soltar = " ".join(k.SQL_SOLTAR.split())
     assert "coletando_em = now() - interval '20 seconds'" in soltar
+
+
+class _ConnNaoLida(Conn):
+    def __init__(self, runs, falha=False):
+        super().__init__(runs)
+        self.avisos = []
+        self.falha = falha
+
+    async def execute(self, sql, *a):
+        if sql == k.SQL_NAO_LIDA:
+            if self.falha:
+                raise RuntimeError("banco fora")
+            self.avisos.append(a)
+            return
+        return await super().execute(sql, *a)
+
+
+def _pronta(conteudo="Bom dia, Welton. Cardápio…"):
+    async def colher(*a, **kw):
+        return SimpleNamespace(status="pronta", message=SimpleNamespace(id="m-1", content=conteudo))
+    return colher
+
+
+def test_resposta_colhida_em_segundo_plano_acende_nao_lida():
+    """16/11/2026: o Welton recebeu o push do cardápio da varredura e, ao abrir
+    o sistema, a conversa não estava como não lida. A não lida de agente só
+    existia na memória da aba que fez a pergunta; resposta que o coletor grava
+    (varredura, lembrete, quem perguntou e fechou) não acendia nada. O coletor
+    agora cria a notificação do sininho com o `agent_id` — a tela já a conta
+    e a apaga ao abrir a conversa."""
+    conn = _ConnNaoLida([_run(1)])
+    asyncio.run(k.passada(_sessao(conn), _pronta(), object()))
+    assert len(conn.avisos) == 1
+    user_id, agent_id, message_id, previa = conn.avisos[0]
+    assert (user_id, agent_id, message_id) == ("u", "nina", "m-1")
+    assert previa.startswith("Bom dia, Welton")
+    assert "NOT EXISTS" in k.SQL_NAO_LIDA  # a mesma mensagem não acende duas vezes
+
+
+def test_falha_ao_acender_nao_lida_nao_derruba_o_coletor():
+    conn = _ConnNaoLida([_run(1), _run(2)], falha=True)
+    assert asyncio.run(k.passada(_sessao(conn), _pronta(), object())) == 2
+    assert conn.encerrados == [] and conn.soltos == []
+
+
+def test_pronta_sem_mensagem_nao_acende():
+    conn = _ConnNaoLida([_run(1)])
+    async def colher(*a, **kw):
+        return SimpleNamespace(status="pronta")
+    asyncio.run(k.passada(_sessao(conn), colher, object()))
+    assert conn.avisos == []

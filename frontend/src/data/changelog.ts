@@ -35,6 +35,10 @@ export const CHANGELOG: ChangelogVersion[] = [
     changes: [
       {
         kind: "correcao",
+        text: "Mensagem que seu Guardi ou outro agente manda sem você estar na tela (como o cardápio do dia) agora aparece como não lida quando você abre o sistema.",
+      },
+      {
+        kind: "correcao",
         text: "A conferência da tarde não repete mais o cardápio quando a varredura da manhã foi refeita: ela compara com a última conferência do dia.",
       },
     ],
