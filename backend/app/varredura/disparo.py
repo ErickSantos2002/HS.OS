@@ -33,6 +33,11 @@ logger = logging.getLogger(__name__)
 
 PREFIXO_RUN = "hsos-varredura-"
 
+SQL_ATENDIDO_PELA_NINA = """
+    SELECT EXISTS (SELECT 1 FROM public.agent_profiles
+                    WHERE agent_id = 'nina' AND $1::uuid = ANY(allowed_user_ids))
+"""
+
 LINHA_PEDIDA = "🔎 A Nina pediu um resumo das suas pendências."
 # Sem `base64`/`mimeType`: não é anexo, é a marca que a tela e o push leem.
 MEDIA_PEDIDA = json.dumps([{"type": "varredura_pedida"}], ensure_ascii=False)
@@ -111,8 +116,12 @@ async def disparar_varredura(sessao_fn, v: dict, agora: datetime, disparar=None)
 
     agente = normalizar_agent_id(v["agent_id"])
     async with sessao_fn(role="service_role") as conn:
-        valido = True
-        if v["tipo"] != "quadro":  # a Nina não tem dono; o quadro não confere Guardi
+        if v["tipo"] == "quadro":
+            # A Nina não tem dono: confere que o destinatário segue ativo e
+            # ainda é atendido por ela — semeado ontem não é autorização hoje.
+            valido = bool(await conn.fetchval(SQL_DONO_ATIVO, v["user_id"])) and \
+                bool(await conn.fetchval(SQL_ATENDIDO_PELA_NINA, v["user_id"]))
+        else:
             # O dono pode ter sido desligado, e o bot pode ter mudado de dono.
             ativo = bool(await conn.fetchval(SQL_DONO_ATIVO, v["user_id"]))
             guardi = await guardi_de(conn, v["user_id"])
@@ -151,7 +160,10 @@ async def disparar_varredura(sessao_fn, v: dict, agora: datetime, disparar=None)
         logger.warning("Varredura %s: turno não abriu: %s", v["id"], e)
         await marcar("erro")
         return
-    await marcar("rodando", run_id=run_id)
+    # ⚠️ Não é `marcar("rodando")`: o registro pode já ter acontecido.
+    async with sessao_fn(role="service_role") as conn:
+        if not await dominio.gravar_run_id(conn, v["id"], carimbo, run_id):
+            logger.info("Varredura %s: posse perdida ao gravar o run_id.", v["id"])
 
 
 async def etapa_varredura(sessao_fn, agora: datetime, disparar=None) -> int:

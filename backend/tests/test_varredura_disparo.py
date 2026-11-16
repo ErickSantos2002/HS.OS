@@ -36,18 +36,28 @@ def _v(**kw):
 
 class Conn:
     def __init__(self, log, turno_aberto=False, ativo=True, guardi="erick-bot",
-                 nome="Erick Santos", config=None, reservadas=()):
+                 nome="Erick Santos", config=None, reservadas=(), na_nina=True):
         self.log = log
         self.turno_aberto, self.ativo, self.guardi, self.nome = turno_aberto, ativo, guardi, nome
         self.config = config
         self.reservadas = list(reservadas)
         self.marcados = []
+        self.na_nina = na_nina
+        self.status = "agendada"  # o estado da linha no "banco"
+        self.run_ids = []
 
     async def fetchval(self, sql, *a):
         if sql == dom.SQL_MARCAR:
             self.log.append(("marcar", a[1]))
             self.marcados.append(a)
+            self.status = a[1]
             return a[0]
+        if sql == dom.SQL_GRAVAR_RUN:
+            self.log.append(("gravar_run_id", a[2]))
+            self.run_ids.append(a)
+            return a[0]
+        if sql == dv.SQL_ATENDIDO_PELA_NINA:
+            return self.na_nina
         if sql == dom.SQL_CONFIG:
             return self.config
         if sql == dl.SQL_DONO_ATIVO:
@@ -183,9 +193,41 @@ def test_pedida_grava_linha_antes_do_chat_send():
     assert json.loads(media) == [{"type": "varredura_pedida"}]
     assert "a nina pediu este resumo" in log[i_send][3].lower()
     # rodando antes (limpando o pendente), rodando com o run_id depois.
-    assert [(m[1], m[3]) for m in conn.marcados] == [("rodando", None), ("rodando", "hsos-varredura-abc")]
-    assert conn.marcados[0][6] is True
-    assert all(m[2] == CARIMBO for m in conn.marcados)
+    assert [(m[1], m[3]) for m in conn.marcados] == [("rodando", None)]
+    assert conn.marcados[0][6] is True and conn.marcados[0][2] == CARIMBO
+    assert conn.run_ids == [("v-1", CARIMBO, "hsos-varredura-abc")]
+
+
+def test_run_id_gravado_depois_do_registro_nao_desfaz_o_registro():
+    """O Guardi pode chamar `varredura_registrar` antes de o `chat.send`
+    voltar. Gravar o `run_id` com `marcar("rodando")` voltaria a linha
+    `entregue` para `rodando`, e o fechamento a marcaria `sem_registro` — a
+    Nina leria "o Guardi não registrou" de quem registrou. O `run_id` vai
+    sozinho, sem tocar no status."""
+    log = []
+    conn = Conn(log)
+
+    async def disparar(agent_id, user_id, mensagem, pergunta_id=None, prefixo="hsos-"):
+        conn.status = "entregue"  # o registro chegou no meio do chat.send
+        return f"{prefixo}abc"
+
+    _rodar(conn, _v(), disparar)
+    assert conn.status == "entregue"
+    assert conn.run_ids == [("v-1", CARIMBO, "hsos-varredura-abc")]
+    sql = " ".join(dom.SQL_GRAVAR_RUN.split())
+    assert "status" not in sql and "SET run_id = $3" in sql
+
+
+def test_quadro_revalida_o_destinatario():
+    """O quadro foi semeado de manhã; até disparar, o destinatário pode ter
+    sido desligado ou tirado da Nina. Sem conferir, o quadro da equipe iria
+    para quem não deve mais vê-lo."""
+    for kw in ({"ativo": False}, {"na_nina": False}):
+        log = []
+        conn = Conn(log, guardi=None, **kw)
+        _rodar(conn, _v(tipo="quadro", agent_id="nina", user_id="u-nicholson"), _disparar(log))
+        assert "chat.send" not in [e[0] for e in log]
+        assert [m[1] for m in conn.marcados] == ["pulada"]
 
 
 def test_manha_e_quadro_nao_gravam_linha():

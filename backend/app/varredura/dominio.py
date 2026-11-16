@@ -78,6 +78,15 @@ SQL_MARCAR = """
     RETURNING id
 """
 
+# Só o `run_id`, sem tocar no status: o Guardi pode ter chamado
+# `varredura_registrar` antes de o `chat.send` voltar, e regravar `rodando`
+# aqui desfaria o registro (o fechamento o marcaria `sem_registro`).
+SQL_GRAVAR_RUN = """
+    UPDATE public.varreduras SET run_id = $3
+     WHERE id = $1::uuid AND disparando_em = $2
+    RETURNING id
+"""
+
 SQL_RODANDO = f"""
     SELECT id::text AS id, tipo, dia
       FROM public.varreduras
@@ -198,6 +207,11 @@ async def marcar(conn, id: str, status: str, carimbo, run_id: str | None = None,
                  proximo_em=None, pendente_desde=None, limpar_pendente: bool = False) -> bool:
     r = await conn.fetchval(SQL_MARCAR, id, status, carimbo, run_id, proximo_em,
                             pendente_desde, limpar_pendente)
+    return r is not None
+
+
+async def gravar_run_id(conn, id: str, carimbo, run_id: str) -> bool:
+    r = await conn.fetchval(SQL_GRAVAR_RUN, id, carimbo, run_id)
     return r is not None
 
 
