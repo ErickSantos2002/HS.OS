@@ -125,3 +125,9 @@ def test_pedir_terceira_vez_explica_o_teto(monkeypatch):
     monkeypatch.setattr(dominio, "pedir", ok)
     texto, _ = asyncio.run(m._pedir_varredura("nina", {"pessoa": "lara"}))
     assert "pedido feito".lower() in texto.lower() and "~2 min" in texto
+
+
+def test_hora_sai_no_fuso_de_sao_paulo():
+    """A `hora` vem do banco em UTC; 10:30Z é a varredura das 07:30 de Brasília."""
+    t = quadro.formatar_equipe([_l("Ana A")], None)
+    assert "(07:30)" in t and "(10:30)" not in t

@@ -8,6 +8,8 @@ contexto do modelo; o aviso manda pedir por pessoa em vez de truncar calado.
 import re
 import unicodedata
 
+from app.varredura.regras import FUSO
+
 TETO_RETORNO = 12_000
 TETO_RESUMO_LISTA = 600
 AVISO_CORTE = "(lista cortada: peça por pessoa)"
@@ -89,7 +91,7 @@ def formatar_equipe(linhas: list[dict], pessoa: str | None) -> str:
         resumo = l.get("resumo") or ""
         if not pessoa and len(resumo) > TETO_RESUMO_LISTA:
             resumo = resumo[:TETO_RESUMO_LISTA] + "…"
-        hora = l["hora"].strftime("%H:%M") if hasattr(l.get("hora"), "strftime") else (l.get("hora") or "")
+        hora = l["hora"].astimezone(FUSO).strftime("%H:%M") if hasattr(l.get("hora"), "astimezone") else (l.get("hora") or "")
         sec = [f"\n## {l['nome']} — {l.get('cargo') or 'sem cargo'}" + (f" ({hora})" if hora else "")]
         n = _numeros(l.get("numeros"))
         if n:
