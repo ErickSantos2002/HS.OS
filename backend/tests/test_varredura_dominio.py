@@ -168,3 +168,20 @@ def test_fechar_sem_registro_pega_rodando_antigo_sem_run():
     no próprio `disparando_em` é o que o fecha."""
     assert "v.disparando_em < now() - interval '30 minutes'" in d.SQL_FECHAR
     assert "OR EXISTS" in d.SQL_FECHAR
+
+
+def test_reserva_respeita_teto_de_simultaneas():
+    """16/11/2026: os 23 Guardis ao mesmo tempo saturaram o backend, o gateway
+    não abriu os MCP e 13 de 23 varreduras terminaram sem registro. A reserva
+    desconta as que já estão rodando do teto."""
+    from app.varredura.regras import TETO_SIMULTANEO
+    assert 1 <= TETO_SIMULTANEO <= 5
+    assert "LIMIT GREATEST(0, $2" in d.SQL_RESERVAR and "status = 'rodando'" in d.SQL_RESERVAR
+
+    class C:
+        async def fetch(self, sql, *a):
+            self.args = a
+            return []
+    c = C()
+    rodar(d.reservar(c))
+    assert c.args == (False, TETO_SIMULTANEO)

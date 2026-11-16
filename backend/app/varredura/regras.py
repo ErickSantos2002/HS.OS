@@ -13,6 +13,8 @@ FUSO = ZoneInfo("America/Sao_Paulo")
 
 TETO_RESUMO = 4000
 TETO_PEDIDAS_DIA = 2
+# Varreduras rodando ao mesmo tempo (por worker; ver SQL_RESERVAR).
+TETO_SIMULTANEO = 3
 INTERVALO_PEDIDAS = timedelta(minutes=30)
 ADIAMENTO = timedelta(minutes=2)
 ADIAMENTO_MAX = timedelta(minutes=30)
@@ -175,3 +177,21 @@ def novidade(manha: dict | None, tarde: dict) -> tuple[bool, list[str]]:
             if v > antes:
                 frases.append(f"{sis}.{k}: {antes} → {v}")
     return bool(frases), frases
+
+
+# Sistema ligado no Guardi (`agent_profiles.sistemas_ligados`) → chave em `numeros`.
+_LIGADO_PARA_CHAVE = {"taskhs": "taskhs", "gestorhs": "gestorhs",
+                      "hsgrowth": "hsgrowth", "hsgrowth_servicos": "hsgrowth"}
+
+
+def sistemas_faltando(numeros: dict, ligados: list[str], email_ligado: bool) -> list[str]:
+    """Os sistemas da varredura que o Guardi tem e não contou nem pôs em `falhas`.
+
+    ⚠️ Na 2ª varredura real (16/11/2026) o Guardi pulou CRM e GestorHS em
+    silêncio; o quadro da Nina mostraria a pessoa "sem pendência" ali.
+    """
+    esperados = {_LIGADO_PARA_CHAVE[s] for s in ligados if s in _LIGADO_PARA_CHAVE}
+    if email_ligado:
+        esperados.add("email")
+    vieram = {k for k in numeros if k in SISTEMAS} | set(numeros.get("falhas") or [])
+    return sorted(esperados - vieram)

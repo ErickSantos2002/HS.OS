@@ -150,3 +150,17 @@ def test_sistema_que_falhou_a_tarde_nao_gera_novidade():
 
 def test_sem_manha_e_novidade():
     assert novidade(None, {"taskhs": {"atrasadas": 0}}) == (True, ["primeira do dia"])
+
+
+def test_sistemas_faltando_aponta_ligado_que_nao_veio():
+    """2ª varredura real (16/11/2026): o Guardi pulou CRM e GestorHS em
+    silêncio — nem contou, nem pôs em `falhas`. O servidor cobra: sistema
+    ligado tem de vir contado ou declarado como falha."""
+    from app.varredura.regras import sistemas_faltando
+    ligados = ["taskhs", "gestorhs", "hsgrowth_servicos", "datacore"]
+    n = {"taskhs": {"abertas": 4}, "email": {"nao_lidos_3d": 3}}
+    assert sistemas_faltando(n, ligados, email_ligado=True) == ["gestorhs", "hsgrowth"]
+    n["falhas"] = ["gestorhs", "hsgrowth"]
+    assert sistemas_faltando(n, ligados, email_ligado=True) == []
+    assert sistemas_faltando({"taskhs": {"a": 1}}, ["taskhs"], email_ligado=True) == ["email"]
+    assert sistemas_faltando({"taskhs": {"a": 1}}, ["taskhs"], email_ligado=False) == []
