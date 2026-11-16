@@ -3,6 +3,7 @@
     cd backend
     PYTHONPATH=. .venv/bin/python scripts/varredura-agora.py --so <user_id>            # ensaio
     PYTHONPATH=. .venv/bin/python scripts/varredura-agora.py --so <user_id> --aplicar  # cria a pedida e espera
+    (… --so <user_id> --aplicar --mostrar-resumo imprime o resumo decifrado; o padrão é só o tamanho)
     PYTHONPATH=. .venv/bin/python scripts/varredura-agora.py --ligar [--aplicar]
     PYTHONPATH=. .venv/bin/python scripts/varredura-agora.py --desligar [--aplicar]
 
@@ -81,48 +82,60 @@ def _gravar_chave(ligada: bool, aplicar: bool) -> int:
             return 0 if ok else 1
 
 
-async def _ensaio(user_id: str, aplicar: bool) -> int:
+async def _ensaio(user_id: str, aplicar: bool, mostrar_resumo: bool = False) -> int:
     from dotenv import load_dotenv  # só o venv do backend tem; o do bancos não
 
     load_dotenv()
-    from app.database import close_db, get_pool, init_db
-    from app.email.cifra import decifrar
+    from app import database
+    from app.email import cifra
     from app.varredura import dominio
 
-    await init_db()
-    pool = get_pool()
-    if pool is None:
-        print("Não conectei no banco (DATABASE_URL do backend/.env).")
-        return 1
+    await database.init_db()
+    # ⚠️ Cada passo numa `sessao(role="service_role")`, nunca `pool.acquire()`
+    # cru: o `hsos_app` é NOINHERIT e sem privilégio em `public` — só o SET
+    # LOCAL ROLE da sessão dá acesso. E transação curta por passo: a pedida
+    # tem que COMITAR para o disparador de produção vê-la.
     try:
-        async with pool.acquire() as conn:
+        async with database.sessao(role="service_role") as conn:
             cfg = await dominio.ler_config(conn)
-            print(f"varredura ligada na config: {cfg.ligada}")
-            if not aplicar:
-                print(f"(ensaio — criaria uma pedida (por='agenda') para {user_id}; use --aplicar)")
-                return 0
-            inicio = datetime.now(timezone.utc)
+        print(f"varredura ligada na config: {cfg.ligada}")
+        if not aplicar:
+            print(f"(ensaio — criaria uma pedida (por='agenda') para {user_id}; use --aplicar)")
+            return 0
+        inicio = datetime.now(timezone.utc)
+        async with database.sessao(role="service_role") as conn:
             ok, motivo = await dominio.pedir(conn, user_id, inicio, por="agenda")
-            if not ok:
-                print(f"❌ {motivo}")
-                return 1
-            print("pedida criada; esperando o disparador (até 4 min)...")
-            esperado = 0
-            while esperado < ESPERA_SEGUNDOS:
-                await asyncio.sleep(INTERVALO)
-                esperado += INTERVALO
-                r = await conn.fetchrow(SQL_STATUS, user_id, inicio)
-                print(f"  {esperado:>3}s status={r['status'] if r else '?'}")
-                if r and r["status"] in TERMINAIS:
-                    print("numeros:", r["numeros"])
-                    if r["resumo_cifrado"]:
-                        print("resumo:\n" + decifrar(r["resumo_cifrado"]))
-                    print("✅ entregue" if r["status"] == "entregue" else f"⚠️ terminou em {r['status']}")
-                    return 0 if r["status"] == "entregue" else 1
-            print("⏱️ sem desfecho em 4 min — o backend com o disparador está no ar?")
+        if not ok:
+            print(f"❌ {motivo}")
             return 1
+        print("pedida criada; esperando o disparador (até 4 min)...")
+        esperado = 0
+        while esperado < ESPERA_SEGUNDOS:
+            await asyncio.sleep(INTERVALO)
+            esperado += INTERVALO
+            async with database.sessao(role="service_role") as conn:
+                r = await conn.fetchrow(SQL_STATUS, user_id, inicio)
+            print(f"  {esperado:>3}s status={r['status'] if r else '?'}")
+            if r and r["status"] in TERMINAIS:
+                print("numeros:", r["numeros"])
+                if r["resumo_cifrado"]:
+                    # O resumo cita assunto e remetente de e-mail do dono:
+                    # por padrão só o tamanho, para não cair em transcript.
+                    resumo = cifra.decifrar(r["resumo_cifrado"]) or ""
+                    if mostrar_resumo:
+                        print("resumo:\n" + resumo)
+                    else:
+                        print(f"resumo: {len(resumo)} caracteres "
+                              "(--mostrar-resumo para ver o texto)")
+                print("✅ entregue" if r["status"] == "entregue" else f"⚠️ terminou em {r['status']}")
+                return 0 if r["status"] == "entregue" else 1
+        print("⏱️ sem desfecho em 4 min — o backend com o disparador está no ar?")
+        return 1
+    except RuntimeError as e:  # `sessao` sem pool
+        print(f"Não conectei no banco (DATABASE_URL do backend/.env): {e}")
+        return 1
     finally:
-        await close_db()
+        await database.close_db()
 
 
 def main() -> int:
@@ -133,9 +146,11 @@ def main() -> int:
     g.add_argument("--ligar", action="store_true", help="liga a varredura para todos")
     g.add_argument("--desligar", action="store_true", help="desliga a varredura")
     ap.add_argument("--aplicar", action="store_true", help="escreve de verdade (padrão: ensaio)")
+    ap.add_argument("--mostrar-resumo", action="store_true",
+                    help="no --so, imprime o resumo decifrado (padrão: só o tamanho)")
     a = ap.parse_args()
     if a.so:
-        return asyncio.run(_ensaio(a.so, a.aplicar))
+        return asyncio.run(_ensaio(a.so, a.aplicar, a.mostrar_resumo))
     return _gravar_chave(a.ligar, a.aplicar)
 
 
