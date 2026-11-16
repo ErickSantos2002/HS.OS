@@ -70,7 +70,7 @@ def test_resumo_cortado_em_600_na_lista():
 
 
 def test_retorno_nunca_passa_12000():
-    linhas = [_l(f"Pessoa{i} Z", resumo="y" * 700) for i in range(60)]
+    linhas = [_l(f"Pessoa{i} Z", resumo="y" * 700) for i in range(150)]
     t = quadro.formatar_equipe(linhas, None)
     assert len(t) <= 12_000 and "(lista cortada: peça por pessoa)" in t
 
@@ -167,7 +167,7 @@ def test_retorno_vai_marcado_como_dado_externo(monkeypatch):
 
 def test_retorno_marcado_continua_ate_12000(monkeypatch):
     """A marca não pode empurrar o retorno para além do teto de 12 mil."""
-    _monta(monkeypatch, [_l(f"Pessoa{i} Z", resumo="y" * 700) for i in range(60)])
+    _monta(monkeypatch, [_l(f"Pessoa{i} Z", resumo="y" * 700) for i in range(150)])
     texto, _ = asyncio.run(m._pendencias_da_equipe("nina", {}))
     assert len(texto) <= quadro.TETO_RETORNO and "(lista cortada" in texto
 
@@ -186,3 +186,35 @@ def test_quadro_avisa_para_nao_publicar_em_pagina():
     topo do retorno, que ela sempre lê."""
     from app.varredura.quadro import AVISO_SEM_PAGINA, formatar_equipe
     assert formatar_equipe([], None).startswith(AVISO_SEM_PAGINA)
+
+
+def test_equipe_inteira_cabe_com_todos_os_nomes():
+    """1º quadro real (16/11/2026): 23 pessoas × até 600 caracteres passavam
+    dos 12.000; quem vinha no fim da ordem alfabética (Miguel a Welton) era
+    cortado e o quadro do CEO saiu com 16 de 23 dizendo "23 de 23". O espaço
+    agora é dividido entre todos."""
+    nomes = [f"Pessoa {chr(65 + i)}{chr(65 + i)}" for i in range(23)]
+    linhas = [_l(n, resumo="x" * 700, numeros={"taskhs": {"abertas": 3}}) for n in nomes]
+    t = quadro.formatar_equipe(linhas, None)
+    assert len(t) <= quadro.TETO_RETORNO
+    assert quadro.AVISO_CORTE not in t
+    for n in nomes:
+        assert f"## {n}" in t
+
+
+def test_topo_lista_todos_e_manda_uma_linha_por_pessoa():
+    linhas = [_l("Ana Souza"), _l("Bruno Lima")]
+    t = quadro.formatar_equipe(linhas, None)
+    topo = t.split("## ")[0]
+    assert "Ana Souza" in topo and "Bruno Lima" in topo
+    assert "CADA" in topo
+
+
+def test_nao_ligado_nao_e_falha():
+    """No 1º quadro a Nina leu "CRM não ligado" como falha de leitura. O
+    retorno diz por pessoa o que não está ligado, separado do que falhou."""
+    l = _l("Ana Souza", numeros={"taskhs": {"abertas": 1}, "falhas": ["email"]},
+           sistemas=["taskhs", "email"])
+    t = quadro.formatar_equipe([l], None)
+    assert "não conseguiu ler: email" in t
+    assert "não ligados a este Guardi (não é falha): gestorhs, hsgrowth" in t

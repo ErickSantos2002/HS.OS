@@ -35,6 +35,10 @@ export const CHANGELOG: ChangelogVersion[] = [
     changes: [
       {
         kind: "correcao",
+        text: "O quadro da equipe que a Nina monta traz todas as pessoas e não trata como problema um sistema que simplesmente não está ligado ao Guardi.",
+      },
+      {
+        kind: "correcao",
         text: "O resumo do seu Guardi passa a cobrir todos os sistemas ligados a ele — se algum não puder ser lido, ele diz qual.",
       },
     ],

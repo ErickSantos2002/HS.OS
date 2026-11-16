@@ -8,10 +8,12 @@ contexto do modelo; o aviso manda pedir por pessoa em vez de truncar calado.
 import re
 import unicodedata
 
-from app.varredura.regras import FUSO
+from app.varredura.regras import FUSO, SISTEMAS
 
 TETO_RETORNO = 12_000
 TETO_RESUMO_LISTA = 600
+# Piso do resumo por pessoa quando a equipe é grande: abaixo disso não diz nada.
+PISO_RESUMO_LISTA = 120
 AVISO_CORTE = "(lista cortada: peça por pessoa)"
 
 _MOTIVO = {
@@ -68,7 +70,7 @@ def _numeros(n) -> str:
     partes = []
     for sis, val in n.items():
         if sis == "falhas":
-            partes.append("não leu: " + ", ".join(val))
+            partes.append("não conseguiu ler: " + ", ".join(val))
         elif isinstance(val, dict):
             partes.append(f"{sis}: " + ", ".join(f"{k}={v}" for k, v in val.items()))
     return "; ".join(partes)
@@ -76,6 +78,18 @@ def _numeros(n) -> str:
 
 AVISO_SEM_PAGINA = ("NUNCA publique isto em página (publicar_pagina gera link público): traz "
                     "cliente, remetente e assunto de e-mail de cada pessoa. Responda só no chat.")
+
+
+def _nao_ligados(l: dict) -> str:
+    """O que este Guardi não tem — escolha da empresa, não falha de leitura.
+
+    ⚠️ No 1º quadro (16/11/2026) a Nina leu "CRM não ligado" como falha e fez
+    disso o destaque nº 1. Só sabe o que não está ligado quem tem `sistemas`.
+    """
+    if "sistemas" not in l:
+        return ""
+    fora = sorted(SISTEMAS - set(l.get("sistemas") or []))
+    return f"não ligados a este Guardi (não é falha): {', '.join(fora)}" if fora else ""
 
 
 def formatar_equipe(linhas: list[dict], pessoa: str | None, teto: int = TETO_RETORNO) -> str:
@@ -86,6 +100,12 @@ def formatar_equipe(linhas: list[dict], pessoa: str | None, teto: int = TETO_RET
     # assunto de e-mail — a proibição vai no próprio retorno, que ela lê sempre.
     out = [AVISO_SEM_PAGINA,
            f"{len(entregues)} de {len(linhas)} entregues (varreduras do dia)."]
+    if not pessoa and len(linhas) > 1:
+        # ⚠️ No 1º quadro (16/11/2026) 7 de 23 pessoas sumiram do texto ao CEO.
+        out += ["", f"Pessoas ({len(linhas)}): " + ", ".join(l["nome"] for l in linhas) + ".",
+                f"Escreva UMA linha para CADA uma dessas {len(linhas)} pessoas, mesmo que seja "
+                "\"sem pendência\" — não omita ninguém. \"Não ligado\" não é falha: não o cite "
+                "como problema."]
     tot = _totais(linhas)
     if tot:
         out += ["", "Totais (soma de quem entregou):"] + tot
@@ -95,17 +115,32 @@ def formatar_equipe(linhas: list[dict], pessoa: str | None, teto: int = TETO_RET
     cabeca = "\n".join(out)
     cortou = False
     corpo = []
+    # ⚠️ O espaço é DIVIDIDO entre todos: com 600 fixos, 23 pessoas passavam dos
+    # 12.000 e o fim da ordem alfabética era cortado (16/11/2026).
+    fixas = []
     for l in entregues:
-        resumo = l.get("resumo") or ""
-        if not pessoa and len(resumo) > TETO_RESUMO_LISTA:
-            resumo = resumo[:TETO_RESUMO_LISTA] + "…"
         hora = l["hora"].astimezone(FUSO).strftime("%H:%M") if hasattr(l.get("hora"), "astimezone") else (l.get("hora") or "")
         sec = [f"\n## {l['nome']} — {l.get('cargo') or 'sem cargo'}" + (f" ({hora})" if hora else "")]
         n = _numeros(l.get("numeros"))
         if n:
             sec.append(n)
+        fora = _nao_ligados(l)
+        if fora:
+            sec.append(fora)
+        fixas.append(sec)
+    # O que sobra depois do cabeçalho e das partes fixas (nome, números, não
+    # ligados) é dividido igualmente entre os resumos — medido, não estimado.
+    limite = TETO_RESUMO_LISTA
+    if not pessoa and entregues:
+        fixo = sum(len("\n".join(s)) + 2 for s in fixas) + 2 * len(entregues)  # +"\n" e "…"
+        sobra = teto - len(cabeca) - len(AVISO_CORTE) - 2 - fixo
+        limite = max(PISO_RESUMO_LISTA, min(TETO_RESUMO_LISTA, sobra // len(entregues)))
+    for l, sec in zip(entregues, fixas):
+        resumo = l.get("resumo") or ""
+        if not pessoa and len(resumo) > limite:
+            resumo = resumo[:limite] + "…"
         if resumo:
-            sec.append(resumo)
+            sec = sec + [resumo]
         corpo.append("\n".join(sec))
     texto = cabeca
     for sec in corpo:
