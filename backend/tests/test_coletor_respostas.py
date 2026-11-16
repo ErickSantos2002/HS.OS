@@ -224,10 +224,13 @@ def test_resposta_colhida_em_segundo_plano_acende_nao_lida():
     conn = _ConnNaoLida([_run(1)])
     asyncio.run(k.passada(_sessao(conn), _pronta(), object()))
     assert len(conn.avisos) == 1
-    user_id, agent_id, message_id, previa = conn.avisos[0]
-    assert (user_id, agent_id, message_id) == ("u", "nina", "m-1")
+    user_id, agent_id, previa = conn.avisos[0]
+    assert (user_id, agent_id) == ("u", "nina")
     assert previa.startswith("Bom dia, Welton")
     assert "NOT EXISTS" in k.SQL_NAO_LIDA  # a mesma mensagem não acende duas vezes
+    # `notifications.message_id` é FK para `channel_messages`: mandar o id de
+    # uma mensagem de agente fazia TODO insert falhar (16/11/2026).
+    assert "message_id" not in k.SQL_NAO_LIDA
 
 
 def test_falha_ao_acender_nao_lida_nao_derruba_o_coletor():

@@ -44,14 +44,20 @@ logger = logging.getLogger(__name__)
 # do sininho com `agent_id` é o que a tela já conta (`unreadByAgentOnly`) e já
 # apaga ao abrir a conversa (`markAllAsReadForAgent`). Sem trigger de push nela
 # desde a `026`: não dobra a notificação do celular.
+#
+# ⚠️ Sem `message_id`: a coluna é FK para `channel_messages` e o id de uma
+# mensagem de agente (`conversations`) a viola — a 1ª versão falhava em todo
+# INSERT, calada no `except` (16/11/2026; PREPARE não pega FK). A duplicata é
+# barrada pela mesma prévia do mesmo agente nos últimos 30 min.
 SQL_NAO_LIDA = """
     INSERT INTO public.notifications
-           (user_id, agent_id, message_id, author_name, content_preview, read)
-    SELECT $1::uuid, $2, $3::uuid,
+           (user_id, agent_id, author_name, content_preview, read)
+    SELECT $1::uuid, $2,
            COALESCE((SELECT name FROM public.agent_profiles WHERE agent_id = $2), $2),
-           $4, false
+           $3, false
      WHERE NOT EXISTS (SELECT 1 FROM public.notifications
-                        WHERE user_id = $1::uuid AND message_id = $3::uuid)
+                        WHERE user_id = $1::uuid AND agent_id = $2 AND content_preview = $3
+                          AND created_at > now() - interval '30 minutes')
 """
 _TETO_PREVIA = 200
 
@@ -124,7 +130,7 @@ async def _acender_nao_lida(sessao_fn, r, mensagem) -> None:
         return
     try:
         async with sessao_fn(role="service_role") as conn:
-            await conn.execute(SQL_NAO_LIDA, r["user_id"], r["agent_id"], mensagem.id,
+            await conn.execute(SQL_NAO_LIDA, r["user_id"], r["agent_id"],
                                (getattr(mensagem, "content", "") or "")[:_TETO_PREVIA])
     except Exception as e:  # noqa: BLE001
         logger.warning("Coletor: não acendi a não lida do run %s: %s", r["run_id"], e)
