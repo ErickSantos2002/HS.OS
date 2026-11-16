@@ -1059,7 +1059,9 @@ plano ao lado, em `plans/`). Cada Guardi confere sozinho as pendências do dono
 - **Chave** `app_settings` `varredura` = `{ligada, manha: 07:30, tarde: 13:30, quadro:
   08:30}`; ausente = desligada. Quem liga é `scripts/varredura-agora.py --ligar
   --aplicar` (admin; sem `--aplicar` é ensaio). `--so <user_id> --aplicar` cria uma
-  pedida de ensaio e espera o resumo.
+  pedida de ensaio e espera o resumo. ⚠️ **Runtime por modo**, sempre de `backend/` com
+  `PYTHONPATH=.`: `--so` no venv do backend (`.venv/bin/python`); `--ligar`/`--desligar`
+  em `~/projetos/bancos/.venv/bin/python` (o do backend não tem o cadastro `bancos`).
 - **Dias úteis** (seg–sex menos feriados nacionais, móveis pela Páscoa), fuso São
   Paulo, banco em UTC. Passou do limite sem rodar (manhã 12:00, tarde 17:00, quadro
   11:00) = `pulada`: não dispara velho.
@@ -1077,8 +1079,8 @@ plano ao lado, em `plans/`). Cada Guardi confere sozinho as pendências do dono
   pedidas por pessoa por dia, 30 min de intervalo, só para a Nina (o ensaio é
   `pedida_por='agenda'`). `varredura_registrar` fora de varredura recusa sem gravar.
 - ⚠️ **Ferramenta nova exige as duas publicações:** `varredura_registrar` (no
-  `hsos-bot-<bot>`) → `publicar-bots-mcp.py --aplicar`; `pendencias_da_equipe` e a de
-  pedir (no `hsos-anexos`, só a `nina`) → `publicar-anexos-mcp.py --aplicar`. O
+  `hsos-bot-<bot>`) → `publicar-bots-mcp.py --aplicar`; `pendencias_da_equipe` e
+  `pedir_varredura` (no `hsos-anexos`, só a `nina`) → `publicar-anexos-mcp.py --aplicar`. O
   `hsos_agente` da Nina não lê `varreduras` (037): ela passa pela ferramenta.
 - **Produção, nesta ordem** (migração `037` já aplicada): deploy → `publicar-bots-mcp.py`
   → `publicar-anexos-mcp.py --aplicar` → `criar-bots-pessoais.py --reescrever-agents-md

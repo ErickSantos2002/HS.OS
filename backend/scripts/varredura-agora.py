@@ -17,7 +17,7 @@ que não conta no teto de 2/dia da Nina.
 admin: o script usa o cadastro `bancos` (`perfil="admin"`), sem ler o
 `admin.toml` — rode com o Python do venv do cadastro nesse caso:
 `~/projetos/bancos/.venv/bin/python` (com `PYTHONPATH=.`). O `--so` usa o
-`DATABASE_URL` do `backend/.env`. Ligar liga os 23: a manhã é 07:30 do próximo
+`DATABASE_URL` do `backend/.env` (venv do backend: o `dotenv` só existe nele). Ligar liga os 23: a manhã é 07:30 do próximo
 dia útil e o quadro, 08:30. Sem `--aplicar` é só ensaio.
 """
 import argparse
@@ -26,9 +26,7 @@ import json
 import sys
 from datetime import datetime, timezone
 
-from dotenv import load_dotenv
-
-load_dotenv()
+from pathlib import Path
 
 CHAVE = "varredura"
 ESPERA_SEGUNDOS = 240
@@ -52,7 +50,7 @@ def valor_da_chave(ligada: bool, atual: dict | None) -> dict:
 
 
 def _gravar_chave(ligada: bool, aplicar: bool) -> int:
-    sys.path.insert(0, "/home/ericks/projetos/bancos")
+    sys.path.insert(0, str(Path.home() / "projetos/bancos"))
     import bancos  # noqa: E402
 
     with bancos.conectar("hsos", perfil="admin" if aplicar else "leitura") as conn:
@@ -84,6 +82,9 @@ def _gravar_chave(ligada: bool, aplicar: bool) -> int:
 
 
 async def _ensaio(user_id: str, aplicar: bool) -> int:
+    from dotenv import load_dotenv  # só o venv do backend tem; o do bancos não
+
+    load_dotenv()
     from app.database import close_db, get_pool, init_db
     from app.email.cifra import decifrar
     from app.varredura import dominio
@@ -125,7 +126,8 @@ async def _ensaio(user_id: str, aplicar: bool) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0], epilog=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--so", metavar="USER_ID", help="cria uma pedida de ensaio para essa pessoa")
     g.add_argument("--ligar", action="store_true", help="liga a varredura para todos")
