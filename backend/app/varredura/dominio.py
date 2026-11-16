@@ -126,7 +126,7 @@ SQL_FECHAR = """
 
 SQL_GUARDIS = """
     SELECT ap.dono_id::text AS user_id, ap.agent_id,
-           p.full_name AS nome, p.cargo, p.departamento
+           p.full_name AS nome, p.cargo, p.departamento, u.email
       FROM public.agent_profiles ap
       JOIN auth.users u ON u.id = ap.dono_id AND u.is_active
       LEFT JOIN public.profiles p ON p.id = ap.dono_id
@@ -269,7 +269,8 @@ async def do_dia(conn, dia, user_id: str | None = None) -> list[dict]:
         entregues = [r for r in cand if r["status"] == "entregue"]
         escolhida = (entregues or cand or [None])[-1]
         item = {"user_id": g["user_id"], "nome": g["nome"], "cargo": g["cargo"],
-                "departamento": g["departamento"], "agent_id": g["agent_id"]}
+                "departamento": g["departamento"], "agent_id": g["agent_id"],
+                "email": g.get("email")}
         if escolhida is None:
             item.update(tipo=None, status="sem_varredura", hora=None, numeros=None, resumo=None)
         else:

@@ -121,12 +121,43 @@ _FERRAMENTAS = [{
         },
         "required": ["ids"],
     },
+}, {
+    "name": "pendencias_da_equipe",
+    "description": (
+        "Lê a varredura do dia de cada Guardi (pendências de cada pessoa nos sistemas: "
+        "TaskHS, HSGrowth, GestorHS, e-mail). Sem `pessoa`, traz a equipe toda: totais por "
+        "sistema, quem ficou SEM varredura e o motivo, e um resumo curto por pessoa. Com "
+        "`pessoa` (nome, primeiro nome ou e-mail), traz o resumo inteiro dela. NÃO invente "
+        "número: quem ficou sem varredura, diga que ficou sem; nunca trate falta de registro "
+        "como zero pendência. `dia` é AAAA-MM-DD (padrão: hoje)."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "dia": {"type": "string", "description": "AAAA-MM-DD. Omita para hoje."},
+            "pessoa": {"type": "string", "description": "Nome, primeiro nome ou e-mail do Guardi."},
+        },
+    },
+}, {
+    "name": "pedir_varredura",
+    "description": (
+        "Pede ao Guardi de UMA pessoa que refaça a varredura agora. No máximo 2 por pessoa "
+        "por dia, com 30 minutos entre elas. Fica pronta em cerca de 2 minutos; depois "
+        "consulte com pendencias_da_equipe(pessoa=…)."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {"pessoa": {"type": "string", "description": "Nome ou e-mail da pessoa."}},
+        "required": ["pessoa"],
+    },
 }]
 
 # Ferramenta que só alguns agentes enxergam. A identidade vem da URL assinada,
 # então esconder no `tools/list` e recusar no `tools/call` é uma fronteira de
 # verdade — não depende do agente se declarar.
-_FERRAMENTAS_RESTRITAS = {"relatorio_ponto": frozenset({"bruce"})}
+_FERRAMENTAS_RESTRITAS = {"relatorio_ponto": frozenset({"bruce"}),
+                          "pendencias_da_equipe": frozenset({"nina"}),
+                          "pedir_varredura": frozenset({"nina"})}
 
 
 def ferramentas_de(agent_id: str) -> list[dict]:
@@ -254,6 +285,67 @@ async def _ler_anexo(agent_id: str, args: dict) -> tuple[str, bool]:
         return f"Não consegui ler {anexo.nome}: o arquivo parece corrompido ou protegido por senha.", True
     logger.info("ler_anexo: %s leu %s (%s)", agent_id, anexo.id, anexo.nome)
     return f"{anexo.nome}\n{texto}", False
+
+
+async def _achar_guardi(conn, consulta: str):
+    """(linha, None) se achou um só; (None, mensagem) se 0 ou 2+."""
+    from app.varredura import dominio, quadro
+    from datetime import datetime
+    hoje = dominio._dia_local(datetime.now(dominio.FUSO))
+    achadas = quadro.achar_pessoas(await dominio.do_dia(conn, hoje), consulta)
+    if not achadas:
+        return None, "Não achei ninguém com esse nome entre os Guardis."
+    if len(achadas) > 1:
+        ops = "\n".join(f"- {l['nome']} — {l.get('cargo') or 'sem cargo'}" for l in achadas)
+        return None, f"Mais de uma pessoa combina. Qual delas?\n{ops}"
+    return achadas[0], None
+
+
+async def _pendencias_da_equipe(agent_id: str, args: dict) -> tuple[str, bool]:
+    from datetime import date, datetime
+    from app.varredura import dominio, quadro
+    bruto = args.get("dia")
+    try:
+        dia = date.fromisoformat(bruto) if bruto else dominio._dia_local(datetime.now(dominio.FUSO))
+    except (TypeError, ValueError):
+        return "`dia` deve ser AAAA-MM-DD.", True
+    pessoa = (args.get("pessoa") or "").strip() or None
+    try:
+        async with sessao(role="service_role") as conn:
+            linhas = await dominio.do_dia(conn, dia)
+            if pessoa:
+                achadas = quadro.achar_pessoas(linhas, pessoa)
+                if not achadas:
+                    return "Não achei ninguém com esse nome entre os Guardis.", False
+                if len(achadas) > 1:
+                    ops = "\n".join(f"- {l['nome']} — {l.get('cargo') or 'sem cargo'}" for l in achadas)
+                    return f"Mais de uma pessoa combina. Qual delas?\n{ops}", False
+                linhas = achadas
+    except Exception:
+        logger.exception("pendencias_da_equipe: falha interna")
+        return "Falha interna ao ler as varreduras; tente de novo em instantes.", True
+    return quadro.formatar_equipe(linhas, pessoa), False
+
+
+async def _pedir_varredura(agent_id: str, args: dict) -> tuple[str, bool]:
+    from datetime import datetime, timezone
+    from app.varredura import dominio
+    consulta = (args.get("pessoa") or "").strip()
+    if not consulta:
+        return "Diga `pessoa` (nome ou e-mail).", True
+    try:
+        async with sessao(role="service_role") as conn:
+            alvo, msg = await _achar_guardi(conn, consulta)
+            if alvo is None:
+                return msg, False
+            ok, motivo = await dominio.pedir(conn, alvo["user_id"], datetime.now(timezone.utc), por="nina")
+    except Exception:
+        logger.exception("pedir_varredura: falha interna")
+        return "Falha interna ao pedir a varredura.", True
+    if not ok:
+        return motivo, False
+    return (f"Pedido feito para {alvo['nome']}; fica pronto em ~2 min — consulte de novo com "
+            f"pendencias_da_equipe(pessoa=\"{alvo['nome']}\")."), False
 
 
 async def _relatorio_ponto(agent_id: str, args: dict) -> tuple[str, bool]:
@@ -520,6 +612,12 @@ async def mcp_anexos(agent_id: str, assinatura: str, request: Request,
             return _texto(ident, texto, erro)
         if nome == "relatorio_ponto":
             texto, erro = await _relatorio_ponto(agent_id, args)
+            return _texto(ident, texto, erro)
+        if nome == "pendencias_da_equipe":
+            texto, erro = await _pendencias_da_equipe(agent_id, args)
+            return _texto(ident, texto, erro)
+        if nome == "pedir_varredura":
+            texto, erro = await _pedir_varredura(agent_id, args)
             return _texto(ident, texto, erro)
         return _resposta(ident, erro={"code": -32601, "message": f"Ferramenta desconhecida: {nome}"})
     return _resposta(ident, erro={"code": -32601, "message": f"Método não suportado: {metodo}"})
