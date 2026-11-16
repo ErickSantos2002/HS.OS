@@ -74,7 +74,7 @@ def _numeros(n) -> str:
     return "; ".join(partes)
 
 
-def formatar_equipe(linhas: list[dict], pessoa: str | None) -> str:
+def formatar_equipe(linhas: list[dict], pessoa: str | None, teto: int = TETO_RETORNO) -> str:
     entregues = [l for l in linhas if _entregue(l)]
     sem = [l for l in linhas if not _entregue(l)]
     out = [f"{len(entregues)} de {len(linhas)} entregues (varreduras do dia)."]
@@ -101,10 +101,10 @@ def formatar_equipe(linhas: list[dict], pessoa: str | None) -> str:
         corpo.append("\n".join(sec))
     texto = cabeca
     for sec in corpo:
-        if len(texto) + len(sec) + 1 + len(AVISO_CORTE) + 1 > TETO_RETORNO:
+        if len(texto) + len(sec) + 1 + len(AVISO_CORTE) + 1 > teto:
             cortou = True
             break
         texto += "\n" + sec
-    if cortou or len(texto) > TETO_RETORNO:
-        texto = texto[:TETO_RETORNO - len(AVISO_CORTE) - 1] + "\n" + AVISO_CORTE
+    if cortou or len(texto) > teto:
+        texto = texto[:teto - len(AVISO_CORTE) - 1] + "\n" + AVISO_CORTE
     return texto

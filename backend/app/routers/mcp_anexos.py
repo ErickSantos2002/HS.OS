@@ -28,6 +28,7 @@ from app.anexos_escrita import montar_arquivo
 from app.anexos_leitura import conteudo_legivel
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
+from app.email.regras import como_dado_externo
 from app.integracoes import exige_segredo, ler_segredo
 from app.relatorios import ponto
 from app.routers.anexos import buscar_anexo, membro_do_canal
@@ -321,10 +322,20 @@ async def _pendencias_da_equipe(agent_id: str, args: dict) -> tuple[str, bool]:
                     ops = "\n".join(f"- {l['nome']} — {l.get('cargo') or 'sem cargo'}" for l in achadas)
                     return f"Mais de uma pessoa combina. Qual delas?\n{ops}", False
                 linhas = achadas
+        # ⚠️ O resumo cita assunto e remetente de e-mail — texto de terceiro.
+        # Vai marcado como dado, e o teto desconta a marca para o total
+        # continuar em 12 mil. Dentro do try: defeito aqui é mensagem, não 500.
+        texto = como_dado_externo(
+            quadro.formatar_equipe(linhas, pessoa, teto=quadro.TETO_RETORNO - _FOLGA_MARCA),
+            origem="varredura")
     except Exception:
         logger.exception("pendencias_da_equipe: falha interna")
         return "Falha interna ao ler as varreduras; tente de novo em instantes.", True
-    return quadro.formatar_equipe(linhas, pessoa), False
+    return texto, False
+
+
+# O que o `como_dado_externo` acrescenta (aviso + delimitadores), com sobra.
+_FOLGA_MARCA = 300
 
 
 async def _pedir_varredura(agent_id: str, args: dict) -> tuple[str, bool]:
