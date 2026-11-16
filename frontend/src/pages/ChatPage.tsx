@@ -118,6 +118,7 @@ import { InstalarApp } from "@/components/InstalarApp";
 import CartaoAprovacaoEmail from "@/components/chat/CartaoAprovacaoEmail";
 import CartaoAcao from "@/components/chat/CartaoAcao";
 import RecadoLembrete from "@/components/chat/RecadoLembrete";
+import LinhaVarredura, { ehVarreduraPedida } from "@/components/chat/LinhaVarredura";
 import { useConversaPessoal } from "@/hooks/use-conversa-pessoal";
 import { nomeDaConversaPessoal } from "@/lib/conversa-pessoal";
 
@@ -531,7 +532,7 @@ export const AgentMessageList = React.memo(function AgentMessageList({
                     className={`relative mt-1 inline-block max-w-[70%] pr-7 text-left ${isOwn ? "w-max" : "w-fit"} ${bubbleClass}`}
                   >
                     <div className="chat-message-content-selectable break-words" data-message-select-scope={msg.id}>
-                      {msg.content && (
+                      {msg.content && !ehVarreduraPedida(msg.media) && (
                         isErrorContent ? (
                           <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm">
                             <span className="inline-flex items-start gap-1.5">
@@ -551,6 +552,8 @@ export const AgentMessageList = React.memo(function AgentMessageList({
                         <CartaoAcao key={i} id={att.id} />
                       ) : att.type === "lembrete" ? (
                         <RecadoLembrete key={i} titulo={att.name} />
+                      ) : att.type === "varredura_pedida" ? (
+                        <LinhaVarredura key={i} />
                       ) : (
                         <AnexoResolvido key={i} id={att.base64?.startsWith("data:") ? undefined : att.id} url={att.base64?.startsWith("data:") ? att.base64 : (att.url || att.base64)}>
                           {(url, renovar, urlAgora) => <MediaBubble attachment={{ ...att, url, base64: att.base64 || url }} onImageClick={onSetLightboxSrc} onErroImagem={renovar} urlAgora={urlAgora} />}

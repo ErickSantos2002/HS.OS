@@ -12,9 +12,24 @@ import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from app import disparador_lembretes as d
 from app.agenda.regras import ADIAMENTO, INSISTENCIA, TETO_TURNOS_DIA
 from app.gateway.client import ErroGateway
+from app.varredura import disparo as varredura_disparo
+
+
+@pytest.fixture(autouse=True)
+def _sem_varredura(monkeypatch):
+    """A `passada` termina na etapa da varredura do Guardi, e as conexões
+    falsas daqui só conhecem o SQL dos lembretes: a etapa batia num
+    `AssertionError` do falso, que o `_varredura` engolia como "etapa falhou"
+    — o teste passava com um traceback no log. A ligação passada → varredura
+    é trancada em `test_varredura_disparo.py`; aqui ela não roda."""
+    async def nada(sessao_fn, agora, disparar=None):
+        return 0
+    monkeypatch.setattr(varredura_disparo, "etapa_varredura", nada)
 
 AGORA = datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)  # 09:00 em Brasília
 # O carimbo da reserva: a posse do item. Toda escrita final o exige.

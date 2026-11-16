@@ -395,6 +395,9 @@ async def passada(sessao_fn, agora: datetime, disparar=None) -> int:
     nova tentativa, porque repetir regravaria o recado a cada passada. Isso
     inclui falha de banco DEPOIS do `chat.send`: o status fica `erro` mesmo
     com o recado (e talvez o turno) já entregue.
+
+    Por último, a etapa da varredura do Guardi (`_varredura`); o retorno soma
+    as varreduras processadas.
     """
     async with sessao_fn(role="service_role") as conn:
         lembretes = await conn.fetch(SQL_RESERVAR)
@@ -438,7 +441,33 @@ async def passada(sessao_fn, agora: datetime, disparar=None) -> int:
                     await conn.execute(SQL_SOLTAR, l["id"], l["disparando_em"])
             except Exception as e:  # noqa: BLE001
                 logger.warning("Lembrete %s: não limpei o re-aviso: %s", l["id"], e)
-    return len(lembretes) + len(reavisos)
+
+    return len(lembretes) + len(reavisos) + await _varredura(sessao_fn, agora, disparar)
+
+
+_avisou_sem_varreduras = False
+
+
+async def _varredura(sessao_fn, agora: datetime, disparar) -> int:
+    """A etapa da varredura do Guardi (`app/varredura/disparo.py`), depois dos
+    lembretes.
+
+    ⚠️ Nada que aconteça nela sobe para a `passada`: o `rodar` trata
+    `UndefinedTableError` parando TUDO por 60 s, e código no ar antes da `037`
+    pararia os lembretes junto. Importada aqui dentro: o módulo dela importa
+    deste.
+    """
+    global _avisou_sem_varreduras
+    from app.varredura import disparo
+    try:
+        return await disparo.etapa_varredura(sessao_fn, agora, disparar=disparar)
+    except (asyncpg.UndefinedTableError, asyncpg.UndefinedColumnError):
+        if not _avisou_sem_varreduras:
+            _avisou_sem_varreduras = True
+            logger.warning("Varredura do Guardi parada: aplicar a migração 037.")
+    except Exception:  # noqa: BLE001 — a varredura não derruba os lembretes
+        logger.exception("Varredura do Guardi: etapa falhou.")
+    return 0
 
 
 def intervalo() -> int:

@@ -279,3 +279,47 @@ def test_agents_md_aponta_para_a_agenda_e_cabe_no_teto():
     a = arquivos_do_bot({"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"})["AGENTS.md"]
     assert "agenda_criar" in a and "agenda_listar" in a and "Não agendo nada" not in a
     assert len(a) < 20000
+
+
+# ── Varredura do Guardi (Task 8) ─────────────────────────────────────────────
+_DONO = {"full_name": "Erick Santos", "email": "ti@healthsafetytech.com"}
+
+
+def _bloco_varredura(a: str) -> str:
+    i = a.index("## Varredura")
+    f = a.find("\n## ", i + 5)
+    return a[i:] if f == -1 else a[i:f]
+
+
+def test_agents_md_tem_bloco_de_varredura():
+    """O turno da varredura já traz a instrução detalhada na mensagem; o
+    `AGENTS.md` guarda a regra durável: o que os cabeçalhos significam, o que
+    consultar por sistema e que `varredura_registrar` vem antes de escrever."""
+    b = _bloco_varredura(arquivos_do_bot(_DONO)["AGENTS.md"])
+    assert len(b) <= 1200
+    for trecho in ("[Varredura", "[Conferência da tarde", "taskhs_minhas",
+                   "minhas_tarefas", "tarefas_atrasadas", "meus_cards",
+                   "gestorhs_consultar", "so_nao_lidos", "varredura_registrar"):
+        assert trecho in b, trecho
+
+
+def test_agents_md_com_bloco_empresa_cabe_no_teto():
+    """O bloco novo come espaço do teto de 20.000 (truncado em silêncio pelo
+    gateway); o `hsos:empresa` de ~4.000 caracteres ainda tem de caber."""
+    from app.bots_pessoais import agents_md_novo
+    from app.routers.integracoes import _MARCA_FIM, _MARCA_INICIO
+    atual = f"x\n\n{_MARCA_INICIO}\n{'e' * 4000}\n{_MARCA_FIM}\n"
+    novo = agents_md_novo(_DONO, atual)
+    assert not excede_o_teto(arquivos_do_bot(_DONO)["AGENTS.md"])
+    assert not excede_o_teto(novo) and len(novo) < 20_000
+
+
+def test_excecao_no_reply_so_na_tarde():
+    """A regra "nunca NO_REPLY" continua; a única exceção é a conferência da
+    tarde quando a ferramenta diz `nada_novo`. Manhã e pedida respondem sempre."""
+    a = arquivos_do_bot(_DONO)["AGENTS.md"]
+    resto = a[a.index("## Sempre respondo"):]
+    assert "**Nunca** respondo `NO_REPLY`" in resto
+    assert "Conferência da tarde" in resto and "nada_novo" in resto
+    assert resto.count("NO_REPLY") == 1  # a exceção não ensina a calar em outro caso
+    assert "manhã" in resto.lower() and "pedida" in resto.lower()

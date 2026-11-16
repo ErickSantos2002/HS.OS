@@ -231,3 +231,18 @@ def test_payload_lembrete():
                              aviso_em="", de_novo=True, acoes=None)
     assert len(longo["body"]) <= 140 and "**" not in longo["body"]
     assert longo["title"] == "⏰ Ligar (de novo)" and "acoes" not in longo
+
+
+def test_varredura_pedida_nao_gera_push():
+    """A linha "A Nina pediu um resumo" é registro na conversa, não recado:
+    acordar o celular do dono por ela seria ruído puro."""
+    from app.push_regras import cala_push
+    assert cala_push([{"type": "varredura_pedida"}]) is True
+    assert cala_push([{"type": "audio"}, {"type": "varredura_pedida"}]) is True
+
+
+def test_resposta_comum_continua_com_push():
+    from app.push_regras import cala_push
+    assert cala_push(None) is False
+    assert cala_push([]) is False
+    assert cala_push([{"type": "audio"}, {"type": "lembrete", "id": "l"}]) is False

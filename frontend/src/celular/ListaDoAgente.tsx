@@ -22,6 +22,7 @@ import { estadoNoAgente, type EstadoDoVisto } from "@/lib/vistos";
 import { Bolha, Pensando } from "./Bolha";
 import { horaCurta, mesmoDia, rotuloDoDia } from "./formato";
 import { MidiaDoAgente } from "./Midia";
+import { ehVarreduraPedida } from "@/components/chat/LinhaVarredura";
 
 /** Ações da bolha; o objeto vem de `useAcoesEstaveis`. */
 export interface AcoesDoAgente {
@@ -111,7 +112,7 @@ const ItemDoAgente = memo(function ItemDoAgente({
             resto && <p style={{ whiteSpace: "pre-wrap" }}>{resto}</p>
           ) : (
             <ArtifactMessage
-              content={resto}
+              content={ehVarreduraPedida(m.media) ? "" : resto}
               agentId={m.agentId}
               className="text-[16px] leading-[1.38]"
               onArtifactClick={acoes.abrirArtefato}

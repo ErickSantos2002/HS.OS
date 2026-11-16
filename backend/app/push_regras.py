@@ -243,6 +243,17 @@ def item_de_lembrete(media) -> dict | None:
     return None
 
 
+def cala_push(media) -> bool:
+    """`True` para a linha "A Nina pediu um resumo" (`varredura_pedida`).
+
+    É registro na conversa, não recado: acordar o celular do dono por ela seria
+    ruído. A resposta comum do Guardi (e o lembrete) seguem com push.
+    """
+    if not isinstance(media, list):
+        return False
+    return any(isinstance(i, dict) and i.get("type") == "varredura_pedida" for i in media)
+
+
 def payload_lembrete(*, lembrete_id: str, titulo: str, instrucao: str | None,
                      aviso_em: str, de_novo: bool, acoes: dict | None) -> dict:
     """O push do recado do lembrete (spec 2026-11-13, "Camada 1").

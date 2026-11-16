@@ -393,3 +393,37 @@ def test_satelite_de_quem_nao_esta_na_parede_nao_sai():
     agora = datetime(2026, 11, 5, 12, tzinfo=timezone.utc)
     bots = [{"agent_id": "claudia-bot", "dono_id": "u-inativa"}]
     assert w.montar_bots(bots, {}, agora, {"u-andre"}) == []
+
+
+def _varr(tipo, status="entregue", pedida_por=None, quando=None):
+    return {"user_id": "u-nich", "agent_id": "nina", "tipo": tipo, "status": status,
+            "pedida_por": pedida_por, "entregue_em": quando or AGORA,
+            "criado_em": quando or AGORA}
+
+
+def test_evento_guardi_entregou_a_nina():
+    ev = w.montar_eventos([], [], [], {}, NOMES, {"nina": "Nina-Guardi"},
+                          varreduras=[_varr("manha"), _varr("tarde", "nada_novo")])
+    assert [e["texto"] for e in ev] == ["Nina-Guardi entregou o resumo à Nina"] * 2
+    assert {e["tipo"] for e in ev} == {"entrega"}
+    assert w.montar_eventos([], [], [], {}, NOMES, {"nina": "G"},
+                            varreduras=[_varr("manha", "erro")]) == []
+
+
+def test_evento_nina_pediu():
+    ev = w.montar_eventos([], [], [], {}, NOMES, {"nina": "Fulano-Guardi"},
+                          varreduras=[_varr("pedida", "rodando", pedida_por="nina")])
+    assert ev == [{"ts": AGORA.isoformat(), "tipo": "agente",
+                   "texto": "Nina pediu um resumo a Fulano-Guardi"}]
+
+
+def test_evento_quadro_entregue():
+    ev = w.montar_eventos([], [], [], {}, NOMES, {}, varreduras=[_varr("quadro")])
+    assert ev[0]["texto"] == "Nina entregou o quadro da equipe" and ev[0]["tipo"] == "entrega"
+
+
+def test_sem_varreduras_eventos_iguais_a_antes():
+    msgs = [{"user_id": "u-nich", "agent_id": "nina", "role": "user", "created_at": AGORA}]
+    antes = w.montar_eventos([], msgs, [], {}, NOMES, {"nina": "Nina"})
+    assert w.montar_eventos([], msgs, [], {}, NOMES, {"nina": "Nina"}, varreduras=None) == antes
+    assert w.montar_eventos([], msgs, [], {}, NOMES, {"nina": "Nina"}, varreduras=[]) == antes

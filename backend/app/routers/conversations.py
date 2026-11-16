@@ -705,7 +705,7 @@ class RespostaOut(BaseModel):
     detalhe: str | None = None
 
 
-def _texto_da_resposta(mensagens: list, desde_seq: int) -> str:
+def _texto_da_resposta(mensagens: list, desde_seq: int, *, recuo: bool = True) -> str:
     """O texto do agente depois do nosso envio — **só o turno final**.
 
     O histórico do gateway traz `toolCall` e `toolResult` junto, e nada disso vai
@@ -732,6 +732,11 @@ def _texto_da_resposta(mensagens: list, desde_seq: int) -> str:
     ⚠️ **Com recuo para o comportamento antigo se o turno final não tiver
     texto.** Agente que responde e só depois chama uma ferramenta é raro, mas
     engolir a resposta dele seria pior que mostrar bastidor.
+
+    ⚠️ **`recuo=False` é da varredura do Guardi** (run `hsos-varredura-`). A
+    tarde sem novidade termina em `NO_REPLY`; limpo ele, o turno final fica
+    vazio e o recuo devolveria a narração ("Vou conferir o TaskHS…") como
+    resposta, com push. Ali vazio quer dizer silêncio, não "faltou texto".
     """
     # ⚠️ **O turno do agente carrega texto de controle, e ele vazou para o CEO.**
     #
@@ -809,7 +814,8 @@ def _texto_da_resposta(mensagens: list, desde_seq: int) -> str:
         return "\n\n".join(p for p in partes if p)
 
     assistentes = [m for m in novas if m.get("role") == "assistant"]
-    return _juntar([m for m in assistentes if (_seq(m) or 0) > corte]) or _juntar(assistentes)
+    final = _juntar([m for m in assistentes if (_seq(m) or 0) > corte])
+    return final or (_juntar(assistentes) if recuo else "")
 
 
 # ⚠️ **`chat.history` com `limit=1` NÃO devolve a mensagem mais nova.** Medido em
@@ -1792,7 +1798,8 @@ async def colher_resposta(c, agent_id: str, run_id: str, chave: str, seq_antes: 
         if corte != seq_antes:
             logger.info("Sessão %s recomeçou no envio (corte %d → %d).",
                         chave, seq_antes, corte)
-        texto = _texto_da_resposta(mensagens, corte)
+        varredura = run_id.startswith(PREFIXO_VARREDURA)
+        texto = _texto_da_resposta(mensagens, corte, recuo=not varredura)
         # O topo do que ACABAMOS de ler. É o piso do próximo envio — ver
         # `_piso_do_seq`. Sem guardá-lo, o corte fica esperando o
         # `chat.history` com `limit=5` acertar, e numa sessão longa ele não
@@ -1824,6 +1831,10 @@ async def colher_resposta(c, agent_id: str, run_id: str, chave: str, seq_antes: 
                         "sozinho. Comece uma nova conversa no botão acima.",
             )
 
+        if not texto and varredura:
+            # `NO_REPLY` da tarde sem novidade: o coletor encerra o run e nada
+            # vai para a conversa. O registro já está na `varreduras`.
+            return RespostaOut(status="erro", detalhe="Varredura sem texto a entregar.")
         if not texto:
             return RespostaOut(
                 status="erro",
@@ -1867,7 +1878,31 @@ async def colher_resposta(c, agent_id: str, run_id: str, chave: str, seq_antes: 
         hub.publicar(topico_usuario(user_id), "resposta-agente",
                      {"agent_id": agent_id, "message": saida.model_dump()})
         logger.info("Resposta de %s gravada (run %s, %d chars)", agent_id, run_id, len(texto))
+        if varredura:
+            await _quadro_entregue(run_id)
         return RespostaOut(status="pronta", message=saida)
+
+
+PREFIXO_VARREDURA = "hsos-varredura-"
+
+
+async def _quadro_entregue(run_id: str) -> None:
+    """O quadro da Nina vira `entregue` quando a resposta dela é gravada.
+
+    Ele não passa pelo `varredura_registrar` (não tem números), então sem isto
+    ficava `rodando` até o fechamento o marcar `sem_registro`. Só toca
+    `tipo='quadro'`: as do Guardi são fechadas pelo registro. Best-effort — a
+    resposta já está gravada e publicada; perder o status é um log.
+    """
+    try:
+        async with sessao(role="service_role") as conn:
+            await conn.execute(
+                """UPDATE public.varreduras
+                      SET status = 'entregue', entregue_em = now()
+                    WHERE run_id = $1 AND tipo = 'quadro' AND status = 'rodando'""",
+                run_id)
+    except Exception:  # noqa: BLE001 — acessório à resposta
+        logger.exception("Não marquei o quadro do run %s como entregue.", run_id)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

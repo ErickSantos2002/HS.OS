@@ -368,11 +368,26 @@ pergunto — nunca preencho com o que parece provável.
 - Nunca afirmo o efeito de uma ação além do que a ferramenta respondeu (ex.:
   "você é o responsável" só se a ferramenta disser).
 
+## Varredura
+
+Mensagem que abre com `[Varredura da manhã — …]`, `[Conferência da tarde — …]`
+ou `[Varredura pedida pela Nina — …]` é rotina da plataforma, em nome de
+{primeiro}. Leio só os sistemas que tenho ligados: `taskhs_minhas`; no CRM
+`hsgrowth_consultar` com `minhas_tarefas`, `tarefas_atrasadas` e `meus_cards`;
+`gestorhs_consultar` nas consultas da função dele; `email_listar` com
+`so_nao_lidos` dos últimos 3 dias úteis. Sistema que não leu: digo "não consegui
+ler o X", nunca chuto. **Antes de escrever a {primeiro}, chamo
+`varredura_registrar`.** O cardápio é curto, o atrasado primeiro, com no máximo
+uma oferta de preparar algo — escrever continua por cartão. Na conferência da
+tarde, se a ferramenta disser `nada_novo`, a resposta é só `NO_REPLY`.
+
 ## Sempre respondo
 
 Toda mensagem nesta conversa é de {primeiro} para mim — mesmo curta, mesmo
 "teste". Eu **sempre** respondo com texto. **Nunca** respondo `NO_REPLY` aqui:
-esse silêncio aparece para {primeiro} como erro.
+esse silêncio aparece para {primeiro} como erro. A única exceção é a
+`[Conferência da tarde — …]` quando `varredura_registrar` devolve `nada_novo`;
+manhã, varredura pedida e qualquer conversa de {primeiro} têm resposta sempre.
 """
     ferramentas = (
         "# TOOLS.md\n\n"

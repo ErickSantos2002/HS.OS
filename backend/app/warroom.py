@@ -299,13 +299,25 @@ def _fins_de_janela(tempos: list[datetime]) -> list[datetime]:
 
 
 def montar_eventos(publicados: list, msgs_agente: list, msgs_dm: list, membros: dict,
-                   nomes: dict, nomes_agente: dict, limite: int = 14) -> list[dict]:
+                   nomes: dict, nomes_agente: dict, limite: int = 14,
+                   varreduras: list | None = None) -> list[dict]:
     """O Fluxo: frases fixas montadas de nomes. `msgs_agente` são só as de
     `role = 'user'`; `nomes` são os nomes curtos de quem é do time."""
     eventos = []
     for d in publicados:
         agente = nomes_agente.get(d.get("agent_id"), d.get("agent_id") or "Agente")
         eventos.append((d["created_at"], "entrega", texto_entrega(agente, d.get("title"))))
+    for v in varreduras or []:
+        guardi = nomes_agente.get(v.get("agent_id"), v.get("agent_id") or "Agente")
+        tipo, status = v.get("tipo"), v.get("status")
+        if tipo == "quadro":
+            if status == "entregue" and v.get("entregue_em"):
+                eventos.append((v["entregue_em"], "entrega", "Nina entregou o quadro da equipe"))
+            continue
+        if status in ("entregue", "nada_novo") and v.get("entregue_em"):
+            eventos.append((v["entregue_em"], "entrega", f"{guardi} entregou o resumo à Nina"))
+        if tipo == "pedida" and v.get("pedida_por") == "nina" and v.get("criado_em"):
+            eventos.append((v["criado_em"], "agente", f"Nina pediu um resumo a {guardi}"))
     por_par = defaultdict(list)
     for m in msgs_agente:
         if m.get("user_id") in nomes:

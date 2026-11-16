@@ -32,7 +32,7 @@ FERRAMENTAS_BOT = ("lembrar", "taskhs_eu", "datacore_consultas", "datacore_consu
                    "taskhs_minhas", "taskhs_quadros", "taskhs_quadro",
                    "taskhs_tarefa", "taskhs_buscar", "taskhs_parados", "taskhs_membros_quadro", "taskhs_comentar",
                    "taskhs_mover", "taskhs_criar", "taskhs_atualizar", "taskhs_membros",
-                   "agenda_criar", "agenda_listar", "agenda_editar", "agenda_apagar")
+                   "agenda_criar", "agenda_listar", "agenda_editar", "agenda_apagar", "varredura_registrar")
 
 TETO_CORPO = 6000
 MAX_DESTINATARIOS = 20

@@ -6,6 +6,7 @@ import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import CartaoAprovacaoEmail from "@/components/chat/CartaoAprovacaoEmail";
 import CartaoAcao from "@/components/chat/CartaoAcao";
 import RecadoLembrete from "@/components/chat/RecadoLembrete";
+import LinhaVarredura from "@/components/chat/LinhaVarredura";
 import type { ChannelAttachment } from "@/hooks/use-channels";
 import type { MediaAttachment } from "@/lib/mock-data";
 import { CartaoDeArquivo, ImagemDaBolha, PlayerDeAudio } from "./Bolha";
@@ -15,6 +16,7 @@ export function MidiaDoAgente({ att, semente, aoAmpliar }: { att: MediaAttachmen
   if (att.type === "email_aprovacao" && att.id) return <CartaoAprovacaoEmail id={att.id} />;
   if (att.type === "acao_aprovacao" && att.id) return <CartaoAcao id={att.id} />;
   if (att.type === "lembrete") return <RecadoLembrete titulo={att.name} />;
+  if (att.type === "varredura_pedida") return <LinhaVarredura />;
   const tipo = att.type ?? (att.mimeType?.startsWith("image/") ? "image" : att.mimeType?.startsWith("audio/") ? "audio" : "file");
   const dataUri = att.base64?.startsWith("data:");
   return (
