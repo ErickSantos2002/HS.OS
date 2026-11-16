@@ -84,8 +84,12 @@ class Conn:
 
     async def fetch(self, sql, *a):
         if sql == dom.SQL_RESERVAR:
-            self.log.append(("reservar",))
-            return self.reservadas
+            # $1 = só pedidas. O filtro de verdade é o SQL (trancado em
+            # `test_reserva_so_pedidas_esta_no_sql`); aqui o falso o imita.
+            so_pedidas = a[0]
+            self.log.append(("reservar", so_pedidas))
+            return [r for r in self.reservadas
+                    if not so_pedidas or r["tipo"] == "pedida"]
         raise AssertionError(sql)
 
 
@@ -111,23 +115,47 @@ def _rodar(conn, v, disparar):
 
 
 def test_desligada_nao_semeia_nem_dispara():
-    """Sem a chave `varredura` (ou com `ligada: false`) nada nasce: é a chave
-    que liga para todos depois do ensaio no `erick-bot`. Mas o fechamento dos
-    `rodando` e o disparo do que já estava na fila continuam — uma pedida de
-    ensaio feita com a chave desligada tem que rodar, e um `rodando` que ficou
-    sem registro não pode ficar `rodando` para sempre."""
+    """Desligar a chave tem que PARAR a varredura, não só parar de semear: a
+    manhã de amanhã já semeada hoje (ou a tarde de hoje) dispararia mesmo com a
+    chave em `false`. Desligada, só a `pedida` sai — é o ensaio do
+    `varredura-agora.py` no `erick-bot` antes de ligar para todos. A agendada
+    parada vira `pulada` pelo limite de horário depois. E o fechamento dos
+    `rodando` continua: um sem registro não pode ficar `rodando` para sempre."""
     log = []
-    conn = Conn(log, config={"ligada": False})
+    manha = _v(id="v-manha", tipo="manha")
+    pedida = _v(id="v-pedida", tipo="pedida", pedida_por="nina")
+    conn = Conn(log, config={"ligada": False}, reservadas=[manha, pedida])
     n = asyncio.run(dv.etapa_varredura(_sessao(conn), AGORA, disparar=_disparar(log)))
     eventos = [e[0] for e in log]
-    assert "semear" not in eventos
-    assert "fechar" in eventos and "reservar" in eventos
-    assert "chat.send" not in eventos and n == 0
+    assert "semear" not in eventos and "fechar" in eventos
+    assert ("reservar", True) in log
+    disparados = [m[0] for m in conn.marcados if m[1] == "rodando"]
+    assert disparados == ["v-pedida"] and n == 1
+    assert len([e for e in log if e[0] == "chat.send"]) == 1
 
     log2 = []
-    conn2 = Conn(log2, config={"ligada": True})
+    conn2 = Conn(log2, config={"ligada": True}, reservadas=[manha])
     asyncio.run(dv.etapa_varredura(_sessao(conn2), AGORA, disparar=_disparar(log2)))
-    assert "semear" in [e[0] for e in log2]
+    assert "semear" in [e[0] for e in log2] and ("reservar", False) in log2
+    assert "chat.send" in [e[0] for e in log2]
+
+
+def test_reserva_so_pedidas_esta_no_sql():
+    """O filtro mora no SQL, nos dois níveis (subselect e conferência de fora),
+    e o padrão continua reservando tudo."""
+    sql = " ".join(dom.SQL_RESERVAR.split())
+    assert sql.count("(NOT $1 OR x.tipo = 'pedida')") == 1
+    assert sql.count("(NOT $1 OR v.tipo = 'pedida')") == 1
+
+    chamadas = []
+
+    class C:
+        async def fetch(self, sql, *a):
+            chamadas.append(a)
+            return []
+    asyncio.run(dom.reservar(C()))
+    asyncio.run(dom.reservar(C(), so_pedidas=True))
+    assert chamadas == [(False,), (True,)]
 
 
 def test_turno_aberto_adia_2_min():

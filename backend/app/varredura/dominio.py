@@ -45,6 +45,8 @@ SQL_SEMEAR_QUADRO = """
     ON CONFLICT DO NOTHING
 """
 
+# $1 = só pedidas: com a chave desligada, a agendada já semeada fica parada
+# (e vira `pulada` pelo limite depois); a pedida de ensaio sai.
 SQL_RESERVAR = """
     UPDATE public.varreduras v SET disparando_em = now()
      WHERE v.id IN (
@@ -52,11 +54,13 @@ SQL_RESERVAR = """
             WHERE x.status = 'agendada'
               AND x.proximo_em <= now()
               AND (x.disparando_em IS NULL OR x.disparando_em < now() - interval '10 minutes')
+              AND (NOT $1 OR x.tipo = 'pedida')
             ORDER BY x.proximo_em
             LIMIT 10
             FOR UPDATE SKIP LOCKED)
        AND v.status = 'agendada'
        AND (v.disparando_em IS NULL OR v.disparando_em < now() - interval '10 minutes')
+       AND (NOT $1 OR v.tipo = 'pedida')
     RETURNING v.id::text AS id, v.user_id::text AS user_id, v.agent_id, v.dia,
               v.tipo, v.pedida_por, v.proximo_em, v.turno_pendente_desde,
               v.disparando_em
@@ -198,8 +202,8 @@ async def semear(conn, cfg: Config, agora: datetime) -> int:
     return total
 
 
-async def reservar(conn) -> list[dict]:
-    rows = await conn.fetch(SQL_RESERVAR)
+async def reservar(conn, so_pedidas: bool = False) -> list[dict]:
+    rows = await conn.fetch(SQL_RESERVAR, so_pedidas)
     return [dict(r) for r in rows]
 
 

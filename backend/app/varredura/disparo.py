@@ -170,13 +170,16 @@ async def disparar_varredura(sessao_fn, v: dict, agora: datetime, disparar=None)
 
 async def etapa_varredura(sessao_fn, agora: datetime, disparar=None) -> int:
     """Semeia (se ligada), fecha as sem registro e dispara. Devolve quantas
-    foram processadas. Um item quebrado vira `erro` e não para os outros."""
+    foram processadas. Um item quebrado vira `erro` e não para os outros.
+
+    ⚠️ Desligada, só a `pedida` dispara: a agendada já semeada fica parada (e
+    vira `pulada` pelo limite) — desligar tem que parar, não só não semear."""
     async with sessao_fn(role="service_role") as conn:
         cfg = await dominio.ler_config(conn)
         if cfg.ligada:
             await dominio.semear(conn, cfg, agora)
         await dominio.fechar_sem_registro(conn)
-        reservadas = await dominio.reservar(conn)
+        reservadas = await dominio.reservar(conn, so_pedidas=not cfg.ligada)
     for v in reservadas:
         try:
             await disparar_varredura(sessao_fn, v, agora, disparar=disparar)
