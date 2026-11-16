@@ -35,6 +35,7 @@ from app.integracoes import exige_segredo
 from app.realtime import hub, topico_usuario
 from app.conversas_anteriores import SQL_RESETS, limites_do_trecho, recortar_conversas
 from app.recibos import eh_uuid, estado_no_agente
+from app.varredura.regras import CABECALHOS_VARREDURA
 
 logger = logging.getLogger(__name__)
 
@@ -1121,6 +1122,27 @@ def _ja_esta_la(texto: str, existentes: list[str]) -> bool:
     return False
 
 
+def _eh_turno_de_varredura(msgs: list) -> bool:
+    """A janela abre com o cabeçalho de um turno autônomo da varredura?"""
+    if not msgs or msgs[0].get("role") != "user":
+        return False
+    c = msgs[0].get("content")
+    t = c if isinstance(c, str) else " ".join(
+        b.get("text", "") for b in (c or []) if isinstance(b, dict))
+    return (t or "").lstrip().startswith(CABECALHOS_VARREDURA)
+
+
+def _texto_da_janela(msgs: list) -> str:
+    """O texto que o `/recuperar` traria desta janela.
+
+    ⚠️ Sem recuo na varredura, como no `colher_resposta`: a conferência da tarde
+    sem novidade responde só `NO_REPLY`, e o recuo pegaria a narração do turno
+    ("Vou conferir o TaskHS…") e a gravaria com push quando a pessoa abrisse a
+    conversa (revisão final de 16/11/2026).
+    """
+    return _texto_da_resposta(msgs, 0, recuo=not _eh_turno_de_varredura(msgs))
+
+
 def _turno_terminou(msgs: list) -> bool:
     """A janela termina com texto do agente — ou seja, o turno acabou?
 
@@ -1242,7 +1264,7 @@ async def recuperar(
                 continue
             if not _turno_terminou(msgs):
                 continue
-            texto = _texto_a_recuperar(_texto_da_resposta(msgs, 0), existentes)
+            texto = _texto_a_recuperar(_texto_da_janela(msgs), existentes)
             if texto is None:
                 continue
             # ⚠️ **A conferência em Python não protege de corrida, e a corrida

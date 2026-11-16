@@ -317,3 +317,24 @@ def test_falha_ao_marcar_o_quadro_nao_derruba_a_resposta(ambiente):
         {"role": "assistant", "content": "Quadro de hoje…", "__openclaw": {"seq": 12}}])
     r = _colher_run("hsos-varredura-q1")
     assert r.status == "pronta" and ambiente.publicados
+
+
+def test_recuperar_nao_traz_a_narracao_da_tarde_calada():
+    """O mesmo defeito do NO_REPLY tinha uma segunda porta: o `/recuperar`,
+    que roda quando a pessoa abre a conversa, relia a janela da conferência
+    da tarde no gateway e gravava "Vou conferir…" com push (revisão final de
+    16/11/2026). Janela que abre com cabeçalho de varredura não tem recuo."""
+    assert c._texto_da_janela(_TARDE_SEM_NOVIDADE) == ""
+
+
+def test_recuperar_mantem_o_recuo_na_conversa_comum():
+    janela = [{**_TARDE_SEM_NOVIDADE[0], "content": "me diz o que tenho hoje"},
+              *_TARDE_SEM_NOVIDADE[1:]]
+    assert c._texto_da_janela(janela) == "Vou conferir o TaskHS e o e-mail."
+
+
+def test_recuperar_reconhece_os_quatro_cabecalhos():
+    from app.varredura.disparo import mensagem
+    for tipo, por in (("manha", None), ("tarde", None), ("pedida", "nina"), ("quadro", None)):
+        janela = [{"role": "user", "content": mensagem(tipo, "Erick Santos", por)}]
+        assert c._eh_turno_de_varredura(janela), tipo

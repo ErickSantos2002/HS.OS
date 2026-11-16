@@ -201,3 +201,9 @@ def sistemas_faltando(numeros: dict, ligados: list[str], email_ligado: bool) -> 
     esperados = set(chaves_ligadas(ligados, email_ligado))
     vieram = {k for k in numeros if k in SISTEMAS} | set(numeros.get("falhas") or [])
     return sorted(esperados - vieram)
+
+
+# Como o turno autônomo da varredura começa (ver `disparo.mensagem`). O
+# `/recuperar` usa para reconhecer a janela no histórico do gateway.
+CABECALHOS_VARREDURA = ("[Varredura da manhã — ", "[Conferência da tarde — ",
+                        "[Varredura pedida pela Nina — ", "[Quadro da equipe para ")
