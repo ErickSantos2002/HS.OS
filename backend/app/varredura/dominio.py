@@ -13,7 +13,7 @@ import logging
 from datetime import datetime
 
 from app.email.cifra import cifrar, decifrar
-from app.varredura.regras import (FUSO, TETO_RESUMO, Config, config, dia_util,
+from app.varredura.regras import (FUSO, TETO_RESUMO, TETO_SIMULTANEO, Config, config, dia_util,
                                   horario, novidade, pode_pedir, validar_numeros,
                                   velha)
 
@@ -56,7 +56,14 @@ SQL_RESERVAR = """
               AND (x.disparando_em IS NULL OR x.disparando_em < now() - interval '10 minutes')
               AND (NOT $1 OR x.tipo = 'pedida')
             ORDER BY x.proximo_em
-            LIMIT 10
+            -- ⚠️ Teto de varreduras rodando ao mesmo tempo (16/11/2026): os 23
+            -- Guardis juntos saturaram o backend — o gateway não conseguiu abrir
+            -- os MCP (`timed out after 30000ms`) e 13 de 23 terminaram sem
+            -- registro. São 2 workers, cada um contando antes de reservar: no
+            -- pior caso rodam 2× o teto, o que ainda é pouco.
+            LIMIT GREATEST(0, $2 - (SELECT count(*) FROM public.varreduras r
+                                     WHERE r.status = 'rodando'
+                                       AND r.disparando_em > now() - interval '30 minutes'))
             FOR UPDATE SKIP LOCKED)
        AND v.status = 'agendada'
        AND (v.disparando_em IS NULL OR v.disparando_em < now() - interval '10 minutes')
@@ -202,8 +209,8 @@ async def semear(conn, cfg: Config, agora: datetime) -> int:
     return total
 
 
-async def reservar(conn, so_pedidas: bool = False) -> list[dict]:
-    rows = await conn.fetch(SQL_RESERVAR, so_pedidas)
+async def reservar(conn, so_pedidas: bool = False, teto: int = TETO_SIMULTANEO) -> list[dict]:
+    rows = await conn.fetch(SQL_RESERVAR, so_pedidas, teto)
     return [dict(r) for r in rows]
 
 

@@ -155,7 +155,7 @@ def test_reserva_so_pedidas_esta_no_sql():
             return []
     asyncio.run(dom.reservar(C()))
     asyncio.run(dom.reservar(C(), so_pedidas=True))
-    assert chamadas == [(False,), (True,)]
+    assert [c[0] for c in chamadas] == [False, True]
 
 
 def test_turno_aberto_adia_2_min():

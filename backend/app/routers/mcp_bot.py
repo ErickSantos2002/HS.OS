@@ -33,7 +33,7 @@ from app import acoes
 from app.agenda import dominio, outlook
 from app.agenda.regras import FUSO, RegraInvalida, regra_de
 from app.varredura import dominio as varredura
-from app.varredura.regras import EXEMPLO_NUMEROS
+from app.varredura.regras import EXEMPLO_NUMEROS, sistemas_faltando
 from app.bots_pessoais import _linha
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
@@ -811,6 +811,10 @@ async def _varredura_registrar(conn, bot: str, args: dict, ctx: dict) -> str:
     numeros = args.get("numeros")
     if not isinstance(numeros, dict):
         raise _Recusa("numeros precisa ser um objeto.")
+    faltando = sistemas_faltando(numeros, ctx.get("sistemas") or [], ctx.get("email_ligado", False))
+    if faltando:
+        raise _Recusa(f"Faltou {', '.join(faltando)}: consulte e conte (ou ponha em `falhas` se não "
+                      "conseguiu ler, e diga no resumo). Depois chame de novo.")
     try:
         r = await varredura.registrar(conn, bot, ctx["dono"], resumo, numeros)
     except LookupError as e:

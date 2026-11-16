@@ -111,3 +111,23 @@ def test_ferramenta_na_lista_do_bot():
     assert tuple(f["name"] for f in m.FERRAMENTAS) == FERRAMENTAS_BOT
     f = next(f for f in m.FERRAMENTAS if f["name"] == "varredura_registrar")
     assert f["inputSchema"]["required"] == ["resumo", "numeros"]
+
+
+def test_sistema_ligado_que_nao_veio_recusa_sem_gravar(amb, monkeypatch):
+    """2ª varredura real (16/11/2026): o Guardi pulou CRM e GestorHS em
+    silêncio. Sistema ligado sem contagem e fora de `falhas` faz a ferramenta
+    recusar ANTES do domínio, nomeando o que falta — o Guardi consulta e
+    chama de novo."""
+    class ConnLigada(Conn):
+        async def fetchrow(self, sql, *a):
+            return {**await super().fetchrow(sql, *a),
+                    "sistemas_ligados": ["taskhs", "gestorhs"], "email_ligado": True}
+
+    class S(_Sessao):
+        async def __aenter__(self):
+            return ConnLigada()
+    monkeypatch.setattr(m, "sessao", lambda **k: S())
+    chamadas = _registrar_falso(
+        monkeypatch, retorno={"status": "entregue", "novidade": True, "o_que_mudou": []})
+    texto, erro = _run({"resumo": "x", "numeros": {"taskhs": {"abertas": 4}}})
+    assert erro and "email" in texto and "gestorhs" in texto and chamadas == []
