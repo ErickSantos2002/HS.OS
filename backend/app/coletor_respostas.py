@@ -37,6 +37,24 @@ from app.gateway.client import ErroGateway
 
 logger = logging.getLogger(__name__)
 
+# ⚠️ A não lida da conversa com agente só existia na memória da aba que fez a
+# pergunta (`chat-sender.ts`, `markAgentUnread`). Resposta que o coletor grava —
+# varredura, lembrete, quem perguntou e fechou — chegava com push e, ao abrir o
+# sistema, a conversa não estava marcada (o Welton, 16/11/2026). A notificação
+# do sininho com `agent_id` é o que a tela já conta (`unreadByAgentOnly`) e já
+# apaga ao abrir a conversa (`markAllAsReadForAgent`). Sem trigger de push nela
+# desde a `026`: não dobra a notificação do celular.
+SQL_NAO_LIDA = """
+    INSERT INTO public.notifications
+           (user_id, agent_id, message_id, author_name, content_preview, read)
+    SELECT $1::uuid, $2, $3::uuid,
+           COALESCE((SELECT name FROM public.agent_profiles WHERE agent_id = $2), $2),
+           $4, false
+     WHERE NOT EXISTS (SELECT 1 FROM public.notifications
+                        WHERE user_id = $1::uuid AND message_id = $3::uuid)
+"""
+_TETO_PREVIA = 200
+
 # O coletor espera pouco por run: são até 10 por passada, em série.
 _ESPERA_MS = 1_500
 
@@ -100,6 +118,18 @@ def intervalo() -> int:
         return 5
 
 
+async def _acender_nao_lida(sessao_fn, r, mensagem) -> None:
+    """Best-effort: a resposta já está gravada; falhar aqui só perde o badge."""
+    if mensagem is None or not getattr(mensagem, "id", None):
+        return
+    try:
+        async with sessao_fn(role="service_role") as conn:
+            await conn.execute(SQL_NAO_LIDA, r["user_id"], r["agent_id"], mensagem.id,
+                               (getattr(mensagem, "content", "") or "")[:_TETO_PREVIA])
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Coletor: não acendi a não lida do run %s: %s", r["run_id"], e)
+
+
 async def passada(sessao_fn, colher, c) -> int:
     """Uma rodada: reserva e colhe cada run.
 
@@ -129,6 +159,7 @@ async def passada(sessao_fn, colher, c) -> int:
             elif saida.status == "pronta":
                 logger.info("Coletor gravou a resposta do run %s (%s).",
                             r["run_id"], r["agent_id"])
+                await _acender_nao_lida(sessao_fn, r, getattr(saida, "message", None))
         except (ErroGateway, OSError, asyncio.TimeoutError) as e:
             logger.warning("Coletor: gateway falhou no run %s: %s", r["run_id"], e)
             acao = "falhou"
