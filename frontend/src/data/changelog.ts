@@ -30,6 +30,20 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.14.0",
+    date: "2026-11-16",
+    changes: [
+      {
+        kind: "novidade",
+        text: "Seu Guardi agora te manda de manhã o que você tem pendente (TaskHS, CRM, GestorHS e e-mail) e, à tarde, só avisa se surgiu algo novo.",
+      },
+      {
+        kind: "novidade",
+        text: "A Nina passou a reunir as pendências da equipe e pode pedir a um Guardi que confira de novo — você vê na sua conversa quando isso acontece.",
+      },
+    ],
+  },
+  {
     version: "2.13.0",
     date: "2026-11-13",
     changes: [

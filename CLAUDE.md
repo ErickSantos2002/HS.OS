@@ -1046,6 +1046,46 @@ continua negado aos Guardis (os 560 disparos da `nina`); a agenda é do HS.OS.
   perde o e-mail por causa do calendário. `/email/estado` e `outlook.eventos` tentam a
   ampliação antes de dizer "sem permissão".
 
+### Varredura do Guardi — 16/11/2026
+
+Spec e plano: `docs/superpowers/specs/2026-11-16-varredura-do-guardi-design.md` (e o
+plano ao lado, em `plans/`). Cada Guardi confere sozinho as pendências do dono
+(TaskHS, HSGrowth, GestorHS, e-mail) e registra um resumo; a Nina reúne o da equipe.
+
+- ⚠️ **Porta única, de novo:** todo turno sai por `disparar_turno(..., prefixo=
+  "hsos-varredura-")`, e a varredura é uma etapa da `passada` do
+  `disparador_lembretes` (`app/varredura/`). Nenhum `chat.send` novo, nenhum laço
+  paralelo — o adiamento por run aberto é o do lembrete (2 min, até 30, depois `pulada`).
+- **Chave** `app_settings` `varredura` = `{ligada, manha: 07:30, tarde: 13:30, quadro:
+  08:30}`; ausente = desligada. Quem liga é `scripts/varredura-agora.py --ligar
+  --aplicar` (admin; sem `--aplicar` é ensaio). `--so <user_id> --aplicar` cria uma
+  pedida de ensaio e espera o resumo.
+- **Dias úteis** (seg–sex menos feriados nacionais, móveis pela Páscoa), fuso São
+  Paulo, banco em UTC. Passou do limite sem rodar (manhã 12:00, tarde 17:00, quadro
+  11:00) = `pulada`: não dispara velho.
+- ⚠️ **O resumo é gravado CIFRADO** (`resumo_cifrado`, `app/email/cifra.py`): o
+  usuário de leitura da empresa enxerga tabela nova por privilégio padrão, e o resumo
+  traz nome de cliente e e-mail. `numeros` fica em claro (só contagens e `falhas`).
+- ⚠️ **A tarde decide "novidade" no SERVIDOR**, comparando com a manhã, e só ela pode
+  responder `NO_REPLY`. Sistema que caiu não é "zero pendências": `numeros.falhas` o
+  nomeia e a tarde não o conta como novidade ao voltar vazio. Guardi que não chama
+  `varredura_registrar` vira `sem_registro` ("sem varredura hoje"), nunca zero.
+- ⚠️ **O quadro das 08:30 vai na conversa do Nicholson com a Nina, NÃO na Base de
+  Conhecimento** — a wiki é legível por todos e o quadro traz pendência nominal.
+- **"🔎 A Nina pediu um resumo das suas pendências."** (`media
+  [{"type":"varredura_pedida"}]`) aparece na conversa do dono, **sem push**. Teto de 2
+  pedidas por pessoa por dia, 30 min de intervalo, só para a Nina (o ensaio é
+  `pedida_por='agenda'`). `varredura_registrar` fora de varredura recusa sem gravar.
+- ⚠️ **Ferramenta nova exige as duas publicações:** `varredura_registrar` (no
+  `hsos-bot-<bot>`) → `publicar-bots-mcp.py --aplicar`; `pendencias_da_equipe` e a de
+  pedir (no `hsos-anexos`, só a `nina`) → `publicar-anexos-mcp.py --aplicar`. O
+  `hsos_agente` da Nina não lê `varreduras` (037): ela passa pela ferramenta.
+- **Produção, nesta ordem** (migração `037` já aplicada): deploy → `publicar-bots-mcp.py`
+  → `publicar-anexos-mcp.py --aplicar` → `criar-bots-pessoais.py --reescrever-agents-md
+  --aplicar --todos` e `ponteiro-nina-varredura.py --aplicar` → perguntar ao
+  `erick-bot` e à `nina` se têm as ferramentas → `varredura-agora.py --so <Erick>
+  --aplicar` → `--ligar --aplicar`.
+
 ### Feature flags — sobrou uma, e ela vem ligada
 
 ⚠️ **Revisadas em 31/08/2026, e o que estava escrito aqui não batia com o
