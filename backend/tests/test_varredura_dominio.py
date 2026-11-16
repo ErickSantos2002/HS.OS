@@ -199,3 +199,13 @@ def test_do_dia_leva_os_sistemas_ligados():
             return []
     r = rodar(d.do_dia(C(), "2026-11-16"))
     assert r[0]["sistemas"] == ["email", "hsgrowth", "taskhs"]
+
+
+def test_tarde_compara_com_a_ultima_entregue_do_dia_inclusive_pedida():
+    """1ª tarde real (16/11/2026): Djalma, Eduardo e Lara tiveram a manhã
+    refeita por uma `pedida`; a tarde só procurava `tipo = 'manha'`, não
+    achou, tratou como "primeira do dia" e mandou o cardápio de novo sem nada
+    ter mudado. A referência é a última varredura entregue do dia."""
+    sql = " ".join(d.SQL_MANHA.split())
+    assert "tipo IN ('manha', 'pedida')" in sql
+    assert "ORDER BY entregue_em DESC" in sql

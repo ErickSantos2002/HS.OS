@@ -108,10 +108,13 @@ SQL_RODANDO = f"""
      LIMIT 1
 """
 
+# A referência da tarde: a última varredura entregue do dia — da manhã ou
+# pedida (a pedida refaz a manhã, ou vem depois dela). Ver o teste de 16/11/2026.
 SQL_MANHA = """
     SELECT numeros FROM public.varreduras
-     WHERE user_id = $1::uuid AND dia = $2 AND tipo = 'manha'
+     WHERE user_id = $1::uuid AND dia = $2 AND tipo IN ('manha', 'pedida')
        AND status IN ('entregue', 'nada_novo')
+     ORDER BY entregue_em DESC NULLS LAST
      LIMIT 1
 """
 

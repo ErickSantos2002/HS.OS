@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.15.1",
+    date: "2026-11-16",
+    changes: [
+      {
+        kind: "correcao",
+        text: "A conferência da tarde não repete mais o cardápio quando a varredura da manhã foi refeita: ela compara com a última conferência do dia.",
+      },
+    ],
+  },
+  {
     version: "2.15.0",
     date: "2026-11-16",
     changes: [
