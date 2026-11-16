@@ -102,6 +102,11 @@ async def feed(
                  JOIN public.channels c ON c.id = m.channel_id
                 WHERE c.type = 'dm' AND m.deleted_at IS NULL
                   AND m.author_type = 'human' AND m.created_at >= $1""", hoje)
+        # Só o dia de hoje (São Paulo) e só as colunas do Fluxo — o resumo
+        # (cifrado) nunca sai do banco por aqui.
+        varreduras = await conn.fetch(
+            "SELECT user_id::text AS user_id, agent_id, tipo, pedida_por, status, "
+            "entregue_em, criado_em FROM public.varreduras WHERE criado_em >= $1", hoje)
         primeiro = await conn.fetchval("SELECT min(ts) FROM public.usage_events")
 
     pessoas, setores = warroom.montar_pessoas([dict(r) for r in perfis_pessoa], agora)
@@ -126,7 +131,8 @@ async def feed(
         "eventos": warroom.montar_eventos(
             [dict(r) for r in publicados],
             [m for m in msgs_agente_l if m["role"] == "user"],
-            msgs_dm_l, membros, nomes, nomes_agente),
+            msgs_dm_l, membros, nomes, nomes_agente,
+            varreduras=[dict(r) for r in varreduras]),
         "numeros": warroom.montar_numeros(len(publicados), msgs_agente_l, msgs_dm_l,
                                           membros, do_time),
     }

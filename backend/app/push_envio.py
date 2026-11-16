@@ -30,7 +30,7 @@ from app.config import settings
 from app.database import sessao
 from app.agenda import token_acao
 from app.push_regras import (Membro, destinatarios_canal, endpoint_de_push_valido,
-                              item_de_lembrete, payload_agente, payload_canal,
+                              cala_push, item_de_lembrete, payload_agente, payload_canal,
                               payload_lembrete)
 
 logger = logging.getLogger(__name__)
@@ -237,6 +237,8 @@ async def _alvos_da_resposta(conn, ident: str):
             media = json.loads(media)
         except ValueError:
             media = None
+    if cala_push(media):
+        return None  # a linha da varredura pedida não acorda o celular
     item = item_de_lembrete(media)
     if item:
         payload = await _payload_do_lembrete(conn, linha, item)
