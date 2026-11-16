@@ -405,3 +405,15 @@ def test_prefixo_do_disparo_e_o_que_o_colher_reconhece():
     from app.routers import conversations
     from app.varredura import disparo
     assert disparo.PREFIXO_RUN == conversations.PREFIXO_VARREDURA
+
+
+def test_ajustes_da_primeira_varredura_real_no_texto_do_turno():
+    """1ª varredura real (16/11/2026, erick-bot): duas ofertas em vez de uma,
+    e o total do GestorHS ("11.559 OS") e do TaskHS geral citados como se
+    fossem pendência do dono; a Nina publicou o quadro em página pública.
+    O texto do turno é onde o modelo lê a regra na hora."""
+    from app.varredura.disparo import mensagem
+    manha = mensagem("manha", "Erick Santos", None)
+    assert "UMA ÚNICA oferta" in manha
+    assert "DO SEU DONO" in manha and "não cite" in manha
+    assert "NUNCA publique" in mensagem("quadro", "Nicholson", None)

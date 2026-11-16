@@ -323,3 +323,12 @@ def test_excecao_no_reply_so_na_tarde():
     assert "Conferência da tarde" in resto and "nada_novo" in resto
     assert resto.count("NO_REPLY") == 1  # a exceção não ensina a calar em outro caso
     assert "manhã" in resto.lower() and "pedida" in resto.lower()
+
+
+def test_bloco_de_varredura_so_o_que_e_do_dono_e_uma_oferta():
+    """1ª varredura real (16/11/2026): o Guardi citou o total do GestorHS como
+    pendência e fez duas ofertas. A regra durável fica no `AGENTS.md`."""
+    b = _bloco_varredura(arquivos_do_bot(_DONO)["AGENTS.md"])
+    assert "total do\nsistema inteiro" in b or "total do sistema inteiro" in b
+    assert "UMA\núnica oferta" in b or "UMA única oferta" in b
+    assert len(b) <= 1200

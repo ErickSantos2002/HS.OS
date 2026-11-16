@@ -50,7 +50,9 @@ _CONSULTAS = (
     "`hsgrowth_consultar` com `minhas_tarefas`, `tarefas_atrasadas` e "
     "`meus_cards`; `gestorhs_consultar` nas consultas da função do seu dono "
     "(veja `gestorhs_consultas`); `email_listar` com `so_nao_lidos: true` e "
-    "`desde` nos últimos 3 dias úteis."
+    "`desde` nos últimos 3 dias úteis. Só o que é DO SEU DONO: as tarefas, "
+    "cards, OS e e-mails dele. Total do sistema inteiro (\"11.559 OS\", "
+    "\"129 cards parados no quadro geral\") não é pendência dele — não cite."
 )
 
 _REGISTRO = (
@@ -62,8 +64,9 @@ _REGISTRO = (
 
 _CARDAPIO = (
     "Então escreva ao seu dono um cardápio curto do dia: primeiro o que está "
-    "atrasado, depois o que vence logo, e no máximo UMA oferta de preparar algo "
-    "(que vira cartão para ele aprovar, como sempre)."
+    "atrasado, depois o que vence logo, e no fim UMA ÚNICA oferta de preparar "
+    "algo (que vira cartão para ele aprovar, como sempre) — a mais útil; não "
+    "ofereça mais de uma coisa."
 )
 
 _TARDE = ("Se a ferramenta responder `novidade: false`, responda só `NO_REPLY` "
@@ -76,7 +79,8 @@ _QUADRO = (
     "linha por pessoa com o que está atrasado e o que vence logo, e no fim os "
     "destaques. Nunca invente número — use só o que a ferramenta devolveu. Diga "
     "nominalmente quem ficou sem varredura hoje e por quê (sistema fora, o "
-    "Guardi não registrou, pulada)."
+    "Guardi não registrou, pulada). Responda aqui no chat — NUNCA publique "
+    "em página (`publicar_pagina` gera link público)."
 )
 
 

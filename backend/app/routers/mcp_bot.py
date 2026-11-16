@@ -33,6 +33,7 @@ from app import acoes
 from app.agenda import dominio, outlook
 from app.agenda.regras import FUSO, RegraInvalida, regra_de
 from app.varredura import dominio as varredura
+from app.varredura.regras import EXEMPLO_NUMEROS
 from app.bots_pessoais import _linha
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
@@ -573,14 +574,16 @@ FERRAMENTAS = [
     _f("agenda_apagar", "Apaga um lembrete (id do agenda_listar).", {"id": {"type": "string"}}, ("id",)),
     _f("varredura_registrar", "Só existe DENTRO de uma varredura (o turno autônomo que pede o resumo das "
        "pendências do seu dono); fora dela recusa. Chame UMA vez, no fim, com o `resumo` (até 4.000 "
-       "caracteres) e os `numeros` (contagens por assunto, ex.: tarefas atrasadas, e-mails não lidos). "
-       "Os números saem das consultas que você fez, NUNCA estimados. Sistema que falhou ou não "
-       "respondeu entra em `numeros.falhas` (lista com o nome dele) e você o diz no resumo "
-       "(\"não consegui ler o X\"). Do e-mail pode entrar assunto e remetente, nunca o corpo. "
-       "O retorno traz a `instrucao` do que responder à pessoa.",
+       "caracteres) e os `numeros`, NESTE formato: " + EXEMPLO_NUMEROS + " — chaves de topo só "
+       "`taskhs`, `hsgrowth`, `gestorhs`, `email` e `falhas`; dentro, contagens inteiras com nome em "
+       "a-z, 0-9 e _. Conte só o que é DO SEU DONO (as tarefas, cards, OS e e-mails dele), nunca "
+       "totais do sistema inteiro. Os números saem das consultas que você fez, NUNCA estimados. "
+       "Sistema que falhou ou não respondeu entra em `falhas` e você o diz no resumo (\"não "
+       "consegui ler o X\"). Do e-mail pode entrar assunto e remetente, nunca o corpo. Se recusar "
+       "o formato, corrija e chame de novo. O retorno traz a `instrucao` do que responder à pessoa.",
        {"resumo": {"type": "string", "maxLength": 4000},
-        "numeros": {"type": "object", "description": "contagens inteiras por assunto; `falhas`: lista "
-                    "dos sistemas que não consegui ler"}}, ("resumo", "numeros")),
+        "numeros": {"type": "object", "description": "contagens do dono por sistema, no formato do "
+                    "exemplo; `falhas`: sistemas que não consegui ler"}}, ("resumo", "numeros")),
 ]
 NOMES = tuple(f["name"] for f in FERRAMENTAS)
 assert NOMES == FERRAMENTAS_BOT, "FERRAMENTAS do servidor e FERRAMENTAS_BOT divergiram"

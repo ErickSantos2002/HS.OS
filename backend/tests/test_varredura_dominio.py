@@ -76,7 +76,7 @@ def test_semear_pula_o_que_ja_passou_do_limite():
 
 def test_registrar_sem_varredura_rodando_levanta():
     with pytest.raises(LookupError):
-        rodar(d.registrar(Conn(rodando=None), "erick-bot", "u1", "oi", {}))
+        rodar(d.registrar(Conn(rodando=None), "erick-bot", "u1", "oi", {"taskhs": {"abertas": 1}}))
 
 
 def test_registrar_cifra_o_resumo():
@@ -89,7 +89,7 @@ def test_registrar_cifra_o_resumo():
 
 def test_registrar_corta_em_4000():
     c = Conn(rodando=RODANDO)
-    rodar(d.registrar(c, "erick-bot", "u1", "x" * 9000, {}))
+    rodar(d.registrar(c, "erick-bot", "u1", "x" * 9000, {"taskhs": {"abertas": 1}}))
     assert len(cifra.decifrar(c.exec[0][1][1])) == TETO_RESUMO
 
 
