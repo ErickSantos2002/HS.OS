@@ -465,8 +465,8 @@ async def _varredura(sessao_fn, agora: datetime, disparar) -> int:
         if not _avisou_sem_varreduras:
             _avisou_sem_varreduras = True
             logger.warning("Varredura do Guardi parada: aplicar a migração 037.")
-    except Exception as e:  # noqa: BLE001 — a varredura não derruba os lembretes
-        logger.warning("Varredura do Guardi: etapa falhou: %s", e)
+    except Exception:  # noqa: BLE001 — a varredura não derruba os lembretes
+        logger.exception("Varredura do Guardi: etapa falhou.")
     return 0
 
 

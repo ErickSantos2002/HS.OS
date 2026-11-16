@@ -351,6 +351,34 @@ def test_passada_dos_lembretes_chama_a_varredura(monkeypatch):
     assert asyncio.run(dl.passada(s, AGORA)) == 0
 
 
+def test_etapa_que_quebra_loga_com_traceback(monkeypatch, caplog):
+    """Defeito nosso na etapa sai com traceback (`logger.exception`), não numa
+    linha de warning que esconde onde quebrou; a tabela ausente continua com o
+    aviso único e sem traceback."""
+    import asyncpg
+    import logging
+
+    async def quebra(sessao_fn, agora, disparar=None):
+        raise KeyError("campo")
+    monkeypatch.setattr(dv, "etapa_varredura", quebra)
+    with caplog.at_level(logging.WARNING, logger="app.disparador_lembretes"):
+        assert asyncio.run(dl._varredura(None, AGORA, None)) == 0
+    [rec] = caplog.records
+    assert rec.levelno == logging.ERROR and rec.exc_info is not None
+
+    caplog.clear()
+
+    async def sem_tabela(sessao_fn, agora, disparar=None):
+        raise asyncpg.UndefinedTableError("relation \"varreduras\" does not exist")
+    monkeypatch.setattr(dv, "etapa_varredura", sem_tabela)
+    monkeypatch.setattr(dl, "_avisou_sem_varreduras", False)
+    with caplog.at_level(logging.WARNING, logger="app.disparador_lembretes"):
+        asyncio.run(dl._varredura(None, AGORA, None))
+        asyncio.run(dl._varredura(None, AGORA, None))
+    [rec] = caplog.records
+    assert "037" in rec.getMessage() and rec.exc_info is None
+
+
 def test_mensagem_da_tarde_menciona_NO_REPLY():
     m = dv.mensagem("tarde", "Erick", None)
     assert m.startswith("[Conferência da tarde — Erick]")
