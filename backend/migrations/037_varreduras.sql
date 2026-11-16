@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS public.varreduras (
     user_id               uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     agent_id              text        NOT NULL,
     dia                   date        NOT NULL,
-    tipo                  text        CHECK (tipo IN ('manha', 'tarde', 'pedida', 'quadro')),
+    tipo                  text        NOT NULL CHECK (tipo IN ('manha', 'tarde', 'pedida', 'quadro')),
     pedida_por            text        CHECK (pedida_por IN ('agenda', 'nina')),
     status                text        NOT NULL DEFAULT 'agendada'
         CHECK (status IN ('agendada', 'rodando', 'entregue', 'nada_novo',
@@ -49,13 +49,14 @@ CREATE TABLE IF NOT EXISTS public.varreduras (
     disparando_em         timestamptz,
     turno_pendente_desde  timestamptz,
     criado_em             timestamptz DEFAULT now(),
-    entregue_em           timestamptz
+    entregue_em           timestamptz,
+    -- pedida_por só existe (e é obrigatório) na varredura pedida.
+    CONSTRAINT varreduras_pedida_por_check CHECK ((tipo = 'pedida') = (pedida_por IS NOT NULL))
 );
 
 ALTER TABLE public.varreduras ENABLE ROW LEVEL SECURITY;
 
-REVOKE ALL ON public.varreduras FROM PUBLIC;
-REVOKE ALL ON public.varreduras FROM hsos_agente;
+REVOKE ALL ON public.varreduras FROM PUBLIC, anon, authenticated, hsos_agente;
 
 -- Uma agendada por pessoa, dia e tipo; pedida pode repetir.
 CREATE UNIQUE INDEX IF NOT EXISTS varreduras_unica_idx
