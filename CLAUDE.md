@@ -1059,7 +1059,9 @@ plano ao lado, em `plans/`). Cada Guardi confere sozinho as pendências do dono
 - **Chave** `app_settings` `varredura` = `{ligada, manha: 07:30, tarde: 13:30, quadro:
   08:30}`; ausente = desligada. Quem liga é `scripts/varredura-agora.py --ligar
   --aplicar` (admin; sem `--aplicar` é ensaio). `--so <user_id> --aplicar` cria uma
-  pedida de ensaio e espera o resumo. ⚠️ **Runtime por modo**, sempre de `backend/` com
+  pedida de ensaio e espera (mostra status, números e o tamanho do resumo; o texto
+  só com `--mostrar-resumo`). ⚠️ **Desligada, só `pedida` dispara**: a agendada já
+  semeada fica parada e vira `pulada` pelo limite. ⚠️ **Runtime por modo**, sempre de `backend/` com
   `PYTHONPATH=.`: `--so` no venv do backend (`.venv/bin/python`); `--ligar`/`--desligar`
   em `~/projetos/bancos/.venv/bin/python` (o do backend não tem o cadastro `bancos`).
 - **Dias úteis** (seg–sex menos feriados nacionais, móveis pela Páscoa), fuso São
@@ -1074,6 +1076,13 @@ plano ao lado, em `plans/`). Cada Guardi confere sozinho as pendências do dono
   `varredura_registrar` vira `sem_registro` ("sem varredura hoje"), nunca zero.
 - ⚠️ **O quadro das 08:30 vai na conversa do Nicholson com a Nina, NÃO na Base de
   Conhecimento** — a wiki é legível por todos e o quadro traz pendência nominal.
+  ⚠️ **Quem lê o resumo de todos é quem está em `allowed_user_ids` da `nina`** (mais
+  administrador que fale com ela); ampliar essa lista também semeia um quadro por pessoa.
+  O quadro vira `entregue` quando a resposta da Nina é gravada (`colher_resposta`).
+- ⚠️ **Run `hsos-varredura-` não tem recuo de texto** (`_texto_da_resposta(recuo=False)`):
+  a tarde em `NO_REPLY` fica vazia e nada é gravado — com o recuo, a narração ("Vou
+  conferir o TaskHS…") virava mensagem com push. O retorno de `pendencias_da_equipe`
+  vai por `como_dado_externo` (o resumo cita assunto e remetente de e-mail).
 - **"🔎 A Nina pediu um resumo das suas pendências."** (`media
   [{"type":"varredura_pedida"}]`) aparece na conversa do dono, **sem push**. Teto de 2
   pedidas por pessoa por dia, 30 min de intervalo, só para a Nina (o ensaio é
@@ -1082,7 +1091,11 @@ plano ao lado, em `plans/`). Cada Guardi confere sozinho as pendências do dono
   `hsos-bot-<bot>`) → `publicar-bots-mcp.py --aplicar`; `pendencias_da_equipe` e
   `pedir_varredura` (no `hsos-anexos`, só a `nina`) → `publicar-anexos-mcp.py --aplicar`. O
   `hsos_agente` da Nina não lê `varreduras` (037): ela passa pela ferramenta.
-- **Produção, nesta ordem** (migração `037` já aplicada): deploy → `publicar-bots-mcp.py`
+- ⚠️ **A `037` esqueceu o `GRANT` ao `service_role`** (`has_table_privilege(...,
+  'INSERT')` = false em produção): sem ele o backend não lê nem grava a fila, e a etapa
+  morre em silêncio a cada 30 s. Vem na `038` (`~/aplicar-hsos-038.py`). Tabela nova:
+  `GRANT ... TO service_role` junto com o `REVOKE`, como a `032`.
+- **Produção, nesta ordem** (migração `037` aplicada; `038` antes do deploy): deploy → `publicar-bots-mcp.py`
   → `publicar-anexos-mcp.py --aplicar` → `criar-bots-pessoais.py --reescrever-agents-md
   --aplicar --todos` e `ponteiro-nina-varredura.py --aplicar` → perguntar ao
   `erick-bot` e à `nina` se têm as ferramentas → `varredura-agora.py --so <Erick>
