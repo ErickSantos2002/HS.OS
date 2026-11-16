@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS public.varreduras (
     criado_em             timestamptz DEFAULT now(),
     entregue_em           timestamptz,
     -- pedida_por só existe (e é obrigatório) na varredura pedida.
-    CONSTRAINT varreduras_pedida_por_check CHECK ((tipo = 'pedida') = (pedida_por IS NOT NULL))
+    CONSTRAINT varreduras_pedida_coerente CHECK ((tipo = 'pedida') = (pedida_por IS NOT NULL))
 );
 
 ALTER TABLE public.varreduras ENABLE ROW LEVEL SECURITY;
