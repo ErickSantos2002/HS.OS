@@ -1,0 +1,131 @@
+"""Regras puras da varredura do Guardi.
+
+Cada teste tranca um defeito que custaria uma varredura errada: rodar em
+feriado, passar do teto de pedidas, aceitar número que o agente inventou ou
+chamar de "novidade" um sistema que só voltou do ar com zero.
+"""
+from datetime import date, datetime, timedelta, timezone
+
+import pytest
+
+from app.varredura.regras import (
+    FUSO, config, dia_util, feriados, horario, novidade, pode_pedir,
+    validar_numeros, velha,
+)
+
+
+def _local(*a):
+    return datetime(*a, tzinfo=FUSO)
+
+
+def test_feriados_2026():
+    f = feriados(2026)
+    for d in (date(2026, 2, 16), date(2026, 2, 17), date(2026, 4, 3),
+              date(2026, 6, 4), date(2026, 11, 20)):
+        assert d in f
+
+
+def test_sabado_e_feriado_nao_sao_uteis():
+    assert not dia_util(date(2026, 11, 14))  # sábado
+    assert not dia_util(date(2026, 11, 20))  # feriado
+    assert dia_util(date(2026, 11, 16))
+
+
+def test_config_ausente_e_desligada():
+    for v in (None, {}, "lixo"):
+        c = config(v)
+        assert c.ligada is False
+        assert (c.manha.hour, c.manha.minute) == (7, 30)
+        assert (c.tarde.hour, c.tarde.minute) == (13, 30)
+        assert (c.quadro.hour, c.quadro.minute) == (8, 30)
+
+
+def test_config_so_liga_com_true_literal_e_campo_ruim_volta_ao_padrao():
+    assert config({"ligada": "true"}).ligada is False
+    c = config({"ligada": True, "manha": "07:45", "tarde": "25:99"})
+    assert c.ligada is True
+    assert (c.manha.hour, c.manha.minute) == (7, 45)
+    assert (c.tarde.hour, c.tarde.minute) == (13, 30)
+
+
+def test_horario_0730_vira_1030_utc():
+    h = horario(config(None), "manha", date(2026, 11, 16))
+    assert h == datetime(2026, 11, 16, 10, 30, tzinfo=timezone.utc)
+    assert h.utcoffset() == timedelta(0)
+
+
+def test_manha_velha_depois_do_meio_dia():
+    ref = datetime(2026, 11, 16, 10, 30, tzinfo=timezone.utc)
+    assert not velha("manha", ref, _local(2026, 11, 16, 11, 59))
+    assert velha("manha", ref, _local(2026, 11, 16, 12, 0))
+    assert velha("tarde", horario(config(None), "tarde", date(2026, 11, 16)),
+                 _local(2026, 11, 16, 17, 0))
+    assert velha("quadro", ref, _local(2026, 11, 16, 11, 0))
+    assert not velha("pedida", ref, _local(2026, 11, 16, 23, 0))
+
+
+def test_terceira_pedida_recusada():
+    agora = _local(2026, 11, 16, 15, 0)
+    ok, motivo = pode_pedir([agora - timedelta(hours=3), agora - timedelta(hours=2)], agora)
+    assert not ok and motivo
+
+
+def test_pedida_com_menos_de_30_min_recusada():
+    agora = _local(2026, 11, 16, 15, 0)
+    ok, motivo = pode_pedir([agora - timedelta(minutes=10)], agora)
+    assert not ok and motivo
+    ok, _ = pode_pedir([agora - timedelta(minutes=31)], agora)
+    assert ok
+    assert pode_pedir([], agora)[0]
+
+
+def test_validar_descarta_sistema_desconhecido():
+    r = validar_numeros({"taskhs": {"atrasadas": 2}, "banco": {"x": 1}})
+    assert r == {"taskhs": {"atrasadas": 2}}
+
+
+def test_validar_recusa_negativo():
+    with pytest.raises(ValueError):
+        validar_numeros({"taskhs": {"atrasadas": -1}})
+
+
+def test_validar_recusa_forma_invalida():
+    for ruim in ({"taskhs": {"Atrasadas": 1}}, {"taskhs": {"a": 1.5}},
+                 {"taskhs": {"a": True}}, {"taskhs": {f"k{i}": 1 for i in range(9)}},
+                 {"falhas": ["banco"]}, {"taskhs": [1]}):
+        with pytest.raises(ValueError):
+            validar_numeros(ruim)
+    assert validar_numeros({"falhas": ["email"]}) == {"falhas": ["email"]}
+
+
+def test_novidade_quando_atrasadas_sobe():
+    assert novidade({"taskhs": {"atrasadas": 2}}, {"taskhs": {"atrasadas": 3}}) == (
+        True, ["taskhs.atrasadas: 2 → 3"])
+
+
+def test_sem_novidade_quando_igual_ou_menor():
+    assert novidade({"taskhs": {"atrasadas": 3}}, {"taskhs": {"atrasadas": 3}}) == (False, [])
+    assert novidade({"taskhs": {"atrasadas": 3}}, {"taskhs": {"atrasadas": 1}}) == (False, [])
+
+
+def test_sistema_que_voltou_com_zero_nao_e_novidade():
+    m = {"falhas": ["email"]}
+    t = {"email": {"nao_lidos": 0}}
+    assert novidade(m, t) == (False, [])
+
+
+def test_sistema_que_voltou_com_pendencia_e_novidade():
+    m = {"falhas": ["email"]}
+    t = {"email": {"nao_lidos": 4}}
+    ha, frases = novidade(m, t)
+    assert ha and frases
+
+
+def test_sistema_que_falhou_a_tarde_nao_gera_novidade():
+    m = {"taskhs": {"atrasadas": 1}}
+    t = {"taskhs": {"atrasadas": 9}, "falhas": ["taskhs"]}
+    assert novidade(m, t) == (False, [])
+
+
+def test_sem_manha_e_novidade():
+    assert novidade(None, {"taskhs": {"atrasadas": 0}}) == (True, ["primeira do dia"])
