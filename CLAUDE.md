@@ -1460,6 +1460,27 @@ e `skill_workshop` negados — foi o que me fez concluir que o escopo nunca tinh
 sido aplicado. Para ler o que está declarado, use `config.get`; para saber o que
 o agente **enxerga**, pergunte a ele.
 
+### O gateway zerava toda conversa uma vez por dia — 16/11/2026
+
+⚠️ **Sem `session.reset` declarado, o OpenClaw 2026.7.1 usa `mode: "daily"` com
+`atHour: 4`, no fuso da VPS (UTC → 01:00 de Brasília).** A doc atual diz que o
+padrão é "nenhum reset"; o código desta versão (`reset-policy.ts`,
+`DEFAULT_RESET_MODE = "daily"`) diz o contrário, e é ele que vale. A sessão é
+arquivada como `<id>.jsonl.reset.<ISO>` na **primeira mensagem do dia
+seguinte**, com a mesma chave: no nosso lado aparece só como `seq` que volta
+para 1–2 no `agent_runs`, sem linha em `conversation_resets`.
+
+Achado pela Lara: o Guardi dela entregou um roteiro às 15h e, na manhã
+seguinte, respondeu "não tenho o roteiro na memória desta conversa". Eram 19
+agentes com resets que ninguém pediu desde 05/11. O `MEMORY.md` (o `lembrar`)
+sobrevivia, e por isso o estilo ficava e só o trabalho em curso sumia.
+
+Hoje: `session.reset = {mode: "idle", idleMinutes: 525600}` (um ano = na
+prática nunca), aplicado com `openclaw config set` na VPS. ⚠️ O schema recusa
+`idleMinutes: 0` e não aceita `mode: "none"` nesta versão. Quem limita o
+tamanho é a compactação do vigia (`_TETO`), e recomeçar é o "Nova conversa".
+**Ao atualizar o OpenClaw, confira se o padrão mudou** antes de tirar a chave.
+
 ### EscritorioHS — escritório virtual (WorkAdventure), 15/10/2026
 
 `escritoriohs/` **não é código do HS.OS**: é a config do WorkAdventure em
