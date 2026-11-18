@@ -15,7 +15,7 @@ const EmojiPickerLargo = lazy(() => import("@/components/chat/EmojiPickerLargo")
 const GifPicker = lazy(() => import("@/components/chat/GifPicker"));
 
 export function FolhaDeAcoes({
-  aberta, aoFechar, acoes, aoReagir, aoResponder, aoMaisEmojis,
+  aberta, aoFechar, acoes, aoReagir, aoResponder, aoMaisEmojis, rotulo = "Ações da mensagem",
 }: {
   aberta: boolean;
   aoFechar: () => void;
@@ -23,9 +23,11 @@ export function FolhaDeAcoes({
   aoReagir?: (emoji: string) => void;
   aoResponder?: () => void;
   aoMaisEmojis?: () => void;
+  /** Nome acessível da folha. A da lista de conversas é "Ações da conversa". */
+  rotulo?: string;
 }) {
   return (
-    <Folha aberta={aberta} aoFechar={aoFechar} rotulo="Ações da mensagem">
+    <Folha aberta={aberta} aoFechar={aoFechar} rotulo={rotulo}>
       {aoReagir && (
         <div className="cel-emojis">
           {REACOES_RAPIDAS.map((e) => (
