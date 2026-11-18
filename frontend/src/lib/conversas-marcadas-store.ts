@@ -52,9 +52,20 @@ export function instantaneo(): ReadonlySet<string> {
   return marcadas;
 }
 
+// ⚠️ Carga velha não sobrescreve mudança nova. A aba que nasce com a conversa
+// aberta manda o GET e, no mesmo ciclo, o DELETE da abertura; se o GET responde
+// depois, trazia a marca de volta para a conversa aberta. Toda mudança local
+// sobe `geracao`, toda carga sobe `geracaoDaCarga`: resposta de carga que viu
+// uma das duas mudar é descartada.
+let geracao = 0;
+let geracaoDaCarga = 0;
+
 export async function carregar(): Promise<void> {
+  const minha = ++geracaoDaCarga;
+  const vista = geracao;
   try {
     const lista = await api<MarcaDoServidor[]>("/conversas/marcadas");
+    if (minha !== geracaoDaCarga || vista !== geracao) return;
     carregado = true;
     trocar(new Set((lista ?? []).map((m) =>
       chaveDaMarca({ canalId: m.canal_id, agentId: m.agent_id }))));
@@ -72,6 +83,7 @@ async function mudar(alvo: AlvoDaMarca, presente: boolean): Promise<boolean> {
   if (!alvo.canalId && !alvo.agentId) return false;
   const chave = chaveDaMarca(alvo);
   const antes = marcadas.has(chave);
+  geracao += 1;
   trocar(com(chave, presente));
   try {
     await api(`/conversas/marcadas?${query(alvo)}`, { method: presente ? "PUT" : "DELETE" });

@@ -90,6 +90,31 @@ describe("carregar e acompanhar", () => {
     cancelar();
   });
 
+  it("carga que começou antes de um desmarcar não devolve a marca (abrir logo ao carregar a página)", async () => {
+    // A aba nasce com a conversa aberta: o GET sai, a abertura desmarca, e a
+    // resposta do GET (com a marca ainda lá) chega DEPOIS — sem descarte, a
+    // bolinha voltava na conversa aberta.
+    let responderGet: (v: unknown) => void = () => {};
+    apiMock.api.mockImplementationOnce(() => new Promise((r) => { responderGet = r; }));
+    const carga = store.carregar();
+    apiMock.api.mockResolvedValueOnce(undefined);
+    await store.desmarcar(CANAL);
+    responderGet([{ canal_id: "c1", agent_id: null, marcada_em: "2026-11-18T12:00:00Z" }]);
+    await carga;
+    expect(store.estaMarcada(CANAL)).toBe(false);
+  });
+
+  it("de duas cargas, só vale a mais nova", async () => {
+    let primeira: (v: unknown) => void = () => {};
+    apiMock.api.mockImplementationOnce(() => new Promise((r) => { primeira = r; }));
+    const a = store.carregar();
+    apiMock.api.mockResolvedValueOnce([]);
+    await store.carregar();
+    primeira([{ canal_id: "c1", agent_id: null, marcada_em: "2026-11-18T12:00:00Z" }]);
+    await a;
+    expect(store.estaMarcada(CANAL)).toBe(false);
+  });
+
   it("evento usuario: de outra tabela não recarrega; da própria tabela, sim", async () => {
     apiMock.api.mockResolvedValue([]);
     const parar = store.iniciar("u1");
