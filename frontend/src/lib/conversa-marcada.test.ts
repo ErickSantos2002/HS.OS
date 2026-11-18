@@ -56,5 +56,6 @@ describe("podeMarcar e chaveDaMarca", () => {
   it("a chave distingue canal de agente", () => {
     expect(chaveDaMarca({ canalId: "c1", agentId: null })).toBe("canal:c1");
     expect(chaveDaMarca({ canalId: null, agentId: "nina" })).toBe("agente:nina");
+    expect(chaveDaMarca({ canalId: null, agentId: "openclaw:Nina" })).toBe("agente:nina");
   });
 });

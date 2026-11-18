@@ -10,6 +10,7 @@
  *
  * Usada pelas duas listas (desktop e celular), para não divergirem.
  */
+import { toCanonicalAgentId } from "./agent-id";
 import { rotuloDoContador, somarNaoLidas } from "./contador-de-nao-lidas";
 
 export type Indicador = { tipo: "numero"; texto: string } | { tipo: "marca" } | null;
@@ -37,6 +38,12 @@ export function podeMarcar(alvo: AlvoDaMarca): boolean {
   return Boolean(alvo.canalId || alvo.agentId);
 }
 
+/** Agente vai na forma que o backend guarda (`normalizar_agent_id`): sem o
+ *  prefixo `openclaw:` e minúsculo — senão "Nina" e "nina" seriam duas marcas. */
+export function idDoAgenteNaMarca(agentId: string): string {
+  return toCanonicalAgentId(agentId).toLowerCase();
+}
+
 export function chaveDaMarca(alvo: AlvoDaMarca): string {
-  return alvo.canalId ? `canal:${alvo.canalId}` : `agente:${alvo.agentId}`;
+  return alvo.canalId ? `canal:${alvo.canalId}` : `agente:${idDoAgenteNaMarca(alvo.agentId ?? "")}`;
 }

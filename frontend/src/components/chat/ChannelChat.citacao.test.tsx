@@ -35,7 +35,7 @@ describe("resposta citando no desktop", () => {
     const aoClicar = vi.fn();
     render(
       <MessageBubble msg={resposta} currentUserId="eu" msgReactions={[]} onToggleReaction={noop}
-        onEdit={noop} onDelete={noop} onReply={noop} onMarkUnread={() => true} onImageClick={noop}
+        onEdit={noop} onDelete={noop} onReply={noop} onImageClick={noop}
         onAttachmentPreview={noop} threadMeta={null} threadHasUnread={false} onCitacaoClick={aoClicar} />,
     );
     expect(screen.getByText("Ana Teste")).toBeInTheDocument();

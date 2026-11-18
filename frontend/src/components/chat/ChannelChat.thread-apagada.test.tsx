@@ -44,7 +44,7 @@ describe("mensagem apagada com respostas em thread", () => {
         onEdit={noop}
         onDelete={noop}
         onReply={noop}
-        onMarkUnread={() => true}
+       
         onImageClick={noop}
         onAttachmentPreview={noop}
         threadMeta={{ count: 1, lastReplyAt: "2026-10-13T17:02:29Z", lastAuthorName: "Ana Teste", lastAuthorAvatar: null } as never}

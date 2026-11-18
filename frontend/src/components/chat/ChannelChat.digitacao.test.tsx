@@ -81,7 +81,6 @@ function Conversa({
     apagar: nada,
     responder: nada,
     irParaCitada: nada,
-    marcarNaoLida: () => true,
     marcarLida: nada,
     abrirImagem: nada,
     preverAnexo: nada,

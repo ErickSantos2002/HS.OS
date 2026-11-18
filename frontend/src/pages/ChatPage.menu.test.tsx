@@ -47,11 +47,10 @@ describe("conversa com agente estilo WhatsApp", () => {
     expect(screen.getAllByRole("button", { name: "Opções da mensagem" })).toHaveLength(2);
   });
 
-  it("na resposta do agente o menu tem copiar e marcar como não lida", async () => {
+  it("na resposta do agente o menu tem só copiar — marcar como não lida é pela lista", async () => {
     montar();
     const menu = await abrir(1);
-    expect(within(menu).getByRole("menuitem", { name: "Copiar" })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: "Marcar como não lida" })).toBeInTheDocument();
+    expect(within(menu).getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Copiar"]);
   });
 
   it("na mensagem da pessoa o menu tem só copiar", async () => {

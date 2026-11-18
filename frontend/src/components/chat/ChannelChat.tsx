@@ -34,7 +34,6 @@ import { estadoNoCanal, type EstadoDoVisto } from "@/lib/vistos";
 import { useResumoEmAudio } from "@/hooks/use-resumo-em-audio";
 import CollapsibleTranscription from "./CollapsibleTranscription";
 import { useTypingIndicator, formatTypingLabel } from "@/hooks/use-typing-indicator";
-import { useNotificationsContext } from "@/components/NotificationsProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -215,7 +214,6 @@ export const MessageBubble = memo(function MessageBubble({
   onEdit,
   onDelete,
   onReply,
-  onMarkUnread,
   onMarkRead,
   onImageClick,
   onAttachmentPreview,
@@ -239,7 +237,6 @@ export const MessageBubble = memo(function MessageBubble({
   onDelete: () => void;
   /** Responder citando. Ausente onde a pessoa não escreve. */
   onReply?: () => void;
-  onMarkUnread: () => Promise<boolean> | boolean;
   onMarkRead?: () => void;
   onImageClick: (src: string, alt: string) => void;
   onAttachmentPreview: (attachment: { name: string; url: string; size?: number; mimeType?: string }) => void;
@@ -394,7 +391,6 @@ export const MessageBubble = memo(function MessageBubble({
   const acoesDoMenu: AcaoDaMensagem[] = acoesDaMensagemDoCanal(msg, {
     souAutor: isOwn,
     aoResponder: onReply,
-    aoMarcarNaoLida: onMarkUnread,
     aoEditar: onEdit,
     aoApagar: onDelete,
     aoDados: onDadosDaMensagem,
@@ -780,7 +776,6 @@ export interface AcoesDaLista {
   apagar: (msgId: string) => void;
   responder: (msg: ChannelMessage) => void;
   irParaCitada: (msgId: string, citacao: Citacao) => void;
-  marcarNaoLida: (msg: ChannelMessage) => Promise<boolean> | boolean;
   marcarLida: (msgId: string) => void;
   abrirImagem: (src: string, alt: string) => void;
   preverAnexo: (anexo: AnexoParaPrever) => void;
@@ -821,7 +816,6 @@ const ItemDaMensagem = memo(function ItemDaMensagem({
     apagar: () => acoes.apagar(msg.id),
     responder: () => acoes.responder(msg),
     citacao: (c: Citacao) => acoes.irParaCitada(msg.id, c),
-    marcarNaoLida: () => acoes.marcarNaoLida(msg),
     marcarLida: () => acoes.marcarLida(msg.id),
     dados: () => acoes.dadosDaMensagem(msg.id),
     apagarParaMim: () => acoes.apagarParaMim(msg),
@@ -839,7 +833,6 @@ const ItemDaMensagem = memo(function ItemDaMensagem({
       onDelete={h.apagar}
       onReply={podeResponder ? h.responder : undefined}
       onCitacaoClick={h.citacao}
-      onMarkUnread={h.marcarNaoLida}
       onMarkRead={h.marcarLida}
       onImageClick={acoes.abrirImagem}
       onAttachmentPreview={acoes.preverAnexo}
@@ -946,7 +939,6 @@ export default function ChannelChat({
   dmPeerName?: string;
 }) {
   const { user, profile, role } = useAuthContext();
-  const { markMessageAsUnread } = useNotificationsContext();
   const currentUserName = (profile?.full_name && profile.full_name.trim()) || user?.email?.split("@")[0] || "Alguém";
   const { bottomOffset, isKeyboardOpen } = useMobileChatViewport();
   const { messages, loading: msgsLoading, sendMessage, ensureMessageLoaded, esconder, reexibir } = useChannelMessages(channel.id);
@@ -1070,30 +1062,6 @@ export default function ChannelChat({
     });
   }, [channel.id]);
 
-  const markMessageAsUnreadLocally = useCallback((messageId: string) => {
-    setMarkedUnreadIds(prev => {
-      if (prev.has(messageId)) return prev;
-      const next = new Set(prev);
-      next.add(messageId);
-      try {
-        localStorage.setItem(`marked-unread:${channel.id}`, JSON.stringify([...next]));
-      } catch {}
-      return next;
-    });
-  }, [channel.id]);
-
-  const handleMarkUnread = useCallback(async (messageId: string, authorName: string, contentPreview: string) => {
-    const ok = await markMessageAsUnread({
-      messageId,
-      channelId: channel.id,
-      authorName,
-      contentPreview,
-    });
-    if (ok) {
-      markMessageAsUnreadLocally(messageId);
-    }
-    return ok;
-  }, [channel.id, markMessageAsUnread, markMessageAsUnreadLocally]);
   const lastSeenMessageCountRef = useRef(0);
   const [threadViewedVersion, setThreadViewedVersion] = useState(0);
 
@@ -1805,7 +1773,6 @@ export default function ChannelChat({
     apagar: (msgId) => setDeleteConfirmId(msgId),
     responder,
     irParaCitada,
-    marcarNaoLida: (m) => handleMarkUnread(m.id, m.author_name, m.content || ""),
     marcarLida: clearMarkedUnread,
     abrirImagem: (src, alt) => setLightboxImage({ src, alt }),
     preverAnexo: setPreviewAttachment,
