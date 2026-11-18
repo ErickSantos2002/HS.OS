@@ -203,6 +203,31 @@ def sistemas_faltando(numeros: dict, ligados: list[str], email_ligado: bool) -> 
     return sorted(esperados - vieram)
 
 
+def separar_nao_ligados(numeros: dict, ligados: list[str] | None,
+                        email_ligado: bool) -> tuple[dict, list[str]]:
+    """Tira de `numeros` (contagens e `falhas`) os sistemas que este Guardi NÃO
+    alcança; devolve o que sobrou e o que foi tirado.
+
+    ⚠️ 1º dia automático (17–18/11/2026): 14 de 19 Guardis puseram `hsgrowth`
+    em `falhas` sem ter o HSGrowth ligado, e o quadro da Nina lia "CRM fora"
+    para 14 pessoas. Dois mandaram contagem do HSGrowth, que ferramenta deles
+    nenhuma devolve. A instrução já dizia para não tentar — não adiantou, então
+    quem decide é o servidor. Forma ruim (chave desconhecida, `falhas` que não é
+    lista) segue intacta para `validar_numeros` recusar com o exemplo.
+    """
+    alcance = set(chaves_ligadas(ligados, email_ligado))
+    falhas = numeros.get("falhas")
+    fora = {k for k in numeros if k in SISTEMAS and k not in alcance}
+    if isinstance(falhas, list):
+        fora |= {s for s in falhas if isinstance(s, str) and s in SISTEMAS and s not in alcance}
+    if not fora:
+        return numeros, []
+    limpo = {k: v for k, v in numeros.items() if k not in fora}
+    if isinstance(falhas, list):
+        limpo["falhas"] = [s for s in falhas if s not in fora]
+    return limpo, sorted(fora)
+
+
 # Como o turno autônomo da varredura começa (ver `disparo.mensagem`). O
 # `/recuperar` usa para reconhecer a janela no histórico do gateway.
 CABECALHOS_VARREDURA = ("[Varredura da manhã — ", "[Conferência da tarde — ",

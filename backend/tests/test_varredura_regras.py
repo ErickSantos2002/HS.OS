@@ -164,3 +164,36 @@ def test_sistemas_faltando_aponta_ligado_que_nao_veio():
     assert sistemas_faltando(n, ligados, email_ligado=True) == []
     assert sistemas_faltando({"taskhs": {"a": 1}}, ["taskhs"], email_ligado=True) == ["email"]
     assert sistemas_faltando({"taskhs": {"a": 1}}, ["taskhs"], email_ligado=False) == []
+
+
+def test_nao_ligado_sai_dos_numeros_e_das_falhas():
+    """1º dia automático (17–18/11/2026): 14 de 19 Guardis puseram `hsgrowth`
+    em `falhas` sem ter o HSGrowth ligado, e o quadro da Nina dizia que o CRM
+    caiu para 14 pessoas. Dois ainda mandaram CONTAGEM do HSGrowth, que nenhuma
+    ferramenta deles devolve — número inventado. O servidor sabe o que está
+    ligado: sistema fora do alcance sai das contagens e das falhas, e o Guardi
+    é avisado do que foi ignorado."""
+    from app.varredura.regras import separar_nao_ligados
+    n = {"taskhs": {"abertas": 2}, "hsgrowth": {"tarefas_atrasadas": 9},
+         "email": {"nao_lidos_3d": 0}, "falhas": ["hsgrowth", "email", "gestorhs"]}
+    limpo, fora = separar_nao_ligados(n, ["taskhs", "gestorhs"], email_ligado=False)
+    assert fora == ["email", "hsgrowth"]
+    assert limpo == {"taskhs": {"abertas": 2}, "falhas": ["gestorhs"]}
+    assert n["falhas"] == ["hsgrowth", "email", "gestorhs"]  # não muta a entrada
+
+
+def test_hsgrowth_servicos_conta_como_hsgrowth_ligado():
+    """Ellen e Leticia têm `hsgrowth_servicos`: a chave da varredura é
+    `hsgrowth`, e ela NÃO pode ser descartada como não ligada."""
+    from app.varredura.regras import separar_nao_ligados
+    n = {"hsgrowth": {"cards_parados": 1}, "falhas": ["hsgrowth"]}
+    limpo, fora = separar_nao_ligados(n, ["hsgrowth_servicos"], email_ligado=False)
+    assert fora == [] and limpo == n
+
+
+def test_separar_deixa_forma_ruim_para_o_validador():
+    """Chave desconhecida e `falhas` fora de lista não são assunto daqui:
+    seguem intactas para `validar_numeros` recusar com o exemplo."""
+    from app.varredura.regras import separar_nao_ligados
+    n = {"a": 1, "falhas": "hsgrowth"}
+    assert separar_nao_ligados(n, [], email_ligado=False) == (n, [])

@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.15.2",
+    date: "2026-11-18",
+    changes: [
+      {
+        kind: "correcao",
+        text: "O resumo de pendências do seu Guardi não diz mais que um sistema \"falhou\" quando ele simplesmente não está ligado para você (como o CRM para quem não é de vendas, ou o e-mail ainda não conectado). O quadro da equipe deixa de mostrar esses falsos alarmes.",
+      },
+    ],
+  },
+  {
     version: "2.15.1",
     date: "2026-11-16",
     changes: [

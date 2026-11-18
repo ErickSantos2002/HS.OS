@@ -33,7 +33,7 @@ from app import acoes
 from app.agenda import dominio, outlook
 from app.agenda.regras import FUSO, RegraInvalida, regra_de
 from app.varredura import dominio as varredura
-from app.varredura.regras import EXEMPLO_NUMEROS, sistemas_faltando
+from app.varredura.regras import EXEMPLO_NUMEROS, separar_nao_ligados, sistemas_faltando
 from app.bots_pessoais import _linha
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
@@ -608,7 +608,8 @@ def _preparado(ctx: dict, resumo: str, origem: str, extra: str | None = None,
 
 async def _contexto(conn, agent_id: str) -> dict:
     p = await conn.fetchrow(
-        "SELECT a.dono_id::text AS dono_id, a.sistemas_ligados, a.email_ligado, pr.email, pr.full_name "
+        "SELECT a.dono_id::text AS dono_id, a.sistemas_ligados, a.email_ligado, pr.email, pr.full_name, "
+        "       EXISTS (SELECT 1 FROM public.email_contas ec WHERE ec.user_id = a.dono_id) AS email_conectado "
         "  FROM public.agent_profiles a JOIN public.profiles pr ON pr.id = a.dono_id "
         " WHERE a.agent_id = $1", agent_id)
     if not p or not p["dono_id"]:
@@ -619,7 +620,10 @@ async def _contexto(conn, agent_id: str) -> dict:
     if await outro_turno_aberto(conn, agent_id, p["dono_id"]):
         raise _Recusa("Outra pessoa está conversando comigo agora; por segurança espero terminar.")
     return {"dono": p["dono_id"], "email": p["email"], "primeiro": primeiro,
-            "sistemas": list(p["sistemas_ligados"] or []), "email_ligado": bool(p["email_ligado"])}
+            "sistemas": list(p["sistemas_ligados"] or []), "email_ligado": bool(p["email_ligado"]),
+            # Flag ligada sem conta conectada não alcança caixa nenhuma: para a
+            # varredura é "não ligado", não falha (17/11/2026).
+            "email_conectado": bool(p["email_ligado"]) and bool(p.get("email_conectado"))}
 
 
 # ── memória (o MEMORY.md do bot, no gateway) ────────────────────────────────
@@ -811,7 +815,9 @@ async def _varredura_registrar(conn, bot: str, args: dict, ctx: dict) -> str:
     numeros = args.get("numeros")
     if not isinstance(numeros, dict):
         raise _Recusa("numeros precisa ser um objeto.")
-    faltando = sistemas_faltando(numeros, ctx.get("sistemas") or [], ctx.get("email_ligado", False))
+    ligados, email = ctx.get("sistemas") or [], ctx.get("email_conectado", False)
+    numeros, ignorados = separar_nao_ligados(numeros, ligados, email)
+    faltando = sistemas_faltando(numeros, ligados, email)
     if faltando:
         raise _Recusa(f"Faltou {', '.join(faltando)}: consulte e conte (ou ponha em `falhas` se não "
                       "conseguiu ler, e diga no resumo). Depois chame de novo.")
@@ -820,10 +826,15 @@ async def _varredura_registrar(conn, bot: str, args: dict, ctx: dict) -> str:
     except LookupError as e:
         raise _Recusa("Não há varredura em curso para registrar.") from e
     calar = r["status"] == "nada_novo"
-    return json.dumps({
+    saida = {
         "status": r["status"], "novidade": r["novidade"], "o_que_mudou": r["o_que_mudou"],
         "instrucao": "Responda só NO_REPLY." if calar
-        else "Escreva à pessoa o cardápio do dia, curto."}, ensure_ascii=False)
+        else "Escreva à pessoa o cardápio do dia, curto."}
+    if ignorados:
+        saida["ignorados_nao_ligados"] = ignorados
+        saida["aviso"] = ("Esses sistemas não estão ligados a você: não são falha nem "
+                          "pendência. Não os cite no cardápio.")
+    return json.dumps(saida, ensure_ascii=False)
 
 
 async def _agenda(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:

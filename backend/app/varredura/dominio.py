@@ -141,7 +141,10 @@ SQL_FECHAR = """
 SQL_GUARDIS = """
     SELECT ap.dono_id::text AS user_id, ap.agent_id,
            p.full_name AS nome, p.cargo, p.departamento, u.email,
-           ap.sistemas_ligados, ap.email_ligado
+           ap.sistemas_ligados,
+           -- flag sem conta conectada é "não ligado" no quadro (17/11/2026)
+           ap.email_ligado AND EXISTS (SELECT 1 FROM public.email_contas ec
+                                        WHERE ec.user_id = ap.dono_id) AS email_ligado
       FROM public.agent_profiles ap
       JOIN auth.users u ON u.id = ap.dono_id AND u.is_active
       LEFT JOIN public.profiles p ON p.id = ap.dono_id
