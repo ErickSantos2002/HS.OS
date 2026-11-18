@@ -121,7 +121,8 @@ def test_sistema_ligado_que_nao_veio_recusa_sem_gravar(amb, monkeypatch):
     class ConnLigada(Conn):
         async def fetchrow(self, sql, *a):
             return {**await super().fetchrow(sql, *a),
-                    "sistemas_ligados": ["taskhs", "gestorhs"], "email_ligado": True}
+                    "sistemas_ligados": ["taskhs", "gestorhs"], "email_ligado": True,
+                    "email_conectado": True}
 
     class S(_Sessao):
         async def __aenter__(self):
@@ -131,3 +132,50 @@ def test_sistema_ligado_que_nao_veio_recusa_sem_gravar(amb, monkeypatch):
         monkeypatch, retorno={"status": "entregue", "novidade": True, "o_que_mudou": []})
     texto, erro = _run({"resumo": "x", "numeros": {"taskhs": {"abertas": 4}}})
     assert erro and "email" in texto and "gestorhs" in texto and chamadas == []
+
+
+def _com_ligados(monkeypatch, ligados, email_ligado=False, email_conectado=False):
+    class C(Conn):
+        async def fetchrow(self, sql, *a):
+            return {**await super().fetchrow(sql, *a), "sistemas_ligados": ligados,
+                    "email_ligado": email_ligado, "email_conectado": email_conectado}
+
+    class S(_Sessao):
+        async def __aenter__(self):
+            return C()
+    monkeypatch.setattr(m, "sessao", lambda **k: S())
+
+
+def test_nao_ligado_e_descartado_antes_de_gravar_e_o_guardi_sabe(amb, monkeypatch):
+    """17–18/11/2026: `hsgrowth` em `falhas` de quem não tem HSGrowth virava
+    "CRM fora" no quadro da Nina. O que chega ao domínio já vem sem ele, e o
+    retorno diz ao Guardi o que foi ignorado — não é descarte em silêncio."""
+    _com_ligados(monkeypatch, ["taskhs"])
+    chamadas = _registrar_falso(
+        monkeypatch, retorno={"status": "entregue", "novidade": True, "o_que_mudou": []})
+    texto, erro = _run({"resumo": "x", "numeros": {
+        "taskhs": {"abertas": 1}, "hsgrowth": {"tarefas_atrasadas": 3}, "falhas": ["hsgrowth"]}})
+    assert not erro
+    assert chamadas[0][3] == {"taskhs": {"abertas": 1}, "falhas": []}
+    d = json.loads(texto)
+    assert d["ignorados_nao_ligados"] == ["hsgrowth"]
+
+
+def test_email_ligado_sem_conta_conectada_nao_e_cobrado_nem_falha(amb, monkeypatch):
+    """Lidisay, Rickelme e Walbert têm `email_ligado` mas nunca conectaram a
+    conta: o e-mail aparecia como falha todo dia. Sem conta, e-mail é "não
+    ligado" — nem cobrado por `sistemas_faltando`, nem aceito em `falhas`."""
+    _com_ligados(monkeypatch, ["taskhs"], email_ligado=True, email_conectado=False)
+    chamadas = _registrar_falso(
+        monkeypatch, retorno={"status": "entregue", "novidade": True, "o_que_mudou": []})
+    texto, erro = _run({"resumo": "x", "numeros": {"taskhs": {"abertas": 1}, "falhas": ["email"]}})
+    assert not erro and chamadas[0][3] == {"taskhs": {"abertas": 1}, "falhas": []}
+    assert json.loads(texto)["ignorados_nao_ligados"] == ["email"]
+
+
+def test_email_conectado_continua_cobrado(amb, monkeypatch):
+    _com_ligados(monkeypatch, ["taskhs"], email_ligado=True, email_conectado=True)
+    chamadas = _registrar_falso(
+        monkeypatch, retorno={"status": "entregue", "novidade": True, "o_que_mudou": []})
+    texto, erro = _run({"resumo": "x", "numeros": {"taskhs": {"abertas": 1}}})
+    assert erro and "email" in texto and chamadas == []
