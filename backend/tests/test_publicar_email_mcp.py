@@ -108,3 +108,22 @@ def test_hsos_bot_publicado_para_bot_sem_sistemas():
     assert "hsos-bot-erick-bot__agenda_criar" in lista["andre-bot"]["deny"]
     assert "hsos-bot-andre-bot__agenda_criar" in lista["nina"]["deny"]
     assert pub.conferir(patch_aplicado(patch), novos, {"erick-bot", "andre-bot"}, set())
+
+
+def test_internet_so_no_guardi_com_a_flag_e_nunca_nos_especialistas():
+    """Spec 2026-11-18: o mesmo patch libera `web_search` ao piloto, nega aos
+    outros Guardis e nega as três ferramentas web à `nina` — que ganharia
+    todas pelo perfil `coding` assim que a busca fosse ligada no gateway."""
+    bots = {"erick-bot", "andre-bot"}
+    patch, novos = pub.montar_patch(_conf(), "seg", "tok", bots=bots, com_email=set(),
+                                    com_internet={"erick-bot"})
+    lista = {a["id"]: a["tools"] for a in patch["agents"]["list"]}
+    assert "web_search" in lista["erick-bot"]["alsoAllow"]
+    assert "web_search" in lista["andre-bot"]["deny"]
+    assert {"web_search", "web_fetch", "x_search"} <= set(lista["nina"]["deny"])
+    aplicado = patch_aplicado(patch)
+    assert pub.conferir(aplicado, novos, bots, set(), {"erick-bot"})
+    # A releitura recusa especialista que escapou com a busca.
+    nina = next(a for a in aplicado["agents"]["list"] if a["id"] == "nina")
+    nina["tools"]["deny"].remove("web_search")
+    assert not pub.conferir(aplicado, novos, bots, set(), {"erick-bot"})

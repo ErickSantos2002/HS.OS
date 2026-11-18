@@ -332,3 +332,40 @@ def test_bloco_de_varredura_so_o_que_e_do_dono_e_uma_oferta():
     assert "total do\nsistema inteiro" in b or "total do sistema inteiro" in b
     assert "UMA\núnica oferta" in b or "UMA única oferta" in b
     assert len(b) <= 1200
+
+
+def test_internet_so_web_search_e_so_com_a_flag():
+    """Guardi na internet (spec 2026-11-18): só `web_search`, e só com
+    `internet` em `sistemas_ligados`. `web_fetch` é GET em URL que o modelo
+    escolhe — com e-mail e CRM do dono no contexto, uma instrução plantada
+    vazaria dado pela query string. Ele e o `x_search` ficam negados SEMPRE,
+    mesmo que alguém ligue o fetch no gateway."""
+    com = tools_do_bot(SERVIDORES, "erick-bot", internet=True)
+    sem = tools_do_bot(SERVIDORES, "andre-bot")
+    assert "web_search" in com["alsoAllow"] and "web_search" not in com["deny"]
+    assert "web_search" not in sem["alsoAllow"] and "web_search" in sem["deny"]
+    for t in (com, sem):
+        assert {"web_fetch", "x_search"} <= set(t["deny"])
+    assert bot_esta_fechado(com, SERVIDORES, "erick-bot", internet=True)
+    assert not bot_esta_fechado(com, SERVIDORES, "erick-bot", internet=False)
+    assert not bot_esta_fechado(sem, SERVIDORES, "andre-bot", internet=True)
+
+
+def test_recalculo_de_deny_preserva_as_travas_de_internet():
+    """Toda publicação de banco reescreve o deny do zero: sem estar em
+    `_DENY_PRESERVADO`, o `web_fetch` negado voltaria no 1º conector."""
+    deny = _deny_de_mcp([ALERTA], ["web_search", "web_fetch", "x_search"], SERVIDORES)
+    assert {"web_search", "web_fetch", "x_search"} <= set(deny)
+
+
+def test_agents_md_ensina_a_pesquisa_sem_dado_da_casa():
+    texto = arquivos_do_bot(_DONO)["AGENTS.md"]
+    assert "web_search" in texto
+    assert "nunca ponho na pesquisa" in texto.lower()
+
+
+def test_guardi_com_internet_fechado_conta_como_ja_existia():
+    """Refazer a criação de um Guardi vivo não pode tirar a busca dele: a
+    rota passa a flag lida do banco para a conferência e para o refecho."""
+    t = tools_do_bot(SERVIDORES, "erick-bot", internet=True)
+    assert bot_esta_fechado(t, SERVIDORES, "erick-bot", False, True)

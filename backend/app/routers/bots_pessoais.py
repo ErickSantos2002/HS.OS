@@ -59,7 +59,7 @@ class _Deps:
     async def linha(self, agent_id: str) -> dict | None:
         async with sessao(role="service_role") as conn:
             r = await conn.fetchrow(
-                "SELECT agent_id, dono_id::text AS dono_id, email_ligado "
+                "SELECT agent_id, dono_id::text AS dono_id, email_ligado, sistemas_ligados "
                 "  FROM public.agent_profiles "
                 " WHERE agent_id = $1", agent_id)
         return dict(r) if r else None
@@ -163,7 +163,10 @@ async def criar_bot(user_id: str, deps=None) -> dict:
         # arquivos dele.
         return {**saida, "motivo": f"colisão: {aid} existe no gateway com outro workspace"}
     email = bool((linha or {}).get("email_ligado"))
-    if linha and no_gw and bot_esta_fechado(no_gw.get("tools") or {}, _servidores(conf), aid, email):
+    # Sem isto, refazer a criação de um Guardi com internet o refecharia sem a busca.
+    internet = "internet" in ((linha or {}).get("sistemas_ligados") or [])
+    if linha and no_gw and bot_esta_fechado(no_gw.get("tools") or {}, _servidores(conf), aid, email,
+                                            internet):
         return {**saida, "resultado": "já existia"}
     adotado = bool(linha or no_gw)
     # ⚠️ Desfazer é só para o que ESTA chamada criou. Um bot que já existia (em
@@ -196,11 +199,11 @@ async def criar_bot(user_id: str, deps=None) -> dict:
         servidores = _servidores(conf)
         lista = [dict(a) for a in (conf.get("agents") or {}).get("list") or []]
         alvo = next(a for a in lista if str(a.get("id")) == aid)
-        alvo["tools"] = tools_do_bot(servidores, aid, email)
+        alvo["tools"] = tools_do_bot(servidores, aid, email, internet)
         await deps.patch(
             {"agents": {"list": lista}}, base_hash,
             lambda c: bot_esta_fechado((_no_gateway(c, aid) or {}).get("tools") or {}, servidores,
-                                       aid, email),
+                                       aid, email, internet),
         )
     except Exception as e:  # noqa: BLE001
         if criou:

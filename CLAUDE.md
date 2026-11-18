@@ -953,6 +953,25 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   a partir da seção "Para os outros repositórios" da spec. O TaskHS já está
   pronto (`48832b0`, v2.13.0, sem deploy).
 
+### Guardi na internet — 18/11/2026
+
+Spec `docs/superpowers/specs/2026-11-18-guardi-internet-design.md`. **Só
+`web_search`** (Brave), com `internet` em `sistemas_ligados`
+(`--ligar-sistema <bot> internet` / `--ligar-internet-todos`, depois
+`publicar-bots-mcp.py --aplicar`). Piloto no `erick-bot`.
+
+- ⚠️ **`web_fetch` e `x_search` são negados a TODO agente**, sempre
+  (`FERRAMENTAS_WEB` em `integracoes.py`, `TRAVAS_DO_BOT`). O Guardi tem
+  e-mail e CRM do dono no contexto; `web_fetch` é GET em URL escolhida pelo
+  modelo — instrução plantada vazaria dado pela query string.
+- ⚠️ **Ligar `tools.web.search` no gateway dá a busca a todo perfil `coding`**
+  (traz `group:web`). Especialista não tem internet por decisão: quem nega é
+  `escopo_mcp_do_agente` (todo perfil que não é `minimal`) e o `conferir` do
+  `publicar-bots-mcp.py` recusa especialista sem as três no `deny`.
+  **Publicar os denies ANTES de ligar a busca no gateway.**
+- A chave é `BRAVE_API_KEY` no `~/.openclaw/.env` da VPS. A consulta vai ao
+  Brave: o `AGENTS.md` proíbe pôr dado do dono ou da HS na pesquisa.
+
 ### "Capacidade" do Guardi — 13/11/2026
 
 Botão ao lado de "Conversas anteriores" (⋮ no celular): o que o Guardi alcança,
