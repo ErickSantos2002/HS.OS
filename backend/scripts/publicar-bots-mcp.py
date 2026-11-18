@@ -7,6 +7,8 @@
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py                                  # ensaio
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-email erick-bot          # só banco
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-sistema erick-bot taskhs # só banco
+    PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-sistema erick-bot internet # web_search (spec 2026-11-18)
+    PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-internet-todos [--aplicar] # todos os Guardis
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-docshs-todos [--aplicar] # só quem tem conta lá
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-gestorhs-todos [--aplicar] # idem, GestorHS
     PYTHONPATH=. .venv/bin/python scripts/publicar-bots-mcp.py --ligar-talenths-todos [--aplicar] # idem, TalentHS
@@ -39,7 +41,7 @@ load_dotenv()
 
 from app.bots_pessoais import tools_do_bot  # noqa: E402
 from app.email.regras import FERRAMENTAS_BOT, FERRAMENTAS_EMAIL  # noqa: E402
-from app.routers.integracoes import escopo_mcp_do_agente, ferramentas_anexos  # noqa: E402
+from app.routers.integracoes import FERRAMENTAS_WEB, escopo_mcp_do_agente, ferramentas_anexos  # noqa: E402
 from app.routers.mcp_anexos import assinatura_do_agente  # noqa: E402
 from app.routers.mcp_bot import assinatura_bot  # noqa: E402
 from app.routers.mcp_email import assinatura_email  # noqa: E402
@@ -53,7 +55,7 @@ def _cabecalhos(modelo: dict, token: str) -> dict:
 
 
 def montar_patch(conf: dict, segredo: str, token: str, bots: set[str],
-                 com_email: set[str]) -> tuple[dict, dict]:
+                 com_email: set[str], com_internet: set[str] = frozenset()) -> tuple[dict, dict]:
     servidores = (conf.get("mcp") or {}).get("servers") or {}
     modelo = servidores.get("hsos-relatorios")
     if not modelo:
@@ -88,13 +90,15 @@ def montar_patch(conf: dict, segredo: str, token: str, bots: set[str],
     for a in agentes:
         aid = str(a.get("id"))
         if aid in bots:
-            a["tools"] = tools_do_bot(depois, aid, email=aid in com_email)
+            a["tools"] = tools_do_bot(depois, aid, email=aid in com_email,
+                                      internet=aid in com_internet)
         else:
             a["tools"] = escopo_mcp_do_agente(aid, a.get("tools") or {}, depois)
     return {"mcp": {"servers": novos}, "agents": {"list": agentes}}, novos
 
 
-def conferir(parsed: dict, novos: dict, bots: set[str], com_email: set[str]) -> bool:
+def conferir(parsed: dict, novos: dict, bots: set[str], com_email: set[str],
+             com_internet: set[str] = frozenset()) -> bool:
     """Na config RELIDA: entradas com a URL certa; bot com e-mail fechado COM
     e-mail; todo o resto nega todas as entradas de e-mail que não são suas."""
     from app.bots_pessoais import bot_esta_fechado
@@ -103,8 +107,10 @@ def conferir(parsed: dict, novos: dict, bots: set[str], com_email: set[str]) -> 
         return False
     for a in (parsed.get("agents") or {}).get("list") or []:
         aid, t = str(a.get("id")), a.get("tools") or {}
-        if aid in bots and not bot_esta_fechado(t, s, aid, aid in com_email):
+        if aid in bots and not bot_esta_fechado(t, s, aid, aid in com_email, aid in com_internet):
             return False
+        if aid not in bots and not set(FERRAMENTAS_WEB) <= set(t.get("deny") or []):
+            return False  # especialista com internet (spec 2026-11-18)
         deny = set(t.get("deny") or [])
         for n in s:
             for pref, ferr in (("hsos-email-", FERRAMENTAS_EMAIL), ("hsos-bot-", FERRAMENTAS_BOT),
@@ -228,6 +234,9 @@ async def main() -> int:
                     help="liga e-mail e TaskHS em TODOS os bots pessoais (só banco)")
     ap.add_argument("--ligar-sistema", nargs=2, metavar=("BOT", "SISTEMA"),
                     help="acrescenta um sistema (taskhs, datacore, docshs, talenths, gestorhs, hsgrowth, hsgrowth_servicos) a sistemas_ligados de UM bot (só banco)")
+    ap.add_argument("--ligar-internet-todos", action="store_true",
+                    help="acrescenta internet (web_search) a sistemas_ligados de TODOS os bots pessoais "
+                         "(só banco; ensaio sem --aplicar)")
     ap.add_argument("--ligar-datacore-todos", action="store_true",
                     help="acrescenta datacore a sistemas_ligados de TODOS os bots pessoais (só banco)")
     ap.add_argument("--ligar-docshs-todos", action="store_true",
@@ -260,6 +269,19 @@ async def main() -> int:
                     "  '{taskhs}'::text[]) x) WHERE dono_id IS NOT NULL RETURNING 1) SELECT count(*) FROM u")
                 print(f"e-mail e TaskHS ligados em {n} bots")
                 return 0
+            if a.ligar_internet_todos:
+                faltam = await conn.fetch(
+                    "SELECT agent_id FROM public.agent_profiles WHERE dono_id IS NOT NULL "
+                    "   AND NOT ('internet' = ANY(coalesce(sistemas_ligados, '{}'))) ORDER BY agent_id")
+                print("Ganham internet:", [l["agent_id"] for l in faltam] or "(ninguém)")
+                if not a.aplicar:
+                    print("(ensaio — nada foi escrito)")
+                    return 0
+                await conn.execute(
+                    "UPDATE public.agent_profiles SET sistemas_ligados = (SELECT array_agg(DISTINCT x) "
+                    "  FROM unnest(sistemas_ligados || '{internet}'::text[]) x) WHERE dono_id IS NOT NULL")
+                print("✅ internet ligada em sistemas_ligados; agora publicar-bots-mcp.py --aplicar")
+                return 0
             if a.ligar_datacore_todos:
                 n = await conn.fetchval(
                     "WITH u AS (UPDATE public.agent_profiles SET sistemas_ligados = (SELECT "
@@ -285,8 +307,8 @@ async def main() -> int:
                 return 0 if ok else 1
             if a.ligar_sistema:
                 bot, sistema = a.ligar_sistema
-                if sistema not in ("taskhs", "datacore", "docshs", "talenths", "gestorhs", "hsgrowth", "hsgrowth_servicos"):
-                    print("sistema desconhecido (por ora: taskhs, datacore, docshs, talenths, gestorhs, hsgrowth, hsgrowth_servicos)")
+                if sistema not in ("taskhs", "datacore", "docshs", "talenths", "gestorhs", "hsgrowth", "hsgrowth_servicos", "internet"):
+                    print("sistema desconhecido (por ora: taskhs, datacore, docshs, talenths, gestorhs, hsgrowth, hsgrowth_servicos, internet)")
                     return 1
                 ok = await conn.fetchval(
                     "UPDATE public.agent_profiles SET sistemas_ligados = "
@@ -294,28 +316,30 @@ async def main() -> int:
                     " WHERE agent_id = $1 AND dono_id IS NOT NULL RETURNING agent_id", bot, sistema)
                 print(f"{sistema} em {bot}: {'ok' if ok else 'NÃO (não é bot pessoal?)'}")
                 return 0 if ok else 1
-            linhas = await conn.fetch("SELECT agent_id, email_ligado "
+            linhas = await conn.fetch("SELECT agent_id, email_ligado, sistemas_ligados "
                                       "  FROM public.agent_profiles WHERE dono_id IS NOT NULL")
         bots = {l["agent_id"] for l in linhas}
         com_email = {l["agent_id"] for l in linhas if l["email_ligado"]}
+        com_internet = {l["agent_id"] for l in linhas if "internet" in (l["sistemas_ligados"] or [])}
         conf, base_hash = await config_do_gateway()
         # Como a produção lê: `integration_secrets` primeiro, depois o ambiente.
         from app.integracoes import ler_segredo
         segredo = await ler_segredo("ANEXOS_MCP_SEGREDO") or os.environ.get("ANEXOS_MCP_SEGREDO", "")
         token = await ler_segredo("GUARDRAILS_API_TOKEN") or os.environ.get("GUARDRAILS_API_TOKEN", "")
         try:
-            patch, novos = montar_patch(conf, segredo, token, bots, com_email)
+            patch, novos = montar_patch(conf, segredo, token, bots, com_email, com_internet)
         except ValueError as e:
             print("❌", e)
             return 1
         print("Bots com e-mail:", sorted(com_email) or "(nenhum)")
+        print("Bots com internet (web_search):", sorted(com_internet) or "(nenhum)")
         print("Entradas:", json.dumps(_mascarar(novos), ensure_ascii=False, indent=1))
         print(f"agents.list reescrito: {len(patch['agents']['list'])} agentes")
         if not a.aplicar:
             print("(ensaio — nada foi escrito)")
             return 0
         await aplicar_patch(patch, base_hash,
-                            conferir=lambda c: conferir(c, novos, bots, com_email))
+                            conferir=lambda c: conferir(c, novos, bots, com_email, com_internet))
         print("✅ aplicado e conferido na releitura")
         return 0
     finally:

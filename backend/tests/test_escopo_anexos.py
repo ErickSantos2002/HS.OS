@@ -105,3 +105,20 @@ def test_ferramenta_restrita_entra_so_no_escopo_de_quem_pode():
     nina = escopo_mcp_do_agente("nina", {}, servidores)
     assert "mcp__hsos-anexos-nina__relatorio_ponto" not in nina["alsoAllow"]
     assert "hsos-anexos-bruce__relatorio_ponto" in nina["deny"]
+
+
+def test_especialista_nunca_ganha_internet():
+    """O perfil `coding` traz `group:web`: ligar a busca no gateway para o
+    piloto do Guardi daria `web_search` (e `web_fetch`) a nina, iris, atlas,
+    flow e bruce. Decisão de 18/11/2026: especialistas sem internet."""
+    t = escopo_mcp_do_agente("iris", {"deny": ["sessions_send"]}, SERVIDORES)
+    assert {"web_search", "web_fetch", "x_search", "sessions_send"} <= set(t["deny"])
+
+
+def test_guardi_com_internet_nao_perde_a_busca_no_escopo():
+    """O `publicar-anexos-mcp.py` passa TODO agente por aqui, inclusive os
+    Guardis (`minimal`). Negar `web_search` a eles desfaria o piloto."""
+    t = escopo_mcp_do_agente("erick-bot", {"profile": "minimal", "alsoAllow": ["web_search"],
+                                           "deny": ["web_fetch", "x_search"]}, SERVIDORES)
+    assert "web_search" in t["alsoAllow"] and "web_search" not in t["deny"]
+    assert {"web_fetch", "x_search"} <= set(t["deny"])

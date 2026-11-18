@@ -1776,6 +1776,15 @@ _DENY_NAO_MCP = ("sessions_send", "sessions_spawn", "skill_workshop", "cron")
 # decisão, que esta mudança não toma (05/11/2026).
 _DENY_PRESERVADO = _DENY_NAO_MCP + ("gateway",)
 
+# ⚠️ Internet (spec 2026-11-18-guardi-internet): ligar `tools.web.search` no
+# gateway entrega a busca a todo agente de perfil `coding` (ele traz
+# `group:web`). Por decisão do Erick só o Guardi com a flag `internet` a tem;
+# `web_fetch` e `x_search` ninguém — `web_fetch` é GET em URL escolhida pelo
+# modelo, canal de vazamento por injeção. As três entram no preservado porque o
+# recálculo de deny as apagaria na próxima publicação de banco.
+FERRAMENTAS_WEB = ("web_search", "web_fetch", "x_search")
+_DENY_PRESERVADO = _DENY_PRESERVADO + FERRAMENTAS_WEB
+
 
 # O único servidor MCP que nunca entra no deny — ver `_deny_de_mcp`.
 SERVIDOR_ALERTA = "hsos-alerta"
@@ -1872,7 +1881,13 @@ def escopo_mcp_do_agente(agent_id: str, tools: dict, servidores: dict) -> dict:
     if f"{_PREFIXO_ANEXOS}{agent_id}" in servidores:
         atuais += [x for x in proprias if x not in atuais]
     t["alsoAllow"] = atuais
-    t["deny"] = _deny_de_mcp(atuais, list(t.get("deny") or []), servidores)
+    deny = _deny_de_mcp(atuais, list(t.get("deny") or []), servidores)
+    # Especialista (todo perfil que não é o `minimal` do Guardi) não tem
+    # internet. O Guardi passa por aqui também (`publicar-anexos-mcp.py`), e o
+    # dele quem decide é `tools_do_bot` — não mexer.
+    if t.get("profile") != "minimal":
+        deny += [f for f in FERRAMENTAS_WEB if f not in deny]
+    t["deny"] = deny
     return t
 
 
