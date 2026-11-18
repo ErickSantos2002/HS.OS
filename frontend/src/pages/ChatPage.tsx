@@ -108,7 +108,7 @@ import { acoesDaMensagemDoAgente } from "@/lib/acoes-da-mensagem";
 import { naoLidasDoAgente } from "@/lib/nao-lidas-do-agente";
 import { indicadorDaAba, indicadorDaConversa } from "@/lib/conversa-marcada";
 import { useConversasMarcadas } from "@/hooks/use-conversas-marcadas";
-import { IndicadorDaConversa, MenuDaConversa } from "@/components/chat/MenuDaConversa";
+import { CEDE_AO_MENU, IndicadorDaConversa, MenuDaConversa } from "@/components/chat/MenuDaConversa";
 import { LIMITE_TEXTO_COMO_ANEXO, useConversaAgente } from "@/hooks/use-conversa-agente";
 import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
 import { canalNaoResolve } from "@/lib/tela-cheia";
@@ -2377,7 +2377,7 @@ export default function ChatPage() {
                         <div className="min-w-0 flex-1 overflow-hidden">
                           <div className="flex items-center justify-between gap-1">
                             <span className="text-sm truncate font-medium text-foreground">{nomePessoal}</span>
-                            {quando && <span className="text-[10px] text-muted-foreground/60 shrink-0">{getRelativeTime(quando)}</span>}
+                            {quando && <span className={`text-[10px] text-muted-foreground/60 shrink-0 ${CEDE_AO_MENU}`}>{getRelativeTime(quando)}</span>}
                           </div>
                           <div className="flex items-center justify-between gap-1">
                             <div className="text-[11px] text-muted-foreground truncate">Suas anotações</div>
@@ -2420,7 +2420,7 @@ export default function ChatPage() {
                               <div className="flex items-center justify-between gap-1">
                                 <span className={`text-sm truncate ${hasUnread ? "font-bold text-foreground" : "font-medium text-foreground"}`}>{agent.name}</span>
                                 <div className="flex items-center gap-1 shrink-0">
-                                  {lastMsg && <span className="text-[10px] text-muted-foreground/60">{getRelativeTime(lastMsg.created_at)}</span>}
+                                  {lastMsg && <span className={`text-[10px] text-muted-foreground/60 ${CEDE_AO_MENU}`}>{getRelativeTime(lastMsg.created_at)}</span>}
                                   <AgentListIndicator working={agentIsWorking} />
                                 </div>
                               </div>
@@ -2473,7 +2473,7 @@ export default function ChatPage() {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">
-                                  {isHumanTyping ? <SidebarTypingDots /> : lastAct && <span className="text-[10px] text-muted-foreground/60">{getRelativeTime(lastAct)}</span>}
+                                  {isHumanTyping ? <SidebarTypingDots /> : lastAct && <span className={`text-[10px] text-muted-foreground/60 ${CEDE_AO_MENU}`}>{getRelativeTime(lastAct)}</span>}
                                   {openingDm === person.id && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground shrink-0" />}
                                 </div>
                               </div>
@@ -2561,7 +2561,7 @@ function ChannelSidebarItem({ channel, active, onClick, unreadCount = 0, marcada
   const hasUnread = (unreadCount > 0 || marcada) && !active;
   const indicador = indicadorDaConversa(unreadCount, marcada);
   return (
-    <MenuDaConversa alvo={{ canalId: channel.id, agentId: null }}>
+    <MenuDaConversa alvo={{ canalId: channel.id, agentId: null }} posicao="meio">
     <button
       onClick={onClick}
       className={`relative w-full text-left pl-3 pr-3 py-2.5 transition-colors duration-150 touch-target ${
@@ -2593,6 +2593,7 @@ function ChannelSidebarItem({ channel, active, onClick, unreadCount = 0, marcada
                 ? "font-bold text-foreground"
                 : "font-medium text-muted-foreground"
           }`}>{channel.name}</span>
+          <span className={`flex items-center gap-2 shrink-0 ${CEDE_AO_MENU}`}>
           <IconeSilenciado channelId={channel.id} />
           {indicador?.tipo === "numero" && (
             <span className="flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-bold shrink-0 shadow-sm">
@@ -2600,6 +2601,7 @@ function ChannelSidebarItem({ channel, active, onClick, unreadCount = 0, marcada
             </span>
           )}
           {indicador?.tipo === "marca" && <IndicadorDaConversa indicador={indicador} tom="primario" />}
+          </span>
         </div>
       </div>
     </button>

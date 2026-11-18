@@ -3,17 +3,23 @@
  *
  * Spec: docs/superpowers/specs/2026-11-18-marcar-conversa-nao-lida-design.md.
  *
- * O ⋮ aparece no hover do item (`group`) e o clique direito abre o mesmo menu.
- * Clicar no ⋮ não abre a conversa. Sem alvo (DM com pessoa que nunca
+ * No hover, a hora cede o lugar a um ˅ (`CEDE_AO_MENU`); o clique direito abre o
+ * mesmo item no ponto do cursor. Clicar no ˅ não abre a conversa. Sem alvo (DM com pessoa que nunca
  * conversou, sem canal ainda) não há menu: não há o que marcar.
  *
  * `IndicadorDaConversa` desenha o que `indicadorDaConversa` decidiu: número de
  * não lidas, a bolinha sem número da marca, ou nada.
  */
 import { useState, type ReactNode } from "react";
-import { BellDot, Check, MoreVertical } from "lucide-react";
+import { BellDot, Check, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,49 +30,71 @@ import { useConversasMarcadas } from "@/hooks/use-conversas-marcadas";
 import { podeMarcar, type AlvoDaMarca, type Indicador } from "@/lib/conversa-marcada";
 import { cn } from "@/lib/utils";
 
-export function MenuDaConversa({ alvo, children, className }: {
+/**
+ * Classe para o que fica no canto do item (hora, contador) e cede o lugar ao
+ * botão no hover — o padrão do Gmail. A 1ª versão punha o ⋮ POR CIMA da hora,
+ * cortando-a, e o menu abria solto sobre a conversa de baixo (18/11/2026).
+ */
+export const CEDE_AO_MENU = "transition-opacity group-hover/conversa:opacity-0";
+
+const CONTEUDO = "min-w-[12rem] rounded-xl p-1 shadow-lg";
+const ITEM = "gap-2.5 rounded-lg px-2.5 py-2 text-sm cursor-pointer";
+
+export function MenuDaConversa({ alvo, children, className, posicao = "topo" }: {
   alvo: AlvoDaMarca;
   children: ReactNode;
   className?: string;
+  /** Onde fica o botão: na linha do nome (`topo`, junto da hora) ou no meio do item. */
+  posicao?: "topo" | "meio";
 }) {
   const [aberto, setAberto] = useState(false);
   const { estaMarcada, marcar, desmarcar } = useConversasMarcadas();
-  if (!podeMarcar(alvo)) return <div className={cn("group relative", className)}>{children}</div>;
+  if (!podeMarcar(alvo)) return <div className={cn("relative", className)}>{children}</div>;
   const marcada = estaMarcada(alvo);
   const alternar = () => {
     void (marcada ? desmarcar(alvo) : marcar(alvo)).then((ok) => {
       if (!ok) toast.error(marcada ? "Não foi possível marcar como lida" : "Não foi possível marcar como não lida");
     });
   };
+  const Icone = marcada ? Check : BellDot;
+  const rotulo = marcada ? "Marcar como lida" : "Marcar como não lida";
   return (
-    <div
-      className={cn("group relative", className)}
-      onContextMenu={(e) => { e.preventDefault(); setAberto(true); }}
-    >
-      {children}
-      <DropdownMenu open={aberto} onOpenChange={setAberto}>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label="Opções da conversa"
-            onClick={(e) => e.stopPropagation()}
-            className={cn(
-              "absolute right-1 top-1/2 -translate-y-1/2 z-10 rounded-md bg-background/80 p-1 text-muted-foreground shadow-sm",
-              "transition-opacity hover:text-foreground focus-visible:opacity-100",
-              aberto ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-            )}
-          >
-            <MoreVertical className="h-3.5 w-3.5" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-[11rem]">
-          <DropdownMenuItem onSelect={alternar} className="gap-2 text-sm">
-            {marcada ? <Check className="h-3.5 w-3.5" /> : <BellDot className="h-3.5 w-3.5" />}
-            {marcada ? "Marcar como lida" : "Marcar como não lida"}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div className={cn("group/conversa relative", className)}>
+          {children}
+          <DropdownMenu open={aberto} onOpenChange={setAberto}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label="Opções da conversa"
+                onClick={(e) => e.stopPropagation()}
+                className={cn(
+                  "absolute right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full",
+                  "bg-secondary text-muted-foreground shadow-sm transition-opacity hover:text-foreground",
+                  "focus-visible:opacity-100",
+                  posicao === "topo" ? "top-1.5" : "top-1/2 -translate-y-1/2",
+                  aberto ? "opacity-100" : "opacity-0 group-hover/conversa:opacity-100",
+                )}
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={4} className={CONTEUDO}>
+              <DropdownMenuItem onSelect={alternar} className={ITEM}>
+                <Icone className="h-4 w-4" />{rotulo}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </ContextMenuTrigger>
+      {/* Clique direito: abre no ponto do cursor, como em qualquer lista do sistema. */}
+      <ContextMenuContent className={CONTEUDO}>
+        <ContextMenuItem onSelect={alternar} className={ITEM}>
+          <Icone className="h-4 w-4" />{rotulo}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

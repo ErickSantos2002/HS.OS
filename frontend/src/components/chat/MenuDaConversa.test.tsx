@@ -50,3 +50,15 @@ describe("IndicadorDaConversa", () => {
     expect(screen.getByText("3")).toBeTruthy();
   });
 });
+
+describe("MenuDaConversa — botão do hover", () => {
+  it("o ˅ abre o mesmo item, sem abrir a conversa", async () => {
+    const abrir = vi.fn();
+    render(<MenuDaConversa alvo={{ canalId: "c1", agentId: null }}><button onClick={abrir}>Ana</button></MenuDaConversa>);
+    const botao = screen.getByRole("button", { name: "Opções da conversa" });
+    fireEvent.pointerDown(botao, { button: 0, pointerType: "mouse" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Marcar como não lida" }));
+    expect(estado.marcar).toHaveBeenCalledWith({ canalId: "c1", agentId: null });
+    expect(abrir).not.toHaveBeenCalled();
+  });
+});
