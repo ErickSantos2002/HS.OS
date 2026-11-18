@@ -35,7 +35,7 @@ const noop = () => {};
 function montar(resumoLigado: boolean) {
   return render(
     <MessageBubble msg={doAgente} currentUserId="u2" msgReactions={[]} onToggleReaction={noop}
-      onEdit={noop} onDelete={noop} onReply={noop} onMarkUnread={() => true} onImageClick={noop}
+      onEdit={noop} onDelete={noop} onReply={noop} onImageClick={noop}
       onAttachmentPreview={noop} threadMeta={null} threadHasUnread={false} resumoLigado={resumoLigado} />,
   );
 }

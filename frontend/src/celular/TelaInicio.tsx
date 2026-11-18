@@ -4,7 +4,7 @@
  */
 import { useMemo, useState } from "react";
 import {
-  AtSign, BellOff, Bell, CheckCheck, ChevronRight, Library, LogOut, MessageCircle, Search, Smartphone, User, AudioLines,
+  AtSign, BellDot, BellOff, Bell, Check, CheckCheck, ChevronRight, Library, LogOut, MessageCircle, Search, Smartphone, User, AudioLines,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
@@ -15,12 +15,15 @@ import { useNotificationsContext } from "@/components/NotificationsProvider";
 import { useAuthContext } from "@/contexts/auth-context";
 import { useAgents } from "@/hooks/use-agents";
 import { useResumoEmAudio } from "@/hooks/use-resumo-em-audio";
+import { useConversasMarcadas } from "@/hooks/use-conversas-marcadas";
+import { useToqueLongo } from "@/hooks/use-toque-longo";
+import { indicadorDaConversa, podeMarcar, type AlvoDaMarca } from "@/lib/conversa-marcada";
 import { findOrCreateDm, usePeople } from "@/hooks/use-people";
 import { getPermission, isEnabled } from "@/lib/browser-notifications";
 import { desligarNotificacoesDoAparelho, ligarNotificacoesDoAparelho } from "@/lib/notificacoes-do-aparelho";
 import { classificarAtividade, nomeDoAutor, textoDaAtividade, type TipoAtividade } from "./atividade";
-import { rotuloDoContador } from "@/lib/contador-de-nao-lidas";
-import { horaDaLista, linhaDaPrevia, montarLista, naoLidasPorChip, type ItemCelular, type TipoItem } from "./lista";
+import { horaDaLista, indicadorPorChip, linhaDaPrevia, montarLista, type ItemCelular, type TipoItem } from "./lista";
+import { FolhaDeAcoes } from "./Folhas";
 import type { Aba, Tela } from "./pilha";
 import { Avatar } from "./ui";
 import { useListaDoCelular } from "./use-lista";
@@ -37,6 +40,8 @@ export function TelaInicio({ aba, aoTrocarAba, aoAbrir }: Props) {
   const { profile } = useAuthContext();
   const meuNome = profile?.full_name ?? "";
   const conversasComNovidade = itens.filter((i) => i.naoLidas > 0 && !i.silenciado).length;
+  // A marca não soma: sem novidade numérica, a aba mostra só a bolinha.
+  const temMarcada = itens.some((i) => i.marcada);
   const atividadesNovas = notifications.filter((n) => !n.read && classificarAtividade(n, meuNome)).length;
 
   return (
@@ -45,7 +50,7 @@ export function TelaInicio({ aba, aoTrocarAba, aoAbrir }: Props) {
       {aba === "atividade" && <Atividade aoAbrir={aoAbrir} />}
       {aba === "eu" && <Eu aoAbrir={aoAbrir} />}
       <nav className="cel-abas" aria-label="Navegação">
-        <BotaoDeAba atual={aba} id="conversas" rotulo="Conversas" icone={<MessageCircle />} n={conversasComNovidade} aoTrocar={aoTrocarAba} />
+        <BotaoDeAba atual={aba} id="conversas" rotulo="Conversas" icone={<MessageCircle />} n={conversasComNovidade} marca={temMarcada} aoTrocar={aoTrocarAba} />
         <BotaoDeAba atual={aba} id="atividade" rotulo="Atividade" icone={<AtSign />} n={atividadesNovas} aoTrocar={aoTrocarAba} />
         <BotaoDeAba atual={aba} id="eu" rotulo="Eu" icone={<User />} n={0} aoTrocar={aoTrocarAba} />
       </nav>
@@ -53,11 +58,12 @@ export function TelaInicio({ aba, aoTrocarAba, aoAbrir }: Props) {
   );
 }
 
-function BotaoDeAba({ atual, id, rotulo, icone, n, aoTrocar }: { atual: Aba; id: Aba; rotulo: string; icone: React.ReactNode; n: number; aoTrocar: (a: Aba) => void }) {
+function BotaoDeAba({ atual, id, rotulo, icone, n, marca = false, aoTrocar }: { atual: Aba; id: Aba; rotulo: string; icone: React.ReactNode; n: number; marca?: boolean; aoTrocar: (a: Aba) => void }) {
   return (
     <button type="button" className="cel-aba" aria-current={atual === id ? "page" : undefined} onClick={() => aoTrocar(id)}>
       <span className="cel-pilula">{icone}</span>{rotulo}
       {n > 0 && <span className="cel-ponto">{n > 99 ? "99+" : n}</span>}
+      {n <= 0 && marca && <span className="cel-ponto marca" aria-label="Há conversa marcada como não lida" />}
     </button>
   );
 }
@@ -74,7 +80,11 @@ function ListaDeConversas({ itens, aoAbrir }: { itens: ItemCelular[]; aoAbrir: (
   const [busca, setBusca] = useState("");
   const [abrindo, setAbrindo] = useState<string | null>(null);
   const lista = useMemo(() => montarLista(itens, filtro, busca), [itens, filtro, busca]);
-  const porChip = useMemo(() => naoLidasPorChip(itens), [itens]);
+  const porChip = useMemo(() => indicadorPorChip(itens), [itens]);
+  const { estaMarcada, marcar, desmarcar } = useConversasMarcadas();
+  const [folhaDe, setFolhaDe] = useState<ItemCelular | null>(null);
+  const alvoDaFolha = folhaDe ? alvoDoItem(folhaDe) : null;
+  const folhaMarcada = alvoDaFolha ? estaMarcada(alvoDaFolha) : false;
   const agora = new Date();
 
   const escolher = (f: TipoItem) => {
@@ -106,11 +116,16 @@ function ListaDeConversas({ itens, aoAbrir }: { itens: ItemCelular[]; aoAbrir: (
       </label>
       <div className="cel-chips" role="group" aria-label="Filtro">
         {CHIPS.map(([k, r]) => {
-          const n = rotuloDoContador(porChip[k]);
+          const ind = porChip[k];
+          const rotulo = ind?.tipo === "numero"
+            ? `${r}, ${ind.texto} não ${ind.texto === "1" ? "lida" : "lidas"}`
+            : ind?.tipo === "marca" ? `${r}, há conversa marcada como não lida` : undefined;
           return (
             <button key={k} type="button" className="cel-chip" aria-pressed={filtro === k} onClick={() => escolher(k)}
-              aria-label={n ? `${r}, ${porChip[k]} não ${porChip[k] === 1 ? "lida" : "lidas"}` : undefined}>
-              {r}{n && <span className="cel-chip-n">{n}</span>}
+              aria-label={rotulo}>
+              {r}
+              {ind?.tipo === "numero" && <span className="cel-chip-n">{ind.texto}</span>}
+              {ind?.tipo === "marca" && <span className="cel-chip-n marca" />}
             </button>
           );
         })}
@@ -119,11 +134,47 @@ function ListaDeConversas({ itens, aoAbrir }: { itens: ItemCelular[]; aoAbrir: (
         <div className="cel-cartao-instalar"><InstalarApp variante="cartao" /></div>
         {lista.length === 0 ? (
           <div className="cel-vazio">{busca.trim() ? `Nenhuma conversa com “${busca.trim()}”.` : "Nenhuma conversa aqui."}</div>
-        ) : lista.map((i) => {
-          const { autor, texto } = linhaDaPrevia(i);
-          const nova = i.naoLidas > 0 && !i.silenciado;
-          return (
-            <button key={i.chave} type="button" className="cel-item" onClick={() => void abrir(i)} aria-busy={abrindo === i.id}>
+        ) : lista.map((i) => (
+          <ItemDaConversa key={i.chave} i={i} agora={agora} abrindo={abrindo === i.id}
+            aoAbrir={() => void abrir(i)} aoSegurar={() => setFolhaDe(i)} />
+        ))}
+      </div>
+      <FolhaDeAcoes
+        aberta={!!folhaDe}
+        aoFechar={() => setFolhaDe(null)}
+        rotulo="Ações da conversa"
+        acoes={alvoDaFolha ? [{
+          rotulo: folhaMarcada ? "Marcar como lida" : "Marcar como não lida",
+          icone: folhaMarcada ? Check : BellDot,
+          aoEscolher: () => {
+            void (folhaMarcada ? desmarcar(alvoDaFolha) : marcar(alvoDaFolha)).then((ok) => {
+              if (!ok) toast.error(folhaMarcada ? "Não foi possível marcar como lida" : "Não foi possível marcar como não lida");
+            });
+          },
+        }] : []}
+      />
+    </>
+  );
+}
+
+function alvoDoItem(i: ItemCelular): AlvoDaMarca {
+  return i.tipo === "agente" ? { canalId: null, agentId: i.id } : { canalId: i.canalId, agentId: null };
+}
+
+/**
+ * Um item da lista. Segurar (450 ms, `useToqueLongo`) abre a folha com
+ * "Marcar como (não) lida"; o toque curto continua abrindo a conversa. Pessoa
+ * sem conversa ainda (sem canal) não tem o que marcar: segurar não faz nada.
+ */
+function ItemDaConversa({ i, agora, abrindo, aoAbrir, aoSegurar }: {
+  i: ItemCelular; agora: Date; abrindo: boolean; aoAbrir: () => void; aoSegurar: () => void;
+}) {
+  const { handlers } = useToqueLongo(aoSegurar, podeMarcar(alvoDoItem(i)));
+  const { autor, texto } = linhaDaPrevia(i);
+  const nova = i.naoLidas > 0 && !i.silenciado;
+  const indicador = indicadorDaConversa(i.naoLidas, i.marcada);
+  return (
+            <button type="button" className="cel-item" onClick={aoAbrir} aria-busy={abrindo} {...handlers}>
               <Avatar tipo={i.tipo === "pessoal" ? "pessoa" : i.tipo} nome={i.nome} chave={i.id} foto={i.foto} />
               <span className="cel-meio">
                 <span className="cel-l1">
@@ -141,14 +192,11 @@ function ListaDeConversas({ itens, aoAbrir }: { itens: ItemCelular[]; aoAbrir: (
                     </span>
                   )}
                   {i.silenciado && <BellOff className="cel-mini" aria-label="Silenciada" />}
-                  {i.naoLidas > 0 && <span className={`cel-badge${i.silenciado ? " mudo" : ""}`}>{i.naoLidas > 99 ? "99+" : i.naoLidas}</span>}
+                  {indicador?.tipo === "numero" && <span className={`cel-badge${i.silenciado ? " mudo" : ""}`}>{indicador.texto}</span>}
+                  {indicador?.tipo === "marca" && <span className="cel-badge marca" role="img" aria-label="Marcada como não lida" />}
                 </span>
               </span>
             </button>
-          );
-        })}
-      </div>
-    </>
   );
 }
 

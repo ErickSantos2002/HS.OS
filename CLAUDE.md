@@ -1205,6 +1205,28 @@ como no ChatGPT — **não** para continuar a sessão. Spec:
   sempre. O run (`agent_runs.pergunta_id`) só decide o cinza e o ⚠ (30 min).
 - `dm_reads` está aposentado, sem leitor nem escritor.
 
+### Marcar conversa como não lida — 18/11/2026
+
+Pedido da Leticia: marcar uma conversa já lida como "voltarei aqui", pela
+lista (segurar no celular; ⋮ ou clique direito no desktop). Spec:
+`docs/superpowers/specs/2026-11-18-marcar-conversa-nao-lida-design.md`.
+
+- ⚠️ **Não é notificação.** O "Marcar como não lida" por mensagem criava uma
+  linha em `notifications`, e o re-sweep de 2 s do
+  `useConversaAtivaNasNotificacoes` a lia na hora com a conversa aberta — "já
+  some". Saiu dos menus; `/notificacoes/nao-lida` ficou sem chamador. A marca
+  nova é a tabela `conversas_marcadas` (`039`), rotas `GET/PUT/DELETE
+  /conversas/marcadas?canal_id=|agent_id=` (exatamente um; `user_id` do token;
+  canal exige membro humano, agente `pode_ver_agente`).
+- ⚠️ **A coluna é `canal_id`, não `channel_id`, e o trigger é próprio**, só com
+  `{tabela, op, id, user_id}` → `usuario:<id>`: com `channel_id` o realtime
+  diria aos membros do canal que alguém o marcou.
+- ⚠️ **A marca não soma em número nenhum** (aba, sininho, ícone do app): é uma
+  bolinha sem número, e não lida de verdade vence (`lib/conversa-marcada.ts`,
+  regra das duas listas). Some só ao ABRIR a conversa — efeito próprio em
+  `use-conversa-ativa.ts`, nunca nos re-sweeps. Store de módulo em
+  `lib/conversas-marcadas-store.ts`.
+
 ### Estado e persistência
 
 - **`app_settings` (tabela) substituiu o `localStorage` para configuração** — ver `frontend/src/lib/app-settings.ts`,

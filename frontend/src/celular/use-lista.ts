@@ -14,6 +14,7 @@ import { useNotificationsContext } from "@/components/NotificationsProvider";
 import { useAuthContext } from "@/contexts/auth-context";
 import { useAgents } from "@/hooks/use-agents";
 import { useCanaisSilenciados } from "@/hooks/use-canais-silenciados";
+import { useConversasMarcadas } from "@/hooks/use-conversas-marcadas";
 import { useChannels } from "@/hooks/use-channels";
 import { useDmPeers } from "@/hooks/use-dm-members";
 import { usePeople } from "@/hooks/use-people";
@@ -136,6 +137,9 @@ export function useListaDoCelular() {
     return () => { window.removeEventListener(CHAT_PENDING_EVENT, p); window.removeEventListener(AGENT_UNREAD_EVENT, u); };
   }, []);
 
+  // Marcada como não lida pela lista (18/11/2026): só a bolinha, sem mexer na ordem.
+  const { estaMarcada } = useConversasMarcadas();
+
   const itens = useMemo<ItemCelular[]>(() => {
     const porCanal = new Map((previas.data ?? []).map((p) => [p.channel_id, p]));
     const membrosPorCanal = new Map((membros.data ?? []).map((m) => [m.channel_id, m]));
@@ -161,6 +165,7 @@ export function useListaDoCelular() {
         naoLidas: naoLidasDoAgente(a.id, mapaDm, unreadByChannel, unreadByAgentOnly) || (naoLidasLocais.some((id) => aliases.includes(id)) ? 1 : 0),
         silenciado: false,
         pensando: pendentes.some((id) => aliases.includes(id)),
+        marcada: estaMarcada({ canalId: null, agentId: a.id }),
       });
     }
     for (const p of people) {
@@ -173,6 +178,7 @@ export function useListaDoCelular() {
         previa: previaDe(canalId),
         naoLidas: canalId ? (unreadByChannel[canalId] || 0) : 0,
         silenciado: !!canalId && estaSilenciado(canalId),
+        marcada: !!canalId && estaMarcada({ canalId, agentId: null }),
       }));
     }
     // Conversa consigo mesmo (10/11/2026): item próprio, fixo no topo de
@@ -184,6 +190,7 @@ export function useListaDoCelular() {
         nome: nomeDaConversaPessoal(profile?.full_name, user.email),
         subtitulo: "Suas anotações", previa: previaDe(pessoal.id),
         naoLidas: 0, silenciado: false, pensando: false, foto: profile?.avatar_url ?? null,
+        marcada: estaMarcada({ canalId: pessoal.id, agentId: null }),
       });
     }
     for (const c of channels) {
@@ -197,12 +204,13 @@ export function useListaDoCelular() {
         naoLidas: unreadByChannel[c.id] || 0,
         silenciado: estaSilenciado(c.id),
         pensando: false,
+        marcada: estaMarcada({ canalId: c.id, agentId: null }),
       });
     }
     return lista;
   }, [agents, people, channels, previas.data, membros.data, ultimasDoAgente, mapaDm, unreadByChannel, unreadByAgentOnly,
     naoLidasLocais, pendentes, peerIdToChannelId, estaSilenciado, silenciadosVersao, user?.id,
-    canalPessoalId, profile?.full_name, profile?.avatar_url, user?.email]);
+    canalPessoalId, profile?.full_name, profile?.avatar_url, user?.email, estaMarcada]);
 
   return { itens, mapaDm, recarregarCanais, carregando: previas.isLoading };
 }

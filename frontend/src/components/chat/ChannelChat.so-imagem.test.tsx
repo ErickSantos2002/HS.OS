@@ -33,7 +33,7 @@ const noop = () => {};
 function montar() {
   return render(
     <MessageBubble msg={soImagem} currentUserId="eu" msgReactions={[]} onToggleReaction={noop}
-      onEdit={noop} onDelete={noop} onReply={noop} onMarkUnread={() => true} onImageClick={noop}
+      onEdit={noop} onDelete={noop} onReply={noop} onImageClick={noop}
       onAttachmentPreview={noop} threadMeta={null} threadHasUnread={false} />,
   );
 }

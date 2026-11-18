@@ -30,6 +30,20 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.16.0",
+    date: "2026-11-18",
+    changes: [
+      {
+        kind: "novidade",
+        text: "Agora dá para marcar uma conversa como não lida pela lista — segure a conversa no celular, ou use o ⋮ / clique direito no computador. Ela fica com uma bolinha sem número até você abrir de novo, para lembrar de voltar nela.",
+      },
+      {
+        kind: "melhoria",
+        text: "O \"Marcar como não lida\" saiu do menu de cada mensagem: ele sumia sozinho com a conversa aberta. Use o da lista de conversas.",
+      },
+    ],
+  },
+  {
     version: "2.15.2",
     date: "2026-11-18",
     changes: [

@@ -21,6 +21,13 @@ describe("ordenarConversas", () => {
     expect(lista.map((i) => i.nome)).toEqual(["Bia", "Ana"]);
   });
 
+  it("a conversa marcada como não lida sobe junto com as não lidas", () => {
+    // Quem marcou "voltarei aqui" quer achá-la no topo, como a não lida.
+    const marcada = { ...item("Ana", 1000), marcada: true };
+    const lista = ordenarConversas([item("Bia", 5000), marcada]);
+    expect(lista.map((i) => i.nome)).toEqual(["Ana", "Bia"]);
+  });
+
   it("depois vem a conversa mais recente", () => {
     const lista = ordenarConversas([item("Ana", 1000), item("Bia", 2000)]);
     expect(lista.map((i) => i.nome)).toEqual(["Bia", "Ana"]);

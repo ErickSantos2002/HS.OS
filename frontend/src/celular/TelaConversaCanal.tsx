@@ -15,7 +15,6 @@ import { toast } from "sonner";
 import ChannelFilesPanel from "@/components/chat/ChannelFilesPanel";
 import ChannelMembersPanel from "@/components/chat/ChannelMembersPanel";
 import { PainelEmbutido } from "@/components/chat/painel-embutido";
-import { useNotificationsContext } from "@/components/NotificationsProvider";
 import { useAuthContext } from "@/contexts/auth-context";
 import { useCanaisSilenciados } from "@/hooks/use-canais-silenciados";
 import { useChannelAgentActivity } from "@/hooks/use-channel-agent-activity";
@@ -101,7 +100,6 @@ export function TelaConversaCanal({
   const threadCounts = useThreadCounts(canalId);
   const { ligado: resumoLigado } = useResumoEmAudio();
   const { estaSilenciado, alternar: alternarSilencio } = useCanaisSilenciados();
-  const { markMessageAsUnread } = useNotificationsContext();
   const nomeProprio = (profile?.full_name && profile.full_name.trim()) || user?.email?.split("@")[0] || "Alguém";
   const { typingUsers, notifyTyping } = useTypingIndicator(canalId, user?.id ?? null, nomeProprio);
 
@@ -230,7 +228,6 @@ export function TelaConversaCanal({
   const acoesDaMensagem = (m: ChannelMessage) => acoesDaMensagemDoCanal(m, {
     souAutor: m.author_id === user?.id,
     aoResponder: podeEscrever ? () => responder(m) : undefined,
-    aoMarcarNaoLida: () => markMessageAsUnread({ messageId: m.id, channelId: canalId, authorName: nomeDoAutor(m), contentPreview: (m.content || "").slice(0, 100) }),
     aoEditar: () => { setResposta(null); setEditando(m); setRascunho(m.content); requestAnimationFrame(() => campoRef.current?.focus()); },
     aoApagar: () => setApagar(m),
     aoApagarParaMim: () => void apagarParaMimNoCanal(canalId, m, { esconder, reexibir }),

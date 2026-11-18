@@ -8,7 +8,7 @@
  * contador já salta aos olhos e a conversa não muda de lugar ao ser lida.
  */
 import type { Person } from "@/hooks/use-people";
-import { somarNaoLidas } from "@/lib/contador-de-nao-lidas";
+import { indicadorDaAba, type Indicador } from "@/lib/conversa-marcada";
 import { casaBusca } from "@/lib/lista-de-conversas";
 
 export type TipoItem = "pessoa" | "agente" | "canal";
@@ -40,6 +40,9 @@ export interface ItemCelular {
   naoLidas: number;
   silenciado: boolean;
   pensando: boolean;
+  /** A pessoa marcou "voltarei aqui" pela lista (18/11/2026): bolinha sem
+   *  número, não soma e não muda a ordem. `lib/conversa-marcada.ts`. */
+  marcada: boolean;
   /** Foto da pessoa (`avatar_url`) ou a própria, na conversa pessoal. Agente e canal não usam. */
   foto?: string | null;
 }
@@ -47,24 +50,24 @@ export interface ItemCelular {
 /** Item de uma pessoa (com ou sem DM ainda). Leva a foto, como a lateral do desktop. */
 export function itemDePessoa(
   p: Pick<Person, "id" | "full_name" | "email" | "cargo" | "departamento" | "avatar_url">,
-  { canalId, previa, naoLidas, silenciado }: { canalId: string | null; previa: PreviaCelular | null; naoLidas: number; silenciado: boolean },
+  { canalId, previa, naoLidas, silenciado, marcada = false }: { canalId: string | null; previa: PreviaCelular | null; naoLidas: number; silenciado: boolean; marcada?: boolean },
 ): ItemCelular {
   return {
     chave: `pessoa:${p.id}`, tipo: "pessoa", id: p.id, canalId, nome: p.full_name || p.email,
     subtitulo: [p.cargo, p.departamento].filter(Boolean).join(" · "),
-    previa, naoLidas, silenciado, pensando: false,
+    previa, naoLidas, silenciado, pensando: false, marcada,
     foto: p.avatar_url ?? null,
   };
 }
 
 /**
- * O contador de cada chip, pela regra do desktop (`somarNaoLidas`: silenciada
- * conta, como nas abas DMs/Agentes/Canais de lá). A conversa pessoal fica em
- * Pessoas, onde aparece.
+ * O indicador de cada chip, pela regra das abas do desktop (`indicadorDaAba`:
+ * soma das não lidas, silenciada conta; sem número, a bolinha se alguma está
+ * marcada). A conversa pessoal fica em Pessoas, onde aparece.
  */
-export function naoLidasPorChip(itens: ItemCelular[]): Record<TipoItem, number> {
+export function indicadorPorChip(itens: ItemCelular[]): Record<TipoItem, Indicador> {
   const chip = (t: TipoItem) => itens.filter((i) => i.tipo === t || (t === "pessoa" && i.tipo === "pessoal"));
-  return { pessoa: somarNaoLidas(chip("pessoa")), agente: somarNaoLidas(chip("agente")), canal: somarNaoLidas(chip("canal")) };
+  return { pessoa: indicadorDaAba(chip("pessoa")), agente: indicadorDaAba(chip("agente")), canal: indicadorDaAba(chip("canal")) };
 }
 
 export function montarLista(itens: ItemCelular[], filtro: TipoItem, busca: string): ItemCelular[] {

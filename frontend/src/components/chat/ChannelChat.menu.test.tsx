@@ -32,7 +32,7 @@ const noop = () => {};
 function montar(currentUserId: string) {
   return render(
     <MessageBubble msg={msg} currentUserId={currentUserId} msgReactions={[]} onToggleReaction={noop}
-      onEdit={noop} onDelete={noop} onReply={noop} onMarkUnread={() => true} onImageClick={noop}
+      onEdit={noop} onDelete={noop} onReply={noop} onImageClick={noop}
       onAttachmentPreview={noop} threadMeta={null} threadHasUnread={false} />,
   );
 }
@@ -55,7 +55,7 @@ describe("mensagem de canal estilo WhatsApp", () => {
     montar("eu");
     abrirMenu();
     const menu = await screen.findByRole("menu");
-    for (const r of ["Responder", "Copiar", "Marcar como não lida", "Editar", "Apagar"]) {
+    for (const r of ["Responder", "Copiar", "Editar", "Apagar"]) {
       expect(within(menu).getByRole("menuitem", { name: r })).toBeInTheDocument();
     }
   });
@@ -76,7 +76,7 @@ describe("mensagem de canal estilo WhatsApp", () => {
   it("dados da mensagem só na própria mensagem (spec 2026-10-14)", async () => {
     const { unmount } = render(
       <MessageBubble msg={msg} currentUserId="eu" msgReactions={[]} onToggleReaction={noop}
-        onEdit={noop} onDelete={noop} onReply={noop} onMarkUnread={() => true} onImageClick={noop}
+        onEdit={noop} onDelete={noop} onReply={noop} onImageClick={noop}
         onAttachmentPreview={noop} threadMeta={null} threadHasUnread={false}
         visto="lida" onDadosDaMensagem={noop} />,
     );

@@ -20,14 +20,17 @@ export interface ItemDaLista {
   /** Epoch em ms da última mensagem; 0 quando nunca houve conversa. */
   ultimaAtividade: number;
   naoLidas: number;
+  /** A pessoa marcou "voltarei aqui" (`lib/conversa-marcada.ts`): sobe junto
+   *  com as não lidas, sem somar número. */
+  marcada?: boolean;
 }
 
-/** Não lidas primeiro, depois a mais recente, depois quem nunca conversou
+/** Não lidas (e marcadas) primeiro, depois a mais recente, depois quem nunca conversou
  *  em ordem alfabética. Não altera a lista recebida. */
 export function ordenarConversas<T extends ItemDaLista>(itens: T[]): T[] {
   return [...itens].sort((a, b) => {
-    const aNaoLida = a.naoLidas > 0;
-    const bNaoLida = b.naoLidas > 0;
+    const aNaoLida = a.naoLidas > 0 || Boolean(a.marcada);
+    const bNaoLida = b.naoLidas > 0 || Boolean(b.marcada);
     if (aNaoLida !== bNaoLida) return aNaoLida ? -1 : 1;
     if (a.ultimaAtividade !== b.ultimaAtividade) return b.ultimaAtividade - a.ultimaAtividade;
     return a.nome.localeCompare(b.nome, "pt-BR");

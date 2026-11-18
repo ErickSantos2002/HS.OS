@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { horaDaLista, itemDePessoa, linhaDaPrevia, montarLista, naoLidasPorChip, type ItemCelular } from "./lista";
+import { horaDaLista, indicadorPorChip, itemDePessoa, linhaDaPrevia, montarLista, type ItemCelular } from "./lista";
 
 const AGORA = new Date(2026, 10, 3, 9, 50); // terça, 03/11/2026 09:50 local
 
 function item(p: Partial<ItemCelular> & Pick<ItemCelular, "id" | "tipo" | "nome">): ItemCelular {
   return {
     chave: `${p.tipo}:${p.id}`, canalId: null, subtitulo: "", previa: null, naoLidas: 0,
-    silenciado: false, pensando: false, ...p,
+    silenciado: false, pensando: false, marcada: false, ...p,
   };
 }
 
@@ -113,13 +113,43 @@ describe("itemDePessoa", () => {
  * Os chips não tinham contador: com 5 não lidas em canais a pessoa só via
  * trocando de chip. A regra é a das abas do desktop: silenciada conta.
  */
-describe("naoLidasPorChip", () => {
+describe("indicadorPorChip", () => {
   it("soma por chip, com a silenciada e a pessoal em Pessoas", () => {
     const comPessoal = [...itens, item({ id: "eu", tipo: "pessoal", nome: "Eu (você)", naoLidas: 1 }), item({ id: "marina2", tipo: "pessoa", nome: "M", naoLidas: 2 })];
-    expect(naoLidasPorChip(comPessoal)).toEqual({ pessoa: 3, agente: 1, canal: 12 });
+    expect(indicadorPorChip(comPessoal)).toEqual({
+      pessoa: { tipo: "numero", texto: "3" }, agente: { tipo: "numero", texto: "1" }, canal: { tipo: "numero", texto: "12" },
+    });
   });
 
-  it("tudo lido dá zero em todos", () => {
-    expect(naoLidasPorChip(itens.map((i) => ({ ...i, naoLidas: 0 })))).toEqual({ pessoa: 0, agente: 0, canal: 0 });
+  it("tudo lido dá nada em todos", () => {
+    expect(indicadorPorChip(itens.map((i) => ({ ...i, naoLidas: 0 })))).toEqual({ pessoa: null, agente: null, canal: null });
+  });
+});
+
+/**
+ * Marcar conversa como não lida (18/11/2026): a marca é bolinha sem número no
+ * chip — não soma — e NÃO mexe na ordem, que no celular é só por recência (nem
+ * a não lida sobe; a conversa não muda de lugar ao ser marcada).
+ */
+describe("conversa marcada no celular", () => {
+  it("só uma pessoa marcada: o chip Pessoas mostra a bolinha", () => {
+    const lidos = itens.map((i) => ({ ...i, naoLidas: 0 }));
+    const comMarca = lidos.map((i) => (i.id === "camila" ? { ...i, marcada: true } : i));
+    expect(indicadorPorChip(comMarca)).toEqual({ pessoa: { tipo: "marca" }, agente: null, canal: null });
+  });
+
+  it("o número de não lidas vence a marca no chip", () => {
+    const comMarca = itens.map((i) => (i.id === "iris" ? { ...i, marcada: true } : i));
+    expect(indicadorPorChip(comMarca).agente).toEqual({ tipo: "numero", texto: "1" });
+  });
+
+  it("montarLista não muda a ordem por causa da marca", () => {
+    const comMarca = itens.map((i) => (i.id === "camila" ? { ...i, marcada: true } : i));
+    expect(montarLista(comMarca, "pessoa", "").map((i) => i.id)).toEqual(montarLista(itens, "pessoa", "").map((i) => i.id));
+  });
+
+  it("itemDePessoa leva a marca", () => {
+    const p = { id: "x", full_name: "X", email: "x@x", cargo: null, departamento: null, avatar_url: null };
+    expect(itemDePessoa(p, { canalId: "dm", previa: null, naoLidas: 0, silenciado: false, marcada: true }).marcada).toBe(true);
   });
 });

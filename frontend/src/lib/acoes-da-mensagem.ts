@@ -6,12 +6,15 @@
  * celular) para não existir uma segunda lista: quem pode editar ou apagar,
  * "Apagar para mim" em qualquer mensagem, nada em mensagem otimista ou
  * apagada. Mudou uma regra, muda aqui, e os dois lados acompanham.
+ *
+ * ⚠️ "Marcar como não lida" SAIU daqui em 18/11/2026: virou ação da CONVERSA,
+ * na lista (`lib/conversas-marcadas-store.ts`). A versão por mensagem criava uma
+ * notificação, e o re-sweep de 2 s da conversa aberta a apagava na hora.
  */
-import { BellDot, Copy, EyeOff, Info, Pencil, Reply, Trash2 } from "lucide-react";
+import { Copy, EyeOff, Info, Pencil, Reply, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
-import { markAgentUnread } from "@/lib/chat-sender";
 import { copyToClipboard } from "@/lib/clipboard";
 import type { ChatMessage } from "@/lib/mock-data";
 import type { ChannelMessage } from "@/hooks/use-channels";
@@ -20,15 +23,12 @@ function copiar(texto: string) {
   void copyToClipboard(texto).then((ok) => (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar")));
 }
 
-/** Conversa com agente. */
-export function acoesDaMensagemDoAgente(msg: ChatMessage, effectiveAgentId: string): AcaoDaMensagem[] {
+/** Conversa com agente. O segundo argumento (agente) ficou sem uso quando o
+ *  "Marcar como não lida" saiu; mantido para não mexer nos chamadores. */
+export function acoesDaMensagemDoAgente(msg: ChatMessage, _effectiveAgentId?: string): AcaoDaMensagem[] {
   if (msg.id.startsWith("optimistic-") || msg.isError) return [];
   return [
     ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => copiar(msg.content) }] : []),
-    ...(msg.role === "agent" && effectiveAgentId ? [{ rotulo: "Marcar como não lida", icone: BellDot, aoEscolher: () => {
-      markAgentUnread(effectiveAgentId);
-      toast.success("Marcada como não lida");
-    } }] : []),
   ];
 }
 
@@ -36,7 +36,6 @@ export interface ContextoDaMensagemDoCanal {
   souAutor: boolean;
   /** Responder citando — substituiu o "Responder em thread" em 10/11/2026. */
   aoResponder?: () => void;
-  aoMarcarNaoLida: () => Promise<boolean> | boolean;
   aoEditar: () => void;
   aoApagar: () => void;
   aoDados?: () => void;
@@ -58,11 +57,6 @@ export function acoesDaMensagemDoCanal(
     // Sem `aoResponder` (canal em que a pessoa não escreve), sem a opção.
     ...(ctx.aoResponder ? [{ rotulo: "Responder", icone: Reply, aoEscolher: e(ctx.aoResponder) }] : []),
     ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => copiar(msg.content) }] : []),
-    { rotulo: "Marcar como não lida", icone: BellDot, aoEscolher: () => {
-      void Promise.resolve(ctx.aoMarcarNaoLida()).then(
-        (ok) => (ok ? toast.success("Marcada como não lida") : toast.error("Não foi possível marcar como não lida")),
-        () => toast.error("Não foi possível marcar como não lida"));
-    } },
     ...(ctx.souAutor ? [
       ...(ctx.aoDados ? [{ rotulo: "Dados da mensagem", icone: Info, aoEscolher: e(ctx.aoDados) }] : []),
       { rotulo: "Editar", icone: Pencil, aoEscolher: e(ctx.aoEditar) },

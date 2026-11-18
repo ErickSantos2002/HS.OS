@@ -15,6 +15,8 @@ const notif = vi.hoisted(() => ({
 const sender = vi.hoisted(() => ({ setActiveAgentId: vi.fn(), clearUnreadAgent: vi.fn() }));
 vi.mock("@/components/NotificationsProvider", () => ({ useNotificationsContext: () => notif }));
 vi.mock("@/lib/chat-sender", () => sender);
+const marcas = vi.hoisted(() => ({ desmarcar: vi.fn(async () => true) }));
+vi.mock("@/lib/conversas-marcadas-store", () => marcas);
 
 import { useConversaAtivaNasNotificacoes } from "./use-conversa-ativa";
 
@@ -49,5 +51,51 @@ describe("conversa ativa com duas telas ao mesmo tempo", () => {
     const a = renderHook(() => useConversaAtivaNasNotificacoes({ agentId: null, canalId: "c1", agentDmChannelMap: {} }));
     a.unmount();
     expect(ultimo(notif.setActiveChannel)).toBeNull();
+  });
+});
+
+/**
+ * A marca "voltarei aqui" some ao ABRIR a conversa, nunca por varredura. O
+ * "Marcar como não lida" por mensagem morria no re-sweep de 2 s com a conversa
+ * aberta — foi o "já some" que a Leticia relatou.
+ */
+describe("a marca de não lida some ao abrir", () => {
+  beforeEach(() => { vi.clearAllMocks(); vi.useFakeTimers(); });
+
+  it("abrir a conversa desmarca uma vez, e o re-sweep de 2 s não desmarca de novo", () => {
+    const h = renderHook(() => useConversaAtivaNasNotificacoes({
+      agentId: "nina", canalId: null, agentDmChannelMap: { nina: "dm-1" },
+    }));
+    expect(marcas.desmarcar).toHaveBeenCalledTimes(1);
+    expect(marcas.desmarcar).toHaveBeenCalledWith({ canalId: null, agentId: "nina" });
+    vi.advanceTimersByTime(2000);
+    expect(notif.markAllAsReadForChannel).toHaveBeenCalledTimes(3); // o re-sweep rodou
+    expect(marcas.desmarcar).toHaveBeenCalledTimes(1);
+    h.unmount();
+    vi.useRealTimers();
+  });
+
+  it("marcar a conversa que já está aberta não a desmarca (re-render sem trocar de alvo)", () => {
+    const h = renderHook((p: { mapa: Record<string, string> }) => useConversaAtivaNasNotificacoes({
+      agentId: null, canalId: "c1", agentDmChannelMap: p.mapa,
+    }), { initialProps: { mapa: {} } });
+    expect(marcas.desmarcar).toHaveBeenCalledTimes(1);
+    marcas.desmarcar.mockClear();
+    h.rerender({ mapa: { outro: "x" } });
+    vi.advanceTimersByTime(5000);
+    expect(marcas.desmarcar).not.toHaveBeenCalled();
+    h.unmount();
+    vi.useRealTimers();
+  });
+
+  it("trocar de conversa desmarca a nova; tela inativa não desmarca", () => {
+    const h = renderHook((p: { canal: string; ativa: boolean }) => useConversaAtivaNasNotificacoes({
+      agentId: null, canalId: p.canal, agentDmChannelMap: {}, ativa: p.ativa,
+    }), { initialProps: { canal: "c1", ativa: false } });
+    expect(marcas.desmarcar).not.toHaveBeenCalled();
+    h.rerender({ canal: "c2", ativa: true });
+    expect(marcas.desmarcar).toHaveBeenCalledWith({ canalId: "c2", agentId: null });
+    h.unmount();
+    vi.useRealTimers();
   });
 });

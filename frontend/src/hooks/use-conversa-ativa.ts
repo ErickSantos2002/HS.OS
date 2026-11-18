@@ -12,12 +12,18 @@
  * conversa aberta passava a tocar som, receber push e não marcar lido. Agora
  * tela inativa (`ativa: false`) não mexe em nada, e a limpeza só zera se o
  * valor ativo ainda for desta instância.
+ *
+ * ⚠️ **A marca "voltarei aqui" (`conversas_marcadas`, 18/11/2026) some ao ABRIR**
+ * — uma vez por abertura, no efeito próprio abaixo, nunca nos re-sweeps de 2 s
+ * nem no `visibilitychange`. Marcar a conversa que já está aberta mantém a marca
+ * até a pessoa sair e voltar.
  */
 import { useEffect, useMemo, useRef } from "react";
 
 import { useNotificationsContext } from "@/components/NotificationsProvider";
 import { getAgentIdAliases } from "@/lib/agent-id";
 import { clearUnreadAgent, setActiveAgentId } from "@/lib/chat-sender";
+import { desmarcar } from "@/lib/conversas-marcadas-store";
 
 let donoDoAgente: object | null = null;
 let donoDoCanal: object | null = null;
@@ -40,6 +46,14 @@ export function useConversaAtivaNasNotificacoes({
   // (and clean up via setActiveAgentId(null)) every time the map updates.
   const agentDmChannelMapRef = useRef(agentDmChannelMap);
   agentDmChannelMapRef.current = agentDmChannelMap;
+
+  // Abrir a conversa (tornar-se ativa ou trocar de alvo) tira a marca de não
+  // lida. Efeito separado de propósito: os outros re-rodam por mudanças que não
+  // são abertura (o mapa de DMs, o canal resolvido depois).
+  useEffect(() => {
+    if (!ativa || (!agentId && !canalId)) return;
+    void desmarcar(canalId ? { canalId, agentId: null } : { canalId: null, agentId });
+  }, [agentId, canalId, ativa]);
 
   useEffect(() => {
     if (!ativa) return;

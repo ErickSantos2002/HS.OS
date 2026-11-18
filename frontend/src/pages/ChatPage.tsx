@@ -106,7 +106,9 @@ import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import MenuDaMensagem from "@/components/chat/MenuDaMensagem";
 import { acoesDaMensagemDoAgente } from "@/lib/acoes-da-mensagem";
 import { naoLidasDoAgente } from "@/lib/nao-lidas-do-agente";
-import { rotuloDoContador, somarNaoLidas } from "@/lib/contador-de-nao-lidas";
+import { indicadorDaAba, indicadorDaConversa } from "@/lib/conversa-marcada";
+import { useConversasMarcadas } from "@/hooks/use-conversas-marcadas";
+import { IndicadorDaConversa, MenuDaConversa } from "@/components/chat/MenuDaConversa";
 import { LIMITE_TEXTO_COMO_ANEXO, useConversaAgente } from "@/hooks/use-conversa-agente";
 import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
 import { canalNaoResolve } from "@/lib/tela-cheia";
@@ -1786,7 +1788,6 @@ export default function ChatPage() {
     window.addEventListener(AGENT_UNREAD_EVENT, handler);
     return () => window.removeEventListener(AGENT_UNREAD_EVENT, handler);
   }, []);
-  const channelUnreadCount = useMemo(() => somarNaoLidas([...publicChannels, ...privateChannels].map((c) => ({ naoLidas: unreadByChannel[c.id] || 0 }))), [publicChannels, privateChannels, unreadByChannel]);
 
   // Populate agent_id → DM channel_id mapping for badge display
   useEffect(() => {
@@ -1884,6 +1885,10 @@ export default function ChatPage() {
   // Duas listas desde 20/10/2026: DMs só com pessoas — TODAS, não só quem já
   // tem conversa — e Agentes numa aba própria, para quem tem algum liberado.
   // Ordem e busca em `lib/lista-de-conversas.ts`.
+  // Conversa marcada como não lida pela lista (18/11/2026): bolinha sem
+  // número, sobe junto com as não lidas, some ao abrir. `lib/conversa-marcada.ts`.
+  const { estaMarcada } = useConversasMarcadas();
+
   type DmItem =
     | ({ kind: "agent"; agent: typeof agents[0] } & ItemDaLista)
     | ({ kind: "person"; person: Person } & ItemDaLista)
@@ -1903,8 +1908,9 @@ export default function ChatPage() {
       nome: agent.name,
       ultimaAtividade: lastMsg ? new Date(lastMsg.created_at).getTime() : 0,
       naoLidas: aberto ? 0 : (doBanco || local),
+      marcada: estaMarcada({ canalId: null, agentId: agent.id }),
     };
-  })), [agents, lastMessages, selection, agentUnreadTotal, agentUnreadIdsForDm]);
+  })), [agents, lastMessages, selection, agentUnreadTotal, agentUnreadIdsForDm, estaMarcada]);
 
   const listaPessoas: DmItem[] = useMemo(() => ordenarConversas(
     // Conta desativada (quem saiu da empresa) não aparece para começar
@@ -1919,9 +1925,10 @@ export default function ChatPage() {
         nome: person.full_name || person.email,
         ultimaAtividade: quando ? new Date(quando).getTime() : 0,
         naoLidas: canalId && !aberto ? (unreadByChannel[canalId] || 0) : 0,
+        marcada: canalId ? estaMarcada({ canalId, agentId: null }) : false,
       };
     }),
-  ), [people, user?.id, peerIdToChannelId, dmLastActivity, selection, unreadByChannel]);
+  ), [people, user?.id, peerIdToChannelId, dmLastActivity, selection, unreadByChannel, estaMarcada]);
 
   // Conversa consigo mesmo (10/11/2026): fixa no topo das DMs, fora da
   // ordenação e sem contador. `lib/conversa-pessoal.ts`.
@@ -1932,8 +1939,13 @@ export default function ChatPage() {
   const nomePessoal = nomeDaConversaPessoal(profile?.full_name, user?.email);
 
   // Regra do contador em `lib/contador-de-nao-lidas.ts` — a mesma do celular.
-  const pessoasNaoLidas = somarNaoLidas(listaPessoas);
-  const agentesNaoLidas = somarNaoLidas(listaAgentes);
+  // A marca NÃO soma: aba só com marcada mostra a bolinha, sem número.
+  const pessoalMarcada = canalPessoal ? estaMarcada({ canalId: canalPessoal.id, agentId: null }) : false;
+  const indicadorPessoas = indicadorDaAba([...listaPessoas, { naoLidas: 0, marcada: pessoalMarcada }]);
+  const indicadorAgentes = indicadorDaAba(listaAgentes);
+  const indicadorCanais = indicadorDaAba([...publicChannels, ...privateChannels].map((c) => ({
+    naoLidas: unreadByChannel[c.id] || 0, marcada: estaMarcada({ canalId: c.id, agentId: null }),
+  })));
   // A aba some para quem não tem agente liberado; quem a tinha como última
   // e perdeu o acesso cai em DMs.
   const temAgentes = agents.length > 0;
@@ -1955,7 +1967,8 @@ export default function ChatPage() {
         ...especialistasDaLista,
         ...(botsDaLista.length
           ? [{ kind: "secao" as const, total: botsDaLista.length, nome: "", ultimaAtividade: 0,
-               naoLidas: botsDaLista.reduce((acc, i) => acc + i.naoLidas, 0) }]
+               naoLidas: botsDaLista.reduce((acc, i) => acc + i.naoLidas, 0),
+               marcada: botsDaLista.some((i) => i.marcada) }]
           : []),
         ...(mostrarBots ? botsDaLista : []),
       ]
@@ -2256,29 +2269,17 @@ export default function ChatPage() {
       <TabsList className="w-full bg-transparent border-b border-border/30 rounded-none p-0 h-auto justify-start gap-6">
         <TabsTrigger value="dms" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5`}>
           DMs
-          {pessoasNaoLidas > 0 && (
-            <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
-              {rotuloDoContador(pessoasNaoLidas)}
-            </span>
-          )}
+          <IndicadorDaAba indicador={indicadorPessoas} />
         </TabsTrigger>
         {temAgentes && (
           <TabsTrigger value="agentes" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5`}>
             Agentes
-            {agentesNaoLidas > 0 && (
-            <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
-              {rotuloDoContador(agentesNaoLidas)}
-            </span>
-          )}
+            <IndicadorDaAba indicador={indicadorAgentes} />
           </TabsTrigger>
         )}
         <TabsTrigger value="channels" className={`rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:shadow-none text-xs font-medium text-muted-foreground pb-2 pt-1 px-1 gap-1.5`}>
           Canais
-          {channelUnreadCount > 0 && (
-            <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
-              {rotuloDoContador(channelUnreadCount)}
-            </span>
-          )}
+          <IndicadorDaAba indicador={indicadorCanais} />
         </TabsTrigger>
       </TabsList>
     </Tabs>
@@ -2332,7 +2333,7 @@ export default function ChatPage() {
                   <div className="mb-2">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-display px-2 mb-1">Públicos</p>
                     {publicChannels.map((ch) => (
-                      <ChannelSidebarItem key={ch.id} channel={ch} active={selection?.type === "channel" && selection.channel.id === ch.id} onClick={() => setSelection({ type: "channel", channel: ch })} unreadCount={unreadByChannel[ch.id] || 0} />
+                      <ChannelSidebarItem key={ch.id} channel={ch} active={selection?.type === "channel" && selection.channel.id === ch.id} onClick={() => setSelection({ type: "channel", channel: ch })} unreadCount={unreadByChannel[ch.id] || 0} marcada={estaMarcada({ canalId: ch.id, agentId: null })} />
                     ))}
                   </div>
                 )}
@@ -2340,7 +2341,7 @@ export default function ChatPage() {
                   <div className="mb-2">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-display px-2 mb-1">Privados</p>
                     {privateChannels.map((ch) => (
-                      <ChannelSidebarItem key={ch.id} channel={ch} active={selection?.type === "channel" && selection.channel.id === ch.id} onClick={() => setSelection({ type: "channel", channel: ch })} unreadCount={unreadByChannel[ch.id] || 0} />
+                      <ChannelSidebarItem key={ch.id} channel={ch} active={selection?.type === "channel" && selection.channel.id === ch.id} onClick={() => setSelection({ type: "channel", channel: ch })} unreadCount={unreadByChannel[ch.id] || 0} marcada={estaMarcada({ canalId: ch.id, agentId: null })} />
                     ))}
                   </div>
                 )}
@@ -2366,7 +2367,8 @@ export default function ChatPage() {
                   const ativo = selection?.type === "channel" && selection.channel.id === canalPessoal.id;
                   const quando = dmLastActivity[canalPessoal.id];
                   return (
-                    <button key="pessoal" onClick={() => setSelection({ type: "channel", channel: canalPessoal })}
+                    <MenuDaConversa key="pessoal" alvo={{ canalId: canalPessoal.id, agentId: null }}>
+                    <button onClick={() => setSelection({ type: "channel", channel: canalPessoal })}
                       className={`w-full max-w-full text-left px-2 py-2 rounded-xl mb-0.5 transition-all duration-200 overflow-hidden box-border ${ativo ? "bg-primary/12 backdrop-blur-md ring-1 ring-primary/20" : "hover:bg-card/60 hover:backdrop-blur-md"}`}>
                       <div className="flex items-center gap-2 min-w-0">
                         <div className="h-9 w-9 shrink-0 rounded-lg bg-secondary flex items-center justify-center overflow-hidden">
@@ -2377,10 +2379,14 @@ export default function ChatPage() {
                             <span className="text-sm truncate font-medium text-foreground">{nomePessoal}</span>
                             {quando && <span className="text-[10px] text-muted-foreground/60 shrink-0">{getRelativeTime(quando)}</span>}
                           </div>
-                          <div className="text-[11px] text-muted-foreground truncate">Suas anotações</div>
+                          <div className="flex items-center justify-between gap-1">
+                            <div className="text-[11px] text-muted-foreground truncate">Suas anotações</div>
+                            <IndicadorDaConversa indicador={indicadorDaConversa(0, pessoalMarcada)} />
+                          </div>
                         </div>
                       </div>
                     </button>
+                    </MenuDaConversa>
                   );
                 })()}
                 {listaDaAba
@@ -2390,19 +2396,19 @@ export default function ChatPage() {
                       <button key="secao-bots" onClick={() => setBotsAbertos((v) => !v)}
                         className="w-full flex items-center justify-between px-2 pt-3 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground/60 font-display hover:text-foreground">
                         <span>{mostrarBots ? "▾" : "▸"} Guardis do time ({item.total})</span>
-                        {item.naoLidas > 0 && <span className="text-destructive font-bold">{item.naoLidas}</span>}
+                        <IndicadorDaConversa indicador={indicadorDaConversa(item.naoLidas, Boolean(item.marcada))} />
                       </button>
                     );
                   }
                   if (item.kind === "agent") {
                     const agent = item.agent;
                     const isActive = selection?.type === "agent" && selection.id === agent.id;
-                    const unread = item.naoLidas;
-                    const hasUnread = unread > 0;
+                    const indicador = indicadorDaConversa(item.naoLidas, Boolean(item.marcada));
+                    const hasUnread = indicador !== null;
                     const agentIsWorking = Boolean(realtimePendingByAgent[agent.id]) || pendingAgentIds.has(agent.id) || (isActive && bgPending);
                     const lastMsg = lastMessages[agent.id];
                     return (
-                      <div key={`agent-${agent.id}`} className="group relative">
+                      <MenuDaConversa key={`agent-${agent.id}`} alvo={{ canalId: null, agentId: agent.id }}>
                         <button onClick={() => setSelection({ type: "agent", id: agent.id })}
                           className={`w-full max-w-full text-left px-2 py-2 rounded-xl mb-0.5 transition-all duration-200 overflow-hidden box-border ${isActive ? "bg-primary/12 backdrop-blur-md shadow-[0_0_12px_-4px_hsl(var(--primary)/0.3)] ring-1 ring-primary/20" : "hover:bg-card/60 hover:backdrop-blur-md"}`}>
                           <div className="flex items-start gap-2 min-w-0">
@@ -2420,24 +2426,25 @@ export default function ChatPage() {
                               </div>
                               {hasUnread && (
                                 <div className="flex justify-end mt-0.5">
-                                  <span className="flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold shrink-0">{unread > 99 ? "99+" : unread}</span>
+                                  <IndicadorDaConversa indicador={indicador} />
                                 </div>
                               )}
                             </div>
                           </div>
                         </button>
-                      </div>
+                      </MenuDaConversa>
                     );
                   } else {
                     const person = item.person;
                     const existingChannelId = peerIdToChannelId[person.id];
-                    const unread = item.naoLidas;
+                    const indicador = indicadorDaConversa(item.naoLidas, Boolean(item.marcada));
+                    const destaque = indicador !== null;
                     const existingChannel = existingChannelId ? channels.find((c) => c.id === existingChannelId) : null;
                     const isActive = existingChannel && selection?.type === "channel" && selection.channel.id === existingChannel.id;
                     const lastAct = existingChannelId ? dmLastActivity[existingChannelId] : null;
                     const isHumanTyping = existingChannelId ? (typingByDmChannel[existingChannelId]?.length ?? 0) > 0 : false;
                     return (
-                      <div key={`person-${person.id}`} className="group relative">
+                      <MenuDaConversa key={`person-${person.id}`} alvo={{ canalId: existingChannelId ?? null, agentId: null }}>
                         <button onClick={() => { if (existingChannel) setSelection({ type: "channel", channel: existingChannel }); else handleOpenPersonDm(person); }}
                           disabled={openingDm === person.id}
                           className={`w-full max-w-full text-left px-2 py-2 rounded-xl mb-0.5 transition-all duration-200 overflow-hidden box-border disabled:opacity-50 ${isActive ? "bg-primary/12 backdrop-blur-md ring-1 ring-primary/20" : "hover:bg-card/60 hover:backdrop-blur-md"}`}>
@@ -2451,7 +2458,7 @@ export default function ChatPage() {
                             <div className="min-w-0 flex-1 overflow-hidden">
                               <div className="flex items-center justify-between gap-1">
                                 <div className="flex items-center gap-1 min-w-0">
-                                  <span className={`text-sm truncate ${unread > 0 ? "font-bold text-foreground" : "font-medium text-foreground"}`}>{person.full_name || person.email}</span>
+                                  <span className={`text-sm truncate ${destaque ? "font-bold text-foreground" : "font-medium text-foreground"}`}>{person.full_name || person.email}</span>
                                   {person.custom_status_emoji && (
                                     <span
                                       title={person.custom_status ? `${person.custom_status_emoji} ${person.custom_status}` : undefined}
@@ -2475,15 +2482,15 @@ export default function ChatPage() {
                                   {person.custom_status}
                                 </div>
                               )}
-                              {unread > 0 && (
+                              {destaque && (
                                 <div className="flex justify-end mt-0.5">
-                                  <span className="flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold shrink-0">{unread > 99 ? "99+" : unread}</span>
+                                  <IndicadorDaConversa indicador={indicador} />
                                 </div>
                               )}
                             </div>
                           </div>
                         </button>
-                      </div>
+                      </MenuDaConversa>
                     );
                   }
                 })}
@@ -2537,9 +2544,24 @@ export default function ChatPage() {
 
 /* ── Sidebar Channel Item ─────────────────────────────── */
 
-function ChannelSidebarItem({ channel, active, onClick, unreadCount = 0 }: { channel: Channel; active: boolean; onClick: () => void; unreadCount?: number }) {
-  const hasUnread = unreadCount > 0 && !active;
+/** O contador da aba: o mesmo `Indicador` da conversa, no tamanho da aba. */
+function IndicadorDaAba({ indicador }: { indicador: ReturnType<typeof indicadorDaAba> }) {
+  if (!indicador) return null;
+  if (indicador.tipo === "marca") {
+    return <span role="img" aria-label="Há conversa marcada como não lida" className="h-2 w-2 rounded-full bg-destructive" />;
+  }
   return (
+    <span className="min-w-[16px] h-[16px] rounded-full bg-destructive text-destructive-foreground text-[9px] font-bold flex items-center justify-center leading-none px-1">
+      {indicador.texto}
+    </span>
+  );
+}
+
+function ChannelSidebarItem({ channel, active, onClick, unreadCount = 0, marcada = false }: { channel: Channel; active: boolean; onClick: () => void; unreadCount?: number; marcada?: boolean }) {
+  const hasUnread = (unreadCount > 0 || marcada) && !active;
+  const indicador = indicadorDaConversa(unreadCount, marcada);
+  return (
+    <MenuDaConversa alvo={{ canalId: channel.id, agentId: null }}>
     <button
       onClick={onClick}
       className={`relative w-full text-left pl-3 pr-3 py-2.5 transition-colors duration-150 touch-target ${
@@ -2572,14 +2594,16 @@ function ChannelSidebarItem({ channel, active, onClick, unreadCount = 0 }: { cha
                 : "font-medium text-muted-foreground"
           }`}>{channel.name}</span>
           <IconeSilenciado channelId={channel.id} />
-          {unreadCount > 0 && (
+          {indicador?.tipo === "numero" && (
             <span className="flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] font-bold shrink-0 shadow-sm">
-              {unreadCount > 99 ? "99+" : unreadCount}
+              {indicador.texto}
             </span>
           )}
+          {indicador?.tipo === "marca" && <IndicadorDaConversa indicador={indicador} tom="primario" />}
         </div>
       </div>
     </button>
+    </MenuDaConversa>
   );
 }
 
