@@ -2255,6 +2255,11 @@ async def _hsgrowth(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
     dados = await hsgrowth.chamar(ctx["email"], bot, caminho, params=remotos, dono=ctx["dono"])
     dados = hg.filtrar_local(chave, dados, locais, eu_id)
     dados = hg.com_links(chave, dados, settings.HSGROWTH_URL)
+    if chave == "meus_cards":
+        limite = locais.get("limite")
+        texto = hg.texto_de_cards(dados, int(locais.get("offset") or 0),
+                                  int(limite) if limite else None)
+        return como_dado_externo(texto, origem="HSGrowth")
     return como_dado_externo(hg.texto_do_retorno(dados), origem="HSGrowth")
 
 

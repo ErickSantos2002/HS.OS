@@ -7,11 +7,18 @@ caminho**, e o link do card é montado aqui, nunca pelo modelo.
 
 Três coisas diferem do GestorHS:
 - **`assigned_to_id` nunca vem do agente.** `meus_cards` e `minhas_tarefas` são
-  "do dono": o router passa o `eu_id` (o id do dono no HSGrowth, de `/users/me`) e
-  este módulo o põe na query. Se o agente pudesse escolher, leria o funil de outro.
-- **`meus_cards` ainda é filtrado AQUI**: o `/cards` do HSGrowth devolve cards de
+  "do dono": o router passa o `eu_id` (o id do dono no HSGrowth, de `/users/me`).
+  Em `minhas_tarefas` ele vai na query. Se o agente pudesse escolher, leria o
+  funil de outro.
+- **`meus_cards` é filtrado SÓ AQUI**: o `/cards` do HSGrowth devolve cards de
   mais de um responsável conforme o papel, então só ficam os que têm o dono como
-  `assigned_to_id` ou `sdr_id` (`filtrar_local`).
+  `assigned_to_id` ou `sdr_id` (`filtrar_local`). ⚠️ **Não mande `assigned_to_id`
+  ao `/cards`**: lá ele filtra só o responsável e corta os cards em que o dono é
+  SDR — em 19/11/2026 o Guardi do Miguel via 44 de 117 cards em Lead Novo.
+- **`meus_cards` sai por `texto_de_cards`**: total real, contagem por etapa e uma
+  fatia de cards inteiros (`offset`/`limite`, locais). A lista crua passava do
+  teto e era cortada no meio do JSON, e o `page_size` do HSGrowth era lido como
+  contagem.
 - **Filtros locais** (`etapa`, `tarefa`, `parado`) são aceitos do agente mas
   NUNCA vão ao HSGrowth: `separar_filtros` os tira da query e `filtrar_local` os
   aplica na resposta.
@@ -31,12 +38,14 @@ Puro, testado em `tests/test_guardi_hsgrowth.py`.
 """
 from __future__ import annotations
 
+import json
 import re
 
-from app.datacore_consultas import _escalar, texto_do_retorno
+from app.datacore_consultas import _escalar, _pagina_da_lista, texto_do_retorno
 
 __all__ = ["CONSULTAS", "caminho_da_consulta", "params_da_consulta", "separar_filtros",
-           "filtrar_local", "pede_id", "pede_eu", "com_links", "texto_do_retorno"]
+           "filtrar_local", "pede_id", "pede_eu", "com_links", "texto_do_retorno",
+           "texto_de_cards"]
 
 _MAX_PAGINA = 100
 _ID = re.compile(r"^[0-9]{1,10}$")
@@ -47,14 +56,18 @@ _DATA = re.compile(r"^\d{4}-\d{2}-\d{2}([T ][0-9:.+Z-]*)?$")
 
 # Filtros que não vão ao HSGrowth (aplicados em `filtrar_local`).
 _LOCAIS = ("etapa", "tarefa", "parado")
+# Paginação de `meus_cards`, também local (o `/cards` vem inteiro, `all=true`).
+_PAGINACAO = ("offset", "limite")
 _PARADO = ("3d", "7d")
 # Inteiros que o agente passa como id (o HSGrowth rejeitaria o resto com 422).
 _FILTROS_ID = ("board_id", "organization_id", "etapa")
 _FILTROS_DATA = ("created_at_from", "created_at_to", "entered_at_from", "entered_at_to",
                  "due_date_start", "due_date_end")
 _OBRIGATORIOS = {"meus_cards": ("board_id",), "buscar": ("q",)}
-# Chaves em que o `<eu>` é injetado, e o que vai junto.
+# Consultas do dono → o que vai junto na query. Só `minhas_tarefas` leva o
+# `assigned_to_id`; em `meus_cards` ele cortaria o SDR (ver o topo).
 _DO_DONO = {"meus_cards": (("all", "true"), ("minimal", "true")), "minhas_tarefas": ()}
+_EU_NA_QUERY = ("minhas_tarefas",)
 # Consultas que exigem o dono mas o filtram só aqui (sem parâmetro remoto).
 _SO_LOCAL = ("tarefas_atrasadas",)
 
@@ -62,7 +75,8 @@ _SO_LOCAL = ("tarefas_atrasadas",)
 CONSULTAS: dict[str, tuple[str, str, tuple[str, ...]]] = {
     "quadros": ("/boards", "os quadros (funis) de vendas, com o id para `meus_cards` e `campos`", ()),
     "etapas": ("/boards/{board_id}/lists",
-               "as etapas (listas) de um quadro, com o id para o filtro `etapa` de `meus_cards`", ()),
+               "as etapas (listas) de um quadro, com o id para o filtro `etapa` de `meus_cards`. "
+               "O `cards_count` daqui vem sempre 0: para contar, use o `por_etapa` de `meus_cards`", ()),
     "meus_cards": ("/cards",
                    "os cards do dono (como vendedor ou SDR) em um quadro. `board_id` é OBRIGATÓRIO "
                    "(de `quadros`). `is_won`/`is_lost` (true/false), `created_at_from`/`created_at_to` "
@@ -70,9 +84,13 @@ CONSULTAS: dict[str, tuple[str, str, tuple[str, ...]]] = {
                    "Filtros daqui: `etapa` (id da etapa, de `etapas`), `tarefa` (`overdue` = tarefa "
                    "atrasada, `today` = vence hoje, `future` = só futuras, `none` = sem tarefa "
                    "pendente) e `parado` (`3d` ou `7d`: o card está parado há mais de 3 ou 7 dias sem movimentação, "
-                   "pela regra do kanban)",
+                   "pela regra do kanban). Volta `total` (contagem REAL, já com os filtros), "
+                   "`por_etapa` (id da etapa → quantos cards; os nomes vêm de `etapas`) e uma "
+                   "fatia de `cards`: para ver o resto, repita com `offset` = `proximo_offset` "
+                   "(`limite` opcional, até 100). Para CONTAR, use `total`/`por_etapa`, nunca o "
+                   "tamanho da fatia",
                    ("board_id", "is_won", "is_lost", "created_at_from", "created_at_to",
-                    "entered_at_from", "entered_at_to") + _LOCAIS),
+                    "entered_at_from", "entered_at_to") + _LOCAIS + _PAGINACAO),
     "card": ("/cards/{card_id}/expanded", "um card pelo id: cliente, contato, valor, etapa, tarefas pendentes", ()),
     "buscar": ("/search/global",
                "busca geral de cards. `q` (título, cliente, CNPJ, contato; mínimo 2 letras), "
@@ -175,6 +193,10 @@ def params_da_consulta(chave: str, parametros: dict | None,
             v = _inteiro(k, v, 1, 30 if chave == "buscar" else _MAX_PAGINA)
         elif k == "page":
             v = _inteiro(k, v, 1)
+        elif k == "offset":
+            v = _inteiro(k, v, 0, 100_000)
+        elif k == "limite":
+            v = _inteiro(k, v, 1, _MAX_PAGINA)
         elif k in _FILTROS_ID:
             v = _inteiro(k, v, 1, 2**31 - 1)
         elif k in _FILTROS_DATA:
@@ -194,7 +216,8 @@ def params_da_consulta(chave: str, parametros: dict | None,
     if chave in _DO_DONO:
         if eu_id is None or isinstance(eu_id, bool) or not isinstance(eu_id, int):
             raise ValueError(f"A consulta {chave} depende do id do dono no HSGrowth.")
-        saida.append(("assigned_to_id", str(eu_id)))
+        if chave in _EU_NA_QUERY:
+            saida.append(("assigned_to_id", str(eu_id)))
         saida.extend(_DO_DONO[chave])
     if chave in _SO_LOCAL and (eu_id is None or isinstance(eu_id, bool) or not isinstance(eu_id, int)):
         raise ValueError(f"A consulta {chave} depende do id do dono no HSGrowth.")
@@ -209,8 +232,9 @@ def separar_filtros(chave: str,
     `meus_cards` tem filtro local; nas outras, tudo vai."""
     if chave != "meus_cards":
         return params, {}
-    remotos = [(k, v) for k, v in params if k not in _LOCAIS]
-    return remotos, {k: v for k, v in params if k in _LOCAIS}
+    locais = _LOCAIS + _PAGINACAO
+    remotos = [(k, v) for k, v in params if k not in locais]
+    return remotos, {k: v for k, v in params if k in locais}
 
 
 def _lista_de(dados, campo: str | None):
@@ -279,3 +303,30 @@ def com_links(chave: str, dados, base: str):
         return dados
     novos = [_com_link(i, base) for i in itens]
     return novos if nome is None else {**dados, nome: novos}
+
+
+# Campos do card mínimo que só servem à tela (avatar, ordem, bolinha pessoal):
+# fora da fatia, que cabe mais card no teto.
+_SO_DA_TELA = ("assigned_to_avatar_url", "sdr_avatar_url", "position", "checked_by_me")
+
+
+def texto_de_cards(dados, offset: int = 0, limite: int | None = None) -> str:
+    """O retorno de `meus_cards` (já filtrado por `filtrar_local`): `total` real,
+    `por_etapa` (list_id → quantos) e uma fatia de cards INTEIROS dentro do teto,
+    com `proximo_offset`. Nada do envelope do HSGrowth (`page_size` & cia.) desce:
+    o agente leu o `page_size` como contagem do funil."""
+    itens, _ = _lista_de(dados, "cards")
+    if itens is None:
+        raise ValueError("resposta inesperada do HSGrowth")
+    por_etapa: dict[str, int] = {}
+    for c in itens:
+        k = str(c.get("list_id"))
+        por_etapa[k] = por_etapa.get(k, 0) + 1
+    enxutos = [{k: v for k, v in c.items() if k not in _SO_DA_TELA} for c in itens]
+    try:
+        pagina = json.loads(_pagina_da_lista(enxutos, offset, limite))
+    except ValueError:            # um card sozinho maior que o teto veio cortado
+        raise ValueError("card grande demais para o retorno") from None
+    return json.dumps({"total": len(itens), "por_etapa": por_etapa, "offset": pagina["offset"],
+                       "proximo_offset": pagina["proximo_offset"], "cards": pagina["itens"]},
+                      ensure_ascii=False, separators=(",", ":"), default=str)

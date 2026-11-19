@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.18.1",
+    date: "2026-11-19",
+    changes: [
+      {
+        kind: "correcao",
+        text: "O Guardi passa a enxergar no HSGrowth todos os cards em que você é SDR, não só os em que é o responsável, e conta os cards de cada etapa do funil sem cortar a lista no meio.",
+      },
+    ],
+  },
+  {
     version: "2.18.0",
     date: "2026-11-19",
     changes: [

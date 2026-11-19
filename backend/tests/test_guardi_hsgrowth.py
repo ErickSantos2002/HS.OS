@@ -86,7 +86,8 @@ def test_o_dono_e_injetado_pelo_servidor():
     """O `<eu>` entra na query por aqui: `meus_cards` leva `all=true` (sem ele
     só viria a primeira página) e `quadros` sempre `category=vendas`."""
     p = hg.params_da_consulta("meus_cards", {"board_id": 2, "is_lost": False}, eu_id=9)
-    assert ("assigned_to_id", "9") in p and ("all", "true") in p and ("is_lost", "false") in p
+    assert ("all", "true") in p and ("is_lost", "false") in p
+    assert "assigned_to_id" not in dict(p)   # ver test_meus_cards_nao_corta_o_sdr_no_hsgrowth
     assert hg.params_da_consulta("minhas_tarefas", None, eu_id=9) == [("assigned_to_id", "9")]
     assert hg.params_da_consulta("quadros", None) == [("category", "vendas")]
     with pytest.raises(ValueError):
@@ -226,7 +227,7 @@ def test_meus_cards_injeta_o_eu_de_users_me(chave, monkeypatch):
     t = asyncio.run(mcp_bot._hsgrowth(None, "ana-bot", "hsgrowth_consultar",
                                       {"consulta": "meus_cards", "parametros": {"board_id": 2}}, dict(_CTX)))
     q = dict(chamadas[-1].url.params)
-    assert q["assigned_to_id"] == "3" and q["all"] == "true" and q["board_id"] == "2"
+    assert "assigned_to_id" not in q and q["all"] == "true" and q["board_id"] == "2"
     assert "HSGrowth" in t and "/cards/8" in t and "/cards/9" not in t   # filtro local do dono
 
 
@@ -343,3 +344,49 @@ def test_agents_md_aponta_o_hsgrowth_e_cabe_no_teto():
     trecho = " ".join(a.split("hsgrowth_consultas", 1)[1][:900].split())
     assert "realizada" in trecho and "tentativa sem resultado" in trecho and "como Ellen" in trecho
     assert len(a + "\n" + "x" * 4000) <= TETO_ARQUIVO_AGENTE
+
+
+def test_meus_cards_nao_corta_o_sdr_no_hsgrowth():
+    """O `assigned_to_id` remoto filtra SÓ o responsável: os cards em que o dono é
+    SDR (vendedor de outra pessoa) nem voltavam. Em 19/11/2026 o Guardi do Miguel
+    via 44 cards em Lead Novo de 117 e relatou número errado ao dono. O HSGrowth
+    já restringe vendedor/SDR pelo vínculo; quem corta pelo dono aqui é o
+    `filtrar_local`, que pega `assigned_to_id` OU `sdr_id`."""
+    p = dict(hg.params_da_consulta("meus_cards", {"board_id": 6}, eu_id=16))
+    assert "assigned_to_id" not in p and "sdr_id" not in p
+    cards = [{"id": 1, "assigned_to_id": 16, "list_id": 1},
+             {"id": 2, "assigned_to_id": 4, "sdr_id": 16, "list_id": 1},
+             {"id": 3, "assigned_to_id": 4, "sdr_id": 5, "list_id": 1}]
+    r = hg.filtrar_local("meus_cards", {"cards": cards, "total": 3}, {}, 16)
+    assert [c["id"] for c in r["cards"]] == [1, 2]
+
+
+def test_cards_paginam_por_item_e_contam_por_etapa():
+    """A lista inteira passava do teto e era cortada NO MEIO do JSON, e o
+    `page_size` do HSGrowth ia junto e foi lido como contagem. Agora: total real,
+    contagem por etapa sempre, fatia de cards inteiros com `proximo_offset`."""
+    import json
+    cards = [{"id": i, "title": "Card com um título razoavelmente comprido " * 3,
+              "list_id": 10 if i < 117 else 11, "assigned_to_avatar_url": "x" * 80,
+              "sdr_avatar_url": "y" * 80, "position": 1.0, "checked_by_me": False}
+             for i in range(150)]
+    t = hg.texto_de_cards({"cards": cards, "total": 150, "page": 1, "page_size": 150,
+                           "total_pages": 1})
+    d = json.loads(t)                                       # JSON válido, sem corte
+    assert d["total"] == 150 and d["por_etapa"] == {"10": 117, "11": 33}
+    assert "page_size" not in d and "total_pages" not in d
+    assert 0 < len(d["cards"]) < 150 and d["proximo_offset"] == len(d["cards"])
+    assert "assigned_to_avatar_url" not in d["cards"][0]
+    d2 = json.loads(hg.texto_de_cards({"cards": cards}, offset=d["proximo_offset"]))
+    assert d2["cards"][0]["id"] == d["proximo_offset"] and d2["por_etapa"] == d["por_etapa"]
+    d3 = json.loads(hg.texto_de_cards({"cards": cards}, offset=140, limite=5))
+    assert [c["id"] for c in d3["cards"]] == [140, 141, 142, 143, 144] and d3["proximo_offset"] == 145
+
+
+def test_offset_e_limite_de_meus_cards_sao_locais():
+    q = hg.params_da_consulta("meus_cards", {"board_id": 6, "offset": 40, "limite": 20}, eu_id=16)
+    remotos, locais = hg.separar_filtros("meus_cards", q)
+    assert "offset" not in dict(remotos) and "limite" not in dict(remotos)
+    assert locais["offset"] == "40" and locais["limite"] == "20"
+    with pytest.raises(ValueError):
+        hg.params_da_consulta("meus_cards", {"board_id": 6, "limite": 0}, eu_id=16)
