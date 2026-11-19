@@ -34,6 +34,15 @@ class Conn:
         self.exec.append((sql, a))
         return "INSERT 0 1"
 
+    def transaction(self):
+        class _Savepoint:
+            async def __aenter__(self):
+                return None
+
+            async def __aexit__(self, *exc):
+                return False
+        return _Savepoint()
+
     async def fetchrow(self, sql, *a):
         return self.manha if sql == d.SQL_MANHA else self.rodando
 
@@ -62,7 +71,9 @@ def test_semear_fim_de_semana_nao_insere():
 def test_semear_usa_on_conflict():
     """Dois workers semeando: o índice único + ON CONFLICT impedem duplicata."""
     c = Conn()
-    assert rodar(d.semear(c, config({"ligada": True}), SEG)) == 3
+    # 16/11/2026 é o primeiro dia útil da semana: manhã, tarde, quadro e a
+    # semana financeira do Midas.
+    assert rodar(d.semear(c, config({"ligada": True}), SEG)) == 4
     assert all("ON CONFLICT DO NOTHING" in sql for sql, _ in c.exec)
 
 
@@ -209,3 +220,43 @@ def test_tarde_compara_com_a_ultima_entregue_do_dia_inclusive_pedida():
     sql = " ".join(d.SQL_MANHA.split())
     assert "tipo IN ('manha', 'pedida')" in sql
     assert "ORDER BY entregue_em DESC" in sql
+
+
+# ── Briefing semanal financeiro do Midas (18/11/2026) ─────────────────────────
+SEG_23 = datetime(2026, 11, 23, 10, 0, tzinfo=timezone.utc)  # 07:00 local, segunda
+TER_24 = datetime(2026, 11, 24, 10, 0, tzinfo=timezone.utc)
+
+
+def test_semear_financeiro_so_no_primeiro_dia_util():
+    c = Conn()
+    rodar(d.semear(c, config({"ligada": True}), TER_24))
+    assert d.SQL_SEMEAR_FINANCEIRO not in [sql for sql, _ in c.exec]
+    c = Conn()
+    rodar(d.semear(c, config({"ligada": True}), SEG_23))
+    assert d.SQL_SEMEAR_FINANCEIRO in [sql for sql, _ in c.exec]
+
+
+def test_semear_financeiro_usa_quem_o_midas_atende():
+    sql = d.SQL_SEMEAR_FINANCEIRO
+    assert "agent_id = 'midas'" in sql and "allowed_user_ids" in sql
+    assert "'financeiro'" in sql and "ON CONFLICT DO NOTHING" in sql
+    assert "u.is_active" in sql
+
+
+def test_semear_financeiro_pula_depois_das_11():
+    c = Conn()
+    meio_dia = datetime(2026, 11, 23, 15, 0, tzinfo=timezone.utc)  # 12:00 local
+    rodar(d.semear(c, config({"ligada": True}), meio_dia))
+    assert d.SQL_SEMEAR_FINANCEIRO not in [sql for sql, _ in c.exec]
+
+
+def test_rodando_ignora_financeiro():
+    """O `varredura_registrar` do Guardi não pode achar a semana do Midas, e o
+    fechamento não a marca `sem_registro`: ela fecha pela resposta gravada."""
+    assert "tipo NOT IN ('quadro', 'financeiro')" in d.SQL_RODANDO
+    # O ramo "o run já respondeu" não vale para elas: entre gravar o
+    # `message_id` e o `_quadro_entregue` a passada as marcaria `sem_registro`.
+    # O corte de 30 min continua fechando a que nunca respondeu.
+    antes, ramo_run = d.SQL_FECHAR.split("OR EXISTS")
+    assert "v.tipo NOT IN ('quadro', 'financeiro')" in ramo_run
+    assert "v.disparando_em < now() - interval '30 minutes'" in antes

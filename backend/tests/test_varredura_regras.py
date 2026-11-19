@@ -5,13 +5,13 @@ feriado, passar do teto de pedidas, aceitar número que o agente inventou ou
 chamar de "novidade" um sistema que só voltou do ar com zero.
 """
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 
 from app.varredura.regras import (
-    FUSO, config, dia_util, feriados, horario, novidade, pode_pedir,
-    validar_numeros, velha,
+    CABECALHOS_VARREDURA, FUSO, config, dia_util, feriados, horario, novidade,
+    pode_pedir, primeiro_dia_util_da_semana, validar_numeros, velha,
 )
 
 
@@ -197,3 +197,36 @@ def test_separar_deixa_forma_ruim_para_o_validador():
     from app.varredura.regras import separar_nao_ligados
     n = {"a": 1, "falhas": "hsgrowth"}
     assert separar_nao_ligados(n, [], email_ligado=False) == (n, [])
+
+
+# ── Briefing semanal financeiro do Midas (18/11/2026) ─────────────────────────
+
+def test_primeiro_dia_util_da_semana():
+    """A semana financeira sai uma vez por semana ISO, no primeiro dia útil.
+    Semana de Carnaval começa na quarta: segunda e terça não são úteis."""
+    assert primeiro_dia_util_da_semana(date(2026, 11, 23))        # segunda
+    assert not primeiro_dia_util_da_semana(date(2026, 11, 24))
+    assert primeiro_dia_util_da_semana(date(2027, 2, 10))         # quarta de cinzas
+    assert not primeiro_dia_util_da_semana(date(2027, 2, 8))      # segunda de Carnaval
+    assert not primeiro_dia_util_da_semana(date(2026, 11, 22))    # domingo
+
+
+def test_config_financeiro_padrao_e_lido():
+    assert config({}).financeiro == time(8)
+    assert config({"financeiro": "07:45"}).financeiro == time(7, 45)
+    assert config({"financeiro": "25:00"}).financeiro == time(8)
+
+
+def test_financeiro_envelhece_as_11():
+    """Briefing de caixa da semana chegando à tarde já não serve à reunião da
+    manhã: passou das 11h locais, é `pulada`."""
+    ref = horario(config(None), "financeiro", date(2026, 11, 23))
+    assert ref == datetime(2026, 11, 23, 11, 0, tzinfo=timezone.utc)  # 08:00 local
+    assert not velha("financeiro", ref, _local(2026, 11, 23, 10, 59))
+    assert velha("financeiro", ref, _local(2026, 11, 23, 11, 0))
+
+
+def test_cabecalho_financeiro_e_reconhecido_como_varredura():
+    """O `/recuperar` só trata sem recuo a janela que abre com um cabeçalho
+    conhecido; sem o financeiro na lista, a narração viraria mensagem."""
+    assert "[Semana financeira — " in CABECALHOS_VARREDURA

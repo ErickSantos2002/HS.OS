@@ -314,6 +314,10 @@ def montar_eventos(publicados: list, msgs_agente: list, msgs_dm: list, membros: 
             if status == "entregue" and v.get("entregue_em"):
                 eventos.append((v["entregue_em"], "entrega", "Nina entregou o quadro da equipe"))
             continue
+        if tipo == "financeiro":  # do Midas para quem ele atende, não à Nina
+            if status == "entregue" and v.get("entregue_em"):
+                eventos.append((v["entregue_em"], "entrega", f"{guardi} entregou a semana financeira"))
+            continue
         if status in ("entregue", "nada_novo") and v.get("entregue_em"):
             eventos.append((v["entregue_em"], "entrega", f"{guardi} entregou o resumo à Nina"))
         if tipo == "pedida" and v.get("pedida_por") == "nina" and v.get("criado_em"):

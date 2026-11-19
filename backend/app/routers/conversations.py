@@ -1909,11 +1909,12 @@ PREFIXO_VARREDURA = "hsos-varredura-"
 
 
 async def _quadro_entregue(run_id: str) -> None:
-    """O quadro da Nina vira `entregue` quando a resposta dela é gravada.
+    """O quadro da Nina (e a semana financeira do Midas) vira `entregue` quando
+    a resposta é gravada.
 
-    Ele não passa pelo `varredura_registrar` (não tem números), então sem isto
-    ficava `rodando` até o fechamento o marcar `sem_registro`. Só toca
-    `tipo='quadro'`: as do Guardi são fechadas pelo registro. Best-effort — a
+    Eles não passam pelo `varredura_registrar` (não têm números), então sem
+    isto ficavam `rodando` até o fechamento os marcar `sem_registro`. Só toca
+    `tipo IN ('quadro','financeiro')`: as do Guardi são fechadas pelo registro. Best-effort — a
     resposta já está gravada e publicada; perder o status é um log.
     """
     try:
@@ -1921,7 +1922,8 @@ async def _quadro_entregue(run_id: str) -> None:
             await conn.execute(
                 """UPDATE public.varreduras
                       SET status = 'entregue', entregue_em = now()
-                    WHERE run_id = $1 AND tipo = 'quadro' AND status = 'rodando'""",
+                    WHERE run_id = $1 AND tipo IN ('quadro', 'financeiro')
+                      AND status = 'rodando'""",
                 run_id)
     except Exception:  # noqa: BLE001 — acessório à resposta
         logger.exception("Não marquei o quadro do run %s como entregue.", run_id)

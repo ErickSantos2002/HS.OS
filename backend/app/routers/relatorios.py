@@ -213,7 +213,8 @@ _FERRAMENTAS.append({
         "NÃO escreva a lista você mesmo — lista longa passa do seu limite de "
         "resposta e o turno inteiro se perde. A régua é a do DataCoreHS "
         "(gold.fato_vendas, a mesma da skill faturamento: só venda, item exato, "
-        "devolução abatida só quando a origem está no fato); não recalcule."
+        "devolução abatida só quando a origem está no fato); não recalcule. "
+        "A planilha vai para Documentos; não há link público."
     ),
     "inputSchema": {
         "type": "object",
@@ -233,13 +234,6 @@ _FERRAMENTAS.append({
                                        "Grupo econômico com nomes diferentes "
                                        "(Rumo Malha Sul × Malha Paulista) não é "
                                        "juntado: se pedirem, diga quais somou."},
-            "publicar_link": {"type": "boolean",
-                              "description": "Também publica a lista como página com "
-                                             "link (pública, expira em 7 dias). Use "
-                                             "quando pedirem link ou algo para mandar a "
-                                             "alguém. NUNCA escreva você a página da "
-                                             "lista com publicar_pagina — ela sai daqui, "
-                                             "dos mesmos números da planilha."},
             "solicitante": {"type": "string",
                             "description": "Id de quem pediu: o `hsos-<id>` da sua "
                                            "chave de sessão, sem o prefixo."},
@@ -259,7 +253,7 @@ _FERRAMENTAS.append({
         "(tiny.contas_receber não tem a régua) e não recalcule o que voltar. "
         "modo=resumo: totais, faixas, cobrança e a taxa mensal. modo=lista: todas as "
         "empresas numa planilha em Documentos; você recebe totais e as 10 maiores — "
-        "não escreva a lista você mesmo."
+        "não escreva a lista você mesmo. A planilha vai para Documentos; não há link público."
     ),
     "inputSchema": {
         "type": "object",
@@ -274,11 +268,6 @@ _FERRAMENTAS.append({
             "incluir_atraso": {"type": "boolean",
                                "description": "Lista também quem está só em atraso (1 a 30 dias). "
                                               "Padrão: não, só inadimplentes."},
-            "publicar_link": {"type": "boolean",
-                              "description": "Também publica a lista como página com link PÚBLICO "
-                                             "(tem nome de cliente e valor). Só quando pedirem link."},
-            "dias_de_validade": {"type": "integer", "minimum": 1, "maximum": 30,
-                                 "description": "Validade do link. Padrão 7."},
             "solicitante": {"type": "string",
                             "description": "Id de quem pediu: o `hsos-<id>` da sua chave de sessão, "
                                            "sem o prefixo."},
@@ -301,8 +290,8 @@ def _filtros_de_inadimplencia(args: dict) -> list[tuple[str, str]]:
 async def _inadimplencia(dono_id: str, args: dict) -> str:
     filtros = _filtros_de_inadimplencia(args)
     if (args.get("modo") or "resumo") == "resumo":
-        r = await datacore.chamar_como_iris("GET", "/inadimplencia/resumo", params=filtros, dono=dono_id)
-        ind = await datacore.chamar_como_iris("GET", "/inadimplencia/indicadores", dono=dono_id)
+        r = await datacore.chamar_como_financeiro("GET", "/inadimplencia/resumo", params=filtros, dono=dono_id)
+        ind = await datacore.chamar_como_financeiro("GET", "/inadimplencia/indicadores", dono=dono_id)
         return inad.texto_do_resumo(r, ind)
 
     extra = list(filtros)
@@ -312,7 +301,7 @@ async def _inadimplencia(dono_id: str, args: dict) -> str:
         extra.append(("incluir_atraso", "true"))
 
     async def pagina(offset: int) -> dict:
-        return await datacore.chamar_como_iris(
+        return await datacore.chamar_como_financeiro(
             "GET", "/inadimplencia/empresas",
             params=extra + [("limite", str(inad.PAGINA)), ("offset", str(offset))], dono=dono_id)
 
@@ -333,23 +322,13 @@ async def _inadimplencia(dono_id: str, args: dict) -> str:
             await conn.execute(
                 """INSERT INTO public.generated_documents
                        (id, user_id, agent_id, title, doc_type, storage_path, size_bytes)
-                   VALUES ($1::uuid, $2::uuid, 'iris', $3, 'xlsx', $4, $5)""",
-                doc_id, dono_id, titulo, caminho, len(dados))
+                   VALUES ($1::uuid, $2::uuid, $3, $4, 'xlsx', $5, $6)""",
+                doc_id, dono_id, datacore.AGENTE_FINANCEIRO, titulo, caminho, len(dados))
     except Exception:
         await arm.apagar(k)
         raise
 
     texto = inad.texto_da_lista(empresas, f"{titulo}.xlsx")
-    if args.get("publicar_link"):
-        dias = max(1, min(30, int(args.get("dias_de_validade") or 7)))
-        async with sessao(role="service_role") as conn:
-            art = await conn.fetchval(
-                """INSERT INTO public.artifacts_published (title, html_content, created_by, is_public, expires_at)
-                   VALUES ($1, $2, $3::uuid, true, $4) RETURNING id::text""",
-                titulo, inad.pagina_html(empresas), dono_id, hoje + timedelta(days=dias))
-        base = (settings.FRONTEND_URL or "").split(",")[0].strip().rstrip("/")
-        texto += (f"\n\nLink da lista (público, expira em {dias} dias — tem nome de cliente e "
-                  f"valor): {base}/artifact/{art}")
     return texto
 
 
@@ -414,20 +393,6 @@ async def _compradores_e_guardar(dono_id: str, args: dict, agente: str | None) -
         await arm.apagar(k)
         raise
 
-    link = ""
-    if args.get("publicar_link"):
-        expira = datetime.now(timezone.utc) + timedelta(days=7)
-        async with sessao(role="service_role") as conn:
-            art = await conn.fetchval(
-                """INSERT INTO public.artifacts_published
-                       (title, html_content, created_by, is_public, expires_at)
-                   VALUES ($1, $2, $3::uuid, true, $4) RETURNING id::text""",
-                f"Compradores de {produto} — {inicio:%d/%m/%Y} a {fim:%d/%m/%Y}",
-                r["html"], dono_id, expira)
-        base = (settings.FRONTEND_URL or "").split(",")[0].strip().rstrip("/")
-        link = (f"\n\nLink da lista completa (público, expira em 7 dias — tem nome "
-                f"de cliente): {base}/artifact/{art}")
-
     def brl(v):
         return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
@@ -437,13 +402,12 @@ async def _compradores_e_guardar(dono_id: str, args: dict, agente: str | None) -
             if r["abatidas"] else "Nenhuma devolução abatida no período.")
     logger.info("Compradores de %s (%s a %s) gerado para %s — %d empresas",
                 produto, inicio, fim, dono_id, r["empresas"])
-    return (f"Planilha **{nome}** guardada em **Documentos** (não é link público).\n\n"
+    return (f"Planilha **{nome}** guardada em **Documentos** (não há link público).\n\n"
             f"**{r['empresas']} empresas · {r['liquidas']} unidades líquidas · "
             f"{brl(r['valor_liquido'])}** ({inicio:%d/%m/%Y} a {fim:%d/%m/%Y}; "
             f"{r['brutas']} vendidas).\n{abat}\n\nTop 10:\n{top}\n\n"
             "A lista completa, o ano a ano e as devoluções (com o motivo de cada "
-            "decisão) estão na planilha. Não reescreva a lista na resposta."
-            + link)
+            "decisão) estão na planilha. Não reescreva a lista na resposta.")
 
 
 def _resposta(ident, resultado=None, erro=None):
@@ -562,7 +526,7 @@ async def mcp_relatorios(
     corpo: dict = Body(...),
     _: None = Depends(exige_segredo("GUARDRAILS_API_TOKEN")),
 ):
-    """Servidor MCP dos relatórios: vendedores (atlas), compradores (iris) e
+    """Servidor MCP dos relatórios: vendedores (atlas), compradores e inadimplência (midas) e
     página publicada.
 
     ⚠️ **Quem enxerga cada ferramenta é decidido no gateway.** O corte é feito na configuração do
@@ -612,7 +576,7 @@ async def mcp_relatorios(
                 "text": "Não há administrador cadastrado para guardar o arquivo."}],
                 "isError": True})
         try:
-            texto = await _compradores_e_guardar(dono, args, "iris")
+            texto = await _compradores_e_guardar(dono, args, datacore.AGENTE_FINANCEIRO)
         except HTTPException as e:
             return _resposta(ident, {"content": [{"type": "text",
                 "text": f"Não consegui gerar: {e.detail}"}], "isError": True})

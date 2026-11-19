@@ -9,6 +9,8 @@ deixar um item quebrado parar os outros. Conexão, sessão e `disparar_turno`
 falsos.
 """
 import asyncio
+
+import asyncpg
 import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -36,13 +38,15 @@ def _v(**kw):
 
 class Conn:
     def __init__(self, log, turno_aberto=False, ativo=True, guardi="erick-bot",
-                 nome="Erick Santos", config=None, reservadas=(), na_nina=True):
+                 nome="Erick Santos", config=None, reservadas=(), na_nina=True,
+                 no_midas=True):
         self.log = log
         self.turno_aberto, self.ativo, self.guardi, self.nome = turno_aberto, ativo, guardi, nome
         self.config = config
         self.reservadas = list(reservadas)
         self.marcados = []
         self.na_nina = na_nina
+        self.no_midas = no_midas
         self.status = "agendada"  # o estado da linha no "banco"
         self.run_ids = []
 
@@ -58,6 +62,8 @@ class Conn:
             return a[0]
         if sql == dv.SQL_ATENDIDO_PELA_NINA:
             return self.na_nina
+        if sql == dv.SQL_ATENDIDO_PELO_MIDAS:
+            return self.no_midas
         if sql == dom.SQL_CONFIG:
             return self.config
         if sql == dl.SQL_DONO_ATIVO:
@@ -74,13 +80,23 @@ class Conn:
         if sql == dl.SQL_RECADO:
             self.log.append(("insert_conversations", a))
             return "INSERT 0 1"
-        if sql in (dom.SQL_SEMEAR_GUARDIS, dom.SQL_SEMEAR_QUADRO):
+        if sql in (dom.SQL_SEMEAR_GUARDIS, dom.SQL_SEMEAR_QUADRO,
+                   dom.SQL_SEMEAR_FINANCEIRO):
             self.log.append(("semear",))
             return "INSERT 0 0"
         if sql == dom.SQL_FECHAR:
             self.log.append(("fechar",))
             return "UPDATE 0"
         raise AssertionError(sql)
+
+    def transaction(self):
+        class _Savepoint:
+            async def __aenter__(self):
+                return None
+
+            async def __aexit__(self, *exc):
+                return False
+        return _Savepoint()
 
     async def fetch(self, sql, *a):
         if sql == dom.SQL_RESERVAR:
@@ -417,3 +433,106 @@ def test_ajustes_da_primeira_varredura_real_no_texto_do_turno():
     assert "UMA ÚNICA oferta" in manha
     assert "DO SEU DONO" in manha and "não cite" in manha
     assert "NUNCA publique" in mensagem("quadro", "Nicholson", None)
+
+
+# ── Briefing semanal financeiro do Midas (18/11/2026) ─────────────────────────
+SEG_FIN = datetime(2026, 11, 23, 11, 1, tzinfo=timezone.utc)  # 08:01 local
+
+
+def _v_fin(**kw):
+    base = _v(tipo="financeiro", agent_id="midas", user_id="u-nicholson",
+              dia=SEG_FIN.date(), proximo_em=SEG_FIN - timedelta(minutes=1))
+    base.update(kw)
+    return base
+
+
+def test_financeiro_valido_so_para_quem_o_midas_atende():
+    """Semeado às 07h, disparado às 08h: no meio a pessoa pode ter saído da
+    lista do Midas. O caixa da empresa não vai para quem não deve vê-lo."""
+    for kw in ({"ativo": False}, {"no_midas": False}):
+        log = []
+        conn = Conn(log, guardi=None, **kw)
+        asyncio.run(dv.disparar_varredura(_sessao(conn), _v_fin(), SEG_FIN,
+                                          disparar=_disparar(log)))
+        assert "chat.send" not in [e[0] for e in log]
+        assert [m[1] for m in conn.marcados] == ["pulada"]
+
+
+def test_financeiro_vai_para_o_midas_na_sessao_do_destinatario():
+    log = []
+    conn = Conn(log, guardi=None, nome="Nicholson Pimentel")
+    asyncio.run(dv.disparar_varredura(_sessao(conn), _v_fin(), SEG_FIN,
+                                      disparar=_disparar(log)))
+    [send] = [e for e in log if e[0] == "chat.send"]
+    assert send[1:3] == ("midas", "u-nicholson")
+    assert send[3].startswith("[Semana financeira — Nicholson]")
+    assert send[4] == dv.PREFIXO_RUN
+    assert "insert_conversations" not in [e[0] for e in log]
+
+
+def test_mensagem_financeiro_pede_a_semana_e_proibe_pagina():
+    m = dv.mensagem("financeiro", "Nicholson Pimentel", None)
+    assert m.startswith("[Semana financeira — Nicholson]")
+    for p in ("agenda de caixa", "calendario-financeiro", "medido", "provisório", "incompleto", "trimestre", "publicar_pagina"):
+        assert p in m
+    assert "varredura_registrar" not in m  # não é a varredura do Guardi
+
+
+def test_financeiro_adiado_quando_o_midas_tem_turno_aberto():
+    """Às 08:00 de segunda o Nicholson pode estar conversando com o Midas:
+    mesma regra do Guardi — adia 2 min, não abre turno no meio do outro."""
+    log = []
+    conn = Conn(log, guardi=None, turno_aberto=True)
+    asyncio.run(dv.disparar_varredura(_sessao(conn), _v_fin(), SEG_FIN,
+                                      disparar=_disparar(log)))
+    assert "chat.send" not in [e[0] for e in log]
+    [m] = conn.marcados
+    assert m[1] == "agendada" and m[4] == SEG_FIN + ADIAMENTO and m[5] == SEG_FIN
+
+
+class _ConnSem040(Conn):
+    """O banco antes da 040: o CHECK recusa `financeiro`."""
+
+    def transaction(self):
+        conn = self
+
+        class _Savepoint:
+            async def __aenter__(self):
+                conn.log.append(("savepoint",))
+
+            async def __aexit__(self, tipo, exc, tb):
+                conn.log.append(("rollback_savepoint" if exc else "release_savepoint",))
+                return False
+        return _Savepoint()
+
+    async def execute(self, sql, *a):
+        if sql == dom.SQL_SEMEAR_FINANCEIRO:
+            self.log.append(("semear_financeiro",))
+            raise asyncpg.CheckViolationError("violates check constraint \"varreduras_tipo_check\"")
+        if sql == dom.SQL_SEMEAR_QUADRO:
+            self.log.append(("semear_quadro",))
+            return "INSERT 0 1"
+        if sql == dom.SQL_SEMEAR_GUARDIS:
+            self.log.append(("semear_guardis", a[1]))
+            return "INSERT 0 1"
+        return await super().execute(sql, *a)
+
+
+def test_codigo_antes_da_040_nao_derruba_a_etapa(monkeypatch, caplog):
+    """Deploy antes da migração: o INSERT do `financeiro` levanta CheckViolation
+    na mesma transação da semeadura, do fechamento e da reserva. Sem o
+    savepoint, toda passada de segunda até as 11:00 derrubaria o quadro da
+    Nina, a manhã dos 23 Guardis e as pedidas. Avisa uma vez por processo."""
+    monkeypatch.setattr(dom, "_avisou_sem_040", False)
+    agora = datetime(2026, 11, 23, 10, 0, tzinfo=timezone.utc)  # seg, 07:00 local
+    for _ in range(2):
+        log = []
+        conn = _ConnSem040(log, config={"ligada": True})
+        with caplog.at_level("WARNING"):
+            asyncio.run(dv.etapa_varredura(_sessao(conn), agora, disparar=_disparar(log)))
+        eventos = [e[0] for e in log]
+        assert ("semear_guardis", "manha") in log and "semear_quadro" in eventos
+        assert "rollback_savepoint" in eventos
+        assert "fechar" in eventos and ("reservar", False) in log
+    avisos = [r for r in caplog.records if "040" in r.getMessage()]
+    assert len(avisos) == 1

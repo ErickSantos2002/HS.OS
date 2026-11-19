@@ -1,9 +1,10 @@
-"""Iris → Inadimplência do DataCore (spec 2026-11-10-iris-inadimplencia).
+"""Agente financeiro (hoje `midas`, antes `iris`) → Inadimplência do DataCore
+(spec 2026-11-10-iris-inadimplencia).
 
-A `iris` montava "vencido" lendo `tiny.contas_receber` e avisava que aquilo
+O agente financeiro montava "vencido" lendo `tiny.contas_receber` e avisava que aquilo
 não era inadimplência — a régua (30 dias de carência, faixas, cobrança) mora no
-DataCore. Agora ela lê a API de lá, como o Nicholson. O que se tranca:
-- o token vai com `aud=datacore`, `sub` do Nicholson e `act` da iris — nunca
+DataCore. Agora ele lê a API de lá, como o Nicholson. O que se tranca:
+- o token vai com `aud=datacore`, `sub` do Nicholson e `act` do agente financeiro (`midas`) — nunca
   um e-mail vindo de argumento do agente;
 - o texto repete os números que o DataCore deu: nada é recalculado aqui;
 - a lista sai inteira (todas as páginas) numa planilha, e o modelo recebe só
@@ -39,18 +40,19 @@ def test_cliente_manda_token_do_datacore_como_o_nicholson(chave, monkeypatch):
         reqs.append(req)
         return httpx.Response(200, json={"ok": 1})
     monkeypatch.setattr(datacore, "_transporte", httpx.MockTransport(h))
-    asyncio.run(datacore.chamar_como_iris("GET", "/inadimplencia/resumo"))
+    asyncio.run(datacore.chamar_como_financeiro("GET", "/inadimplencia/resumo"))
     assert reqs[0].url.path.endswith("/inadimplencia/resumo")
     token = reqs[0].headers["authorization"].removeprefix("Bearer ")
     d = jwt.decode(token, at.chave_publica_pem(), algorithms=["EdDSA"], audience="datacore")
-    assert d["sub"] == "np@healthsafetytech.com" and d["act"] == {"sub": "iris"}
+    assert d["sub"] == "np@healthsafetytech.com" and d["act"] == {"sub": "midas"}
 
 
 def test_401_diz_que_o_datacore_nao_aceitou(chave, monkeypatch):
     monkeypatch.setattr(datacore, "_transporte", httpx.MockTransport(lambda r: httpx.Response(401, json={})))
     with pytest.raises(datacore.ErroSistema) as e:
-        asyncio.run(datacore.chamar_como_iris("GET", "/inadimplencia/resumo"))
+        asyncio.run(datacore.chamar_como_financeiro("GET", "/inadimplencia/resumo"))
     assert "DataCore" in str(e.value)
+    assert "iris" not in str(e.value).lower()
 
 
 RESUMO = {
@@ -119,3 +121,76 @@ def test_nome_de_cliente_nao_vira_formula():
     assert ws.cell(2, 1).data_type == "s" and ws.cell(2, 1).value.startswith("'=")
     assert ws.cell(2, 8).value.startswith("'+")
     assert ws.cell(2, 5).data_type == "n"
+
+
+def test_ferramentas_financeiras_nao_tem_publicar_link():
+    """O servidor `hsos-relatorios` não sabe qual agente chama; link público
+    com nome de cliente e valor não existe para ninguém nestas duas listas."""
+    from app.routers import relatorios
+    nomes = {f["name"]: f for f in relatorios._FERRAMENTAS}
+    for n in ("compradores_produto", "inadimplencia"):
+        props = nomes[n]["inputSchema"]["properties"]
+        assert "publicar_link" not in props
+        assert "dias_de_validade" not in props
+
+
+class _Conn:
+    def __init__(self, log):
+        self.log = log
+
+    async def execute(self, sql, *a):
+        self.log.append((sql, a))
+
+    async def fetchval(self, sql, *a):
+        self.log.append((sql, a))
+        return "x"
+
+
+def _falsos(monkeypatch, log):
+    from contextlib import asynccontextmanager
+    from app.routers import relatorios as rel
+
+    @asynccontextmanager
+    async def sessao(**kw):
+        yield _Conn(log)
+
+    async def gravar(*a, **k):
+        return None
+    monkeypatch.setattr(rel, "sessao", sessao)
+    monkeypatch.setattr(rel.arm, "gravar", gravar)
+    return rel
+
+
+def test_publicar_link_true_e_ignorado_na_inadimplencia(monkeypatch):
+    log = []
+    rel = _falsos(monkeypatch, log)
+
+    async def chamar(*a, **k):
+        return {"itens": EMPRESAS, "total": len(EMPRESAS)}
+    monkeypatch.setattr(rel.datacore, "chamar_como_financeiro", chamar)
+    t = asyncio.run(rel._inadimplencia(
+        "00000000-0000-0000-0000-000000000001", {"modo": "lista", "publicar_link": True}))
+    assert "/artifact/" not in t
+    assert not any("artifacts_published" in sql for sql, _ in log)
+    docs = [a for sql, a in log if "generated_documents" in sql]
+    assert docs and docs[0][2] == "midas"
+
+
+def test_documento_de_compradores_fica_no_nome_do_midas_e_sem_link(monkeypatch):
+    from datetime import date
+    log = []
+    rel = _falsos(monkeypatch, log)
+
+    async def dsn(conn, *a):
+        return "dsn"
+    monkeypatch.setattr(rel, "_dsn_do_conector", dsn)
+    r = {"empresas": 1, "brutas": 1, "devolvidas": 0, "liquidas": 1, "valor_liquido": 1.0,
+         "top": [("A", 1, 1.0)], "abatidas": []}
+    monkeypatch.setattr(rel.compradores, "gerar", lambda *a: (b"x", "n.xlsx", r))
+    t = asyncio.run(rel._compradores_e_guardar(
+        "00000000-0000-0000-0000-000000000001",
+        {"produto": "P", "inicio": "2025-01-01", "publicar_link": True}, rel.datacore.AGENTE_FINANCEIRO))
+    assert "/artifact/" not in t
+    assert not any("artifacts_published" in sql for sql, _ in log)
+    docs = [a for sql, a in log if "generated_documents" in sql]
+    assert docs and docs[0][2] == "midas"

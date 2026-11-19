@@ -953,6 +953,51 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   a partir da seção "Para os outros repositórios" da spec. O TaskHS já está
   pronto (`48832b0`, v2.13.0, sem deploy).
 
+### Midas — o CFO (18/11/2026)
+
+Especialista financeiro do Nicholson, que **substitui a `iris`**. Spec
+`docs/superpowers/specs/2026-11-18-cfo-midas-design.md`; plano ao lado, em `plans/`.
+Herda da Iris faturamento, contas a receber, `compradores_produto` e `inadimplencia`;
+ganha a pagar, custos (régua do Balancete), `calendario-financeiro` e GestorHS/HSGrowth
+**como dado financeiro** (flow e atlas seguem donos de operação e vendas).
+
+- ⚠️ **Quem recebe dado financeiro:** o Nicholson **e, nominalmente, o Erick Santos**
+  (`ti@healthsafetytech.com`, `administrador`; quem configura e confere o Midas) — conferido
+  pelo diretório, por nome e e-mail, **não** "qualquer administrador". Qualquer outra pessoa:
+  recusa + `avisar_administrador`. Trava em `test_midas_arquivos.py`.
+- ⚠️ **Repositório público: sem valor absoluto da empresa** nas skills e docs (dívida, a
+  pagar, parcelas). O arquivo traz a régua e a consulta; o agente mede na hora.
+- **Código:** `app/agentes/midas.py` (os sete arquivos, com `TOOLS.md`),
+  `app/agentes/midas_escopo.py` (`tools_do_midas`, `escopo_final`, `midas_esta_fechado`,
+  `decidir_criacao`), `backend/scripts/criar-midas.py` (**ensaio por padrão**; ordem:
+  criar → arquivos → patch conferido → `agentToAgent` → INSERT em `agent_profiles` →
+  roster) e `PROPRIO["midas"]` no `escopo-mcp.py`.
+- **DataCore:** `datacore.chamar_como_financeiro` (`AGENTE_FINANCEIRO="midas"`,
+  `EMAIL_DO_FINANCEIRO_NO_DATACORE`) — o Midas lê como o Nicholson, igual a Iris.
+- **Resultado mensal ainda não existe:** `gold.dre_mensal` não foi construído; o Midas diz
+  que não tem resultado do mês. Prompt para a sessão do DataCore em
+  `docs/superpowers/specs/2026-11-18-cfo-midas-datacore-prompt.md`.
+- **Varredura tipo `financeiro`** (migração `040`): segunda ou 1º dia útil às 08:00,
+  limite 11:00, entregue na conversa do Nicholson com o Midas.
+  ⚠️ **A `040` precisa estar aplicada ANTES do deploy**; a semeadura roda em savepoint,
+  então código antes da migração não derruba a varredura dos Guardis.
+- ⚠️ **`publicar_link` saiu de `compradores_produto` e `inadimplencia` para TODOS** (não só
+  o Midas): a lista nominal de devedores e a folha não vão para página pública. O Midas não
+  tem `publicar_pagina`; planilha vai para Documentos.
+- ⚠️ **`escopo-mcp.py` não descreve o escopo real da Iris** (`PROPRIO["iris"]` só tem o banco;
+  as duas ferramentas de relatório foram dadas à mão). Herdar a Iris é ler o `config.get`.
+- ⚠️ **Skills não têm filtro por agente:** o Midas enxerga todas; o que o contém são os
+  ponteiros do `AGENTS.md` e o escopo de dados.
+- ⚠️ **O bloco `hsos:empresa` da Iris está vazio**, então o Midas nasce sem perfil da empresa:
+  rodar `POST /onboarding-empresa` depois de criá-lo.
+- **Skills:** `contas-receber` (âncora nova de 18/11; parcelas do Itaú em linha própria),
+  `custos` (R1, R3, R4, tipo do número), `calendario-financeiro` (nova). Toda resposta
+  com número diz se é *medido*, *provisório* ou *incompleto*.
+- ⚠️ **A Iris ainda está ATIVA** até a etapa de produção (criar o Midas, conferência por
+  perguntas, mover o cron do briefing 07h35). Dormir = tirá-la do `agents.list` **com
+  backup em JSON** e `agent_profiles.status='inactive'`; religar = restaurar o JSON e
+  voltar o status. Não declarar que dormiu antes de acontecer.
+
 ### Guardi na internet — 18/11/2026
 
 Spec `docs/superpowers/specs/2026-11-18-guardi-internet-design.md`. **Só
@@ -1540,7 +1585,8 @@ agente contradizer os próprios arquivos, que os citam nominalmente.
 | agente | banco |
 |---|---|
 | `nina` | só `banco-hsos` — orquestra e delega o domínio |
-| `iris` | `banco-datacorehs` |
+| `iris` | `banco-datacorehs` (vai dormir; o `midas` a substitui) |
+| `midas` | `banco-datacorehs`, `banco-gestorhs`, `banco-hsgrowth` + `compradores_produto` e `inadimplencia` — sem `publicar_pagina` |
 | `atlas` | `banco-hsgrowth` + `relatorio_vendedores` |
 | `flow` | `banco-gestorhs`, `banco-taskhs`, `banco-chamadoshs` |
 | `bruce` | `banco-talenths`, `banco-pessoas-hs` |
@@ -2005,7 +2051,7 @@ masculinas, mais robóticas).
 
 ⚠️ **A voz do agente é `agent_profiles.tts_voice_id`, mas só se começar com
 `pt-BR-`** — a coluna veio do ElevenLabs e pode ter id opaco; aí vale o Antonio.
-`nina` Francisca, `iris` Thalita, os outros Antonio (migração `019`).
+`nina` Francisca, `iris` Thalita (dormindo quando o `midas` assumir), `midas` e os outros Antonio (migração `019`).
 
 Preferência por pessoa: `profiles.resumo_em_audio`, ligada por padrão, em
 Configurações → Perfil. Conversa direta: desligada, nada é gerado. Canal: gera

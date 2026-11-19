@@ -30,6 +30,20 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.17.0",
+    date: "2026-11-18",
+    changes: [
+      {
+        kind: "novidade",
+        text: "Midas, o assistente financeiro do Nicholson, substitui a Iris: faturamento, contas a receber e a pagar, custos e calendário do Financeiro, com um resumo semanal toda segunda-feira.",
+      },
+      {
+        kind: "melhoria",
+        text: "As listas de inadimplência e de compradores não geram mais link público — ficam em Documentos, privadas.",
+      },
+    ],
+  },
+  {
     version: "2.16.0",
     date: "2026-11-18",
     changes: [

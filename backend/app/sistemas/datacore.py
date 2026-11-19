@@ -1,8 +1,8 @@
 """Cliente do DataCoreHS com token de agente (aud=datacore) — spec
 `docs/superpowers/specs/2026-11-10-iris-inadimplencia-design.md`.
 
-Só a `iris` usa, e só para LER a Inadimplência. Ela entra **como o Nicholson**
-(decisão do Erick, 10/11/2026): quem pergunta a ela é ele, quase sempre pela
+Só o agente financeiro (`midas`, que substituiu a `iris`) usa, e só para LER a Inadimplência. Ele entra **como o Nicholson**
+(decisão do Erick, 10/11/2026): quem pergunta a ele é o Nicholson, quase sempre pela
 `nina`, e numa delegação não há "dono do turno" a quem atribuir o pedido. O
 e-mail é constante daqui — nunca argumento vindo do agente.
 
@@ -19,15 +19,17 @@ import httpx
 from app.config import settings
 from app.sistemas.taskhs import ErroSistema, chamar_sistema
 
-__all__ = ["ErroSistema", "chamar", "chamar_como_iris", "EMAIL_DA_IRIS_NO_DATACORE"]
+__all__ = ["ErroSistema", "chamar", "chamar_como_financeiro",
+           "AGENTE_FINANCEIRO", "EMAIL_DO_FINANCEIRO_NO_DATACORE"]
 
 AUD = "datacore"
-EMAIL_DA_IRIS_NO_DATACORE = "np@healthsafetytech.com"
+AGENTE_FINANCEIRO = "midas"
+EMAIL_DO_FINANCEIRO_NO_DATACORE = "np@healthsafetytech.com"
 _transporte: httpx.AsyncBaseTransport | None = None   # trocável em teste
 
 _MSG = {
-    401: "o DataCore não aceitou o acesso da Iris (token de agente ainda não ligado lá?)",
-    403: "o DataCore não deixa a Iris ver isso",
+    401: "o DataCore não aceitou o acesso do agente financeiro (token de agente ainda não ligado lá?)",
+    403: "o DataCore não deixa o agente financeiro ver isso",
     404: "não encontrado no DataCore",
 }
 
@@ -46,8 +48,8 @@ _MSG_GUARDI = {
 }
 
 
-async def chamar_como_iris(metodo: str, caminho: str, params: dict | list | None = None,
-                           dono: str | None = None) -> Any:
+async def chamar_como_financeiro(metodo: str, caminho: str, params: dict | list | None = None,
+                                 dono: str | None = None) -> Any:
     return await chamar_sistema(AUD, "DataCore", settings.DATACORE_API_URL, _transporte, _MSG,
-                                EMAIL_DA_IRIS_NO_DATACORE, "iris", metodo, caminho,
+                                EMAIL_DO_FINANCEIRO_NO_DATACORE, AGENTE_FINANCEIRO, metodo, caminho,
                                 params=params, dono=dono)

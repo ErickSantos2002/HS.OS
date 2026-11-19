@@ -128,16 +128,60 @@ dentro de R$ 50 milhões — e foi assim que o erro do `MESES_ANALISE` sobrevive
 três conferências em agosto. Conferir outra coisa e dar certo é pior que não
 conferir.
 
-Retrato de 09/09/2026, para você saber o tamanho do que está olhando:
+Não há número de referência fixo neste arquivo: **meça na hora** com a consulta
+do passo anterior (títulos e saldo em aberto, a receber e a pagar, pela régua
+desta skill) e compare com as âncoras qualitativas abaixo.
 
-| | a receber | a pagar |
-|---|---|---|
-| títulos (não excluídos) | 9.598 | 8.361 |
-| em aberto | 555 títulos · R$ 2.095.401,11 | 11 títulos · R$ 56.945,11 |
-| já quitado (histórico) | R$ 50.208.778,03 | R$ 30.088.354,27 |
+⚠️ **A âncora antiga de "a pagar" ("é poucos títulos, a empresa paga em dia") não
+vale mais, e não por erro de régua.** O financeiro lançou, em bloco, as parcelas
+de um empréstimo no Itaú (ver a seção abaixo), com vencimento até 2030. Hoje
+**a maior parte do a pagar em aberto são essas parcelas futuras**, não conta do
+mês. Quem mostrar o total sem a ressalva faz a empresa parecer ter tudo isso
+vencendo. Sem as parcelas, o a pagar em aberto soma vencimentos de vários meses
+(até 2031) — **não é o que vence este mês**; para o mês, filtre por `vencimento`.
+Teste de sanidade: tirando as parcelas do Itaú, o a pagar em aberto deve ser
+uma fração pequena do total com elas; se não for (ou se passar de poucas vezes o
+que a empresa paga num mês típico, medido por `tiny.contas_pagar` quitadas),
+suspeite de `cancelada` ou excluída contada.
 
-⚠️ **Se o seu "em aberto" a pagar der muito mais que R$ 57 mil, você contou
-cancelada ou excluída.** A empresa paga em dia; o volume está todo no recebido.
+## Parcelas do Itaú — linha própria na agenda de caixa
+
+Em aberto e não excluídas (`cliente_nome = 'Itaú'`,
+`categoria = '9.3 - Tarifas Bancárias'`, `historico ILIKE '%Parcela%'`). O saldo
+por ano de vencimento **se mede com a consulta abaixo** — não decore valor:
+as parcelas são regulares, e o ano corrente tem menos meses restantes.
+
+```sql
+SELECT extract(year FROM vencimento) AS ano, count(*) AS parcelas,
+       sum(saldo)::numeric(14,2) AS saldo
+  FROM tiny.contas_pagar
+ WHERE lower(situacao) IN ('aberto','pendente')
+   AND excluida_na_origem_em IS NULL
+   AND cliente_nome = 'Itaú'
+   AND categoria = '9.3 - Tarifas Bancárias'
+   AND historico ILIKE '%Parcela%'
+ GROUP BY 1 ORDER BY 1;
+```
+
+⚠️ **O Tiny as classifica como tarifa bancária, mas o histórico ("Parcela
+10/44") e o prazo até 2030 parecem empréstimo.** Ninguém do Financeiro
+confirmou. Regra para agenda de caixa e "quanto vence nos próximos N dias":
+as parcelas entram **numa linha própria**, rotulada **"parcelas de empréstimo —
+classificação a confirmar"**, separada do resto; o total do período sai com e
+sem essa linha. Nunca as misture no "a pagar" sem dizer, e nunca afirme que são
+empréstimo: diga que **parecem** e que falta confirmação. A mesma ressalva, do
+lado do custo, está na skill `custos`.
+
+## O dado recente é provisório
+
+⚠️ **O financeiro lança a conta a pagar já paga e com a data de emissão
+original, em lote, 30 a 60 dias depois** (nota do vault *Contas a pagar
+lançadas com emissão retroativa*, apurada em 29/09/2026). Consequência para
+quem olha pagamentos e a pagar: os **dois últimos meses estão sempre
+provisórios** — o que foi pago em outubro pode só aparecer em novembro ou
+dezembro, com emissão de outubro. Quando a pergunta tocar o mês corrente ou o
+anterior, diga "provisório, ainda pode crescer". Conta vencida em aberto também
+é excluída e reemitida com id novo (por isso o filtro 1).
 
 ## Ao responder
 

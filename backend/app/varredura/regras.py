@@ -20,10 +20,14 @@ ADIAMENTO = timedelta(minutes=2)
 ADIAMENTO_MAX = timedelta(minutes=30)
 # Passou deste horário local sem rodar, a varredura é pulada: manhã velha à
 # tarde mostraria número de manhã como se fosse de agora.
-LIMITE = {"manha": time(12), "tarde": time(17), "quadro": time(11)}
+# A semana financeira do Midas é para a manhã do primeiro dia útil: chegando à
+# tarde, o caixa "dos próximos 7 dias" já é outro.
+LIMITE = {"manha": time(12), "tarde": time(17), "quadro": time(11),
+          "financeiro": time(11)}
 SISTEMAS = {"taskhs", "hsgrowth", "gestorhs", "email"}
 
-_PADRAO = {"manha": time(7, 30), "tarde": time(13, 30), "quadro": time(8, 30)}
+_PADRAO = {"manha": time(7, 30), "tarde": time(13, 30), "quadro": time(8, 30),
+           "financeiro": time(8)}
 _HORA = re.compile(r"^([0-9]{1,2}):([0-9]{2})\Z")
 _CHAVE = re.compile(r"^[a-z0-9_]{1,30}\Z")
 _MAX_CHAVES = 8
@@ -63,12 +67,23 @@ def dia_util(d: date) -> bool:
     return d.weekday() < 5 and d not in feriados(d.year)
 
 
+def primeiro_dia_util_da_semana(d: date) -> bool:
+    """É útil e nenhum dia antes dele na mesma semana ISO é útil.
+
+    Semana de Carnaval: segunda e terça são feriado, o primeiro é a quarta.
+    """
+    if not dia_util(d):
+        return False
+    return not any(dia_util(d - timedelta(days=k)) for k in range(1, d.weekday() + 1))
+
+
 @dataclass(frozen=True)
 class Config:
     ligada: bool
     manha: time
     tarde: time
     quadro: time
+    financeiro: time = _PADRAO["financeiro"]
 
 
 def _parse(valor, padrao: time) -> time:
@@ -86,11 +101,12 @@ def config(valor) -> Config:
         manha=_parse(v.get("manha"), _PADRAO["manha"]),
         tarde=_parse(v.get("tarde"), _PADRAO["tarde"]),
         quadro=_parse(v.get("quadro"), _PADRAO["quadro"]),
+        financeiro=_parse(v.get("financeiro"), _PADRAO["financeiro"]),
     )
 
 
 def horario(cfg: Config, tipo: str, dia: date) -> datetime:
-    """Hora agendada do tipo (manha/tarde/quadro) naquele dia, em UTC."""
+    """Hora agendada do tipo (manha/tarde/quadro/financeiro) naquele dia, em UTC."""
     if tipo not in _PADRAO:
         raise ValueError(f"tipo sem horário: {tipo!r}")
     h = getattr(cfg, tipo)
@@ -231,4 +247,5 @@ def separar_nao_ligados(numeros: dict, ligados: list[str] | None,
 # Como o turno autônomo da varredura começa (ver `disparo.mensagem`). O
 # `/recuperar` usa para reconhecer a janela no histórico do gateway.
 CABECALHOS_VARREDURA = ("[Varredura da manhã — ", "[Conferência da tarde — ",
-                        "[Varredura pedida pela Nina — ", "[Quadro da equipe para ")
+                        "[Varredura pedida pela Nina — ", "[Quadro da equipe para ",
+                        "[Semana financeira — ")

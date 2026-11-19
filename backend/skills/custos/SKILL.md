@@ -150,6 +150,74 @@ saber o tamanho:
 | sem impostos e sem mercadoria (fora 6, 7 e 8) | **R$ 321.658** |
 | … dos quais equipe (grupo 1) | R$ 113.194 |
 
+### Ressalvas do dado — o que o Balancete não diz sozinho
+
+Levantadas em 18/11/2026 sobre `tiny.contas_pagar`. A régua acima **não muda**
+(o Balancete é a autoridade); o que muda é o que você **diz** junto do número.
+
+⚠️ **R1 — O Itaú em "9.3 - Tarifas Bancárias" parece dívida, não tarifa.** São
+parcelas ("Parcela N/44", "Parcela Giro N/57") com vencimento até 2030, em
+volume que domina o a pagar. O Balancete as soma em 9.3 e o mês fica inflado: o
+financeiro as lança em bloco, então o mês do lançamento (out/2026, 136 parcelas
+de uma vez) tem 9.3 muitas vezes maior que o ritmo normal de tarifas dos meses
+anteriores. Meça mês a mês com a consulta abaixo. Sempre que o grupo 9 aparecer, mostre
+**tarifas com e sem as parcelas do Itaú**, nomeando-as:
+
+```sql
+SELECT to_char(data_emissao,'YYYY-MM') AS mes,
+       sum(valor) FILTER (WHERE categoria = '9.3 - Tarifas Bancárias')::numeric(14,2)
+         AS tarifas_total,
+       sum(valor) FILTER (WHERE categoria = '9.3 - Tarifas Bancárias'
+            AND cliente_nome = 'Itaú' AND historico ILIKE '%Parcela%')::numeric(14,2)
+         AS parcelas_itau
+  FROM tiny.contas_pagar
+ WHERE excluida_na_origem_em IS NULL
+   AND data_emissao >= DATE '2026-01-01'
+ GROUP BY 1 ORDER BY 1;
+```
+
+Classificação como dívida (amortização) é **provisória e nomeada** até o
+Financeiro confirmar. Não mude a categoria no número do Balancete: reclassifique
+numa linha à parte e diga que fez. Se alguém pedir "custo do mês" com out/2026
+dentro, o número sem esse ajuste engana.
+
+⚠️ **R2 — Os dois últimos meses são provisórios.** O financeiro lança conta
+paga com emissão retroativa, 30–60 dias depois (nota do vault *Contas a pagar
+lançadas com emissão retroativa*). Mês corrente e o anterior crescem depois de
+fechados. Diga "provisório" neles, sempre.
+
+⚠️ **R3 — Meses sem fatura de cartão (`9.1 - Cartão de Crédito`) estão
+incompletos em despesa.** A fatura só aparece no Tiny a partir de set/2026.
+Medido em 18/11/2026 (contas vivas com categoria 9.1 por mês de emissão):
+**jan, fev, mar, abr, mai, jun, jul e ago/2026 têm zero**; set e out têm uma
+conta cada; nov/2026 tem zero e está em curso.
+A despesa desses meses é **subestimada** por falta de fatura, e a âncora de
+jul/2026 acima (R$ 462.917,93) é a do Balancete, que tem essa mesma lacuna — não
+é erro de régua. Ao comparar mês de 2026 com mês de 2026, avise que os dois lados
+não têm cartão; ao comparar com set/out em diante, avise que o cartão apareceu.
+
+```sql
+SELECT to_char(data_emissao,'YYYY-MM') AS mes,
+       count(*) FILTER (WHERE categoria LIKE '9.1 - %') AS contas_cartao
+  FROM tiny.contas_pagar
+ WHERE excluida_na_origem_em IS NULL
+   AND data_emissao >= DATE '2026-01-01'
+ GROUP BY 1 ORDER BY 1;
+```
+
+⚠️ **R4 — "1.3 - Salário" é o líquido; a folha cheia é fechada por quem fecha a folha, fora
+do Tiny.** O grupo 1 do Balancete é, portanto, **pessoal parcial**: falta
+encargo, retenção e o que o Tiny não registra. Nunca chame o grupo 1 de "custo
+de pessoal" ou "folha"; diga "pessoal (parcial — salário líquido e o que o Tiny
+lança)". Custo por colaborador não sai daqui.
+
+### Toda resposta de custo diz o estado do número
+
+Cada resposta de custo ou despesa termina marcando o que entrou como **medido**
+(mês fechado, base conferida), **provisório** (os dois últimos meses — R2) ou
+**incompleto** (meses sem cartão — R3; pessoal parcial — R4; 9.3 com as
+parcelas do Itaú — R1). Sem esse rótulo o número parece mais firme do que é.
+
 ## Parte 2 — estoque e custo de produto
 
 ### Leia do `gold.dim_produto`, não do `tiny.estoque`

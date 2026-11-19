@@ -125,20 +125,3 @@ def texto_da_lista(empresas: list[dict], nome_do_arquivo: str) -> str:
             f"**{len(empresas)} empresas · {brl(total_dev)} devido · {brl(total_inad)} inadimplente.**"
             f"\n\nAs 10 maiores:\n{linhas}\n\nA lista completa está na planilha. Não reescreva a "
             f"lista na resposta.\n\n{RODAPE}")
-
-
-def pagina_html(empresas: list[dict]) -> str:
-    """A lista como página, montada aqui — o modelo nunca escreve o HTML dela."""
-    from html import escape
-    linhas = "".join(
-        f"<tr><td>{escape(str(e.get('nome') or ''))}</td><td>{escape(str(e.get('documento') or ''))}</td>"
-        f"<td class=n>{brl(e.get('valor_devido'))}</td><td class=n>{brl(e.get('valor_inadimplente'))}</td>"
-        f"<td class=n>{e.get('maior_atraso') or ''}</td><td>{escape(str(e.get('status') or ''))}</td></tr>"
-        for e in empresas)
-    return ("<!doctype html><html lang=pt-BR><meta charset=utf-8><title>Inadimplência</title>"
-            "<style>body{font-family:sans-serif;background:#0a0a0a;color:#eee;padding:16px}"
-            "table{border-collapse:collapse;width:100%}td,th{padding:6px 8px;border-bottom:1px solid #333}"
-            "th{text-align:left;background:#3D61FF}.n{text-align:right}</style>"
-            "<h1>Inadimplência — DataCoreHS</h1><table><tr><th>Cliente</th><th>CNPJ/CPF</th>"
-            "<th>Devido</th><th>Inadimplente</th><th>Maior atraso</th><th>Status</th></tr>"
-            f"{linhas}</table><p>{escape(RODAPE)}</p></html>")

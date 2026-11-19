@@ -427,3 +427,13 @@ def test_sem_varreduras_eventos_iguais_a_antes():
     antes = w.montar_eventos([], msgs, [], {}, NOMES, {"nina": "Nina"})
     assert w.montar_eventos([], msgs, [], {}, NOMES, {"nina": "Nina"}, varreduras=None) == antes
     assert w.montar_eventos([], msgs, [], {}, NOMES, {"nina": "Nina"}, varreduras=[]) == antes
+
+
+def test_evento_semana_financeira_nao_e_resumo_a_nina():
+    """A semana financeira do Midas vai para o Nicholson, não para a Nina: o
+    Fluxo não pode dizer "entregou o resumo à Nina" (18/11/2026)."""
+    ev = w.montar_eventos([], [], [], {}, NOMES, {"midas": "Midas"},
+                          varreduras=[{**_varr("financeiro"), "agent_id": "midas"}])
+    assert [e["texto"] for e in ev] == ["Midas entregou a semana financeira"]
+    assert w.montar_eventos([], [], [], {}, NOMES, {"midas": "Midas"},
+                            varreduras=[{**_varr("financeiro", "rodando"), "agent_id": "midas"}]) == []

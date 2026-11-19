@@ -10,11 +10,14 @@ from __future__ import annotations
 
 import json
 import logging
+
+import asyncpg
 from datetime import datetime
 
 from app.email.cifra import cifrar, decifrar
 from app.varredura.regras import (FUSO, TETO_RESUMO, TETO_SIMULTANEO, chaves_ligadas, Config, config, dia_util,
-                                  horario, novidade, pode_pedir, validar_numeros,
+                                  horario, novidade, pode_pedir,
+                                  primeiro_dia_util_da_semana, validar_numeros,
                                   velha)
 
 logger = logging.getLogger(__name__)
@@ -42,6 +45,18 @@ SQL_SEMEAR_QUADRO = """
       CROSS JOIN LATERAL unnest(ap.allowed_user_ids) AS x(uid)
       JOIN auth.users u ON u.id = x.uid AND u.is_active
      WHERE ap.agent_id = 'nina'
+    ON CONFLICT DO NOTHING
+"""
+
+# A semana financeira é do Midas (CFO): uma linha por pessoa que ele atende,
+# no primeiro dia útil da semana ISO. Mesma forma do quadro da Nina.
+SQL_SEMEAR_FINANCEIRO = """
+    INSERT INTO public.varreduras (user_id, agent_id, dia, tipo, proximo_em)
+    SELECT x.uid, 'midas', $1::date, 'financeiro', $2
+      FROM public.agent_profiles ap
+      CROSS JOIN LATERAL unnest(ap.allowed_user_ids) AS x(uid)
+      JOIN auth.users u ON u.id = x.uid AND u.is_active
+     WHERE ap.agent_id = 'midas'
     ON CONFLICT DO NOTHING
 """
 
@@ -102,7 +117,7 @@ SQL_RODANDO = f"""
     SELECT id::text AS id, tipo, dia
       FROM public.varreduras
      WHERE agent_id = $1 AND user_id = $2::uuid
-       AND status = 'rodando' AND tipo <> 'quadro'
+       AND status = 'rodando' AND tipo NOT IN ('quadro', 'financeiro')
        AND disparando_em > now() - interval '{JANELA_RODANDO}'
      ORDER BY disparando_em DESC
      LIMIT 1
@@ -126,6 +141,9 @@ SQL_REGISTRAR = """
 
 # Run que já respondeu (message_id), cujo coletor desistiu, ou que passou de
 # 30 min: a varredura terminou sem o Guardi registrar.
+# ⚠️ Quadro e financeiro não passam pelo registro: fecham pela resposta gravada
+# (`_quadro_entregue`), que vem DEPOIS do `message_id`. O ramo do run não vale
+# para eles — senão a passada que cai no meio as marca `sem_registro`.
 SQL_FECHAR = """
     UPDATE public.varreduras v SET status = 'sem_registro'
      WHERE v.status = 'rodando'
@@ -133,6 +151,7 @@ SQL_FECHAR = """
             OR EXISTS (
                SELECT 1 FROM public.agent_runs r
                 WHERE r.run_id = v.run_id
+                  AND v.tipo NOT IN ('quadro', 'financeiro')
                   AND (r.message_id IS NOT NULL
                        OR r.coleta_encerrada_em IS NOT NULL
                        OR r.criado_em < now() - interval '30 minutes')))
@@ -174,6 +193,25 @@ SQL_PEDIR = """
 """
 
 
+_avisou_sem_040 = False
+
+
+async def _semear_financeiro(conn, dia, quando) -> int:
+    """A semana do Midas num savepoint: código no ar antes da 040 faz o CHECK
+    de `tipo` recusar o INSERT, e sem o savepoint a transação inteira — a
+    semeadura dos Guardis, o fechamento e a reserva — cairia em toda passada de
+    segunda até as 11:00. Só a CheckViolation é engolida; o resto sobe."""
+    global _avisou_sem_040
+    try:
+        async with conn.transaction():
+            return _inseridas(await conn.execute(SQL_SEMEAR_FINANCEIRO, dia, quando))
+    except asyncpg.CheckViolationError:
+        if not _avisou_sem_040:
+            _avisou_sem_040 = True
+            logger.warning("Semana financeira do Midas parada: aplicar a migração 040.")
+        return 0
+
+
 def _dia_local(agora: datetime):
     return agora.astimezone(FUSO).date()
 
@@ -205,12 +243,17 @@ async def semear(conn, cfg: Config, agora: datetime) -> int:
     if not dia_util(dia):
         return 0
     total = 0
-    for tipo in ("manha", "tarde", "quadro"):
+    tipos = ["manha", "tarde", "quadro"]
+    if primeiro_dia_util_da_semana(dia):
+        tipos.append("financeiro")  # uma vez por semana, para o Midas
+    for tipo in tipos:
         quando = horario(cfg, tipo, dia)
         if velha(tipo, quando, agora):
             continue  # semear 'manha' às 15h seria criar linha já morta
         if tipo == "quadro":
             total += _inseridas(await conn.execute(SQL_SEMEAR_QUADRO, dia, quando))
+        elif tipo == "financeiro":
+            total += await _semear_financeiro(conn, dia, quando)
         else:
             total += _inseridas(await conn.execute(SQL_SEMEAR_GUARDIS, dia, tipo, quando))
     return total

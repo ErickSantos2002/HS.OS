@@ -40,6 +40,11 @@ SQL_ATENDIDO_PELA_NINA = """
                     WHERE agent_id = 'nina' AND $1::uuid = ANY(allowed_user_ids))
 """
 
+SQL_ATENDIDO_PELO_MIDAS = """
+    SELECT EXISTS (SELECT 1 FROM public.agent_profiles
+                    WHERE agent_id = 'midas' AND $1::uuid = ANY(allowed_user_ids))
+"""
+
 LINHA_PEDIDA = "🔎 A Nina pediu um resumo das suas pendências."
 # Sem `base64`/`mimeType`: não é anexo, é a marca que a tela e o push leem.
 MEDIA_PEDIDA = json.dumps([{"type": "varredura_pedida"}], ensure_ascii=False)
@@ -85,6 +90,19 @@ _QUADRO = (
     "em página (`publicar_pagina` gera link público)."
 )
 
+_FINANCEIRO = (
+    "Monte a semana financeira da empresa, para a reunião de segunda: "
+    "(1) a agenda de caixa dos próximos 7 dias, a pagar e a receber, com as "
+    "parcelas do Itaú em linha própria; (2) os vencidos novos desde a semana "
+    "passada; (3) o que o `calendario-financeiro` marca para esta semana "
+    "(impostos, folha, fechamentos); (4) o faturamento do trimestre até agora contra "
+    "a meta do trimestre (skill `faturamento`). Diga o tipo de cada número — medido, "
+    "provisório ou incompleto (e 'previsto' para o que ainda vai vencer); incompleto "
+    "é folha parcial ou mês sem a fatura do cartão, que não se apresenta como total — e de onde ele veio. Nunca invente "
+    "número: o que não conseguiu ler, diga que não conseguiu. Responda aqui no "
+    "chat — NUNCA publique em página (`publicar_pagina` gera link público)."
+)
+
 
 def mensagem(tipo: str, nome: str, pedida_por: str | None) -> str:
     """O texto do turno. O cabeçalho é saneado (nome é texto livre); a
@@ -92,6 +110,8 @@ def mensagem(tipo: str, nome: str, pedida_por: str | None) -> str:
     primeiro = _primeiro_nome(nome)
     if tipo == "quadro":
         return f"[Quadro da equipe para {primeiro}]\n{_QUADRO}"
+    if tipo == "financeiro":
+        return f"[Semana financeira — {primeiro}]\n{_FINANCEIRO}"
     partes = [_CONSULTAS, _REGISTRO, _CARDAPIO]
     if tipo == "tarde":
         cab = f"[Conferência da tarde — {primeiro}]"
@@ -129,6 +149,11 @@ async def disparar_varredura(sessao_fn, v: dict, agora: datetime, disparar=None)
             # ainda é atendido por ela — semeado ontem não é autorização hoje.
             valido = bool(await conn.fetchval(SQL_DONO_ATIVO, v["user_id"])) and \
                 bool(await conn.fetchval(SQL_ATENDIDO_PELA_NINA, v["user_id"]))
+        elif v["tipo"] == "financeiro":
+            # Mesmo raciocínio do quadro, com o Midas: o caixa da empresa só
+            # vai a quem ele ainda atende.
+            valido = bool(await conn.fetchval(SQL_DONO_ATIVO, v["user_id"])) and \
+                bool(await conn.fetchval(SQL_ATENDIDO_PELO_MIDAS, v["user_id"]))
         else:
             # O dono pode ter sido desligado, e o bot pode ter mudado de dono.
             ativo = bool(await conn.fetchval(SQL_DONO_ATIVO, v["user_id"]))

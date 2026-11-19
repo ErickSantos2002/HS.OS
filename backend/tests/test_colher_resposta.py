@@ -297,7 +297,8 @@ def test_quadro_gravado_vira_entregue(ambiente):
     assert r.status == "pronta"
     [(sql, args)] = ambiente.conn.varredura
     assert "status = 'entregue'" in sql and "entregue_em = now()" in sql
-    assert "tipo = 'quadro'" in sql and "status = 'rodando'" in sql
+    # A semana financeira do Midas fecha pelo mesmo caminho (18/11/2026).
+    assert "tipo IN ('quadro', 'financeiro')" in sql and "status = 'rodando'" in sql
     assert args == ("hsos-varredura-q1",)
 
 

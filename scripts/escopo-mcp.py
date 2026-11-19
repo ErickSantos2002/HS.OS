@@ -17,13 +17,23 @@ COMUM = ["banco-diretorio-hs-os__query",
          "hsos-relatorios__publicar_pagina"]
 PROPRIO = {
     "nina":  ["banco-hsos__query"],                       # orquestra: delega o domínio
+    # ⚠️ Não lista compradores_produto/inadimplencia — rodar com --aplicar as
+    # tira da iris; a iris vai dormir (plano 2026-11-18-cfo-midas).
     "iris":  ["banco-datacorehs__query"],                 # faturamento
     "atlas": ["banco-hsgrowth__query",                    # CRM
               "hsos-relatorios__relatorio_vendedores"],
     "flow":  ["banco-gestorhs__query", "banco-taskhs__query",
               "banco-chamadoshs__query"],                 # operação
     "bruce": ["banco-talenths__query", "banco-pessoas-hs__query"],
+    # financeiro (CFO, 18/11/2026): GestorHS e HSGrowth como dado financeiro
+    "midas": ["banco-datacorehs__query", "banco-gestorhs__query",
+              "banco-hsgrowth__query", "hsos-relatorios__compradores_produto",
+              "hsos-relatorios__inadimplencia"],
 }
+
+# ⚠️ O Midas NÃO publica página: contas a pagar trazem salário por pessoa,
+# dividendos e dívida, e a página abre sem login (spec 2026-11-18-cfo-midas).
+SEM_COMUM = {"midas": {"hsos-relatorios__publicar_pagina"}}
 
 # Cada agente enxerga só a PRÓPRIA entrada de anexos: a URL dela carrega o HMAC
 # do id dele, e é isso que o servidor confere. Dar a de outro seria dar a
@@ -53,7 +63,7 @@ async def main() -> int:
         aid = ag.get("id")
         if aid not in PROPRIO:
             continue
-        meus = set(COMUM) | set(PROPRIO[aid]) | set(_anexos_de(aid))
+        meus = (set(COMUM) - SEM_COMUM.get(aid, set())) | set(PROPRIO[aid]) | set(_anexos_de(aid))
         faltando = meus - todas
         assert not faltando, f"{aid}: ferramenta que não existe no gateway: {faltando}"
         t = dict(ag.get("tools") or {})
