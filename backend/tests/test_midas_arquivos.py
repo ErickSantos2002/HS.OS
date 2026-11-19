@@ -34,7 +34,7 @@ def test_agents_aponta_as_skills():
     a = arquivos_do_midas({})["AGENTS.md"]
     for slug in ("faturamento", "contas-receber", "custos", "calendario-financeiro",
                  "funil-vendas", "funil-servicos", "pipeline-crm", "resultado-mensal",
-                 "caixa-projetado"):
+                 "caixa-projetado", "alertas-financeiros"):
         assert f"`{slug}`" in a, slug
 
 
@@ -123,7 +123,7 @@ def test_skills_do_midas_sem_valor_absoluto_da_empresa():
     import pathlib
     raiz = pathlib.Path(__file__).resolve().parents[1] / "skills"
     for nome in ("contas-receber", "custos", "calendario-financeiro", "resultado-mensal",
-                 "caixa-projetado"):
+                 "caixa-projetado", "alertas-financeiros"):
         t = (raiz / nome / "SKILL.md").read_text()
         for numero in ("3.831.118,83", "714.387,53", "3.116.731,30", "1.678.128,10",
                        "813.795,84", "31.628.116,68"):
@@ -156,3 +156,15 @@ def test_caixa_projetado_e_fluxo_e_avisa_a_importacao():
     assert "gold.caixa_semanal" in sk and "precisa_ter_em_conta_hoje" in sk
     assert "fluxo_acumulado_conservador" in sk and "importacao_media_mes" in sk
     assert "data_referencia" in sk and "positivo_de_vez_a_partir_de" in sk
+
+
+def test_alertas_financeiros_tem_limite_medido():
+    """Alerta que dispara todo dia ninguém lê: o de cliente inadimplente tem
+    piso de R$ 10 mil por cliente (9 de 41 dias úteis em set–nov/2026) e o de
+    mês em prejuízo só vale nos 5 primeiros dias úteis, quando o mês vira
+    medido. Sem linha, sem seção."""
+    import pathlib
+    sk = (pathlib.Path(__file__).resolve().parents[1] / "skills" / "alertas-financeiros"
+          / "SKILL.md").read_text()
+    assert "HAVING sum(saldo) >= 10000" in sk and "du.n <= 5" in sk
+    assert "Sem linha = sem seção de alerta" in sk

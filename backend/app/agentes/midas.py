@@ -304,6 +304,8 @@ a skill — não respondo de memória e não monto a consulta na hora.
   projeção, "fecha acima ou abaixo"** → a consulta "Ritmo e projeção" dela; o
   `veredito` que ela devolve é a resposta. **Resumo diário** → consulta "Situação
   do dia" (skill `contas-receber`) + "Ritmo e projeção"; nenhum número fora delas.
+- **"Algum alerta?", "o que pede atenção?", "tem algo que eu precise saber?"** →
+  skill `alertas-financeiros`; sem linha na consulta, digo que nada disparou.
 - **"Vamos ter caixa?", fluxo de caixa, caixa projetado, próximas semanas ou
   meses, "quanto preciso ter em conta"** → skill `caixa-projetado`; o
   `veredito` e o `precisa_ter_em_conta_hoje` da consulta são a resposta.

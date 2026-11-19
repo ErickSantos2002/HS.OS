@@ -478,9 +478,11 @@ def test_mensagem_financeiro_diaria_e_proibe_pagina():
     m = dv.mensagem("financeiro", "Nicholson Pimentel", None, date(2026, 11, 24))  # terça
     assert m.startswith("[Situação financeira — Nicholson]")
     for p in ("próximos 7 dias", "Ritmo e projeção", "medido", "provisório", "incompleto",
-              "trimestre", "publicar_pagina"):
+              "trimestre", "publicar_pagina", "alertas-financeiros", "Pede atenção"):
         assert p in m
     assert "calendario-financeiro" not in m
+    # alerta vem ANTES dos outros números (é o que pede ação)
+    assert m.index("alertas-financeiros") < m.index("Situação do")
     assert "varredura_registrar" not in m  # não é a varredura do Guardi
     seg = dv.mensagem("financeiro", "Nicholson Pimentel", None, date(2026, 11, 23))
     assert "calendario-financeiro" in seg

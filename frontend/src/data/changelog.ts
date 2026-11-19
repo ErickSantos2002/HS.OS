@@ -30,6 +30,24 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.19.0",
+    date: "2026-11-19",
+    changes: [
+      {
+        kind: "novidade",
+        text: "O Midas responde o resultado do mês: lucro ou prejuízo já descontado o custo da mercadoria, margem e quanto sobrou depois de pagar o banco, dizendo quando o mês ainda não fechou.",
+      },
+      {
+        kind: "novidade",
+        text: "O Midas projeta o caixa das próximas 13 semanas e diz quanto é preciso ter em conta para não ficar no vermelho, e em que semana está o aperto.",
+      },
+      {
+        kind: "novidade",
+        text: "O resumo financeiro das 8h abre com o que pede atenção: aperto de caixa, cliente que passou a ser inadimplente, importação grande lançada e mês que fechou em prejuízo.",
+      },
+    ],
+  },
+  {
     version: "2.18.1",
     date: "2026-11-19",
     changes: [
