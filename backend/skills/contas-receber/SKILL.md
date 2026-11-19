@@ -108,6 +108,51 @@ SELECT sum(CASE WHEN lower(situacao) IN ('recebido','pago') THEN 0 ELSE saldo EN
 Para **contas a pagar**, a mesma consulta trocando a tabela e a lista de
 quitadas para `('pago')` apenas.
 
+### Situação do dia — a consulta do resumo diário
+
+⚠️ **No primeiro resumo diário (19/11/2026) o que veio desta régua aplicada à mão
+saiu errado nas duas cópias:** "vencidos novos desde o último dia útil" virou a
+semana inteira numa e "nenhum" na outra (eram poucos, do último dia útil);
+contas "fora do Itaú" incluíam parcelas do Itaú; o total do Itaú saiu errado na
+soma de cabeça. A agenda e os vencidos novos saem DESTA consulta, prontos —
+o resumo copia as linhas e não acrescenta número que não esteja nela.
+
+```sql
+WITH hoje AS (SELECT current_date AS d),
+     -- último dia útil antes de hoje: segunda pega sexta (e o fim de semana)
+     ant AS (SELECT max(t.data) AS d FROM gold.dim_tempo t, hoje
+              WHERE t.dia_util AND t.data < hoje.d),
+     rec AS (SELECT vencimento, saldo FROM tiny.contas_receber
+              WHERE excluida_na_origem_em IS NULL AND lower(situacao) IN ('aberto','pendente')),
+     pag AS (SELECT vencimento, saldo,
+                    (cliente_nome = 'Itaú' AND categoria = '9.3 - Tarifas Bancárias'
+                     AND historico ILIKE '%parcela%') AS itau
+               FROM tiny.contas_pagar
+              WHERE excluida_na_origem_em IS NULL AND lower(situacao) IN ('aberto','pendente'))
+SELECT 'receber_7_dias' AS linha, count(*) AS titulos, sum(saldo)::numeric(14,2) AS valor
+  FROM rec, hoje WHERE vencimento BETWEEN hoje.d AND hoje.d + 7
+UNION ALL
+SELECT 'pagar_7_dias_sem_itau', count(*), coalesce(sum(saldo),0)::numeric(14,2)
+  FROM pag, hoje WHERE NOT itau AND vencimento BETWEEN hoje.d AND hoje.d + 7
+UNION ALL
+SELECT 'pagar_7_dias_parcelas_itau', count(*), coalesce(sum(saldo),0)::numeric(14,2)
+  FROM pag, hoje WHERE itau AND vencimento BETWEEN hoje.d AND hoje.d + 7
+UNION ALL
+SELECT 'vencidos_novos_desde_ultimo_dia_util', count(*), coalesce(sum(saldo),0)::numeric(14,2)
+  FROM rec, hoje, ant WHERE vencimento >= ant.d AND vencimento < hoje.d
+UNION ALL
+SELECT 'vencido_total', count(*), sum(saldo)::numeric(14,2)
+  FROM rec, hoje WHERE vencimento < hoje.d
+UNION ALL
+SELECT 'itau_em_aberto_total', count(*), coalesce(sum(saldo),0)::numeric(14,2)
+  FROM pag WHERE itau;
+```
+
+"Vencidos novos" = títulos ainda em aberto cujo vencimento caiu **desde o último
+dia útil até ontem** — é o que mudou desde o resumo anterior, não a semana.
+Para o detalhe por dia, troque o `SELECT` final por `GROUP BY vencimento` com o
+mesmo filtro; o total do detalhe tem que bater com a linha daqui.
+
 ## Confira antes de responder
 
 Rode a primeira consulta com `vencimento < DATE '2026-09-08'` e compare:

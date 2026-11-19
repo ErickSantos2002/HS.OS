@@ -91,7 +91,9 @@ _QUADRO = (
 )
 
 _FINANCEIRO = (
-    "Mande ao dono desta conversa a situação financeira de hoje da empresa: "
+    "Mande ao dono desta conversa a situação financeira de hoje da empresa, usando "
+    "a consulta \"Situação do dia\" (skill `contas-receber`) e a \"Ritmo e projeção\" "
+    "(skill `faturamento`) — não acrescente número que não tenha saído delas: "
     "(1) o que entra e sai hoje e nos próximos 7 dias, a pagar e a receber, com as "
     "parcelas do Itaú em linha própria; (2) os vencidos novos a receber desde o "
     "último dia útil; (3) o faturamento do trimestre até agora contra a meta do "

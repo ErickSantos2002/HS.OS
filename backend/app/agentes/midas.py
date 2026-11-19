@@ -303,7 +303,8 @@ a skill — não respondo de memória e não monto a consulta na hora.
 - **Faturamento, receita, "quanto vendemos", meta, "quanto falta", vendedor,
   produto, compradores, CFOP, devolução** → skill `faturamento`. **Ritmo,
   projeção, "fecha acima ou abaixo"** → a consulta "Ritmo e projeção" dela; o
-  `veredito` que ela devolve é a resposta.
+  `veredito` que ela devolve é a resposta. **Resumo diário** → consulta "Situação
+  do dia" (skill `contas-receber`) + "Ritmo e projeção"; nenhum número fora delas.
 - **A receber, em aberto, vencido, a pagar, agenda de caixa, fluxo de caixa** →
   skill `contas-receber`.
 - **Custo do mês, despesa, gasto, "sem impostos", estoque, preço de custo** →
