@@ -30,6 +30,20 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.20.0",
+    date: "2026-11-19",
+    changes: [
+      {
+        kind: "novidade",
+        text: "O Midas mostra o que dá dinheiro: receita, custo e margem por linha (aparelho, consumível, acessório, calibração, plataforma, locação) e por produto.",
+      },
+      {
+        kind: "novidade",
+        text: "Todo mês, no primeiro dia útil a partir do dia 25, o resumo das 8h traz o fechamento do mês anterior: o resultado comparado com o mês anterior e com o mesmo mês do ano passado, e as maiores variações.",
+      },
+    ],
+  },
+  {
     version: "2.19.0",
     date: "2026-11-19",
     changes: [

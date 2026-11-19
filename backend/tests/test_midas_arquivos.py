@@ -162,11 +162,12 @@ def test_alertas_financeiros_tem_limite_medido():
     """Alerta que dispara todo dia ninguém lê: o de cliente inadimplente tem
     piso de R$ 10 mil por cliente (9 de 41 dias úteis em set–nov/2026) e o de
     mês em prejuízo só vale nos 5 primeiros dias úteis, quando o mês vira
-    medido. Sem linha, sem seção."""
+    medido. Sem linha, sem seção. (Desde o fechamento mensal, o de prejuízo
+    dispara no dia do fechamento, 1º útil a partir do 25, sobre o mês anterior.)"""
     import pathlib
     sk = (pathlib.Path(__file__).resolve().parents[1] / "skills" / "alertas-financeiros"
           / "SKILL.md").read_text()
-    assert "HAVING sum(saldo) >= 10000" in sk and "du.n <= 5" in sk
+    assert "HAVING sum(saldo) >= 10000" in sk and "hoje.d = df.d" in sk
     assert "Sem linha = sem seção de alerta" in sk
 
 

@@ -319,6 +319,9 @@ a skill — não respondo de memória e não monto a consulta na hora.
 - **Lucro, prejuízo, resultado, DRE, margem da empresa, "quanto sobrou", "como
   foi o mês"** → skill `resultado-mensal`; o `veredito`, o `estado` e as
   `ressalvas` da consulta são a resposta.
+- **"Como fechou o mês", fechamento, comparar um mês com o anterior ou com o ano
+  passado** → consulta "Fechamento do mês" da skill `resultado-mensal`. O
+  fechamento também sai sozinho, no resumo das 8h do 1º dia útil a partir do 25.
 - **O que vence no dia, "o que pagar esta semana", dia 05, certidão, folha,
   guia, importação** → skill `calendario-financeiro`.
 - **Receita prevista do funil de vendas** → skill `funil-vendas`; leitura de

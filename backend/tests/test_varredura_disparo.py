@@ -548,3 +548,13 @@ def test_codigo_antes_da_040_nao_derruba_a_etapa(monkeypatch, caplog):
         assert "fechar" in eventos and ("reservar", False) in log
     avisos = [r for r in caplog.records if "040" in r.getMessage()]
     assert len(avisos) == 1
+
+
+def test_fechamento_do_mes_vai_junto_do_resumo_no_dia_certo():
+    """Uma vez por mês, no 1º dia útil a partir do 25, o resumo das 8h acrescenta
+    o fechamento do mês anterior — a consulta pronta da skill `resultado-mensal`,
+    nunca conta de cabeça. Nos outros dias, não."""
+    from datetime import date
+    m = dv.mensagem("financeiro", "Nicholson", None, date(2026, 11, 25))
+    assert "Fechamento do mês" in m and "resultado-mensal" in m and "margem-por-linha" in m
+    assert "Fechamento do mês" not in dv.mensagem("financeiro", "Nicholson", None, date(2026, 11, 24))

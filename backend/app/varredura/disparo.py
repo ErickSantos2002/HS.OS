@@ -27,7 +27,8 @@ from app.disparador_lembretes import (SQL_DONO_ATIVO, SQL_NOME, SQL_RECADO,
                                       SQL_TURNO_ABERTO, _primeiro_nome)
 from app.routers.mcp_anexos import JANELA_TURNO_S
 from app.varredura import dominio
-from app.varredura.regras import ADIAMENTO, ADIAMENTO_MAX, primeiro_dia_util_da_semana, velha
+from app.varredura.regras import (ADIAMENTO, ADIAMENTO_MAX, dia_do_fechamento,
+                                  primeiro_dia_util_da_semana, velha)
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,17 @@ _FINANCEIRO = (
     "aqui no chat — NUNCA publique em página (`publicar_pagina` gera link público)."
 )
 
+_FECHAMENTO = (
+    "Hoje é o dia do Fechamento do mês: depois da situação de hoje, mande o "
+    "fechamento do MÊS ANTERIOR com a consulta \"Fechamento do mês\" da skill "
+    "`resultado-mensal` (o mês contra o anterior e contra o mesmo mês do ano "
+    "passado, linha a linha do DRE, com as maiores variações) e a consulta 1 da "
+    "skill `margem-por-linha` só para esse mês. Abra pelo veredito e pelo `estado` "
+    "da consulta; se ela disser que a folha do mês não foi lançada, diga isso no "
+    "topo e não chame o mês de fechado. Explique variação só com o que a consulta "
+    "mostra. Nenhum número fora dessas consultas."
+)
+
 _FINANCEIRO_SEGUNDA = (
     "Hoje é o primeiro dia útil da semana: acrescente o que o `calendario-financeiro` "
     "marca para esta semana (impostos, folha, dia 05, certidões, fechamentos)."
@@ -125,6 +137,8 @@ def mensagem(tipo: str, nome: str, pedida_por: str | None, dia: date | None = No
         return f"[Quadro da equipe para {primeiro}]\n{_QUADRO}"
     if tipo == "financeiro":
         extra = ("\n" + _FINANCEIRO_SEGUNDA) if dia and primeiro_dia_util_da_semana(dia) else ""
+        if dia and dia_do_fechamento(dia):
+            extra += "\n" + _FECHAMENTO
         return f"[Situação financeira — {primeiro}]\n{_FINANCEIRO}{extra}"
     partes = [_CONSULTAS, _REGISTRO, _CARDAPIO]
     if tipo == "tarde":

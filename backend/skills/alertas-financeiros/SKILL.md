@@ -3,7 +3,7 @@ name: alertas-financeiros
 description: >-
   Os alertas financeiros do dia da Health & Safety: o que pede ação do dono
   antes que ele pergunte — aperto de caixa nas próximas semanas, cliente que
-  virou inadimplente desde o último dia útil, mês que fechou em prejuízo,
+  virou inadimplente desde o último dia útil, mês que fechou em prejuízo (no dia do fechamento),
   importação grande lançada e projeção de caixa desatualizada. Use no resumo
   diário e SEMPRE que perguntarem "tem algo que eu precise saber?", "algum
   alerta?", "o que pede atenção?" ou "alguma coisa preocupante?".
@@ -31,9 +31,9 @@ prontos nas colunas.
 WITH hoje AS (SELECT current_date AS d),
 ant AS (SELECT max(t.data) AS d FROM gold.dim_tempo t, hoje
          WHERE t.dia_util AND t.data < hoje.d),
--- dia útil do mês (1º, 2º…): o alerta de mês fechado só vale nos 5 primeiros
-du AS (SELECT count(*) AS n FROM gold.dim_tempo t, hoje
-        WHERE t.dia_util AND t.data >= date_trunc('month', hoje.d) AND t.data <= hoje.d),
+-- o dia do fechamento: 1º dia útil a partir do dia 25 (o mês anterior fecha)
+df AS (SELECT min(t.data) AS d FROM gold.dim_tempo t, hoje
+        WHERE t.dia_util AND t.data >= date_trunc('month', hoje.d)::date + 24),
 cx AS (SELECT * FROM gold.caixa_semanal),
 pior AS (SELECT semana, inicio_semana, fim_semana, fluxo_acumulado_conservador
            FROM cx ORDER BY fluxo_acumulado_conservador, semana LIMIT 1),
@@ -46,7 +46,7 @@ virou AS (SELECT cliente_nome, count(*) AS titulos, sum(saldo) AS valor, min(ven
            GROUP BY cliente_nome
           HAVING sum(saldo) >= 10000),
 fechou AS (SELECT mes, resultado FROM gold.dre_mensal, hoje
-            WHERE mes = (date_trunc('month', hoje.d) - interval '2 months')::date)
+            WHERE mes = (date_trunc('month', hoje.d) - interval '1 month')::date)
 SELECT 1 AS ordem, 'projecao_desatualizada' AS alerta,
        'a projeção de caixa é de ' || to_char(max(data_referencia), 'DD/MM')
          || ': o cálculo da madrugada não rodou' AS o_que,
@@ -72,9 +72,9 @@ SELECT 4, 'cliente_virou_inadimplente',
   FROM virou
 UNION ALL
 SELECT 5, 'mes_fechou_em_prejuizo',
-       to_char(fechou.mes, 'MM/YYYY') || ' fechou em prejuízo (agora é número medido)',
+       to_char(fechou.mes, 'MM/YYYY') || ' fechou em prejuízo (fechamento de hoje)',
        round(fechou.resultado), NULL
-  FROM fechou, du WHERE du.n <= 5 AND fechou.resultado < 0
+  FROM fechou, df, hoje WHERE hoje.d = df.d AND fechou.resultado < 0
 ORDER BY ordem, valor DESC NULLS LAST;
 ```
 

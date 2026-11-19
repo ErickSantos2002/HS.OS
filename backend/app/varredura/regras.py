@@ -77,6 +77,20 @@ def primeiro_dia_util_da_semana(d: date) -> bool:
     return not any(dia_util(d - timedelta(days=k)) for k in range(1, d.weekday() + 1))
 
 
+# Dia do mês a partir do qual o mês anterior está lançado o bastante para fechar.
+# Medido em 19/11/2026 (do que hoje está lançado, quanto já existia): no dia 15 do
+# mês seguinte, setembro 1,1% e outubro 82,7%; no dia 25, 91,6% e 100%. O "tudo
+# até o dia 15" do Financeiro não se cumpre — por isso 25, não 16.
+DIA_DO_FECHAMENTO = 25
+
+
+def dia_do_fechamento(d: date) -> bool:
+    """É o 1º dia útil a partir do dia 25 do mês: o dia do fechamento do mês anterior."""
+    if d.day < DIA_DO_FECHAMENTO or not dia_util(d):
+        return False
+    return not any(dia_util(date(d.year, d.month, k)) for k in range(DIA_DO_FECHAMENTO, d.day))
+
+
 @dataclass(frozen=True)
 class Config:
     ligada: bool

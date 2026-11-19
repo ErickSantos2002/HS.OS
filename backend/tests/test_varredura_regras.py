@@ -11,7 +11,7 @@ import pytest
 
 from app.varredura.regras import (
     CABECALHOS_VARREDURA, FUSO, config, dia_util, feriados, horario, novidade,
-    pode_pedir, primeiro_dia_util_da_semana, validar_numeros, velha,
+    pode_pedir, primeiro_dia_util_da_semana, dia_do_fechamento, validar_numeros, velha,
 )
 
 
@@ -230,3 +230,16 @@ def test_cabecalho_financeiro_e_reconhecido_como_varredura():
     """O `/recuperar` só trata sem recuo a janela que abre com um cabeçalho
     conhecido; sem o financeiro na lista, a narração viraria mensagem."""
     assert "[Semana financeira — " in CABECALHOS_VARREDURA
+
+
+def test_dia_do_fechamento_e_o_primeiro_util_a_partir_do_25():
+    """O fechamento do mês anterior sai no 1º dia útil a partir do dia 25, não no
+    dia 16: medido em 19/11/2026, do que hoje está lançado, só 1,1% de setembro
+    existia no dia 15 de outubro, e 91,6% no dia 25 (outubro: 82,7% × 100%). A
+    meta de "tudo até o dia 15" que o Financeiro deu não se cumpre."""
+    assert dia_do_fechamento(date(2026, 11, 25))            # quarta
+    assert not dia_do_fechamento(date(2026, 11, 24))
+    assert not dia_do_fechamento(date(2026, 11, 26))        # só um por mês
+    assert dia_do_fechamento(date(2026, 10, 26))            # 25/10 é domingo
+    assert not dia_do_fechamento(date(2026, 10, 25))
+    assert dia_do_fechamento(date(2026, 12, 28))            # 25/12 Natal, 26–27 fim de semana
