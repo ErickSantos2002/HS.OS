@@ -20,14 +20,14 @@ uma segunda régua: a receita da `faturamento` e a despesa da `custos` não usam
 mesmas exceções que o DRE (parcelamento no mês da parcela, dívida fora do
 resultado), e o número mudaria conforme você montasse o SQL.
 
-⚠️ **O DRE ainda NÃO tem custo da mercadoria vendida (CMV).** A venda de um
-aparelho entra inteira na receita, e a compra dele (importação, frete e imposto de
-importação) fica **abaixo da linha**, como compra de estoque. O `resultado` é,
-portanto, **antes do custo da mercadoria**, e sai bem acima do lucro de verdade —
-as margens passam de 50%. Diga isso em TODA resposta de resultado ou margem: o
-nome do número é *"resultado antes do custo da mercadoria"*, nunca só "lucro".
-Custo unitário dos carros-chefe é a tela Centro de Custo do DataCoreHS; o DRE
-ainda não o usa.
+**O DRE desconta o custo da mercadoria vendida (CMV)** desde 19/11/2026: cada item
+vendido leva o custo unitário do produto — dos carros-chefe, o da tela Centro de
+Custo (importação e custos diretos, sem a despesa fixa, que já está no DRE); dos
+outros, o do cadastro. ⚠️ **Produto sem custo cadastrado entra sem CMV**, e o
+resultado daquele mês sai acima do real: a `cobertura_cmv_pct` diz quanto da
+receita de produto tem custo, e a consulta transforma isso em ressalva. ⚠️ Antes
+de 2026 o custo é o de 2026 aplicado ao passado (`cmv_de_outro_ano`): o lucro de
+2024 e 2025 é aproximado.
 
 ⚠️ **Nunca some nem divida de cabeça.** Toda conta — total do período, margem,
 variação contra o mês anterior, veredito — sai das consultas abaixo. A sua
@@ -40,16 +40,18 @@ Midas calculou à mão saíram errados; os que vieram prontos da consulta, certo
   receita bruta              vendas (gold.fato_vendas) + serviços (gold.fato_servicos)
 − impostos sobre venda       grupo 7 do plano de contas
 = receita líquida
+− CMV                        custo da mercadoria vendida (fato_vendas.cmv)
+= lucro bruto
 − despesa operacional        grupos 1 a 6, 9 (cartão) e 10, mais conta sem categoria
 = resultado operacional
 − despesa financeira         tarifas bancárias
 − impostos sobre lucro       grupo 8
-= resultado                  ← "o lucro do mês", ANTES do custo da mercadoria
+= resultado                  ← "o lucro do mês"
 − amortização de dívida      parcelas de empréstimo
 = resultado após dívida      ← "o que sobrou depois de pagar o banco"
 
-abaixo da linha, fora do resultado: importação (a compra da mercadoria),
-dividendos, investimento
+abaixo da linha, fora do resultado: importação (compra de estoque — o que já foi
+vendido está no CMV), dividendos, investimento
 ```
 
 Regras da tabela que você **diz** quando importam:
@@ -62,8 +64,7 @@ Regras da tabela que você **diz** quando importam:
   conta só, então os juros também estão na amortização: o `resultado` sai um pouco
   **maior** que o contábil, e o `resultado_apos_divida` está certo.
 - **Importação, dividendos e investimento** não entram no resultado. Mostre-os em
-  linha própria quando aparecerem — a importação **sempre** que falar de resultado,
-  porque é ela que falta para chegar perto do lucro de verdade.
+  linha própria quando aparecerem.
 - **É resultado por competência de emissão, não caixa.** "Quanto entrou na conta"
   é a skill `contas-receber` (agenda de caixa), e saldo bancário não chega a você.
 
@@ -84,6 +85,10 @@ SELECT to_char(b.mes, 'YYYY-MM') AS mes,
             WHEN b.mes = (h.m - interval '1 month')::date THEN 'provisório'
             ELSE 'medido' END                                          AS estado,
        b.receita_bruta, b.impostos_sobre_venda, b.receita_liquida,
+       b.cmv, b.lucro_bruto,
+       CASE WHEN b.mes_lancado AND b.mes <= h.m
+            THEN round(100 * b.lucro_bruto / nullif(b.receita_liquida, 0), 1) END AS margem_bruta_pct,
+       b.cobertura_cmv_pct, b.receita_produto_sem_custo,
        b.despesa_operacional, b.resultado_operacional,
        b.despesa_financeira, b.impostos_sobre_lucro,
        b.resultado,
@@ -107,7 +112,10 @@ SELECT to_char(b.mes, 'YYYY-MM') AS mes,
        b.despesa_grupo_5_diretoria, b.despesa_grupo_6_materiais,
        b.despesa_grupo_9_cartoes, b.despesa_grupo_10_outros, b.despesa_sem_categoria,
        concat_ws('; ',
-         'sem custo da mercadoria vendida: o resultado sai acima do lucro real',
+         CASE WHEN b.cobertura_cmv_pct < 95
+              THEN 'só ' || round(b.cobertura_cmv_pct) || '% da receita de produto tem custo cadastrado: o resultado sai acima do real' END,
+         CASE WHEN b.cmv_de_outro_ano <> 0
+              THEN 'custo da mercadoria de outro ano: lucro aproximado' END,
          CASE WHEN NOT b.tem_fatura_cartao
               THEN 'sem fatura de cartão no Tiny: despesa subestimada' END,
          CASE WHEN b.despesa_sem_categoria <> 0
@@ -116,12 +124,14 @@ SELECT to_char(b.mes, 'YYYY-MM') AS mes,
               THEN 'parcelas do Itaú tratadas como dívida, a confirmar pelo Financeiro' END,
          'pessoal parcial: o Tiny tem o salário líquido, não a folha')  AS ressalvas,
        (    abs(b.receita_liquida - (b.receita_bruta - b.impostos_sobre_venda)) < 0.01
+        AND abs(b.lucro_bruto - (b.receita_liquida - b.cmv)) < 0.01
+        AND abs(b.resultado_operacional - (b.lucro_bruto - b.despesa_operacional)) < 0.01
         AND abs(b.despesa_operacional - (b.despesa_grupo_1_equipe + b.despesa_grupo_2_sede
               + b.despesa_grupo_3_servicos_de_apoio + b.despesa_grupo_4_gerais
               + b.despesa_grupo_5_diretoria + b.despesa_grupo_6_materiais
               + b.despesa_grupo_9_cartoes + b.despesa_grupo_10_outros
               + b.despesa_sem_categoria)) < 0.01
-        AND abs(b.resultado - (b.receita_liquida - b.despesa_operacional
+        AND abs(b.resultado - (b.resultado_operacional
               - b.despesa_financeira - b.impostos_sobre_lucro)) < 0.01
         AND abs(b.resultado_apos_divida - (b.resultado - b.amortizacao_de_divida)) < 0.01
        )                                                                AS fecha
@@ -150,6 +160,11 @@ SELECT min(to_char(mes, 'YYYY-MM')) AS de, max(to_char(mes, 'YYYY-MM')) AS ate,
        count(*) FILTER (WHERE NOT tem_fatura_cartao)   AS meses_sem_cartao,
        sum(receita_bruta)::numeric(14,2)               AS receita_bruta,
        sum(receita_liquida)::numeric(14,2)             AS receita_liquida,
+       sum(cmv)::numeric(14,2)                         AS cmv,
+       sum(lucro_bruto)::numeric(14,2)                 AS lucro_bruto,
+       round(100 * sum(lucro_bruto) / nullif(sum(receita_liquida), 0), 1) AS margem_bruta_pct,
+       sum(receita_produto_sem_custo)::numeric(14,2)   AS receita_produto_sem_custo,
+       sum(cmv_de_outro_ano)::numeric(14,2)            AS cmv_de_outro_ano,
        sum(despesa_operacional)::numeric(14,2)         AS despesa_operacional,
        sum(resultado)::numeric(14,2)                   AS resultado,
        round(100 * sum(resultado) / nullif(sum(receita_liquida), 0), 1) AS margem_pct,
@@ -198,16 +213,16 @@ parcial" vale sempre: nunca chame o grupo 1 de folha nem de custo de pessoal.
 - ⚠️ **Mês provisório ou em curso NÃO abre com "lucro" nem "prejuízo"** — a
   consulta já devolve `veredito` = "ainda não fechou". Quem lê só a primeira
   linha (o CEO, no celular) leva o veredito embora. Abra assim: *"Outubro ainda
-  não fechou: o que está lançado dá R$ X antes do custo da mercadoria, mas falta
-  despesa a lançar."* Em 19/11/2026 a abertura dizia "lucro" e a frase seguinte
+  não fechou: o que está lançado dá R$ X, mas falta despesa a lançar."* Em 19/11/2026 a abertura dizia "lucro" e a frase seguinte
   "não é lucro".
 - **Mês medido: comece pelo veredito e pelo `resultado`**, com o mês e o `estado`: *"Setembro/2026
-  fechou com resultado de R$ X antes do custo da mercadoria (medido)."* Depois a
-  margem, o resultado após a dívida, a **importação do mês** (a compra de mercadoria
-  que o resultado não desconta) e, se pedirem, as linhas do DRE e os grupos de
-  despesa.
-- ⚠️ **Não apresente a margem como margem de lucro.** É margem antes do custo da
-  mercadoria; diga assim.
+  fechou com prejuízo de R$ X (medido)."* Depois a margem, o lucro bruto e a
+  margem bruta, o resultado após a dívida e, se pedirem, as linhas do DRE e os
+  grupos de despesa.
+- **Duas margens, com nome:** `margem_bruta_pct` (depois do custo da mercadoria) e
+  `margem_pct` (depois de tudo). Nunca "a margem" sem dizer qual.
+- **Importação não é custo do mês**: é estoque comprado. Se perguntarem por que o
+  caixa não acompanha o lucro, ela é uma das razões — mostre-a como linha própria.
 - **"Quanto sobrou"** é o `resultado_apos_divida` — diga que é depois de pagar as
   parcelas do empréstimo. **"Lucro"** é o `resultado`.
 - **Explique o veredito só com o que a consulta mostrou.** Causa que você não

@@ -193,7 +193,7 @@ HSGrowth e respondo como está o dinheiro da empresa:
 - **A pagar** — o que vence, o que está atrasado, por categoria
 - **Agenda de caixa** — o que entra e sai nas próximas semanas
 - **Custo do mês** — pela régua do Balancete do DataCoreHS
-- **Resultado do mês** — o DRE do DataCoreHS, antes do custo da mercadoria
+- **Resultado do mês** — o DRE do DataCoreHS: lucro bruto, resultado e margens
 - **Estoque e preço de custo** de produto
 - **Receita prevista** — OS a faturar, propostas e funil, lidos como previsão
 - **Calendário financeiro** — o que vence ou se faz em cada dia do mês
@@ -285,8 +285,8 @@ daqui já fez isso 560 vezes em 28 horas.
 
 ⚠️ **Resultado do mês só sai do `gold.dre_mensal`, pela skill
 `resultado-mensal`.** Nunca somo faturamento menos custo: seria uma segunda
-régua. O DRE ainda não tem custo da mercadoria, então digo
-"antes do custo da mercadoria", nunca só "lucro".
+régua. Produto sem custo cadastrado entra sem custo da mercadoria: digo a
+cobertura quando a consulta trouxer a ressalva.
 
 Fora desta versão: saldo em conta e extrato, comissão, margem por produto, e qualquer
 escrita.
@@ -629,9 +629,9 @@ GestorHS (OS a faturar, propostas) e do HSGrowth (funil).
 
 ## Margem e custo da mercadoria
 
-O CMV e a margem por produto não saem do banco: o custo cheio dos carros-chefe é
-conta da tela Centro de Custo do DataCoreHS. Só uma parte pequena dos produtos
-tem custo cadastrado.
+O CMV do mês está no `gold.dre_mensal` (skill `resultado-mensal`) e, por item
+vendido, em `gold.fato_vendas` (`custo_unitario`, `cmv`, `fonte_custo`). Margem
+por produto ainda não tem consulta pronta: não monto à mão.
 """
 
 

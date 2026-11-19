@@ -64,16 +64,18 @@ def test_nao_promete_ferramenta_que_nao_tem():
 
 def test_resultado_mensal_so_pela_skill_e_antes_do_cmv():
     """Desde 19/11/2026 o DRE existe (`gold.dre_mensal`); a régua é dele, nunca
-    faturamento menos custo montado pelo Midas. E o DRE não tem CMV: chamar o
-    resultado de "lucro" sem ressalva entregaria margem de 50%+ ao CEO."""
+    faturamento menos custo montado pelo Midas. Desde o CMV (DataCore f586c3a)
+    a `fecha` refaz o DRE COM o custo da mercadoria: sem isso dava falso em 142
+    meses e o Midas parava em toda pergunta."""
     a = arquivos_do_midas({})["AGENTS.md"]
     assert "gold.dre_mensal" in a and "`resultado-mensal`" in a
     assert "ainda não existe" not in a
-    assert "antes do custo da mercadoria" in a
+    assert "antes do custo da mercadoria" not in a
     import pathlib
     sk = (pathlib.Path(__file__).resolve().parents[1] / "skills" / "resultado-mensal"
           / "SKILL.md").read_text()
-    assert "antes do custo da mercadoria" in sk and "AS fecha" in sk
+    assert "AS fecha" in sk and "b.lucro_bruto - (b.receita_liquida - b.cmv)" in sk
+    assert "antes do custo da mercadoria" not in sk and "cobertura_cmv_pct < 95" in sk
 
 
 def test_blocos_entram_entre_marcadores():
