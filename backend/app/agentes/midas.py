@@ -191,7 +191,9 @@ HSGrowth e respondo como está o dinheiro da empresa:
   meta do trimestre
 - **A receber** — em aberto, vencido, inadimplência
 - **A pagar** — o que vence, o que está atrasado, por categoria
-- **Agenda de caixa** — o que entra e sai nas próximas semanas
+- **Agenda de caixa** — o que vence a receber e a pagar, título a título
+- **Caixa projetado** — 13 semanas, a semana mais apertada e quanto é preciso
+  ter em conta (fluxo, não saldo: o saldo vem de quem pergunta)
 - **Custo do mês** — pela régua do Balancete do DataCoreHS
 - **Resultado do mês** — o DRE do DataCoreHS: lucro bruto, resultado e margens
 - **Estoque e preço de custo** de produto
@@ -302,7 +304,10 @@ a skill — não respondo de memória e não monto a consulta na hora.
   projeção, "fecha acima ou abaixo"** → a consulta "Ritmo e projeção" dela; o
   `veredito` que ela devolve é a resposta. **Resumo diário** → consulta "Situação
   do dia" (skill `contas-receber`) + "Ritmo e projeção"; nenhum número fora delas.
-- **A receber, em aberto, vencido, a pagar, agenda de caixa, fluxo de caixa** →
+- **"Vamos ter caixa?", fluxo de caixa, caixa projetado, próximas semanas ou
+  meses, "quanto preciso ter em conta"** → skill `caixa-projetado`; o
+  `veredito` e o `precisa_ter_em_conta_hoje` da consulta são a resposta.
+- **A receber, em aberto, vencido, a pagar, o que vence esta semana** →
   skill `contas-receber`.
 - **Custo do mês, despesa, gasto, "sem impostos", estoque, preço de custo** →
   skill `custos`.
@@ -442,6 +447,7 @@ O espelho do ERP Tiny e as notas de serviço. Postgres.
 | Faturamento, meta, produto, compradores | `gold.fato_vendas`, `tiny.servicos`, `tiny.configuracoes` | `faturamento` |
 | A receber, vencido | `tiny.contas_receber` | `contas-receber` |
 | A pagar, agenda de caixa | `tiny.contas_pagar` | `contas-receber` |
+| Caixa projetado, 13 semanas | `gold.caixa_semanal` | `caixa-projetado` |
 | Custo do mês, por grupo | `tiny.contas_pagar` | `custos` |
 | Resultado do mês (DRE), margem | `gold.dre_mensal` | `resultado-mensal` |
 | Estoque, preço de custo | `gold.dim_produto` | `custos` |

@@ -33,7 +33,8 @@ def test_nenhum_arquivo_passa_do_teto():
 def test_agents_aponta_as_skills():
     a = arquivos_do_midas({})["AGENTS.md"]
     for slug in ("faturamento", "contas-receber", "custos", "calendario-financeiro",
-                 "funil-vendas", "funil-servicos", "pipeline-crm", "resultado-mensal"):
+                 "funil-vendas", "funil-servicos", "pipeline-crm", "resultado-mensal",
+                 "caixa-projetado"):
         assert f"`{slug}`" in a, slug
 
 
@@ -121,7 +122,8 @@ def test_skills_do_midas_sem_valor_absoluto_da_empresa():
     saldo da dívida nem o a pagar em aberto."""
     import pathlib
     raiz = pathlib.Path(__file__).resolve().parents[1] / "skills"
-    for nome in ("contas-receber", "custos", "calendario-financeiro", "resultado-mensal"):
+    for nome in ("contas-receber", "custos", "calendario-financeiro", "resultado-mensal",
+                 "caixa-projetado"):
         t = (raiz / nome / "SKILL.md").read_text()
         for numero in ("3.831.118,83", "714.387,53", "3.116.731,30", "1.678.128,10",
                        "813.795,84", "31.628.116,68"):
@@ -141,3 +143,16 @@ def test_mes_provisorio_nao_abre_com_lucro_e_pagina_so_quando_pedirem():
     assert "veredito_so_meses_medidos" in sk
     a = arquivos_do_midas({})["AGENTS.md"]
     assert "## Página só quando pedirem" in a
+
+
+def test_caixa_projetado_e_fluxo_e_avisa_a_importacao():
+    """O a pagar é lançado depois de pago: a saída é ritmo, o erro do backtest
+    passou de 70%, e a importação (R$ 1,5 mi num mês) fica fora se não lançada.
+    O Midas responde pelo pior ponto do acumulado PESSIMISTA, nunca pelo
+    acumulado simples, e diz que é fluxo, não saldo."""
+    import pathlib
+    sk = (pathlib.Path(__file__).resolve().parents[1] / "skills" / "caixa-projetado"
+          / "SKILL.md").read_text()
+    assert "gold.caixa_semanal" in sk and "precisa_ter_em_conta_hoje" in sk
+    assert "fluxo_acumulado_conservador" in sk and "importacao_media_mes" in sk
+    assert "data_referencia" in sk
