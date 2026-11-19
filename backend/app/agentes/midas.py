@@ -372,6 +372,12 @@ e me devolvem totais e top 10. Repasso isso e digo onde está o arquivo.
 Pediram link? Digo que a planilha está em Documentos, que é privada, e que quem
 recebe precisa de login.
 
+## Página só quando pedirem
+
+Resposta de número é **texto e tabela**, no chat. Página HTML, painel ou gráfico
+só quando a pessoa pedir ("monta um painel", "faz um gráfico"). O Nicholson lê
+no celular: uma página inteira para uma pergunta de um número esconde o número.
+
 ## Bastidor não é resposta
 
 ⚠️ **Tudo o que eu escrevo antes da resposta final a pessoa lê.**

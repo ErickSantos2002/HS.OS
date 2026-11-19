@@ -90,12 +90,15 @@ SELECT to_char(b.mes, 'YYYY-MM') AS mes,
        CASE WHEN b.mes_lancado AND b.mes <= h.m
             THEN round(100 * b.resultado / nullif(b.receita_liquida, 0), 1) END AS margem_pct,
        CASE WHEN NOT b.mes_lancado OR b.mes > h.m THEN NULL
+            WHEN b.mes >= (h.m - interval '1 month')::date
+              THEN 'ainda não fechou: falta despesa a lançar'
             WHEN b.resultado >= 0 THEN 'lucro' ELSE 'prejuízo' END      AS veredito,
        CASE WHEN b.mes_lancado AND b.mes <= h.m
             THEN (b.resultado - b.resultado_mes_anterior)::numeric(14,2) END
                                                                         AS variacao_vs_mes_anterior,
        b.amortizacao_de_divida, b.resultado_apos_divida,
        CASE WHEN NOT b.mes_lancado OR b.mes > h.m THEN NULL
+            WHEN b.mes >= (h.m - interval '1 month')::date THEN 'ainda não fechou'
             WHEN b.resultado_apos_divida >= 0 THEN 'sobrou' ELSE 'faltou' END
                                                                         AS depois_da_divida,
        b.importacao, b.dividendos, b.investimento,
@@ -154,13 +157,15 @@ SELECT min(to_char(mes, 'YYYY-MM')) AS de, max(to_char(mes, 'YYYY-MM')) AS ate,
        sum(resultado_apos_divida)::numeric(14,2)       AS resultado_apos_divida,
        sum(importacao)::numeric(14,2)                  AS importacao_no_periodo,
        count(*) FILTER (WHERE resultado < 0)           AS meses_com_prejuizo,
-       CASE WHEN sum(resultado) >= 0 THEN 'lucro' ELSE 'prejuízo' END AS veredito,
+       CASE WHEN sum(resultado) FILTER (WHERE NOT nao_firme) >= 0
+            THEN 'lucro' ELSE 'prejuízo' END              AS veredito_so_meses_medidos,
        sum(resultado) FILTER (WHERE NOT nao_firme)::numeric(14,2) AS resultado_so_meses_medidos
   FROM p;
 ```
 
-Se `meses_provisorios_ou_em_curso` > 0, a resposta diz que o período inclui mês
-provisório e mostra também o `resultado_so_meses_medidos`.
+O veredito do período é o dos meses medidos (`veredito_so_meses_medidos`). Se
+`meses_provisorios_ou_em_curso` > 0, a resposta diz quais meses ficaram de fora do
+veredito e por quê, e mostra o `resultado` com eles só como informação.
 
 ## Confira antes de responder
 
@@ -190,7 +195,13 @@ parcial" vale sempre: nunca chame o grupo 1 de folha nem de custo de pessoal.
 
 ## Ao responder
 
-- **Comece pelo veredito e pelo `resultado`**, com o mês e o `estado`: *"Setembro/2026
+- ⚠️ **Mês provisório ou em curso NÃO abre com "lucro" nem "prejuízo"** — a
+  consulta já devolve `veredito` = "ainda não fechou". Quem lê só a primeira
+  linha (o CEO, no celular) leva o veredito embora. Abra assim: *"Outubro ainda
+  não fechou: o que está lançado dá R$ X antes do custo da mercadoria, mas falta
+  despesa a lançar."* Em 19/11/2026 a abertura dizia "lucro" e a frase seguinte
+  "não é lucro".
+- **Mês medido: comece pelo veredito e pelo `resultado`**, com o mês e o `estado`: *"Setembro/2026
   fechou com resultado de R$ X antes do custo da mercadoria (medido)."* Depois a
   margem, o resultado após a dívida, a **importação do mês** (a compra de mercadoria
   que o resultado não desconta) e, se pedirem, as linhas do DRE e os grupos de

@@ -124,3 +124,18 @@ def test_skills_do_midas_sem_valor_absoluto_da_empresa():
         for numero in ("3.831.118,83", "714.387,53", "3.116.731,30", "1.678.128,10",
                        "813.795,84", "31.628.116,68"):
             assert numero not in t, (nome, numero)
+
+
+def test_mes_provisorio_nao_abre_com_lucro_e_pagina_so_quando_pedirem():
+    """19/11/2026: outubro (provisório, 72% de margem por falta de lançamento)
+    abriu com "lucro de R$ 811 mil" e só na frase seguinte "não é lucro" — quem lê
+    a primeira linha no celular leva o lucro embora. O veredito do mês não firme
+    sai da CONSULTA, não da instrução. E setembro veio com um painel HTML inteiro
+    para uma pergunta de um número."""
+    import pathlib
+    sk = (pathlib.Path(__file__).resolve().parents[1] / "skills" / "resultado-mensal"
+          / "SKILL.md").read_text()
+    assert "'ainda não fechou: falta despesa a lançar'" in sk
+    assert "veredito_so_meses_medidos" in sk
+    a = arquivos_do_midas({})["AGENTS.md"]
+    assert "## Página só quando pedirem" in a
