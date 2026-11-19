@@ -977,8 +977,11 @@ ganha a pagar, custos (régua do Balancete), `calendario-financeiro` e GestorHS/
 - **Resultado mensal ainda não existe:** `gold.dre_mensal` não foi construído; o Midas diz
   que não tem resultado do mês. Prompt para a sessão do DataCore em
   `docs/superpowers/specs/2026-11-18-cfo-midas-datacore-prompt.md`.
-- **Varredura tipo `financeiro`** (migração `040`): segunda ou 1º dia útil às 08:00,
-  limite 11:00, entregue na conversa do Nicholson com o Midas.
+- **Varredura tipo `financeiro`** (migração `040`): **todo dia útil** às 08:00 (era
+  semanal até 19/11/2026 — o Nicholson pediu diário, na conversa, sem documento),
+  limite 11:00, uma por pessoa em `allowed_user_ids` do `midas` (o Nicholson e o Erick,
+  que recebe a própria cópia para conferir). No 1º dia útil da semana a mensagem
+  acrescenta o `calendario-financeiro`. Cabeçalho `[Situação financeira — <nome>]`.
   ⚠️ **A `040` precisa estar aplicada ANTES do deploy**; a semeadura roda em savepoint,
   então código antes da migração não derruba a varredura dos Guardis.
 - ⚠️ **`publicar_link` saiu de `compradores_produto` e `inadimplencia` para TODOS** (não só

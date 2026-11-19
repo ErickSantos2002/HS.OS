@@ -17,7 +17,7 @@ from datetime import datetime
 from app.email.cifra import cifrar, decifrar
 from app.varredura.regras import (FUSO, TETO_RESUMO, TETO_SIMULTANEO, chaves_ligadas, Config, config, dia_util,
                                   horario, novidade, pode_pedir,
-                                  primeiro_dia_util_da_semana, validar_numeros,
+                                  validar_numeros,
                                   velha)
 
 logger = logging.getLogger(__name__)
@@ -243,9 +243,9 @@ async def semear(conn, cfg: Config, agora: datetime) -> int:
     if not dia_util(dia):
         return 0
     total = 0
-    tipos = ["manha", "tarde", "quadro"]
-    if primeiro_dia_util_da_semana(dia):
-        tipos.append("financeiro")  # uma vez por semana, para o Midas
+    # "financeiro": todo dia útil, desde 19/11/2026 — o Nicholson pediu a situação
+    # financeira diária na conversa (era semanal, só no 1º dia útil da semana).
+    tipos = ["manha", "tarde", "quadro", "financeiro"]
     for tipo in tipos:
         quando = horario(cfg, tipo, dia)
         if velha(tipo, quando, agora):

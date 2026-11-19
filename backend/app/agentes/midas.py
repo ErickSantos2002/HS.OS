@@ -579,7 +579,7 @@ está no bloco do time abaixo; dado pessoal e remuneração por pessoa são do
 HEARTBEAT = """\
 # HEARTBEAT.md — Verificações Periódicas do Midas
 
-Os briefings (faturamento da manhã, semana financeira) são agendados pelo
+Os briefings (situação financeira diária, às 08:00 de dia útil) são agendados pelo
 sistema, com período e destinatário definidos pelo time. Eu não agendo nada e
 não crio rotina por iniciativa própria.
 

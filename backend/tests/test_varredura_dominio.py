@@ -227,13 +227,16 @@ SEG_23 = datetime(2026, 11, 23, 10, 0, tzinfo=timezone.utc)  # 07:00 local, segu
 TER_24 = datetime(2026, 11, 24, 10, 0, tzinfo=timezone.utc)
 
 
-def test_semear_financeiro_so_no_primeiro_dia_util():
+def test_semear_financeiro_todo_dia_util():
+    """Era semanal; desde 19/11/2026 é diário (pedido do Nicholson)."""
+    for quando in (TER_24, SEG_23):
+        c = Conn()
+        rodar(d.semear(c, config({"ligada": True}), quando))
+        assert d.SQL_SEMEAR_FINANCEIRO in [sql for sql, _ in c.exec]
     c = Conn()
-    rodar(d.semear(c, config({"ligada": True}), TER_24))
+    sabado = datetime(2026, 11, 21, 10, 0, tzinfo=timezone.utc)
+    rodar(d.semear(c, config({"ligada": True}), sabado))
     assert d.SQL_SEMEAR_FINANCEIRO not in [sql for sql, _ in c.exec]
-    c = Conn()
-    rodar(d.semear(c, config({"ligada": True}), SEG_23))
-    assert d.SQL_SEMEAR_FINANCEIRO in [sql for sql, _ in c.exec]
 
 
 def test_semear_financeiro_usa_quem_o_midas_atende():

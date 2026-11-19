@@ -465,17 +465,27 @@ def test_financeiro_vai_para_o_midas_na_sessao_do_destinatario():
                                       disparar=_disparar(log)))
     [send] = [e for e in log if e[0] == "chat.send"]
     assert send[1:3] == ("midas", "u-nicholson")
-    assert send[3].startswith("[Semana financeira — Nicholson]")
+    assert send[3].startswith("[Situação financeira — Nicholson]")
     assert send[4] == dv.PREFIXO_RUN
     assert "insert_conversations" not in [e[0] for e in log]
 
 
-def test_mensagem_financeiro_pede_a_semana_e_proibe_pagina():
-    m = dv.mensagem("financeiro", "Nicholson Pimentel", None)
-    assert m.startswith("[Semana financeira — Nicholson]")
-    for p in ("agenda de caixa", "calendario-financeiro", "medido", "provisório", "incompleto", "trimestre", "publicar_pagina"):
+def test_mensagem_financeiro_diaria_e_proibe_pagina():
+    """Desde 19/11/2026 a situação financeira é diária, na conversa (o Nicholson
+    não queria documento). Segunda acrescenta a semana do calendário; nos outros
+    dias, não — repetir o calendário todo dia vira ruído e ninguém lê."""
+    from datetime import date
+    m = dv.mensagem("financeiro", "Nicholson Pimentel", None, date(2026, 11, 24))  # terça
+    assert m.startswith("[Situação financeira — Nicholson]")
+    for p in ("próximos 7 dias", "Ritmo e projeção", "medido", "provisório", "incompleto",
+              "trimestre", "publicar_pagina"):
         assert p in m
+    assert "calendario-financeiro" not in m
     assert "varredura_registrar" not in m  # não é a varredura do Guardi
+    seg = dv.mensagem("financeiro", "Nicholson Pimentel", None, date(2026, 11, 23))
+    assert "calendario-financeiro" in seg
+    quarta_de_cinzas = dv.mensagem("financeiro", "Nicholson", None, date(2027, 2, 10))
+    assert "calendario-financeiro" in quarta_de_cinzas  # 1º dia útil da semana do Carnaval
 
 
 def test_financeiro_adiado_quando_o_midas_tem_turno_aberto():

@@ -248,4 +248,4 @@ def separar_nao_ligados(numeros: dict, ligados: list[str] | None,
 # `/recuperar` usa para reconhecer a janela no histórico do gateway.
 CABECALHOS_VARREDURA = ("[Varredura da manhã — ", "[Conferência da tarde — ",
                         "[Varredura pedida pela Nina — ", "[Quadro da equipe para ",
-                        "[Semana financeira — ")
+                        "[Semana financeira — ", "[Situação financeira — ")

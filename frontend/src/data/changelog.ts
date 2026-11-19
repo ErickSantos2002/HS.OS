@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.18.0",
+    date: "2026-11-19",
+    changes: [
+      {
+        kind: "melhoria",
+        text: "O Midas manda a situação financeira da empresa todo dia útil às 8h, direto na conversa: o que entra e sai na semana, vencidos novos e o faturamento do trimestre contra a meta. Na segunda, também o calendário do Financeiro.",
+      },
+    ],
+  },
+  {
     version: "2.17.0",
     date: "2026-11-18",
     changes: [

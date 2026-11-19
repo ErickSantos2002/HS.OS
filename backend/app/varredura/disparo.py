@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import date, datetime
 
 from app.agenda.dominio import guardi_de
 from app.dependencies import normalizar_agent_id
@@ -27,7 +27,7 @@ from app.disparador_lembretes import (SQL_DONO_ATIVO, SQL_NOME, SQL_RECADO,
                                       SQL_TURNO_ABERTO, _primeiro_nome)
 from app.routers.mcp_anexos import JANELA_TURNO_S
 from app.varredura import dominio
-from app.varredura.regras import ADIAMENTO, ADIAMENTO_MAX, velha
+from app.varredura.regras import ADIAMENTO, ADIAMENTO_MAX, primeiro_dia_util_da_semana, velha
 
 logger = logging.getLogger(__name__)
 
@@ -91,27 +91,34 @@ _QUADRO = (
 )
 
 _FINANCEIRO = (
-    "Monte a semana financeira da empresa, para a reunião de segunda: "
-    "(1) a agenda de caixa dos próximos 7 dias, a pagar e a receber, com as "
-    "parcelas do Itaú em linha própria; (2) os vencidos novos desde a semana "
-    "passada; (3) o que o `calendario-financeiro` marca para esta semana "
-    "(impostos, folha, fechamentos); (4) o faturamento do trimestre até agora contra "
-    "a meta do trimestre (skill `faturamento`). Diga o tipo de cada número — medido, "
-    "provisório ou incompleto (e 'previsto' para o que ainda vai vencer); incompleto "
-    "é folha parcial ou mês sem a fatura do cartão, que não se apresenta como total — e de onde ele veio. Nunca invente "
-    "número: o que não conseguiu ler, diga que não conseguiu. Responda aqui no "
-    "chat — NUNCA publique em página (`publicar_pagina` gera link público)."
+    "Mande ao dono desta conversa a situação financeira de hoje da empresa: "
+    "(1) o que entra e sai hoje e nos próximos 7 dias, a pagar e a receber, com as "
+    "parcelas do Itaú em linha própria; (2) os vencidos novos a receber desde o "
+    "último dia útil; (3) o faturamento do trimestre até agora contra a meta do "
+    "trimestre, com o veredito da consulta \"Ritmo e projeção\" (skill `faturamento`). "
+    "Toda soma, ritmo e projeção sai da consulta, não da sua conta. Diga o tipo de "
+    "cada número — medido, provisório ou incompleto (e 'previsto' para o que ainda "
+    "vai vencer); incompleto é folha parcial ou mês sem a fatura do cartão, que não se "
+    "apresenta como total — e de onde ele veio. Curto: é leitura de começo de dia. "
+    "Nunca invente número: o que não conseguiu ler, diga que não conseguiu. Responda "
+    "aqui no chat — NUNCA publique em página (`publicar_pagina` gera link público)."
+)
+
+_FINANCEIRO_SEGUNDA = (
+    "Hoje é o primeiro dia útil da semana: acrescente o que o `calendario-financeiro` "
+    "marca para esta semana (impostos, folha, dia 05, certidões, fechamentos)."
 )
 
 
-def mensagem(tipo: str, nome: str, pedida_por: str | None) -> str:
+def mensagem(tipo: str, nome: str, pedida_por: str | None, dia: date | None = None) -> str:
     """O texto do turno. O cabeçalho é saneado (nome é texto livre); a
     instrução é nossa, fixa."""
     primeiro = _primeiro_nome(nome)
     if tipo == "quadro":
         return f"[Quadro da equipe para {primeiro}]\n{_QUADRO}"
     if tipo == "financeiro":
-        return f"[Semana financeira — {primeiro}]\n{_FINANCEIRO}"
+        extra = ("\n" + _FINANCEIRO_SEGUNDA) if dia and primeiro_dia_util_da_semana(dia) else ""
+        return f"[Situação financeira — {primeiro}]\n{_FINANCEIRO}{extra}"
     partes = [_CONSULTAS, _REGISTRO, _CARDAPIO]
     if tipo == "tarde":
         cab = f"[Conferência da tarde — {primeiro}]"
@@ -187,7 +194,7 @@ async def disparar_varredura(sessao_fn, v: dict, agora: datetime, disparar=None)
         return
     try:
         run_id = await disparar(v["agent_id"], v["user_id"],
-                                mensagem(v["tipo"], nome, v.get("pedida_por")),
+                                mensagem(v["tipo"], nome, v.get("pedida_por"), v.get("dia")),
                                 prefixo=PREFIXO_RUN)
     except Exception as e:  # noqa: BLE001 — ErroGateway ou qualquer outra
         logger.warning("Varredura %s: turno não abriu: %s", v["id"], e)
