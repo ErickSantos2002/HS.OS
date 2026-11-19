@@ -65,6 +65,27 @@ hist AS (SELECT CASE WHEN length(regexp_replace(r.cliente_cpf_cnpj, '\D', '', 'g
                       THEN left(regexp_replace(r.cliente_cpf_cnpj, '\D', '', 'g'), 8)
                       ELSE coalesce(nullif(r.cliente_cpf_cnpj, ''), r.cliente_nome) END IN (SELECT chave FROM virou)
           GROUP BY 1),
+-- faturamento recorrente: contrato de locação faturado em cada um dos 3
+-- meses anteriores e ainda não neste (a locação da APERAM sai todo dia 05)
+mrec AS (SELECT CASE WHEN length(regexp_replace(dc.documento, '\D', '', 'g')) = 14
+                      THEN left(regexp_replace(dc.documento, '\D', '', 'g'), 8)
+                      ELSE coalesce(nullif(dc.documento, ''), dc.nome) END AS chave,
+                max(dc.nome) AS nome, s.linha,
+                date_trunc('month', s.data_servico)::date AS mes,
+                date_trunc('month', s.data_servico) = date_trunc('month', hoje.d) AS atual,
+                sum(s.valor_servicos) AS v
+           FROM gold.fato_servicos s JOIN gold.dim_cliente dc USING (sk_cliente), hoje
+          WHERE s.data_servico >= date_trunc('month', hoje.d) - interval '3 months'
+            AND s.data_servico <= hoje.d
+            -- só locação: é contrato mensal. Calibração em 3 meses seguidos é cliente
+            -- mandando aparelho, não recorrência — medido, viraria alerta todo dia
+            AND s.linha = 'locacao'
+          GROUP BY 1, s.linha, 4, 5),
+recorrente AS (SELECT chave, max(nome) AS nome, linha,
+                      round(avg(v) FILTER (WHERE NOT atual)) AS valor_mes
+                 FROM mrec GROUP BY chave, linha
+                HAVING count(*) FILTER (WHERE NOT atual) = 3
+                   AND count(*) FILTER (WHERE atual) = 0),
 fechou AS (SELECT mes, resultado FROM gold.dre_mensal, hoje
             WHERE mes = (date_trunc('month', hoje.d) - interval '1 month')::date)
 SELECT 1 AS ordem, 'projecao_desatualizada' AS alerta,
@@ -101,6 +122,11 @@ SELECT 5, 'mes_fechou_em_prejuizo',
        to_char(fechou.mes, 'MM/YYYY') || ' fechou em prejuízo (fechamento de hoje)',
        round(fechou.resultado), NULL
   FROM fechou, df, hoje WHERE hoje.d = df.d AND fechou.resultado < 0
+UNION ALL
+SELECT 6, 'faturamento_recorrente_nao_emitido',
+       nome || ' (' || linha || ') foi faturado nos últimos 3 meses e ainda não neste',
+       valor_mes, 'valor mensal típico'
+  FROM recorrente, hoje WHERE extract(day FROM hoje.d) >= 8
 ORDER BY ordem, valor DESC NULLS LAST;
 ```
 
@@ -112,6 +138,7 @@ ORDER BY ordem, valor DESC NULLS LAST;
 | `caixa_apertado` | "No cenário pessimista é preciso ter R$ `valor` em conta; o aperto é na semana de `quando`." | saldo mínimo projetado, se ele disser o saldo (skill `caixa-projetado`) |
 | `importacao_lancada` | "Há R$ `valor` de importação lançada a partir de `quando`." | o caixa das semanas com ela |
 | `cliente_virou_inadimplente` | uma linha por cliente: nome, valor em aberto, desde quando, e o que o `o_que` diz do histórico — **"atraso fora do padrão"** é o que pede ação (vem primeiro); **"costuma pagar com atraso"** é informação, dita em meia linha, sem alarme. ⚠️ A baixa do boleto no Tiny é **manual**, depois que o Financeiro confirma o recebimento: o título pode já estar pago. Diga "em aberto no Tiny", não "não pagou" | a lista de inadimplência (`inadimplencia`) e conferir no banco se já entrou |
+| `faturamento_recorrente_nao_emitido` | "`o_que`: R$ `valor` por mês." Pode ser contrato que acabou — diga que é para conferir, não que alguém esqueceu | conferir com o Financeiro (a locação da APERAM é o FIN-16, todo dia 05) |
 | `mes_fechou_em_prejuizo` | "`o_que`: R$ `valor`." | o DRE do mês (skill `resultado-mensal`) |
 
 - **Alertas vão primeiro**, antes de qualquer outro número, em lista curta.

@@ -34,7 +34,8 @@ def test_agents_aponta_as_skills():
     a = arquivos_do_midas({})["AGENTS.md"]
     for slug in ("faturamento", "contas-receber", "custos", "calendario-financeiro",
                  "funil-vendas", "funil-servicos", "pipeline-crm", "resultado-mensal",
-                 "caixa-projetado", "alertas-financeiros", "margem-por-linha"):
+                 "caixa-projetado", "alertas-financeiros", "margem-por-linha",
+                 "indicadores-financeiros"):
         assert f"`{slug}`" in a, slug
 
 
@@ -123,7 +124,8 @@ def test_skills_do_midas_sem_valor_absoluto_da_empresa():
     import pathlib
     raiz = pathlib.Path(__file__).resolve().parents[1] / "skills"
     for nome in ("contas-receber", "custos", "calendario-financeiro", "resultado-mensal",
-                 "caixa-projetado", "alertas-financeiros", "margem-por-linha"):
+                 "caixa-projetado", "alertas-financeiros", "margem-por-linha",
+                 "indicadores-financeiros"):
         t = (raiz / nome / "SKILL.md").read_text()
         for numero in ("3.831.118,83", "714.387,53", "3.116.731,30", "1.678.128,10",
                        "813.795,84", "31.628.116,68"):
@@ -196,3 +198,17 @@ def test_inadimplente_habitual_nao_vira_alarme():
     # pela raiz do CNPJ: grafia diferente e filial não podem dividir o histórico
     # (a COFCO saiu "fora do padrão" por isso, agrupada por nome e depois por CNPJ)
     assert "left(regexp_replace(cliente_cpf_cnpj" in sk
+
+
+def test_indicadores_e_recorrente_so_de_locacao():
+    """Ponto de equilíbrio sai da consulta, inclusive a divisão; concentração por
+    raiz do CNPJ. O alerta de faturamento recorrente é só de LOCAÇÃO (contrato):
+    com calibração disparava todo dia; só locação, 2 dias em 139 (APERAM atrasada
+    em set/2026)."""
+    import pathlib
+    raiz = pathlib.Path(__file__).resolve().parents[1] / "skills"
+    ind = (raiz / "indicadores-financeiros" / "SKILL.md").read_text()
+    assert "ponto_de_equilibrio_mes" in ind and "prazo_medio_recebimento_dias" in ind
+    assert "left(regexp_replace(dc.documento" in ind
+    al = (raiz / "alertas-financeiros" / "SKILL.md").read_text()
+    assert "AND s.linha = 'locacao'" in al and "faturamento_recorrente_nao_emitido" in al

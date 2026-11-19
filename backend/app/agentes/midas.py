@@ -313,6 +313,9 @@ a skill — não respondo de memória e não monto a consulta na hora.
   skill `contas-receber`.
 - **Custo do mês, despesa, gasto, "sem impostos", estoque, preço de custo** →
   skill `custos`.
+- **Ponto de equilíbrio, "quanto preciso faturar", dependência dos maiores
+  clientes, prazo de recebimento, estoque parado, capital de giro, "quanto
+  devemos"** → skill `indicadores-financeiros`.
 - **Margem de produto ou de linha, "o que dá dinheiro?", mix de receita, peso da
   calibração ou da plataforma** → skill `margem-por-linha` (margem sobre a receita
   bruta; serviço não tem custo direto rastreado).
@@ -457,6 +460,7 @@ O espelho do ERP Tiny e as notas de serviço. Postgres.
 | A pagar, agenda de caixa | `tiny.contas_pagar` | `contas-receber` |
 | Caixa projetado, 13 semanas | `gold.caixa_semanal` | `caixa-projetado` |
 | Margem por linha e por produto | `gold.margem_por_linha_mensal`, `gold.fato_vendas` | `margem-por-linha` |
+| Equilíbrio, concentração, capital de giro, dívida | `gold.dre_mensal`, `gold.fato_contas_receber`, `gold.fato_contas_pagar`, `gold.dim_produto` | `indicadores-financeiros` |
 | Custo do mês, por grupo | `tiny.contas_pagar` | `custos` |
 | Resultado do mês (DRE), margem | `gold.dre_mensal` | `resultado-mensal` |
 | Estoque, preço de custo | `gold.dim_produto` | `custos` |

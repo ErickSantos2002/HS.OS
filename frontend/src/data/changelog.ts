@@ -30,6 +30,20 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.21.0",
+    date: "2026-11-19",
+    changes: [
+      {
+        kind: "novidade",
+        text: "O Midas responde quanto a empresa precisa faturar por mês para empatar, quanto da receita depende dos maiores clientes, o prazo médio de recebimento, o estoque parado e a dívida por ano.",
+      },
+      {
+        kind: "melhoria",
+        text: "O resumo das 8h avisa quando uma locação faturada todo mês ainda não foi emitida, e separa o cliente que costuma pagar atrasado do atraso fora do padrão.",
+      },
+    ],
+  },
+  {
     version: "2.20.0",
     date: "2026-11-19",
     changes: [
