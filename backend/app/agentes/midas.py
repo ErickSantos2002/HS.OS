@@ -301,7 +301,9 @@ e o número sair do jeito antigo, 48% a mais. Cada pergunta abaixo começa abrin
 a skill — não respondo de memória e não monto a consulta na hora.
 
 - **Faturamento, receita, "quanto vendemos", meta, "quanto falta", vendedor,
-  produto, compradores, CFOP, devolução** → skill `faturamento`.
+  produto, compradores, CFOP, devolução** → skill `faturamento`. **Ritmo,
+  projeção, "fecha acima ou abaixo"** → a consulta "Ritmo e projeção" dela; o
+  `veredito` que ela devolve é a resposta.
 - **A receber, em aberto, vencido, a pagar, agenda de caixa, fluxo de caixa** →
   skill `contas-receber`.
 - **Custo do mês, despesa, gasto, "sem impostos", estoque, preço de custo** →

@@ -151,6 +151,56 @@ trimestre ao lado parece defeito. Se a pessoa perguntar de outro trimestre,
 troque o valor da `tri` na consulta (ex.: `'2026-T2'` no lugar do `coalesce`) —
 **não** altere a chave na tabela, que é a tela de todo mundo no DataCoreHS.
 
+### Ritmo e projeção — "fecha acima ou abaixo?" sai daqui, pronto
+
+⚠️ **Em 19/11/2026 o Midas errou esta conta duas vezes seguidas, de cabeça:**
+calculou o ritmo certo (R$ 52,7 mil por dia útil), viu que bastavam R$ 42,6 mil
+por dia, e mesmo assim respondeu "fecha abaixo", com uma projeção que não saía
+de conta nenhuma. Ritmo, projeção, "falta por dia" e o veredito saem desta
+consulta; a resposta copia e diz que é projeção linear por dia útil (`dia_util`
+da `gold.dim_tempo`, que já desconta feriado).
+
+```sql
+WITH tri AS (SELECT ini, (ini + interval '3 months')::date fim
+               FROM (SELECT CASE WHEN v ~ '^\d{4}-T[1-4]$'
+                                 THEN make_date(left(v,4)::int, (right(v,1)::int-1)*3+1, 1)
+                                 ELSE date_trunc('quarter', current_date)::date END ini
+                       FROM (SELECT coalesce((SELECT upper(btrim(valor)) FROM tiny.configuracoes
+                                               WHERE chave='TRIMESTRE_APURACAO'),'AUTO') v) c) x),
+     meta AS (SELECT valor::numeric/4 m FROM tiny.configuracoes WHERE chave='META'),
+     ate  AS (SELECT max(data_venda) d FROM gold.fato_vendas),
+     v AS (SELECT coalesce(sum(f.valor_nota_rateado),0)::numeric t
+             FROM gold.fato_vendas f, tri
+            WHERE f.data_venda >= tri.ini AND f.data_venda < tri.fim),
+     s AS (SELECT coalesce(sum(replace("valor_dos_serviços",',','.')::numeric),0)::numeric t
+             FROM tiny.servicos, tri, ate WHERE cancelada=false
+              AND "data_da_emissão_nfs_e_dsr_e" >= tri.ini
+              AND "data_da_emissão_nfs_e_dsr_e" <  tri.fim
+              AND "data_da_emissão_nfs_e_dsr_e" <= ate.d),
+     du AS (SELECT count(*) FILTER (WHERE t.data <= ate.d) decorridos, count(*) total
+              FROM gold.dim_tempo t, tri, ate
+             WHERE t.dia_util AND t.data >= tri.ini AND t.data < tri.fim),
+     r AS (SELECT meta.m, v.t + s.t real, du.decorridos, du.total, ate.d
+             FROM meta, v, s, du, ate)
+SELECT r.m::numeric(14,2)                                         AS meta_trimestre,
+       r.real::numeric(14,2)                                      AS realizado,
+       r.d                                                        AS dados_ate,
+       r.decorridos                                               AS dias_uteis_decorridos,
+       r.total                                                    AS dias_uteis_trimestre,
+       (r.real / nullif(r.decorridos,0))::numeric(14,2)           AS ritmo_por_dia_util,
+       (r.real / nullif(r.decorridos,0) * r.total)::numeric(14,2) AS projecao,
+       round(r.real / nullif(r.decorridos,0) * r.total / r.m * 100, 1) AS projecao_pct,
+       (greatest(r.m - r.real, 0)
+          / nullif(r.total - r.decorridos, 0))::numeric(14,2)     AS falta_por_dia_util_restante,
+       CASE WHEN r.real / nullif(r.decorridos,0) * r.total >= r.m
+            THEN 'acima' ELSE 'abaixo' END                        AS veredito
+  FROM r;
+```
+
+O `veredito` é a resposta. Se ele disser "acima", você não diz "abaixo" — mesmo
+que um mês isolado pareça fraco: comparação mês a mês é outra pergunta, com
+outra consulta. É projeção, não fato: diga **"no ritmo atual"**.
+
 Âncora — trimestre fixado em `2026-T3`, apurado em 01/10/2026: meta do trimestre
 **R$ 3.166.666,68**, realizado **R$ 2.783.902,24**, **87,9%**, faltando
 **R$ 382.764,44**.
