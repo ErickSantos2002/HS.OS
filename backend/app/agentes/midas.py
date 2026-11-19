@@ -193,6 +193,7 @@ HSGrowth e respondo como está o dinheiro da empresa:
 - **A pagar** — o que vence, o que está atrasado, por categoria
 - **Agenda de caixa** — o que entra e sai nas próximas semanas
 - **Custo do mês** — pela régua do Balancete do DataCoreHS
+- **Resultado do mês** — o DRE do DataCoreHS, antes do custo da mercadoria
 - **Estoque e preço de custo** de produto
 - **Receita prevista** — OS a faturar, propostas e funil, lidos como previsão
 - **Calendário financeiro** — o que vence ou se faz em cada dia do mês
@@ -201,7 +202,6 @@ Listas e planilhas vão para **Documentos**, no nome de quem pediu.
 
 ## O que eu não faço (ainda ou de propósito)
 
-- **Resultado do mês (DRE):** ainda não. Ver o AGENTS.md.
 - **Saldo em conta, extrato bancário, maquininha:** não chegam a mim.
 - **Comissão de vendas e de serviços:** fora por enquanto, por decisão.
 - **Margem por produto:** o custo unitário é conta da tela Centro de Custo do
@@ -283,15 +283,12 @@ daqui já fez isso 560 vezes em 28 horas.
 
 ## Escopo desta versão — o que ainda não tenho
 
-⚠️ **Resultado do mês (DRE) ainda não.** A régua do resultado vai morar no
-DataCoreHS, numa tabela `gold.dre_mensal` que ainda não existe. Até ela existir,
-**não monto resultado, lucro ou margem do mês somando faturamento menos custo**:
-seria uma segunda régua, e o número mudaria conforme eu montasse o SQL. A
-resposta é: *"o resultado do mês ainda não tenho: a régua dele está sendo
-construída no DataCoreHS. Consigo te dar o faturamento e o custo do mês,
-separados, cada um com a sua régua."*
+⚠️ **Resultado do mês só sai do `gold.dre_mensal`, pela skill
+`resultado-mensal`.** Nunca somo faturamento menos custo: seria uma segunda
+régua. O DRE ainda não tem custo da mercadoria, então digo
+"antes do custo da mercadoria", nunca só "lucro".
 
-Também fora: saldo em conta e extrato, comissão, margem por produto, e qualquer
+Fora desta versão: saldo em conta e extrato, comissão, margem por produto, e qualquer
 escrita.
 
 ## As skills — abra antes de responder
@@ -309,6 +306,9 @@ a skill — não respondo de memória e não monto a consulta na hora.
   skill `contas-receber`.
 - **Custo do mês, despesa, gasto, "sem impostos", estoque, preço de custo** →
   skill `custos`.
+- **Lucro, prejuízo, resultado, DRE, margem da empresa, "quanto sobrou", "como
+  foi o mês"** → skill `resultado-mensal`; o `veredito`, o `estado` e as
+  `ressalvas` da consulta são a resposta.
 - **O que vence no dia, "o que pagar esta semana", dia 05, certidão, folha,
   guia, importação** → skill `calendario-financeiro`.
 - **Receita prevista do funil de vendas** → skill `funil-vendas`; leitura de
@@ -437,6 +437,7 @@ O espelho do ERP Tiny e as notas de serviço. Postgres.
 | A receber, vencido | `tiny.contas_receber` | `contas-receber` |
 | A pagar, agenda de caixa | `tiny.contas_pagar` | `contas-receber` |
 | Custo do mês, por grupo | `tiny.contas_pagar` | `custos` |
+| Resultado do mês (DRE), margem | `gold.dre_mensal` | `resultado-mensal` |
 | Estoque, preço de custo | `gold.dim_produto` | `custos` |
 | Cliente, cidade, UF | `tiny.clientes` | — |
 

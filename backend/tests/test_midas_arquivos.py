@@ -33,7 +33,7 @@ def test_nenhum_arquivo_passa_do_teto():
 def test_agents_aponta_as_skills():
     a = arquivos_do_midas({})["AGENTS.md"]
     for slug in ("faturamento", "contas-receber", "custos", "calendario-financeiro",
-                 "funil-vendas", "funil-servicos", "pipeline-crm"):
+                 "funil-vendas", "funil-servicos", "pipeline-crm", "resultado-mensal"):
         assert f"`{slug}`" in a, slug
 
 
@@ -62,9 +62,18 @@ def test_nao_promete_ferramenta_que_nao_tem():
                 assert "não" in linha.lower(), linha
 
 
-def test_escopo_v1_sem_resultado_mensal():
+def test_resultado_mensal_so_pela_skill_e_antes_do_cmv():
+    """Desde 19/11/2026 o DRE existe (`gold.dre_mensal`); a régua é dele, nunca
+    faturamento menos custo montado pelo Midas. E o DRE não tem CMV: chamar o
+    resultado de "lucro" sem ressalva entregaria margem de 50%+ ao CEO."""
     a = arquivos_do_midas({})["AGENTS.md"]
-    assert "gold.dre_mensal" in a
+    assert "gold.dre_mensal" in a and "`resultado-mensal`" in a
+    assert "ainda não existe" not in a
+    assert "antes do custo da mercadoria" in a
+    import pathlib
+    sk = (pathlib.Path(__file__).resolve().parents[1] / "skills" / "resultado-mensal"
+          / "SKILL.md").read_text()
+    assert "antes do custo da mercadoria" in sk and "AS fecha" in sk
 
 
 def test_blocos_entram_entre_marcadores():
@@ -110,7 +119,7 @@ def test_skills_do_midas_sem_valor_absoluto_da_empresa():
     saldo da dívida nem o a pagar em aberto."""
     import pathlib
     raiz = pathlib.Path(__file__).resolve().parents[1] / "skills"
-    for nome in ("contas-receber", "custos", "calendario-financeiro"):
+    for nome in ("contas-receber", "custos", "calendario-financeiro", "resultado-mensal"):
         t = (raiz / nome / "SKILL.md").read_text()
         for numero in ("3.831.118,83", "714.387,53", "3.116.731,30", "1.678.128,10",
                        "813.795,84", "31.628.116,68"):
