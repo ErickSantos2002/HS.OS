@@ -34,7 +34,7 @@ def test_agents_aponta_as_skills():
     a = arquivos_do_midas({})["AGENTS.md"]
     for slug in ("faturamento", "contas-receber", "custos", "calendario-financeiro",
                  "funil-vendas", "funil-servicos", "pipeline-crm", "resultado-mensal",
-                 "caixa-projetado", "alertas-financeiros"):
+                 "caixa-projetado", "alertas-financeiros", "margem-por-linha"):
         assert f"`{slug}`" in a, slug
 
 
@@ -123,7 +123,7 @@ def test_skills_do_midas_sem_valor_absoluto_da_empresa():
     import pathlib
     raiz = pathlib.Path(__file__).resolve().parents[1] / "skills"
     for nome in ("contas-receber", "custos", "calendario-financeiro", "resultado-mensal",
-                 "caixa-projetado", "alertas-financeiros"):
+                 "caixa-projetado", "alertas-financeiros", "margem-por-linha"):
         t = (raiz / nome / "SKILL.md").read_text()
         for numero in ("3.831.118,83", "714.387,53", "3.116.731,30", "1.678.128,10",
                        "813.795,84", "31.628.116,68"):
@@ -168,3 +168,16 @@ def test_alertas_financeiros_tem_limite_medido():
           / "SKILL.md").read_text()
     assert "HAVING sum(saldo) >= 10000" in sk and "du.n <= 5" in sk
     assert "Sem linha = sem seção de alerta" in sk
+
+
+def test_margem_por_linha_nao_divide_o_lucro_da_tabela():
+    """O `lucro_bruto` da tabela é a receita inteira menos o cmv; dividi-lo pela
+    receita COM custo deu 107% no consumível e 824% no acessório na primeira
+    versão. A margem sai de (receita_com_custo − cmv) ÷ receita_com_custo, e é
+    sobre a receita BRUTA (a do resultado-mensal é sobre a líquida)."""
+    import pathlib
+    sk = (pathlib.Path(__file__).resolve().parents[1] / "skills" / "margem-por-linha"
+          / "SKILL.md").read_text()
+    assert "100 * (receita_com_custo - cmv) / nullif(receita_com_custo, 0)" in sk
+    assert "lucro_bruto / nullif(receita_com_custo" not in sk
+    assert "RECEITA BRUTA" in sk

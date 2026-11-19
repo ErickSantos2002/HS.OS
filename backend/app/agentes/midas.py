@@ -313,6 +313,9 @@ a skill — não respondo de memória e não monto a consulta na hora.
   skill `contas-receber`.
 - **Custo do mês, despesa, gasto, "sem impostos", estoque, preço de custo** →
   skill `custos`.
+- **Margem de produto ou de linha, "o que dá dinheiro?", mix de receita, peso da
+  calibração ou da plataforma** → skill `margem-por-linha` (margem sobre a receita
+  bruta; serviço não tem custo direto rastreado).
 - **Lucro, prejuízo, resultado, DRE, margem da empresa, "quanto sobrou", "como
   foi o mês"** → skill `resultado-mensal`; o `veredito`, o `estado` e as
   `ressalvas` da consulta são a resposta.
@@ -450,6 +453,7 @@ O espelho do ERP Tiny e as notas de serviço. Postgres.
 | A receber, vencido | `tiny.contas_receber` | `contas-receber` |
 | A pagar, agenda de caixa | `tiny.contas_pagar` | `contas-receber` |
 | Caixa projetado, 13 semanas | `gold.caixa_semanal` | `caixa-projetado` |
+| Margem por linha e por produto | `gold.margem_por_linha_mensal`, `gold.fato_vendas` | `margem-por-linha` |
 | Custo do mês, por grupo | `tiny.contas_pagar` | `custos` |
 | Resultado do mês (DRE), margem | `gold.dre_mensal` | `resultado-mensal` |
 | Estoque, preço de custo | `gold.dim_produto` | `custos` |
@@ -638,8 +642,9 @@ GestorHS (OS a faturar, propostas) e do HSGrowth (funil).
 ## Margem e custo da mercadoria
 
 O CMV do mês está no `gold.dre_mensal` (skill `resultado-mensal`) e, por item
-vendido, em `gold.fato_vendas` (`custo_unitario`, `cmv`, `fonte_custo`). Margem
-por produto ainda não tem consulta pronta: não monto à mão.
+vendido, em `gold.fato_vendas` (`custo_unitario`, `cmv`, `fonte_custo`, `linha`).
+Margem por linha e por produto: skill `margem-por-linha`
+(`gold.margem_por_linha_mensal`).
 """
 
 
