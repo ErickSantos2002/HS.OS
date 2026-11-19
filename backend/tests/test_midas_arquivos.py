@@ -155,4 +155,4 @@ def test_caixa_projetado_e_fluxo_e_avisa_a_importacao():
           / "SKILL.md").read_text()
     assert "gold.caixa_semanal" in sk and "precisa_ter_em_conta_hoje" in sk
     assert "fluxo_acumulado_conservador" in sk and "importacao_media_mes" in sk
-    assert "data_referencia" in sk
+    assert "data_referencia" in sk and "positivo_de_vez_a_partir_de" in sk

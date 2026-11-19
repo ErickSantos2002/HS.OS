@@ -86,6 +86,11 @@ SELECT (SELECT data_referencia FROM c LIMIT 1)                       AS data_ref
                                                                      AS periodo_mais_apertado,
        round(pior.fluxo_acumulado_conservador)                       AS pior_acumulado_pessimista,
        round(greatest(0, -pior.fluxo_acumulado_conservador))         AS precisa_ter_em_conta_hoje,
+       (SELECT to_char(min(c1.inicio_semana), 'DD/MM') FROM c c1
+         WHERE NOT EXISTS (SELECT 1 FROM c c2
+                            WHERE c2.semana >= c1.semana
+                              AND c2.fluxo_acumulado_conservador < 0))
+                                                                     AS positivo_de_vez_a_partir_de,
        round(s.saldo_hoje + pior.fluxo_acumulado_conservador)        AS saldo_minimo_projetado,
        CASE WHEN s.saldo_hoje IS NULL THEN
               CASE WHEN pior.fluxo_acumulado_conservador >= 0
@@ -115,6 +120,10 @@ SELECT (SELECT data_referencia FROM c LIMIT 1)                       AS data_ref
   semanas, no cenário pessimista, o aperto maior é a semana de 16/11 a 22/11: é preciso
   ter pelo menos R$ X em conta hoje."* Com saldo: *"Com R$ Y em conta, o saldo mínimo
   projetado é R$ Z, na semana de …"*.
+- **"Quando o aperto passa"** é o `positivo_de_vez_a_partir_de` (a semana desde a
+  qual o acumulado pessimista não volta a ficar negativo). Nunca leia isso da tabela
+  à mão: em 19/11/2026 a resposta disse "de 30/11 em diante" e a semana de 30/11 ainda
+  dava −R$ 17 mil. Nulo = o acumulado pessimista termina as 13 semanas negativo.
 - Em seguida, **o fluxo das 13 semanas** e, se pedirem, a tabela da Consulta 1 —
   `entra`, `sai`, `acumulado` e `confianca`. Semana com confiança `baixa` vai marcada.
 - **Sempre, as três ressalvas, curtas:** (1) é fluxo, não saldo; (2) a importação
