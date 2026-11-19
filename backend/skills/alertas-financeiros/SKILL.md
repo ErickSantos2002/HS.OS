@@ -85,7 +85,7 @@ ORDER BY ordem, valor DESC NULLS LAST;
 | `projecao_desatualizada` | o caixa de hoje não é confiável: a projeção é de outro dia | chame `avisar_administrador` uma vez |
 | `caixa_apertado` | "No cenário pessimista é preciso ter R$ `valor` em conta; o aperto é na semana de `quando`." | saldo mínimo projetado, se ele disser o saldo (skill `caixa-projetado`) |
 | `importacao_lancada` | "Há R$ `valor` de importação lançada a partir de `quando`." | o caixa das semanas com ela |
-| `cliente_virou_inadimplente` | uma linha por cliente: nome, valor em aberto, desde quando | a lista de inadimplência (`inadimplencia`) |
+| `cliente_virou_inadimplente` | uma linha por cliente: nome, valor em aberto, desde quando. ⚠️ A baixa do boleto no Tiny é **manual**, depois que o Financeiro confirma o recebimento: o título pode já estar pago. Diga "em aberto no Tiny", não "não pagou" | a lista de inadimplência (`inadimplencia`) e conferir no banco se já entrou |
 | `mes_fechou_em_prejuizo` | "`o_que`: R$ `valor`." | o DRE do mês (skill `resultado-mensal`) |
 
 - **Alertas vão primeiro**, antes de qualquer outro número, em lista curta.

@@ -195,7 +195,7 @@ veredito e por quê, e mostra o `resultado` com eles só como informação.
 | `estado` | o que dizer |
 |---|---|
 | `medido` | o número, com as `ressalvas` |
-| `provisório` | ⚠️ **"provisório"**, sempre. O Financeiro lança conta já paga com emissão retroativa, 30 a 60 dias depois: a despesa deste mês ainda vai subir |
+| `provisório` | ⚠️ **"provisório"**, sempre. O Financeiro lança conta já paga com emissão retroativa (mediana de 31 dias depois do pagamento; a meta da equipe é tudo lançado até o dia 15 do mês seguinte, segundo o Djalma em 19/11/2026): a despesa deste mês ainda vai subir |
 | `em curso — parcial` | o mês não acabou; o número é só do que já foi lançado |
 | `futuro — ainda não é resultado` | não é resultado de ninguém: são parcelas agendadas |
 

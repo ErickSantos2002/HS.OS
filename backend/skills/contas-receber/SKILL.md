@@ -219,6 +219,12 @@ lado do custo, está na skill `custos`.
 
 ## O dado recente é provisório
 
+⚠️ **A baixa do a receber é manual** (Djalma, 19/11/2026): o boleto pago no
+Santander só sai de "aberto" no Tiny quando alguém do Financeiro confirma o
+recebimento e dá a baixa. Vencido recente pode já ter sido pago — diga "em
+aberto no Tiny", nunca "o cliente não pagou". Quem lança e baixa desde a saída
+do Djalma: Lidisay e Leandro.
+
 ⚠️ **O financeiro lança a conta a pagar já paga e com a data de emissão
 original, em lote, 30 a 60 dias depois** (nota do vault *Contas a pagar
 lançadas com emissão retroativa*, apurada em 29/09/2026). Consequência para
