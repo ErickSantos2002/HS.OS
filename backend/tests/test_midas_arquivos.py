@@ -182,3 +182,17 @@ def test_margem_por_linha_nao_divide_o_lucro_da_tabela():
     assert "100 * (receita_com_custo - cmv) / nullif(receita_com_custo, 0)" in sk
     assert "lucro_bruto / nullif(receita_com_custo" not in sk
     assert "RECEITA BRUTA" in sk
+
+
+def test_inadimplente_habitual_nao_vira_alarme():
+    """CSN Cimentos (177 dias), Unidas (115) e Pepsico (133) pagam com atraso
+    longo e pagam: o alerta separa "fora do padrão" (pede ação, vem primeiro) de
+    "costuma pagar com atraso" (2+ títulos pagos depois de 30 dias em 24 meses)."""
+    import pathlib
+    sk = (pathlib.Path(__file__).resolve().parents[1] / "skills" / "alertas-financeiros"
+          / "SKILL.md").read_text()
+    assert "costuma pagar com atraso" in sk and "atraso fora do padrão" in sk
+    assert "h.pagos_depois_de_30, 0) >= 2 THEN 4.5 ELSE 4" in sk
+    # pela raiz do CNPJ: grafia diferente e filial não podem dividir o histórico
+    # (a COFCO saiu "fora do padrão" por isso, agrupada por nome e depois por CNPJ)
+    assert "left(regexp_replace(cliente_cpf_cnpj" in sk

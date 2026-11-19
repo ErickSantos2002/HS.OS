@@ -37,14 +37,34 @@ df AS (SELECT min(t.data) AS d FROM gold.dim_tempo t, hoje
 cx AS (SELECT * FROM gold.caixa_semanal),
 pior AS (SELECT semana, inicio_semana, fim_semana, fluxo_acumulado_conservador
            FROM cx ORDER BY fluxo_acumulado_conservador, semana LIMIT 1),
-rec AS (SELECT cliente_nome, vencimento, saldo FROM tiny.contas_receber
+rec AS (SELECT cliente_nome, cliente_cpf_cnpj, vencimento, saldo FROM tiny.contas_receber
          WHERE excluida_na_origem_em IS NULL AND lower(situacao) IN ('aberto','pendente')),
 -- passou de 30 dias de atraso desde o último dia útil (até 30 é atraso; depois, inadimplência)
-virou AS (SELECT cliente_nome, count(*) AS titulos, sum(saldo) AS valor, min(vencimento) AS desde
+-- pela RAIZ do CNPJ (8 dígitos): o mesmo cliente aparece com grafias diferentes no
+-- Tiny e com filiais de CNPJ diferente — o atraso de uma filial diz da empresa
+virou AS (SELECT CASE WHEN length(regexp_replace(cliente_cpf_cnpj, '\D', '', 'g')) = 14
+                      THEN left(regexp_replace(cliente_cpf_cnpj, '\D', '', 'g'), 8)
+                      ELSE coalesce(nullif(cliente_cpf_cnpj, ''), cliente_nome) END AS chave,
+                 max(cliente_nome) AS cliente_nome,
+                 count(*) AS titulos, sum(saldo) AS valor, min(vencimento) AS desde
             FROM rec, hoje, ant
            WHERE rec.vencimento + 30 >= ant.d AND rec.vencimento + 30 < hoje.d
-           GROUP BY cliente_nome
+           GROUP BY 1
           HAVING sum(saldo) >= 10000),
+-- histórico de 24 meses de quem virou: atraso habitual não é calote provável
+hist AS (SELECT CASE WHEN length(regexp_replace(r.cliente_cpf_cnpj, '\D', '', 'g')) = 14
+                      THEN left(regexp_replace(r.cliente_cpf_cnpj, '\D', '', 'g'), 8)
+                      ELSE coalesce(nullif(r.cliente_cpf_cnpj, ''), r.cliente_nome) END AS chave,
+                count(*) FILTER (WHERE r.liquidacao - r.vencimento > 30)   AS pagos_depois_de_30,
+                round(percentile_cont(0.5) WITHIN GROUP (ORDER BY r.liquidacao - r.vencimento)
+                      FILTER (WHERE r.liquidacao - r.vencimento > 0))        AS atraso_mediano
+           FROM tiny.contas_receber r, hoje
+          WHERE r.excluida_na_origem_em IS NULL AND r.liquidacao IS NOT NULL
+            AND r.vencimento >= hoje.d - 730
+            AND CASE WHEN length(regexp_replace(r.cliente_cpf_cnpj, '\D', '', 'g')) = 14
+                      THEN left(regexp_replace(r.cliente_cpf_cnpj, '\D', '', 'g'), 8)
+                      ELSE coalesce(nullif(r.cliente_cpf_cnpj, ''), r.cliente_nome) END IN (SELECT chave FROM virou)
+          GROUP BY 1),
 fechou AS (SELECT mes, resultado FROM gold.dre_mensal, hoje
             WHERE mes = (date_trunc('month', hoje.d) - interval '1 month')::date)
 SELECT 1 AS ordem, 'projecao_desatualizada' AS alerta,
@@ -66,10 +86,16 @@ SELECT 3, 'importacao_lancada',
        to_char(min(inicio_semana) FILTER (WHERE saida_importacao > 0), 'DD/MM')
   FROM cx WHERE semana <= 4 HAVING sum(saida_importacao) >= 50000
 UNION ALL
-SELECT 4, 'cliente_virou_inadimplente',
-       cliente_nome || ' passou de 30 dias de atraso (' || titulos || ' título(s))',
-       round(valor), 'vencido desde ' || to_char(desde, 'DD/MM')
-  FROM virou
+SELECT CASE WHEN coalesce(h.pagos_depois_de_30, 0) >= 2 THEN 4.5 ELSE 4 END,
+       'cliente_virou_inadimplente',
+       v.cliente_nome || ' passou de 30 dias de atraso (' || v.titulos || ' título(s)) — '
+         || CASE WHEN coalesce(h.pagos_depois_de_30, 0) >= 2
+                 THEN 'costuma pagar com atraso: ' || h.pagos_depois_de_30
+                      || ' título(s) pagos depois de 30 dias nos últimos 24 meses, atraso mediano de '
+                      || h.atraso_mediano || ' dias'
+                 ELSE 'atraso fora do padrão deste cliente' END,
+       round(v.valor), 'vencido desde ' || to_char(v.desde, 'DD/MM')
+  FROM virou v LEFT JOIN hist h USING (chave)
 UNION ALL
 SELECT 5, 'mes_fechou_em_prejuizo',
        to_char(fechou.mes, 'MM/YYYY') || ' fechou em prejuízo (fechamento de hoje)',
@@ -85,7 +111,7 @@ ORDER BY ordem, valor DESC NULLS LAST;
 | `projecao_desatualizada` | o caixa de hoje não é confiável: a projeção é de outro dia | chame `avisar_administrador` uma vez |
 | `caixa_apertado` | "No cenário pessimista é preciso ter R$ `valor` em conta; o aperto é na semana de `quando`." | saldo mínimo projetado, se ele disser o saldo (skill `caixa-projetado`) |
 | `importacao_lancada` | "Há R$ `valor` de importação lançada a partir de `quando`." | o caixa das semanas com ela |
-| `cliente_virou_inadimplente` | uma linha por cliente: nome, valor em aberto, desde quando. ⚠️ A baixa do boleto no Tiny é **manual**, depois que o Financeiro confirma o recebimento: o título pode já estar pago. Diga "em aberto no Tiny", não "não pagou" | a lista de inadimplência (`inadimplencia`) e conferir no banco se já entrou |
+| `cliente_virou_inadimplente` | uma linha por cliente: nome, valor em aberto, desde quando, e o que o `o_que` diz do histórico — **"atraso fora do padrão"** é o que pede ação (vem primeiro); **"costuma pagar com atraso"** é informação, dita em meia linha, sem alarme. ⚠️ A baixa do boleto no Tiny é **manual**, depois que o Financeiro confirma o recebimento: o título pode já estar pago. Diga "em aberto no Tiny", não "não pagou" | a lista de inadimplência (`inadimplencia`) e conferir no banco se já entrou |
 | `mes_fechou_em_prejuizo` | "`o_que`: R$ `valor`." | o DRE do mês (skill `resultado-mensal`) |
 
 - **Alertas vão primeiro**, antes de qualquer outro número, em lista curta.
