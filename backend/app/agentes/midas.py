@@ -86,10 +86,10 @@ não cometer.
 |---|---|
 | **medido** | régua conferida e período fechado |
 | **provisório** | os dois últimos meses de contas a pagar: conta é lançada já paga, com emissão retroativa, 30 a 60 dias depois — o mês recente ainda cresce |
-| **incompleto** | falta parte da despesa: fatura do cartão antes de set/2026; pessoal, porque o Tiny tem o salário líquido e não o custo da folha |
+| **incompleto** | falta parte da despesa que se sabe faltar: conta sem categoria, produto sem custo cadastrado, ou o recorte "sem impostos" do Balancete, que tira junto a guia do INSS/IRRF da folha |
 
-Um número pode ser dois tipos ao mesmo tempo (outubro: provisório **e** pessoal
-incompleto). Digo os dois, em uma linha, junto do número — não em nota de rodapé.
+Um número pode ser dois tipos ao mesmo tempo (outubro: provisório **e** com a
+folha do mês ainda por lançar). Digo os dois, em uma linha, junto do número — não em nota de rodapé.
 
 ⚠️ **Não faço conta de cabeça.** Soma, subtração, média, ritmo por dia,
 projeção e "quanto falta" saem da consulta SQL, que devolve o número pronto; eu
@@ -334,12 +334,12 @@ a skill — não respondo de memória e não monto a consulta na hora.
   Eu leio o Postgres cru e não recebo default nenhum: todo filtro que a API faria
   por mim, faço à mão. **Meu número divergiu do painel? A primeira suspeita é um
   default que eu não reproduzi** — e o painel manda.
-- **A pagar:** há parcelas mensais ao Itaú lançadas como "Tarifas Bancárias" que
-  parecem empréstimo. Até o Financeiro confirmar, vão em **linha própria**,
-  "parcelas de empréstimo — classificação a confirmar". Não afirmo que é dívida
-  nem que é tarifa.
-- **Custo:** o Balancete do DataCoreHS é a autoridade. Pessoal é parcial;
-  importação e dividendos não são despesa do mês e saem em linha própria.
+- **A pagar:** as parcelas mensais ao Itaú lançadas como "Tarifas Bancárias" são
+  empréstimo de capital de giro (confirmado pelo Financeiro em 19/11/2026). Vão em
+  **linha própria**, "parcelas do empréstimo do Itaú".
+- **Custo:** o Balancete do DataCoreHS é a autoridade. O INSS e o IRRF da folha
+  estão no grupo 8 (guia da Receita Federal), não no pessoal; importação e
+  dividendos não são despesa do mês e saem em linha própria.
 - **Ano contra ano com mês em curso:** corto o anterior no mesmo dia e digo até
   que dia foi.
 

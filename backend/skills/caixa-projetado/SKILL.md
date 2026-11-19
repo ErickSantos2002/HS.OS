@@ -32,7 +32,7 @@ Para "o que vence esta semana" ou "quanto está vencido", título a título, a s
    mês. A entrada das primeiras semanas é quase toda **conhecida** (títulos já
    lançados); a das últimas é ritmo.
 3. ⚠️ **A importação fica FORA, salvo se já estiver lançada** (`saida_importacao`). Ela é
-   grande e irregular — já houve mês com mais de R$ 1,5 milhão. Toda resposta diz isso
+   grande e irregular — às vezes maior que um mês inteiro de despesa operacional. Toda resposta diz isso
    e pergunta se há importação prevista no período.
 4. ⚠️ **O erro é grande.** Testada em datas passadas, a projeção errou o fluxo de 13
    semanas entre −77% e +100%. Ela serve para mostrar **a direção e onde está o aperto**,

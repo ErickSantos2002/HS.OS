@@ -121,8 +121,8 @@ SELECT to_char(b.mes, 'YYYY-MM') AS mes,
          CASE WHEN b.despesa_sem_categoria <> 0
               THEN 'há conta sem categoria no Tiny' END,
          CASE WHEN b.valor_reclassificado_nao_confirmado <> 0
-              THEN 'parcelas do Itaú tratadas como dívida, a confirmar pelo Financeiro' END,
-         'pessoal parcial: o Tiny tem o salário líquido, não a folha')  AS ressalvas,
+              THEN 'há reclassificação ainda não confirmada pelo Financeiro' END)
+                                                                        AS ressalvas,
        (    abs(b.receita_liquida - (b.receita_bruta - b.impostos_sobre_venda)) < 0.01
         AND abs(b.lucro_bruto - (b.receita_liquida - b.cmv)) < 0.01
         AND abs(b.resultado_operacional - (b.lucro_bruto - b.despesa_operacional)) < 0.01
@@ -205,8 +205,12 @@ que ainda não entrou no Tiny. Nunca chame esse mês de "o melhor mês", nunca o
 como base de média ou de projeção, e não compare um mês provisório com um medido
 sem dizer isso.
 
-As `ressalvas` da consulta vão na resposta como estão, em uma linha. "Pessoal
-parcial" vale sempre: nunca chame o grupo 1 de folha nem de custo de pessoal.
+As `ressalvas` da consulta vão na resposta como estão, em uma linha.
+
+**O pessoal do DRE é a folha como o Tiny a registra:** salário líquido, a guia do
+INSS e IRRF (DCTFWeb, no mês da apuração — `encargos_da_folha`), FGTS e
+benefícios. 13º e férias entram no mês em que são pagos, não provisionados mês a
+mês: diga isso se compararem dezembro (ou um mês de férias) com os outros.
 
 ## Ao responder
 

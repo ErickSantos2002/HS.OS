@@ -208,14 +208,11 @@ SELECT extract(year FROM vencimento) AS ano, count(*) AS parcelas,
  GROUP BY 1 ORDER BY 1;
 ```
 
-⚠️ **O Tiny as classifica como tarifa bancária, mas o histórico ("Parcela
-10/44") e o prazo até 2030 parecem empréstimo.** Ninguém do Financeiro
-confirmou. Regra para agenda de caixa e "quanto vence nos próximos N dias":
-as parcelas entram **numa linha própria**, rotulada **"parcelas de empréstimo —
-classificação a confirmar"**, separada do resto; o total do período sai com e
-sem essa linha. Nunca as misture no "a pagar" sem dizer, e nunca afirme que são
-empréstimo: diga que **parecem** e que falta confirmação. A mesma ressalva, do
-lado do custo, está na skill `custos`.
+⚠️ **O Tiny as classifica como tarifa bancária, mas são empréstimo de capital
+de giro** — confirmado pelo Djalma (Financeiro) em 19/11/2026. Regra para agenda de caixa e "quanto vence nos próximos N
+dias": as parcelas entram **numa linha própria**, rotulada **"parcelas do
+empréstimo do Itaú"**, separada do resto; o total do período sai com e sem essa
+linha. O contrato (com a parte de juros) não está com o Financeiro.
 
 ## O dado recente é provisório
 

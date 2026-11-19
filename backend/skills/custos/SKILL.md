@@ -185,7 +185,7 @@ saber o tamanho:
 Levantadas em 18/11/2026 sobre `tiny.contas_pagar`. A régua acima **não muda**
 (o Balancete é a autoridade); o que muda é o que você **diz** junto do número.
 
-⚠️ **R1 — O Itaú em "9.3 - Tarifas Bancárias" parece dívida, não tarifa.** São
+⚠️ **R1 — O Itaú em "9.3 - Tarifas Bancárias" é dívida, não tarifa** (confirmado pelo Djalma (Financeiro) em 19/11/2026). São
 parcelas ("Parcela N/44", "Parcela Giro N/57") com vencimento até 2030, em
 volume que domina o a pagar. O Balancete as soma em 9.3 e o mês fica inflado: o
 financeiro as lança em bloco, então o mês do lançamento (out/2026, 136 parcelas
@@ -206,9 +206,8 @@ SELECT to_char(data_emissao,'YYYY-MM') AS mes,
  GROUP BY 1 ORDER BY 1;
 ```
 
-Classificação como dívida (amortização) é **provisória e nomeada** até o
-Financeiro confirmar. Não mude a categoria no número do Balancete: reclassifique
-numa linha à parte e diga que fez. Se alguém pedir "custo do mês" com out/2026
+A classificação como dívida (amortização) está confirmada. Não mude a categoria
+no número do Balancete: reclassifique numa linha à parte e diga que fez. Se alguém pedir "custo do mês" com out/2026
 dentro, o número sem esse ajuste engana.
 
 ⚠️ **R2 — Os dois últimos meses são provisórios.** O financeiro lança conta
@@ -216,15 +215,13 @@ paga com emissão retroativa, 30–60 dias depois (nota do vault *Contas a pagar
 lançadas com emissão retroativa*). Mês corrente e o anterior crescem depois de
 fechados. Diga "provisório" neles, sempre.
 
-⚠️ **R3 — Meses sem fatura de cartão (`9.1 - Cartão de Crédito`) estão
-incompletos em despesa.** A fatura só aparece no Tiny a partir de set/2026.
-Medido em 18/11/2026 (contas vivas com categoria 9.1 por mês de emissão):
-**jan, fev, mar, abr, mai, jun, jul e ago/2026 têm zero**; set e out têm uma
-conta cada; nov/2026 tem zero e está em curso.
-A despesa desses meses é **subestimada** por falta de fatura, e a âncora de
-jul/2026 acima (R$ 462.917,93) é a do Balancete, que tem essa mesma lacuna — não
-é erro de régua. Ao comparar mês de 2026 com mês de 2026, avise que os dois lados
-não têm cartão; ao comparar com set/out em diante, avise que o cartão apareceu.
+⚠️ **R3 — Até ago/2026 a fatura do cartão está em "9.3 - Tarifas Bancárias".**
+A categoria `9.1 - Cartão de Crédito` só aparece em set/2026; antes, a fatura era
+paga por boleto no Santander e lançada em 9.3 com o histórico "pagamento de
+boleto" (confirmado pelo Djalma (Financeiro) em 19/11/2026). O **total** do mês está completo — a despesa existe, só está no
+grupo 9 como tarifa. Quando a pergunta for por grupo, diga que o cartão de
+jan–ago/2026 está dentro de 9.3. O DRE (skill `resultado-mensal`) já o move para
+o cartão.
 
 ```sql
 SELECT to_char(data_emissao,'YYYY-MM') AS mes,
@@ -235,18 +232,21 @@ SELECT to_char(data_emissao,'YYYY-MM') AS mes,
  GROUP BY 1 ORDER BY 1;
 ```
 
-⚠️ **R4 — "1.3 - Salário" é o líquido; a folha cheia é fechada por quem fecha a folha, fora
-do Tiny.** O grupo 1 do Balancete é, portanto, **pessoal parcial**: falta
-encargo, retenção e o que o Tiny não registra. Nunca chame o grupo 1 de "custo
-de pessoal" ou "folha"; diga "pessoal (parcial — salário líquido e o que o Tiny
-lança)". Custo por colaborador não sai daqui.
+⚠️ **R4 — O INSS e o IRRF da folha estão no grupo 8, não no 1.** "1.3 - Salário" é
+o líquido; o INSS e o IRRF saem numa guia única da Receita Federal (DCTFWeb), lançada
+em `8.4 - Taxas Diversas` com o histórico "Recibo Declaração … Apuração MM/AAAA"
+(confirmado pelo Djalma (Financeiro) em 19/11/2026). Consequência: o **"sem impostos" do Balancete tira também o encargo da
+folha** (uma guia por mês, medida com a consulta do grupo 8). Ao responder custo de pessoal ou custo de
+operar, diga isso — o grupo 1 sozinho não é a folha. O DRE (skill
+`resultado-mensal`) já põe a guia no pessoal, no mês da apuração. Custo por
+colaborador não sai daqui.
 
 ### Toda resposta de custo diz o estado do número
 
 Cada resposta de custo ou despesa termina marcando o que entrou como **medido**
 (mês fechado, base conferida), **provisório** (os dois últimos meses — R2) ou
-**incompleto** (meses sem cartão — R3; pessoal parcial — R4; 9.3 com as
-parcelas do Itaú — R1). Sem esse rótulo o número parece mais firme do que é.
+**incompleto** (pessoal sem a guia do INSS/IRRF quando o recorte tira o grupo 8 —
+R4; 9.3 com as parcelas do Itaú — R1). Sem esse rótulo o número parece mais firme do que é.
 
 ## Parte 2 — estoque e custo de produto
 
