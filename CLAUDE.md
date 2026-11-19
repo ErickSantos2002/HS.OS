@@ -993,10 +993,24 @@ ganha a pagar, custos (régua do Balancete), `calendario-financeiro` e GestorHS/
 - **Skills:** `contas-receber` (âncora nova de 18/11; parcelas do Itaú em linha própria),
   `custos` (R1, R3, R4, tipo do número), `calendario-financeiro` (nova). Toda resposta
   com número diz se é *medido*, *provisório* ou *incompleto*.
-- ⚠️ **A Iris ainda está ATIVA** até a etapa de produção (criar o Midas, conferência por
-  perguntas, mover o cron do briefing 07h35). Dormir = tirá-la do `agents.list` **com
-  backup em JSON** e `agent_profiles.status='inactive'`; religar = restaurar o JSON e
-  voltar o status. Não declarar que dormiu antes de acontecer.
+- **No ar desde 19/11/2026; a Iris DORME.** Conferido perguntando ao Midas (pela conta
+  do Erick, liberado nominalmente). As tabelas "quem é quem" de Nina, Flow, Atlas e
+  Bruce apontam para o Midas. O cron `hsos-briefing-faturamento` passou para o
+  `midas` **desligado, como já estava** — religar é decisão do Erick. A Iris saiu do
+  `agents.list` e do `agentToAgent.allow`, sessões arquivadas, `status='inactive'`;
+  workspace e linha no banco ficam. **Backup da entrada dela fora do repo** (traz os
+  ids dos Guardis): `~/projetos/backups-hs/gateway/iris-agents-list-2026-11-19.json`.
+  Religar: devolver o JSON ao `agents.list` (lista inteira), `iris` no `allow`,
+  `status='active'`. Script: `backend/scripts/dormir-iris.py`.
+- ⚠️ **O gateway mescla o `agents.list` POR ID: mandar a lista sem um agente NÃO o
+  remove**, e como não há recusa o `aplicar_patch` não repete com `replacePaths`. Para
+  tirar agente, mande `replacePaths: ["agents.list"]` explícito e confira relendo.
+  Em 19/11/2026 o `allow` mudou e a Iris ficou na config até o segundo patch.
+- ⚠️ **Conta de cabeça é o defeito do Midas.** Na conferência ele somou grupos de
+  custo à mão e inverteu a projeção do trimestre. Correção que funcionou: **consulta
+  pronta na skill** que devolve o total/veredito (`custos`: totais do mês;
+  `faturamento`: "Ritmo e projeção" com `veredito`). Só a regra no `SOUL.md` não
+  bastou. Pergunta nova com conta: dê a ele a consulta, não a instrução.
 
 ### Guardi na internet — 18/11/2026
 
@@ -1585,7 +1599,7 @@ agente contradizer os próprios arquivos, que os citam nominalmente.
 | agente | banco |
 |---|---|
 | `nina` | só `banco-hsos` — orquestra e delega o domínio |
-| `iris` | `banco-datacorehs` (vai dormir; o `midas` a substitui) |
+| `iris` | dormindo desde 19/11/2026 — o `midas` a substitui |
 | `midas` | `banco-datacorehs`, `banco-gestorhs`, `banco-hsgrowth` + `compradores_produto` e `inadimplencia` — sem `publicar_pagina` |
 | `atlas` | `banco-hsgrowth` + `relatorio_vendedores` |
 | `flow` | `banco-gestorhs`, `banco-taskhs`, `banco-chamadoshs` |
