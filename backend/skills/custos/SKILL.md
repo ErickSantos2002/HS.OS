@@ -88,9 +88,39 @@ SELECT to_char(data_emissao, 'YYYY-MM')                       AS mes,
  ORDER BY 1, 2;
 ```
 
-Some os grupos na resposta, não na consulta: assim você tem o detalhe para
-mostrar "sem impostos" e "sem impostos e sem mercadoria" a partir do mesmo
-resultado.
+⚠️ **Nunca some de cabeça — os totais saem da consulta.** Em 19/11/2026, na
+conferência do Midas, o custo de outubro saiu com três totais diferentes na
+mesma resposta (R$ 979 mil, R$ 1,96 mi e um "custo operacional" R$ 2 mil acima
+do certo): o modelo somou oito grupos à mão e errou. Para o total de UM mês, use
+esta consulta — ela já devolve cada total pronto, e a resposta só copia:
+
+```sql
+WITH m AS (
+  SELECT coalesce(substring(categoria FROM '^(\d+)'), 'sem') AS grupo,
+         valor,
+         (cliente_nome = 'Itaú' AND categoria = '9.3 - Tarifas Bancárias'
+          AND historico ILIKE '%parcela%') AS parcela_itau
+    FROM tiny.contas_pagar
+   WHERE excluida_na_origem_em IS NULL
+     AND data_emissao >= DATE '2026-10-01'        -- o mês pedido
+     AND data_emissao <  DATE '2026-11-01')
+SELECT count(*)                                                        AS contas,
+       sum(valor)::numeric(14,2)                                       AS total_com_impostos,
+       sum(valor) FILTER (WHERE grupo NOT IN ('7','8'))::numeric(14,2) AS sem_impostos,
+       sum(valor) FILTER (WHERE parcela_itau)::numeric(14,2)           AS parcelas_itau,
+       sum(valor) FILTER (WHERE grupo NOT IN ('7','8')
+                            AND NOT parcela_itau)::numeric(14,2)       AS operacional_sem_itau,
+       sum(valor) FILTER (WHERE grupo NOT IN ('6','7','8')
+                            AND NOT parcela_itau)::numeric(14,2)       AS operacional_sem_mercadoria,
+       sum(valor) FILTER (WHERE grupo = 'sem')::numeric(14,2)          AS sem_categoria
+  FROM m;
+```
+
+A resposta **começa** pelo `operacional_sem_itau` (é o custo de operar no mês),
+diz o tipo do número, e só depois mostra os outros totais e, se pedirem, os
+grupos da consulta anterior. `sem_categoria` diferente de zero é conta lançada
+sem categoria no Tiny: nomeie, não esconda. Comparação entre meses, ritmo ou
+média também sai do SQL (`GROUP BY` mês), nunca da sua conta.
 
 ### ⚠️ O mês corrente está sempre incompleto — e mês antigo também pode estar
 
