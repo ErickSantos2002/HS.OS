@@ -121,7 +121,7 @@ def test_sistema_ligado_que_nao_veio_recusa_sem_gravar(amb, monkeypatch):
     class ConnLigada(Conn):
         async def fetchrow(self, sql, *a):
             return {**await super().fetchrow(sql, *a),
-                    "sistemas_ligados": ["taskhs", "gestorhs"], "email_ligado": True,
+                    "sistemas_ligados": ["taskhs", "hsgrowth"], "email_ligado": True,
                     "email_conectado": True}
 
     class S(_Sessao):
@@ -131,7 +131,7 @@ def test_sistema_ligado_que_nao_veio_recusa_sem_gravar(amb, monkeypatch):
     chamadas = _registrar_falso(
         monkeypatch, retorno={"status": "entregue", "novidade": True, "o_que_mudou": []})
     texto, erro = _run({"resumo": "x", "numeros": {"taskhs": {"abertas": 4}}})
-    assert erro and "email" in texto and "gestorhs" in texto and chamadas == []
+    assert erro and "email" in texto and "hsgrowth" in texto and chamadas == []
 
 
 def _com_ligados(monkeypatch, ligados, email_ligado=False, email_conectado=False):

@@ -159,8 +159,8 @@ def test_sistemas_faltando_aponta_ligado_que_nao_veio():
     from app.varredura.regras import sistemas_faltando
     ligados = ["taskhs", "gestorhs", "hsgrowth_servicos", "datacore"]
     n = {"taskhs": {"abertas": 4}, "email": {"nao_lidos_3d": 3}}
-    assert sistemas_faltando(n, ligados, email_ligado=True) == ["gestorhs", "hsgrowth"]
-    n["falhas"] = ["gestorhs", "hsgrowth"]
+    assert sistemas_faltando(n, ligados, email_ligado=True) == ["hsgrowth"]
+    n["falhas"] = ["hsgrowth"]
     assert sistemas_faltando(n, ligados, email_ligado=True) == []
     assert sistemas_faltando({"taskhs": {"a": 1}}, ["taskhs"], email_ligado=True) == ["email"]
     assert sistemas_faltando({"taskhs": {"a": 1}}, ["taskhs"], email_ligado=False) == []
@@ -175,11 +175,11 @@ def test_nao_ligado_sai_dos_numeros_e_das_falhas():
     é avisado do que foi ignorado."""
     from app.varredura.regras import separar_nao_ligados
     n = {"taskhs": {"abertas": 2}, "hsgrowth": {"tarefas_atrasadas": 9},
-         "email": {"nao_lidos_3d": 0}, "falhas": ["hsgrowth", "email", "gestorhs"]}
-    limpo, fora = separar_nao_ligados(n, ["taskhs", "gestorhs"], email_ligado=False)
+         "email": {"nao_lidos_3d": 0}, "falhas": ["hsgrowth", "email", "taskhs"]}
+    limpo, fora = separar_nao_ligados(n, ["taskhs"], email_ligado=False)
     assert fora == ["email", "hsgrowth"]
-    assert limpo == {"taskhs": {"abertas": 2}, "falhas": ["gestorhs"]}
-    assert n["falhas"] == ["hsgrowth", "email", "gestorhs"]  # não muta a entrada
+    assert limpo == {"taskhs": {"abertas": 2}, "falhas": ["taskhs"]}
+    assert n["falhas"] == ["hsgrowth", "email", "taskhs"]  # não muta a entrada
 
 
 def test_hsgrowth_servicos_conta_como_hsgrowth_ligado():
@@ -243,3 +243,23 @@ def test_dia_do_fechamento_e_o_primeiro_util_a_partir_do_25():
     assert dia_do_fechamento(date(2026, 10, 26))            # 25/10 é domingo
     assert not dia_do_fechamento(date(2026, 10, 25))
     assert dia_do_fechamento(date(2026, 12, 28))            # 25/12 Natal, 26–27 fim de semana
+
+
+def test_gestorhs_saiu_da_varredura():
+    """23/11/2026: a varredura pedia `gestorhs.minhas_os`, mas a OS do GestorHS
+    não tem responsável — não existe "minhas OS". Com o GestorHS ligado nos 23
+    Guardis, cada um improvisou: 17 escreveram 0, dois mandaram totais (66 e
+    31, nada a ver com o dono) e três marcaram `falhas` todo dia — o quadro da
+    Nina dizia "GestorHS fora" para quem o lia sem problema. Pendência pessoal
+    no GestorHS não existe; o sistema saiu da varredura (decisão do Erick).
+
+    O Guardi com sessão antiga ainda manda a chave: ela é descartada em
+    silêncio, sem recusar e sem virar "não ligado"."""
+    from app.varredura.regras import (EXEMPLO_NUMEROS, SISTEMAS, sem_aposentados,
+                                      sistemas_faltando)
+    assert "gestorhs" not in SISTEMAS and "gestorhs" not in EXEMPLO_NUMEROS
+    assert sistemas_faltando({"taskhs": {"a": 1}}, ["taskhs", "gestorhs"], email_ligado=False) == []
+    n = {"taskhs": {"abertas": 1}, "gestorhs": {"minhas_os": 66}, "falhas": ["gestorhs", "email"]}
+    assert sem_aposentados(n) == {"taskhs": {"abertas": 1}, "falhas": ["email"]}
+    assert n["falhas"] == ["gestorhs", "email"]  # não muta a entrada
+    assert sem_aposentados({"taskhs": {"a": 1}}) == {"taskhs": {"a": 1}}

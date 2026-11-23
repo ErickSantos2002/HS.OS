@@ -30,6 +30,20 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.21.1",
+    date: "2026-11-23",
+    changes: [
+      {
+        kind: "correcao",
+        text: "O resumo de pendências do seu Guardi não diz mais que \"não conseguiu ler o GestorHS\": as OS de lá não têm responsável, então ele deixou de contar \"suas OS\" no resumo. Continua consultando o GestorHS sempre que você pedir.",
+      },
+      {
+        kind: "correcao",
+        text: "Quem usa o HSGrowth de Serviços passa a ver no resumo as próprias atividades pendentes e cards parados, em vez de \"não consegui ler o HSGrowth\".",
+      },
+    ],
+  },
+  {
     version: "2.21.0",
     date: "2026-11-19",
     changes: [

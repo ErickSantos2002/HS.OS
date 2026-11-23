@@ -33,7 +33,8 @@ from app import acoes
 from app.agenda import dominio, outlook
 from app.agenda.regras import FUSO, RegraInvalida, regra_de
 from app.varredura import dominio as varredura
-from app.varredura.regras import EXEMPLO_NUMEROS, separar_nao_ligados, sistemas_faltando
+from app.varredura.regras import (EXEMPLO_NUMEROS, sem_aposentados, separar_nao_ligados,
+                                  sistemas_faltando)
 from app.bots_pessoais import _linha
 from app.database import sessao
 from app.dependencies import normalizar_agent_id
@@ -575,8 +576,9 @@ FERRAMENTAS = [
     _f("varredura_registrar", "Só existe DENTRO de uma varredura (o turno autônomo que pede o resumo das "
        "pendências do seu dono); fora dela recusa. Chame UMA vez, no fim, com o `resumo` (até 4.000 "
        "caracteres) e os `numeros`, NESTE formato: " + EXEMPLO_NUMEROS + " — chaves de topo só "
-       "`taskhs`, `hsgrowth`, `gestorhs`, `email` e `falhas`; dentro, contagens inteiras com nome em "
-       "a-z, 0-9 e _. Conte só o que é DO SEU DONO (as tarefas, cards, OS e e-mails dele), nunca "
+       "`taskhs`, `hsgrowth`, `email` e `falhas` (o GestorHS não entra: lá a OS não tem dono); "
+       "dentro, contagens inteiras com nome em "
+       "a-z, 0-9 e _. Conte só o que é DO SEU DONO (as tarefas, cards e e-mails dele), nunca "
        "totais do sistema inteiro. Os números saem das consultas que você fez, NUNCA estimados. "
        "Sistema que falhou ou não respondeu entra em `falhas` e você o diz no resumo (\"não "
        "consegui ler o X\"). Do e-mail pode entrar assunto e remetente, nunca o corpo. Se recusar "
@@ -816,7 +818,7 @@ async def _varredura_registrar(conn, bot: str, args: dict, ctx: dict) -> str:
     if not isinstance(numeros, dict):
         raise _Recusa("numeros precisa ser um objeto.")
     ligados, email = ctx.get("sistemas") or [], ctx.get("email_conectado", False)
-    numeros, ignorados = separar_nao_ligados(numeros, ligados, email)
+    numeros, ignorados = separar_nao_ligados(sem_aposentados(numeros), ligados, email)
     faltando = sistemas_faltando(numeros, ligados, email)
     if faltando:
         raise _Recusa(f"Faltou {', '.join(faltando)}: consulte e conte (ou ponha em `falhas` se não "

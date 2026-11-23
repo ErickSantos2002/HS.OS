@@ -217,4 +217,4 @@ def test_nao_ligado_nao_e_falha():
            sistemas=["taskhs", "email"])
     t = quadro.formatar_equipe([l], None)
     assert "não conseguiu ler: email" in t
-    assert "não ligados a este Guardi (não é falha): gestorhs, hsgrowth" in t
+    assert "não ligados a este Guardi (não é falha): hsgrowth" in t

@@ -54,10 +54,13 @@ _CONSULTAS = (
     "Consulte só os sistemas para os quais você tem ferramenta (o que não "
     "aparece na sua lista não está ligado, não tente): `taskhs_minhas`; "
     "`hsgrowth_consultar` com `minhas_tarefas`, `tarefas_atrasadas` e "
-    "`meus_cards`; `gestorhs_consultar` nas consultas da função do seu dono "
-    "(veja `gestorhs_consultas`); `email_listar` com `so_nao_lidos: true` e "
-    "`desde` nos últimos 3 dias úteis. Só o que é DO SEU DONO: as tarefas, "
-    "cards, OS e e-mails dele. Total do sistema inteiro (\"11.559 OS\", "
+    "`meus_cards`; ou, se o seu HSGrowth é o de Serviços, "
+    "`hsgrowth_servicos_consultar` com `pendencias` (`minhas: true`) e `cards` "
+    "nos quadros 1 e 2 com `colaborador: eu` (e `pendencia: overdue` ou "
+    "`parado: 3d`) — o resultado vai na chave `hsgrowth`; `email_listar` com "
+    "`so_nao_lidos: true` e `desde` nos últimos 3 dias úteis. O GestorHS NÃO "
+    "entra: lá a OS não tem dono. Só o que é DO SEU DONO: as tarefas, "
+    "cards e e-mails dele. Total do sistema inteiro (\"11.559 OS\", "
     "\"129 cards parados no quadro geral\") não é pendência dele — não cite."
 )
 

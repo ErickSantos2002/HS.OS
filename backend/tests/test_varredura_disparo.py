@@ -402,8 +402,10 @@ def test_mensagem_da_tarde_menciona_NO_REPLY():
     assert "NO_REPLY" not in dv.mensagem("manha", "Erick", None)
     manha = dv.mensagem("manha", "Erick", None)
     for termo in ("varredura_registrar", "taskhs_minhas", "hsgrowth_consultar",
-                  "gestorhs_consultar", "email_listar", "falhas"):
+                  "hsgrowth_servicos_consultar", "email_listar", "falhas"):
         assert termo in manha
+    # 23/11/2026: GestorHS fora da varredura (OS não tem dono).
+    assert "gestorhs" not in manha
     assert dv.mensagem("pedida", "Erick", "nina").startswith("[Varredura pedida pela Nina — Erick]")
 
 
@@ -558,3 +560,15 @@ def test_fechamento_do_mes_vai_junto_do_resumo_no_dia_certo():
     m = dv.mensagem("financeiro", "Nicholson", None, date(2026, 11, 25))
     assert "Fechamento do mês" in m and "resultado-mensal" in m and "margem-por-linha" in m
     assert "Fechamento do mês" not in dv.mensagem("financeiro", "Nicholson", None, date(2026, 11, 24))
+
+
+def test_servicos_sabe_quais_consultas_contam():
+    """Ellen e Leticia têm o HSGrowth de Serviços, que é OUTRA ferramenta
+    (`hsgrowth_servicos_consultar`), com outras consultas. A instrução só
+    nomeava `hsgrowth_consultar` com `minhas_tarefas`: as duas marcavam
+    `hsgrowth` em `falhas` toda manhã (19 e 23/11/2026) sem nem tentar, e a
+    Leticia ainda mandava contagem zero junto com a falha."""
+    manha = dv.mensagem("manha", "Ellen", None)
+    assert "hsgrowth_servicos_consultar" in manha
+    assert "pendencias" in manha and "minhas" in manha
+    assert "colaborador" in manha

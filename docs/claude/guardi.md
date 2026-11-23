@@ -450,7 +450,16 @@ continua negado aos Guardis (os 560 disparos da `nina`); a agenda é do HS.OS.
 
 Spec e plano: `docs/superpowers/specs/2026-11-16-varredura-do-guardi-design.md` (e o
 plano ao lado, em `plans/`). Cada Guardi confere sozinho as pendências do dono
-(TaskHS, HSGrowth, GestorHS, e-mail) e registra um resumo; a Nina reúne o da equipe.
+(TaskHS, HSGrowth, e-mail) e registra um resumo; a Nina reúne o da equipe.
+
+⚠️ **GestorHS saiu da varredura em 23/11/2026** (`APOSENTADOS` em `regras.py`): a
+OS lá não tem responsável, então `minhas_os` não existia — 17 Guardis escreviam 0,
+dois mandavam totais e três marcavam `falhas` todo dia. A chave ainda chega de
+sessão antiga e é descartada em silêncio. ⚠️ **HSGrowth de Serviços é outra
+ferramenta** (`hsgrowth_servicos_consultar`, `pendencias minhas=true` e `cards`
+com `colaborador=eu`); a instrução só nomeava a de Vendas e Ellen/Leticia
+declaravam falha sem tentar. **Antes de pedir um número na varredura, confira
+que alguma consulta o devolve POR PESSOA** — senão o Guardi inventa.
 
 ⚠️ **Lições da 1ª varredura real (16/11/2026, `erick-bot`):** o validador
 descartava em silêncio chave fora de `taskhs/hsgrowth/gestorhs/email` e gravou

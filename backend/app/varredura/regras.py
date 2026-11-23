@@ -24,7 +24,12 @@ ADIAMENTO_MAX = timedelta(minutes=30)
 # tarde, o caixa "dos próximos 7 dias" já é outro.
 LIMITE = {"manha": time(12), "tarde": time(17), "quadro": time(11),
           "financeiro": time(11)}
-SISTEMAS = {"taskhs", "hsgrowth", "gestorhs", "email"}
+SISTEMAS = {"taskhs", "hsgrowth", "email"}
+# Saíram da varredura; o Guardi de sessão antiga ainda pode mandá-los, e a chave
+# é descartada em silêncio (`sem_aposentados`). ⚠️ GestorHS (23/11/2026): a OS
+# lá não tem responsável, então "minhas OS" não existe — cada Guardi inventava
+# um número ou declarava falha. Ver `test_gestorhs_saiu_da_varredura`.
+APOSENTADOS = {"gestorhs"}
 
 _PADRAO = {"manha": time(7, 30), "tarde": time(13, 30), "quadro": time(8, 30),
            "financeiro": time(8)}
@@ -34,7 +39,7 @@ _MAX_CHAVES = 8
 # O formato que o Guardi copia. Vai na descrição da ferramenta e na recusa.
 EXEMPLO_NUMEROS = ('{"taskhs": {"abertas": 4, "atrasadas": 0, "sem_prazo": 4}, '
                    '"hsgrowth": {"tarefas_atrasadas": 1, "cards_parados": 1}, '
-                   '"gestorhs": {"minhas_os": 0}, "email": {"nao_lidos_3d": 4}, "falhas": []}')
+                   '"email": {"nao_lidos_3d": 4}, "falhas": []}')
 
 
 def _pascoa(ano: int) -> date:
@@ -210,7 +215,7 @@ def novidade(manha: dict | None, tarde: dict) -> tuple[bool, list[str]]:
 
 
 # Sistema ligado no Guardi (`agent_profiles.sistemas_ligados`) → chave em `numeros`.
-_LIGADO_PARA_CHAVE = {"taskhs": "taskhs", "gestorhs": "gestorhs",
+_LIGADO_PARA_CHAVE = {"taskhs": "taskhs",
                       "hsgrowth": "hsgrowth", "hsgrowth_servicos": "hsgrowth"}
 
 
@@ -231,6 +236,17 @@ def sistemas_faltando(numeros: dict, ligados: list[str], email_ligado: bool) -> 
     esperados = set(chaves_ligadas(ligados, email_ligado))
     vieram = {k for k in numeros if k in SISTEMAS} | set(numeros.get("falhas") or [])
     return sorted(esperados - vieram)
+
+
+def sem_aposentados(numeros: dict) -> dict:
+    """Tira de `numeros` (contagens e `falhas`) os sistemas que saíram da
+    varredura. Devolve cópia; forma ruim segue para `validar_numeros`."""
+    if not isinstance(numeros, dict):
+        return numeros
+    limpo = {k: v for k, v in numeros.items() if k not in APOSENTADOS}
+    if isinstance(limpo.get("falhas"), list):
+        limpo["falhas"] = [s for s in limpo["falhas"] if s not in APOSENTADOS]
+    return limpo
 
 
 def separar_nao_ligados(numeros: dict, ligados: list[str] | None,
