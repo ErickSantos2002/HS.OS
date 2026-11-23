@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.22.0",
+    date: "2026-11-23",
+    changes: [
+      {
+        kind: "melhoria",
+        text: "Conversa silenciada não entra mais no número das abas Pessoas, Agentes e Canais, no computador e no celular. Ela continua mostrando as próprias não lidas na lista.",
+      },
+    ],
+  },
+  {
     version: "2.21.1",
     date: "2026-11-23",
     changes: [

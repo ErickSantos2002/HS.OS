@@ -111,13 +111,14 @@ describe("itemDePessoa", () => {
 
 /**
  * Os chips não tinham contador: com 5 não lidas em canais a pessoa só via
- * trocando de chip. A regra é a das abas do desktop: silenciada conta.
+ * trocando de chip. A regra é a das abas do desktop: desde 23/11/2026 a
+ * silenciada NÃO conta (antes contava no chip e não na aba "Conversas").
  */
 describe("indicadorPorChip", () => {
-  it("soma por chip, com a silenciada e a pessoal em Pessoas", () => {
+  it("soma por chip, sem a silenciada e com a pessoal em Pessoas", () => {
     const comPessoal = [...itens, item({ id: "eu", tipo: "pessoal", nome: "Eu (você)", naoLidas: 1 }), item({ id: "marina2", tipo: "pessoa", nome: "M", naoLidas: 2 })];
     expect(indicadorPorChip(comPessoal)).toEqual({
-      pessoa: { tipo: "numero", texto: "3" }, agente: { tipo: "numero", texto: "1" }, canal: { tipo: "numero", texto: "12" },
+      pessoa: { tipo: "numero", texto: "3" }, agente: { tipo: "numero", texto: "1" }, canal: null,
     });
   });
 

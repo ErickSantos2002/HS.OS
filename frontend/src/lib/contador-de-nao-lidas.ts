@@ -1,14 +1,16 @@
 /**
  * O contador das abas da lista de conversas (DMs/Pessoas · Agentes · Canais).
  *
- * A regra é a do desktop desde sempre e o celular passou a usá-la em
- * 13/11/2026: soma das não lidas dos itens da aba, **silenciados inclusive**
- * (silenciar corta push, som e notificação, não a não lida — ver
- * `channel_members.silenciado`), e "99+" acima de 99. Em lugar só, para as
- * duas telas não contarem diferente.
+ * Soma das não lidas dos itens da aba, **sem as silenciadas**, e "99+" acima
+ * de 99. Em lugar só, para o desktop e o celular não contarem diferente.
+ *
+ * ⚠️ Até 23/11/2026 a silenciada somava aqui, enquanto a aba "Conversas" do
+ * celular já a deixava de fora — o mesmo app dizia dois números. Silenciar é
+ * não querer ser cobrado pela conversa (decisão do Erick). A conversa mantém o
+ * próprio número na lista; só a soma da aba a ignora.
  */
-export function somarNaoLidas(itens: ReadonlyArray<{ naoLidas: number }>): number {
-  return itens.reduce((acc, i) => acc + (i.naoLidas > 0 ? i.naoLidas : 0), 0);
+export function somarNaoLidas(itens: ReadonlyArray<{ naoLidas: number; silenciado?: boolean }>): number {
+  return itens.reduce((acc, i) => acc + (i.naoLidas > 0 && !i.silenciado ? i.naoLidas : 0), 0);
 }
 
 /** O texto da bolinha; `null` quando não há o que mostrar. */

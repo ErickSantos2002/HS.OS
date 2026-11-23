@@ -62,7 +62,7 @@ export function itemDePessoa(
 
 /**
  * O indicador de cada chip, pela regra das abas do desktop (`indicadorDaAba`:
- * soma das não lidas, silenciada conta; sem número, a bolinha se alguma está
+ * soma das não lidas, silenciada NÃO conta; sem número, a bolinha se alguma está
  * marcada). A conversa pessoal fica em Pessoas, onde aparece.
  */
 export function indicadorPorChip(itens: ItemCelular[]): Record<TipoItem, Indicador> {

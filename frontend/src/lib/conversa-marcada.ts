@@ -27,7 +27,9 @@ export function indicadorDaConversa(naoLidas: number, marcada: boolean): Indicad
   return marcada ? { tipo: "marca" } : null;
 }
 
-export function indicadorDaAba(itens: ReadonlyArray<{ naoLidas: number; marcada?: boolean }>): Indicador {
+export function indicadorDaAba(
+  itens: ReadonlyArray<{ naoLidas: number; marcada?: boolean; silenciado?: boolean }>,
+): Indicador {
   const texto = rotuloDoContador(somarNaoLidas(itens));
   if (texto) return { tipo: "numero", texto };
   return itens.some((i) => i.marcada) ? { tipo: "marca" } : null;

@@ -107,6 +107,7 @@ import MenuDaMensagem from "@/components/chat/MenuDaMensagem";
 import { acoesDaMensagemDoAgente } from "@/lib/acoes-da-mensagem";
 import { naoLidasDoAgente } from "@/lib/nao-lidas-do-agente";
 import { indicadorDaAba, indicadorDaConversa } from "@/lib/conversa-marcada";
+import { useCanaisSilenciados } from "@/hooks/use-canais-silenciados";
 import { useConversasMarcadas } from "@/hooks/use-conversas-marcadas";
 import { CEDE_AO_MENU, IndicadorDaConversa, MenuDaConversa } from "@/components/chat/MenuDaConversa";
 import { LIMITE_TEXTO_COMO_ANEXO, useConversaAgente } from "@/hooks/use-conversa-agente";
@@ -1941,10 +1942,18 @@ export default function ChatPage() {
   // Regra do contador em `lib/contador-de-nao-lidas.ts` — a mesma do celular.
   // A marca NÃO soma: aba só com marcada mostra a bolinha, sem número.
   const pessoalMarcada = canalPessoal ? estaMarcada({ canalId: canalPessoal.id, agentId: null }) : false;
-  const indicadorPessoas = indicadorDaAba([...listaPessoas, { naoLidas: 0, marcada: pessoalMarcada }]);
+  // Silenciada não soma na aba (23/11/2026); agente não se silencia. O hook é
+  // o que re-renderiza quando a pessoa silencia ou volta a ouvir.
+  const { estaSilenciado } = useCanaisSilenciados();
+  const pessoasDaAba = listaPessoas.map((i) => {
+    const canalId = i.kind === "person" ? peerIdToChannelId[i.person.id] : undefined;
+    return { ...i, silenciado: !!canalId && estaSilenciado(canalId) };
+  });
+  const indicadorPessoas = indicadorDaAba([...pessoasDaAba, { naoLidas: 0, marcada: pessoalMarcada }]);
   const indicadorAgentes = indicadorDaAba(listaAgentes);
   const indicadorCanais = indicadorDaAba([...publicChannels, ...privateChannels].map((c) => ({
     naoLidas: unreadByChannel[c.id] || 0, marcada: estaMarcada({ canalId: c.id, agentId: null }),
+    silenciado: estaSilenciado(c.id),
   })));
   // A aba some para quem não tem agente liberado; quem a tinha como última
   // e perdeu o acesso cai em DMs.
