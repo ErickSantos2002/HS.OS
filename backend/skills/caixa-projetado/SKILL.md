@@ -22,6 +22,12 @@ duas consultas abaixo.
 Para "o que vence esta semana" ou "quanto está vencido", título a título, a skill é a
 `contas-receber`. Esta é para o **futuro agregado**.
 
+⚠️ **O vencido há mais de 7 dias não entra no fluxo** (DataCore, 23/11/2026):
+quase sempre é conta paga sem baixa no Tiny. Ele fica em `saida_vencida_antiga`
+(semana 0; a parte de parcelas em `saida_vencida_antiga_parcelas`), e o cenário em
+que nada foi pago é `fluxo_acumulado_conservador_com_vencido`. Ao dar o caixa, diga
+o valor que ficou de fora e por quê, em uma linha.
+
 ## O que você precisa saber antes de responder
 
 1. **É FLUXO, não saldo.** O saldo bancário não chega a você. A tabela diz quanto

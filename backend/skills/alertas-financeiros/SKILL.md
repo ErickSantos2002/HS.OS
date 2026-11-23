@@ -4,7 +4,8 @@ description: >-
   Os alertas financeiros do dia da Health & Safety: o que pede ação do dono
   antes que ele pergunte — aperto de caixa nas próximas semanas, cliente que
   virou inadimplente desde o último dia útil, mês que fechou em prejuízo (no dia do fechamento),
-  importação grande lançada e projeção de caixa desatualizada. Use no resumo
+  importação grande lançada, conta a pagar vencida sem baixa (às segundas) e
+  projeção de caixa desatualizada. Use no resumo
   diário e SEMPRE que perguntarem "tem algo que eu precise saber?", "algum
   alerta?", "o que pede atenção?" ou "alguma coisa preocupante?".
 emoji: 🚨
@@ -87,7 +88,10 @@ recorrente AS (SELECT chave, max(nome) AS nome, linha,
                 HAVING count(*) FILTER (WHERE NOT atual) = 3
                    AND count(*) FILTER (WHERE atual) = 0),
 fechou AS (SELECT mes, resultado FROM gold.dre_mensal, hoje
-            WHERE mes = (date_trunc('month', hoje.d) - interval '1 month')::date)
+            WHERE mes = (date_trunc('month', hoje.d) - interval '1 month')::date),
+-- 1º dia útil da semana: o vencido sem baixa é rotina do Financeiro, não emergência
+seg AS (SELECT min(t.data) AS d FROM gold.dim_tempo t, hoje
+         WHERE t.dia_util AND t.data >= date_trunc('week', hoje.d)::date)
 SELECT 1 AS ordem, 'projecao_desatualizada' AS alerta,
        'a projeção de caixa é de ' || to_char(max(data_referencia), 'DD/MM')
          || ': o cálculo da madrugada não rodou' AS o_que,
@@ -127,6 +131,16 @@ SELECT 6, 'faturamento_recorrente_nao_emitido',
        nome || ' (' || linha || ') foi faturado nos últimos 3 meses e ainda não neste',
        valor_mes, 'valor mensal típico'
   FROM recorrente, hoje WHERE extract(day FROM hoje.d) >= 8
+UNION ALL
+SELECT 7, 'pagar_vencido_sem_baixa',
+       titulos_vencidos_antigos || ' contas a pagar vencidas há mais de 7 dias seguem em aberto no Tiny'
+         || CASE WHEN saida_vencida_antiga_parcelas > 0
+                 THEN ' (R$ ' || replace(to_char(round(saida_vencida_antiga_parcelas), 'FM999,999,999'), ',', '.')
+                      || ' são parcelas de débito automático)' ELSE '' END
+         || ' — quase sempre pagas sem baixa; estão fora do caixa projetado',
+       round(saida_vencida_antiga), NULL
+  FROM cx, hoje, seg
+ WHERE cx.semana = 0 AND hoje.d = seg.d AND cx.saida_vencida_antiga >= 50000
 ORDER BY ordem, valor DESC NULLS LAST;
 ```
 
@@ -139,6 +153,7 @@ ORDER BY ordem, valor DESC NULLS LAST;
 | `importacao_lancada` | "Há R$ `valor` de importação lançada a partir de `quando`." | o caixa das semanas com ela |
 | `cliente_virou_inadimplente` | uma linha por cliente: nome, valor em aberto, desde quando, e o que o `o_que` diz do histórico — **"atraso fora do padrão"** é o que pede ação (vem primeiro); **"costuma pagar com atraso"** é informação, dita em meia linha, sem alarme. ⚠️ A baixa do boleto no Tiny é **manual**, depois que o Financeiro confirma o recebimento: o título pode já estar pago. Diga "em aberto no Tiny", não "não pagou" | a lista de inadimplência (`inadimplencia`) e conferir no banco se já entrou |
 | `faturamento_recorrente_nao_emitido` | "`o_que`: R$ `valor` por mês." Pode ser contrato que acabou — diga que é para conferir, não que alguém esqueceu | conferir com o Financeiro (a locação da APERAM é o FIN-16, todo dia 05) |
+| `pagar_vencido_sem_baixa` | "`o_que`: R$ `valor`." É pendência de **baixa** do Financeiro, não de caixa — nunca diga "faltou pagar" nem some ao aperto | a lista dessas contas (skill `contas-receber`, a pagar vencido) para o Financeiro dar baixa |
 | `mes_fechou_em_prejuizo` | "`o_que`: R$ `valor`." | o DRE do mês (skill `resultado-mensal`) |
 
 - **Alertas vão primeiro**, antes de qualquer outro número, em lista curta.
@@ -146,6 +161,15 @@ ORDER BY ordem, valor DESC NULLS LAST;
   passo é o que faz o alerta virar decisão; adivinhar a causa não.
 - **Cliente inadimplente é dado nominal**: só na conversa direta com quem pode ver
   dado financeiro, nunca à Nina, nunca em página.
+
+⚠️ **Desde 23/11/2026 (DataCore `5aecf77`) o vencido há mais de 7 dias está FORA
+do `fluxo_acumulado_conservador`.** Antes ele caía inteiro na semana corrente e
+o `caixa_apertado` disparava todo dia por R$ 270 mil de contas já pagas sem baixa
+(parcelas do Itaú em débito automático, VA/VT, DARF) — e o resumo dizia "caixa
+apertado" ao lado de "a pagar em 7 dias: R$ 9,8 mil", sem como conciliar. Agora o
+aperto é o de verdade, e o vencido sem baixa é o alerta 7, só às segundas. O
+cenário "nada daquilo foi pago" é `fluxo_acumulado_conservador_com_vencido`: use
+só se perguntarem, dizendo que é o pior caso.
 
 ## Notas relacionadas
 
