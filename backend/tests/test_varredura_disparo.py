@@ -504,6 +504,57 @@ def test_financeiro_adiado_quando_o_midas_tem_turno_aberto():
     assert m[1] == "agendada" and m[4] == SEG_FIN + ADIAMENTO and m[5] == SEG_FIN
 
 
+def _zerar(log, falha=None):
+    async def zerar(agente, user_id):
+        log.append(("zerar", agente, user_id))
+        if falha:
+            raise falha
+    return zerar
+
+
+def test_financeiro_comeca_em_sessao_limpa():
+    """23/11/2026: o resumo das 8h que o Midas mandou ao Erick abriu com "caixa
+    apertado: R$ 284.391, semana de 16 a 22/11" — o alerta de QUATRO dias antes.
+    Ele não rodou a consulta de alertas: copiou o número que estava no histórico
+    da sessão (repetido três vezes em 19/11) e ainda deixou de fora o atraso da
+    Mineração Caraíba. A instrução mandava rodar primeiro; com dias de conversa
+    na sessão, ele pulou. Sem número velho não há o que copiar: a sessão é
+    zerada ANTES do turno, e só no financeiro (o Guardi lembra o dia de ontem
+    de propósito). A tela não muda — nada vai para `conversation_resets`."""
+    log = []
+    conn = Conn(log, guardi=None)
+    asyncio.run(dv.disparar_varredura(_sessao(conn), _v_fin(), SEG_FIN,
+                                      disparar=_disparar(log), zerar=_zerar(log)))
+    nomes = [e[0] for e in log]
+    assert nomes.index("zerar") < nomes.index("chat.send")
+    assert ("zerar", "midas", "u-nicholson") in log
+
+    log = []
+    asyncio.run(dv.disparar_varredura(_sessao(Conn(log)), _v(), AGORA,
+                                      disparar=_disparar(log), zerar=_zerar(log)))
+    assert "zerar" not in [e[0] for e in log] and "chat.send" in [e[0] for e in log]
+
+
+def test_financeiro_sai_mesmo_se_zerar_falhar():
+    """Zerar é proteção, não condição: com o gateway recusando o
+    `sessions.delete`, a situação do dia sai do mesmo jeito (e fica no log)."""
+    log = []
+    conn = Conn(log, guardi=None)
+    asyncio.run(dv.disparar_varredura(_sessao(conn), _v_fin(), SEG_FIN, disparar=_disparar(log),
+                                      zerar=_zerar(log, ErroGateway("recusou"))))
+    assert "chat.send" in [e[0] for e in log]
+
+
+def test_financeiro_adiado_nao_zera():
+    """Turno aberto às 8h = o Nicholson conversando: zerar ali apagaria a
+    conversa em curso. Adia sem tocar na sessão."""
+    log = []
+    conn = Conn(log, guardi=None, turno_aberto=True)
+    asyncio.run(dv.disparar_varredura(_sessao(conn), _v_fin(), SEG_FIN,
+                                      disparar=_disparar(log), zerar=_zerar(log)))
+    assert "zerar" not in [e[0] for e in log]
+
+
 class _ConnSem040(Conn):
     """O banco antes da 040: o CHECK recusa `financeiro`."""
 

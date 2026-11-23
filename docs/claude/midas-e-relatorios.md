@@ -134,3 +134,18 @@ régua antiga contava 27 notas que não são venda e perdia 13 que são. O
 cabeçalho de `compradores.py` tem a conta. **Não reintroduza filtro de CFOP ou
 marcador do lado de cá**: duas réguas foi o que fez o faturamento divergir por
 anos. ⚠️ O fato é recalculado às 05:00 — nota de hoje entra amanhã.
+
+
+### A situação das 8h começa em sessão limpa — 23/11/2026
+
+⚠️ O resumo das 8h ao Erick abriu com o alerta de caixa de **19/11** (R$ 284.391,
+"semana de 16 a 22/11"): o Midas não rodou a consulta de `alertas-financeiros` —
+copiou o número que estava três vezes no histórico da sessão — e perdeu o alerta
+do dia (Mineração Caraíba). A instrução já mandava rodar primeiro. O conserto não é
+texto: `disparar_varredura` faz `sessions.delete` da sessão do Midas com a pessoa
+**antes** do turno `financeiro` (`zerar_sessao`, sem `conversation_resets` — a tela
+não muda), depois do teste de turno aberto. O OpenClaw não tem reset por agente
+(`session.reset*` é global, por tipo ou por canal — conferido na doc em 23/11).
+Custo aceito: o Midas não lembra a conversa da véspera; perguntas do mesmo dia têm
+contexto. **Número de painel diário em sessão longa é número velho esperando para
+ser copiado.**

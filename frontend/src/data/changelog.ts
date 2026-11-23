@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.22.1",
+    date: "2026-11-23",
+    changes: [
+      {
+        kind: "correcao",
+        text: "A situação financeira das 8h do Midas confere os alertas do dia toda manhã, em vez de repetir um alerta de dias anteriores. Ele não lembra mais a conversa da véspera, mas o histórico continua na tela.",
+      },
+    ],
+  },
+  {
     version: "2.22.0",
     date: "2026-11-23",
     changes: [

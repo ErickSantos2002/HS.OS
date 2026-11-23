@@ -155,10 +155,28 @@ def mensagem(tipo: str, nome: str, pedida_por: str | None, dia: date | None = No
     return cab + "\n" + "\n".join(partes)
 
 
-async def disparar_varredura(sessao_fn, v: dict, agora: datetime, disparar=None) -> None:
+async def zerar_sessao(agent_id: str, user_id: str) -> None:
+    """Encerra a sessão do agente com a pessoa no gateway (`sessions.delete`).
+
+    Só o lado do agente: diferente do "Limpar" da tela, não grava em
+    `conversation_resets` — a conversa continua inteira na tela.
+    """
+    from app.gateway import config as cfg
+    from app.gateway.client import obter_cliente
+    from app.routers.conversations import _chave_sessao
+    c = await cfg.carregar()
+    if c.configurado:
+        await obter_cliente(c.url, c.token).chamar(
+            "sessions.delete", {"key": _chave_sessao(agent_id, user_id)})
+
+
+async def disparar_varredura(sessao_fn, v: dict, agora: datetime, disparar=None,
+                             zerar=None) -> None:
     """Decide e dispara uma varredura reservada. Cada passo, transação curta."""
     if disparar is None:
         from app.routers.conversations import disparar_turno as disparar
+    if zerar is None:
+        zerar = zerar_sessao
 
     carimbo = v["disparando_em"]
 
@@ -216,6 +234,15 @@ async def disparar_varredura(sessao_fn, v: dict, agora: datetime, disparar=None)
 
     if not await marcar("rodando", limpar_pendente=True):
         return
+    if v["tipo"] == "financeiro":
+        # ⚠️ 23/11/2026: com dias de conversa na sessão, o Midas copiou o alerta
+        # de caixa de 19/11 em vez de rodar a consulta. Sessão limpa = nada
+        # velho para copiar. Depois do teste de turno aberto, para não derrubar
+        # uma conversa em curso. Falhar aqui não segura a situação do dia.
+        try:
+            await zerar(v["agent_id"], v["user_id"])
+        except Exception as e:  # noqa: BLE001 — ErroGateway, OSError
+            logger.warning("Varredura %s: sessão não zerada antes do financeiro: %s", v["id"], e)
     try:
         run_id = await disparar(v["agent_id"], v["user_id"],
                                 mensagem(v["tipo"], nome, v.get("pedida_por"), v.get("dia")),
