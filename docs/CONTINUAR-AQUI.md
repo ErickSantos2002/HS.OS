@@ -49,7 +49,7 @@ Pendente, em ordem:
 3. **Celular sem atalho para a Agenda** (o `AppCelular` não tem menu inferior) —
    decidir com o Erick.
 4. Risco aceito e revisável: instrução de lembrete plantada por e-mail lido roda
-   depois no turno autônomo (ver a seção da agenda no `CLAUDE.md`).
+   depois no turno autônomo (ver a seção da agenda em `docs/claude/guardi.md`).
 
 Ponto de retomada da portagem. Atualizado em **03/09/2026**. Leia isto, depois
 `CLAUDE.md` e `docs/ROADMAP.md`.
@@ -390,7 +390,7 @@ declarados — **TypeScript afirma, não confere**.
 **E o principal: configurar LLM pela tela funciona.** Passei o dia afirmando o
 contrário, três vezes, e o Erick segurou o argumento de que o pessoal da dn.ia
 não toca a VPS. Ele estava certo. Detalhes e os erros de raciocínio estão em
-`CLAUDE.md`, seção *"Configurar LLM"* — vale ler antes de mexer em `llm.py`.
+`docs/claude/gateway-operacao.md`, seção *"Configurar LLM"* — vale ler antes de mexer em `llm.py`.
 
 A `nina` ficou muda por horas por causa de uma chave inválida, não por nada
 disso. Quem resolveu foi o log do gateway
