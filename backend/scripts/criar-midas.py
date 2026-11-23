@@ -45,7 +45,8 @@ logger = logging.getLogger("criar-midas")
 
 LIDER_PADRAO = "nina"
 NOME = "Midas"
-ESPECIALIDADE = "Financeiro (CFO)"
+ESPECIALIDADE = ("Financeiro (CFO): faturamento, vendas, estoque e notas do ERP Tiny/DataCoreHS, "
+                 "contas a pagar e receber, inadimplência, caixa")
 VOZ = "pt-BR-AntonioNeural"
 
 
