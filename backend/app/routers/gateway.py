@@ -237,8 +237,36 @@ _MANUTENCAO = {
 }
 
 
+_SQL_RUNS_ATIVOS = """
+    SELECT agent_id, count(*)::int AS n
+      FROM public.agent_runs
+     WHERE message_id IS NULL
+       AND coleta_encerrada_em IS NULL
+       AND criado_em > now() - interval '15 minutes'
+     GROUP BY agent_id ORDER BY n DESC, agent_id
+"""
+
+
+async def _recusa_por_runs_ativos(conn) -> str | None:
+    """A mensagem de recusa se houver resposta em andamento; `None` se livre.
+
+    ⚠️ PK-10 (24/11/2026): reiniciar no meio de um turno derruba a resposta
+    que alguém está esperando. "Em andamento" é a regra do `SQL_FECHAR` da
+    varredura. Ver `tests/test_reinicio_seguro.py`.
+    """
+    linhas = await conn.fetch(_SQL_RUNS_ATIVOS)
+    if not linhas:
+        return None
+    total = sum(l["n"] for l in linhas)
+    quem = ", ".join(f"{l['agent_id']} ({l['n']})" for l in linhas[:6])
+    return (f"Há {total} resposta(s) em andamento — {quem}. Reiniciar agora as "
+            "derrubaria. Espere terminarem e tente de novo; em emergência, "
+            "chame com `?forcar=true`.")
+
+
 @router.post("/manutencao/{acao}")
-async def manutencao(acao: str, _: Usuario = Depends(exige_papel("administrador"))):
+async def manutencao(acao: str, forcar: bool = False,
+                     _: Usuario = Depends(exige_papel("administrador"))):
     """Reinicia o gateway ou limpa os Chrome órfãos. Só `administrador`.
 
     Rota REST, não JSON-RPC: é manutenção do processo do gateway, fora do
@@ -254,6 +282,12 @@ async def manutencao(acao: str, _: Usuario = Depends(exige_papel("administrador"
             f"Ação desconhecida. Use: {', '.join(sorted(_MANUTENCAO))}.",
         )
     caminho, segundos, aviso = _MANUTENCAO[acao]
+
+    if acao == "restart" and not forcar:
+        async with sessao(role="service_role") as conn:
+            recusa = await _recusa_por_runs_ativos(conn)
+        if recusa:
+            return {"success": False, "error": recusa}
 
     c = await cfg.carregar()
     if not c.configurado:

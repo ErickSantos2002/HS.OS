@@ -1,0 +1,11 @@
+[Unit]
+Description=Backup diário do OpenClaw às 03:30 BRT (06:30 UTC)
+
+[Timer]
+# Longe da varredura (07:30 BRT) e dos briefings (08:00 BRT).
+OnCalendar=*-*-* 06:30:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

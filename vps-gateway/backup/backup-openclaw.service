@@ -1,0 +1,14 @@
+[Unit]
+Description=Backup cifrado do OpenClaw para o R2 (PK-10)
+# Sem credencial, não roda — e não dá erro: o timer pode estar ligado antes.
+ConditionPathExists=/root/.config/backup-openclaw/env
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/backup-openclaw/backup-openclaw.sh
+Nice=10
+IOSchedulingClass=idle
+# Não disputa memória com o gateway: a VPS já conheceu OOM (PK-47).
+MemoryMax=1G
