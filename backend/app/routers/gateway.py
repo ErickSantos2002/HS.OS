@@ -153,9 +153,14 @@ async def listar_modelos(_: Usuario = Depends(usuario_atual)):
 
 
 @router.get("/agents")
-async def listar_agentes(_: Usuario = Depends(usuario_atual)):
-    """Só os agentes vivos no gateway. A junção com `agent_profiles` (metadados
-    e controle de acesso) fica no router de agentes, no Lote 2."""
+async def listar_agentes(_: Usuario = Depends(exige_papel("administrador"))):
+    """Só os agentes vivos no gateway, crus. A junção com `agent_profiles`
+    (metadados e controle de acesso) fica no router de agentes.
+
+    ⚠️ PK-03 (24/11/2026): estava em "só logado" e passava por cima do
+    `_pode_ver` do `GET /agents` — o colaborador via todos os agentes, os
+    Guardis dos outros inclusive. Nenhum front chama esta rota.
+    """
     cliente = await _cliente()
     try:
         return await cliente.chamar("agents.list")
@@ -166,8 +171,11 @@ async def listar_agentes(_: Usuario = Depends(usuario_atual)):
 @router.get("/sessions")
 async def listar_sessoes(
     limit: int = 50,
-    _: Usuario = Depends(exige_papel("administrador", "colaborador")),
+    _: Usuario = Depends(exige_papel("administrador")),
 ):
+    # ⚠️ PK-03: o `sessions.list` cru diz quem conversa com qual agente (a
+    # chave da sessão leva o id da pessoa), de todos. Era aberto ao
+    # colaborador; nenhum front chama esta rota.
     cliente = await _cliente()
     try:
         return await cliente.chamar("sessions.list", {"limit": limit})

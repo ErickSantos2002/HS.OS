@@ -87,6 +87,9 @@ def exige_papel(*papeis: str):
             )
         return usuario
 
+    # Lido pelos testes de rota (PK-03): sem isto, conferir que uma rota é de
+    # administrador exigia chamá-la com token emitido à mão.
+    setattr(_guard, "papeis", papeis)
     return _guard
 
 

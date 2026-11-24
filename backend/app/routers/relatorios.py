@@ -177,7 +177,7 @@ _FERRAMENTAS = [{
                                                 "dias serve. Só omita para página sem "
                                                 "dado nominal."},
         },
-        "required": ["titulo", "html"],
+        "required": ["titulo", "html", "solicitante"],
     },
 }, {
     "name": "relatorio_vendedores",
@@ -194,10 +194,10 @@ _FERRAMENTAS = [{
                      "description": "Janela em dias. O padrão é 30, que é o que se usa."},
             "solicitante": {"type": "string",
                             "description": "Id da pessoa que pediu, o `hsos-<id>` da sua "
-                                           "chave de sessão sem o prefixo. Sem ele o "
-                                           "arquivo fica no nome do administrador."},
+                                           "chave de sessão sem o prefixo. Obrigatório: "
+                                           "sem ele a ferramenta recusa."},
         },
-        "required": [],
+        "required": ["solicitante"],
     },
 }]
 
@@ -238,7 +238,7 @@ _FERRAMENTAS.append({
                             "description": "Id de quem pediu: o `hsos-<id>` da sua "
                                            "chave de sessão, sem o prefixo."},
         },
-        "required": ["produto", "inicio"],
+        "required": ["produto", "inicio", "solicitante"],
     },
 })
 
@@ -272,7 +272,7 @@ _FERRAMENTAS.append({
                             "description": "Id de quem pediu: o `hsos-<id>` da sua chave de sessão, "
                                            "sem o prefixo."},
         },
-        "required": ["modo"],
+        "required": ["modo", "solicitante"],
     },
 })
 
@@ -435,23 +435,31 @@ def _uuid_ou_none(texto: str | None) -> str | None:
         return None
 
 
-async def _dono_do_pedido(conn, solicitante: str | None) -> str | None:
-    """Quem fica como dono do que o agente publicou.
+# ⚠️ PK-03 (24/11/2026): sem `solicitante` válido a ferramenta RECUSA — não cai
+# mais no administrador mais antigo. Três das quatro ferramentas daqui gravam
+# arquivo com dado financeiro nos Documentos do dono; no DN.OS esse mesmo
+# desenho mandou o painel de uma pessoa para a conta de outra. A recusa ensina
+# o agente a achar o id, e todo turno vindo do HS.OS tem a chave com ele.
+_SEM_SOLICITANTE = (
+    "Faltou o `solicitante`: o id da pessoa que pediu, que é o que vem depois de "
+    "`hsos-` na sua chave de sessão (`agent:<você>:hsos-<id>`). Chame de novo com "
+    "ele. Sem uma pessoa pedindo (cron, teste), não publique nem gere arquivo — "
+    "o resultado iria parar na conta de alguém que não pediu."
+)
 
-    Sem `solicitante` válido, cai no administrador — o mesmo desenho do
-    `/mcp/wiki`. Um cron não tem pessoa pedindo, e artefato sem dono não
-    aparece em lugar nenhum.
+
+async def _dono_do_pedido(conn, solicitante: str | None) -> str | None:
+    """A pessoa que pediu, se o id existir em `profiles`; senão `None`.
+
+    Até 24/11/2026 caía no administrador mais antigo — ver `_SEM_SOLICITANTE`.
+    A wiki (`mcp_wiki._dono`) mantém o recuo de propósito: é o caminho dos
+    briefings, e o documento vai para a base que todos leem.
     """
     pedido = _uuid_ou_none(solicitante)
-    if pedido:
-        dono = await conn.fetchval(
-            "SELECT id::text FROM public.profiles WHERE id = $1::uuid", pedido)
-        if dono:
-            return dono
+    if not pedido:
+        return None
     return await conn.fetchval(
-        "SELECT p.id::text FROM public.profiles p "
-        "  JOIN public.user_roles r ON r.user_id = p.id "
-        " WHERE r.role = 'administrador' ORDER BY p.created_at LIMIT 1")
+        "SELECT id::text FROM public.profiles WHERE id = $1::uuid", pedido)
 
 
 async def _publicar_pagina(ident, args: dict):
@@ -486,7 +494,7 @@ async def _publicar_pagina(ident, args: dict):
         dono = await _dono_do_pedido(conn, args.get("solicitante"))
         if not dono:
             return _resposta(ident, {"content": [{"type": "text",
-                "text": "Não há administrador cadastrado para ficar como dono."}],
+                "text": _SEM_SOLICITANTE}],
                 "isError": True})
 
         # Mesmo HTML já publicado por essa pessoa devolve o link que existe. É a
@@ -559,7 +567,7 @@ async def mcp_relatorios(
             dono = await _dono_do_pedido(conn, args.get("solicitante"))
         if not dono:
             return _resposta(ident, {"content": [{"type": "text",
-                "text": "Não há administrador cadastrado para guardar o arquivo."}], "isError": True})
+                "text": _SEM_SOLICITANTE}], "isError": True})
         try:
             texto = await _inadimplencia(dono, args)
         except datacore.ErroSistema as e:
@@ -573,7 +581,7 @@ async def mcp_relatorios(
             dono = await _dono_do_pedido(conn, args.get("solicitante"))
         if not dono:
             return _resposta(ident, {"content": [{"type": "text",
-                "text": "Não há administrador cadastrado para guardar o arquivo."}],
+                "text": _SEM_SOLICITANTE}],
                 "isError": True})
         try:
             texto = await _compradores_e_guardar(dono, args, datacore.AGENTE_FINANCEIRO)
@@ -590,7 +598,7 @@ async def mcp_relatorios(
         dono = await _dono_do_pedido(conn, args.get("solicitante"))
     if not dono:
         return _resposta(ident, {"content": [{"type": "text",
-            "text": "Não há administrador cadastrado para guardar o arquivo."}],
+            "text": _SEM_SOLICITANTE}],
             "isError": True})
 
     try:

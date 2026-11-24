@@ -240,7 +240,7 @@ async def varrer_contexto(_: Usuario = Depends(exige_papel("administrador"))):
 
 @router.get("/eventos")
 async def eventos(
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(exige_papel("administrador")),
     desde: str | None = Query(default=None, description="ISO-8601. Sem isto, vale `dias`."),
     ate: str | None = Query(default=None, description="ISO-8601. Sem isto, agora."),
     dias: int = Query(default=30, ge=1, le=365),
@@ -276,7 +276,7 @@ async def eventos(
 
 @router.get("/snapshots")
 async def snapshots(
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(exige_papel("administrador")),
     desde: str | None = Query(default=None, description="ISO-8601."),
     limite: int = Query(default=2000, ge=1, le=10_000),
 ):
@@ -298,7 +298,7 @@ async def snapshots(
 
 @router.get("/estatisticas-de-agente")
 async def estatisticas_de_agente(
-    usuario: Usuario = Depends(usuario_atual),
+    usuario: Usuario = Depends(exige_papel("administrador")),
     limite: int = Query(default=500, ge=1, le=2000),
 ):
     """As coletas de `agent_stats`, da mais recente para a mais antiga."""
