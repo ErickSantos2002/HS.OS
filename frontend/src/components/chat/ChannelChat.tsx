@@ -16,7 +16,7 @@ import { normalizeAgentId } from "@/lib/active-agents";
 import { useChatMedia } from "@/hooks/use-chat-media";
 import { useAudioRecorder } from "@/hooks/use-audio-recorder";
 import AnexoResolvido from "@/components/chat/AnexoResolvido";
-import { uploadFileToStorage, formatFileSize, isImageFile } from "@/lib/file-upload";
+import { formatFileSize, isImageFile } from "@/lib/file-upload";
 import FileAttachmentCard from "./FileAttachmentCard";
 import AudioDaMensagem from "./AudioDaMensagem";
 import MenuDaMensagem, { type AcaoDaMensagem } from "./MenuDaMensagem";

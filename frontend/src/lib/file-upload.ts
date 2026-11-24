@@ -2,8 +2,7 @@
  * File upload to Supabase Storage + text extraction for documents.
  */
 
-import { enviarArquivo, urlPublica, type Bucket } from "@/lib/storage";
-import { caminhoDeAnexo } from "@/lib/caminho-de-anexo";
+import { urlPublica, type Bucket } from "@/lib/storage";
 
 const MAX_TEXT_CHARS = 50_000;
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB — mesmo limite do backend
@@ -175,39 +174,6 @@ export async function downloadAttachment({ url, name }: Pick<FileAttachmentMeta,
       `Não foi possível baixar "${name}"${errMsg ? `: ${errMsg}` : ""}.`,
     );
   }
-}
-
-/**
- * Envia um arquivo para o bucket `agent-files` e devolve a URL pública dele.
- *
- * ⚠️ **Não é URL assinada.** Esta docstring dizia "Returns a signed URL valid
- * for 30 days" até 03/09/2026, contradizendo o comentário quinze linhas abaixo,
- * que explica justamente por que não há assinatura. Herança do texto da versão
- * Supabase.
- *
- * ⚠️ **O nome do arquivo é aleatório, e isso é a defesa.** O caminho era
- * `<epoch em ms>_<nome original>`, e o `epoch` fica a poucas dezenas de
- * milissegundos do `created_at` da mensagem — que a API devolve com precisão de
- * microssegundo. Como o bucket é de leitura pública, quem conhecesse o canal e
- * o nome do arquivo reconstruía a URL. Ver `caminho-de-anexo.ts`.
- */
-export async function uploadFileToStorage(
-  bucketPath: string,
-  file: File
-): Promise<string> {
-  const path = caminhoDeAnexo(bucketPath, file.name);
-
-  // A conferência de que o objeto existe saiu junto com o `list()`: aqui o
-  // upload só responde 201 depois de o arquivo estar gravado em disco, e
-  // qualquer falha vira exceção. Não há o "sucesso silencioso" contra o qual
-  // aquela checagem defendia.
-  const enviado = await enviarArquivo("agent-files", path, file, file.name);
-
-  // Não há URL assinada: `agent-files` é bucket de leitura pública, como já era
-  // no Supabase (o `createSignedUrl` tinha `getPublicUrl` como fallback e caía
-  // nele sempre que a assinatura falhava). O agente precisa buscar o arquivo
-  // sozinho, do lado do gateway, e não teria como carregar nosso token.
-  return `${window.location.origin}${enviado.url}`;
 }
 
 export async function extractTextFromFileUrl(

@@ -1,4 +1,5 @@
 import { useEditor, EditorContent } from "@tiptap/react";
+import { caminhoNaWiki } from "@/lib/caminho-de-anexo";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -320,8 +321,7 @@ function EditorDropZone({ editor, documentId }: { editor: ReturnType<typeof useE
       if (!userId) throw new Error("Usuário não autenticado para enviar arquivos");
 
       for (const file of list) {
-        const ext = file.name.split(".").pop() || "bin";
-        const path = `${userId}/${documentId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const path = caminhoNaWiki(userId, documentId, file.name);
         await enviarArquivo("wiki-uploads", path, file, file.name);
         const url = urlPublica("wiki-uploads", path);
         const endPos = editor.state.doc.content.size;

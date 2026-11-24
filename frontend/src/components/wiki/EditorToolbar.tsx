@@ -1,4 +1,5 @@
 import type { Editor } from "@tiptap/react";
+import { caminhoNaWiki } from "@/lib/caminho-de-anexo";
 import { useRef, useState } from "react";
 import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough,
@@ -101,14 +102,12 @@ export function EditorToolbar({ editor, documentId }: Props) {
   const promptAttachment = () => attachmentInputRef.current?.click();
 
   const uploadFile = async (file: File, kind: "image" | "video" | "attachment") => {
-    const ext = file.name.split(".").pop() || "bin";
     const userId = lerUsuarioDoToken();
     if (!userId) {
       console.error("Upload failed: usuário não autenticado");
       return;
     }
-    const folder = documentId || "misc";
-    const path = `${userId}/${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const path = caminhoNaWiki(userId, documentId, file.name);
     try {
       await enviarArquivo("wiki-uploads", path, file, file.name);
     } catch (e) {

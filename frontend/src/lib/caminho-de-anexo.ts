@@ -31,3 +31,17 @@ export function caminhoDeAnexo(prefixo: string, nomeOriginal: string): string {
   const ext = extensaoSegura(nomeOriginal);
   return `${prefixo}/${idAleatorio()}${ext ? "." + ext : ""}`;
 }
+
+/**
+ * O caminho de um arquivo enviado na wiki (bucket `wiki-uploads`, público).
+ *
+ * ⚠️ PK-09 (24/11/2026): era `<usuário>/<documento>/<ms>-<6 de Math.random>`.
+ * Usuário e documento são conhecidos de quem é membro, o carimbo fica a
+ * segundos do `updated_at` do documento, e 6 caracteres de `Math.random` não
+ * são sorteio de verdade — o mesmo defeito que este arquivo fechou no
+ * `agent-files`. O bucket continua público (a imagem aparece em `<img src>`);
+ * a defesa é o nome não ser adivinhável.
+ */
+export function caminhoNaWiki(usuario: string, documento: string | null | undefined, nomeOriginal: string): string {
+  return caminhoDeAnexo(`${usuario}/${documento || "misc"}`, nomeOriginal);
+}

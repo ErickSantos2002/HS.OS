@@ -734,7 +734,20 @@ Nada disso é novo de 14/08, e nada disso bloqueia o trabalho acima:
   de *Decisões pendentes*, no mesmo arquivo, já a dava como feita. Duas seções
   do mesmo documento em desacordo: quem lesse esta primeiro iria rotacionar de
   novo.
-- 🟠 **Anexo de conversa privada é servido sem token, e a URL é permanente.**
+- ✅ **Fechado em 24/11/2026 (PK-09), e esta seção estava velha.** Desde 13/10 o
+  anexo de conversa vai para o bucket privado `anexos` (232 mensagens de canal
+  com anexo, nenhuma em `agent-files`), e `audio-messages` também é privado. O
+  inventário do R2 de 24/11: `agent-files` tem **só os 20 avatares** (que são
+  públicos de propósito) e `wiki-uploads` está **vazio** — não havia anexo
+  antigo público a apagar (a decisão do Erick era apagar os de +30 dias). Uma
+  conversa ainda cita um anexo antigo que já não existe no R2: link quebrado
+  de antes, não piora. O upload morto para `agent-files` saiu, e o nome dos
+  arquivos da wiki passou a ser uuid (`caminhoNaWiki`). O que segue público por
+  caminho, com nome não adivinhável: avatar e arquivo da wiki.
+
+  O texto abaixo é o histórico da decisão.
+
+- 🟠 *(histórico)* **Anexo de conversa privada é servido sem token, e a URL é permanente.**
   Levantado em 03/09/2026 na pilha local, com três contas: num canal
   **privado**, a API recusa corretamente quem não é membro (devolve lista
   vazia) e o arquivo é entregue a uma requisição anônima.
