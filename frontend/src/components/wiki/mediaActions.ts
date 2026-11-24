@@ -1,4 +1,15 @@
 // Shared helpers for media actions (preview / download)
+import { toast } from "sonner";
+import { enderecoSeguro } from "@/lib/endereco-seguro";
+
+// ⚠️ PK-01 (24/11/2026): o endereço vem do conteúdo do documento, que agentes
+// escrevem. Abrir um `javascript:` numa aba (ou numa janela aberta daqui) roda
+// na origem do HS.OS e lê `hsos.token`.
+function recusar(url: string): boolean {
+  if (enderecoSeguro(url, { imagem: true })) return false;
+  toast.error("Este endereço não pode ser aberto.");
+  return true;
+}
 
 const MIME_BY_EXT: Record<string, string> = {
   html: "text/html",
@@ -34,6 +45,7 @@ function escapeHtml(value: string): string {
 }
 
 function openDirectUrl(url: string) {
+  if (recusar(url)) return;
   const targetUrl = new URL(url, window.location.href).href;
   const opened = window.open(targetUrl, "_blank");
   if (opened) {
@@ -77,6 +89,7 @@ function writePopupLoading(win: Window, filename: string) {
  */
 export async function openPreview(url: string, filename?: string) {
   if (!url) return;
+  if (recusar(url)) return;
   const name = filename || url.split("/").pop() || "";
   const ext = extOf(name) || extOf(url);
   const mime = MIME_BY_EXT[ext];
@@ -85,6 +98,15 @@ export async function openPreview(url: string, filename?: string) {
 
   if (ext === "html" || ext === "htm") {
     openHtmlPreviewRoute(url, name);
+    return;
+  }
+
+  // ⚠️ PK-01: SVG e XML podem conter <script>. Abrir numa aba (blob de mesma
+  // origem) faz esse script rodar na origem do app e ler o login — roubo de
+  // conta com um clique. Baixamos em vez de abrir; md/txt/csv/json não
+  // executam script e seguem abrindo.
+  if (ext === "svg" || ext === "xml") {
+    await downloadUrl(url, name);
     return;
   }
 
@@ -129,6 +151,7 @@ export async function openPreview(url: string, filename?: string) {
 
 export async function downloadUrl(url: string, filename?: string) {
   if (!url) return;
+  if (recusar(url)) return;
   try {
     const res = await fetch(url, { credentials: "omit" });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

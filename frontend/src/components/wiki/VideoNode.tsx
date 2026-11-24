@@ -2,9 +2,11 @@ import { Node, mergeAttributes } from "@tiptap/core";
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from "@tiptap/react";
 import { Eye, Download, Trash2 } from "lucide-react";
 import { openPreview, downloadUrl } from "./mediaActions";
+import { enderecoSeguro } from "@/lib/endereco-seguro";
 
 function VideoView({ node, deleteNode }: NodeViewProps) {
-  const src: string = node.attrs.src;
+  // PK-01: o src vem do conteúdo do documento; só http(s)/blob/relativo.
+  const src: string = enderecoSeguro(node.attrs.src) ?? "";
   const stop = (e: React.MouseEvent) => e.preventDefault();
 
   return (
@@ -33,13 +35,13 @@ export const VideoNode = Node.create({
   selectable: true,
   addAttributes() {
     return {
-      src: { default: null },
+      src: { default: null, parseHTML: (el) => enderecoSeguro((el as HTMLElement).getAttribute("src")), renderHTML: (a) => { const v = enderecoSeguro(a.src); return v ? { src: v } : {}; } },
     };
   },
   parseHTML() {
     return [
-      { tag: "div[data-video] video", getAttrs: (el) => ({ src: (el as HTMLVideoElement).getAttribute("src") }) },
-      { tag: "video[src]", getAttrs: (el) => ({ src: (el as HTMLVideoElement).getAttribute("src") }) },
+      { tag: "div[data-video] video", getAttrs: (el) => ({ src: enderecoSeguro((el as HTMLVideoElement).getAttribute("src")) }) },
+      { tag: "video[src]", getAttrs: (el) => ({ src: enderecoSeguro((el as HTMLVideoElement).getAttribute("src")) }) },
     ];
   },
   renderHTML({ HTMLAttributes }) {

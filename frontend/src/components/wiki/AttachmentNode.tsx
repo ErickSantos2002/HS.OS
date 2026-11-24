@@ -3,10 +3,12 @@ import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from "@tip
 import { Eye, Download, Trash2, Pencil, Paperclip, Check, X, GripVertical } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { downloadUrl } from "./mediaActions";
+import { enderecoSeguro } from "@/lib/endereco-seguro";
 import { PreviewModal } from "./PreviewModal";
 
 function AttachmentView({ node, updateAttributes, deleteNode }: NodeViewProps) {
-  const href: string = node.attrs.href;
+  // PK-01: o href vem do conteúdo (que agentes escrevem); só http(s)/blob/relativo.
+  const href: string = enderecoSeguro(node.attrs.href) ?? "";
   const name: string = node.attrs.name || "arquivo";
   const size: string = node.attrs.size || "";
 
@@ -118,7 +120,7 @@ export const AttachmentNode = Node.create({
   selectable: true,
   addAttributes() {
     return {
-      href: { default: null },
+      href: { default: null, parseHTML: (el) => enderecoSeguro((el as HTMLElement).getAttribute("data-href") ?? (el as HTMLElement).getAttribute("href")), renderHTML: (a) => { const v = enderecoSeguro(a.href); return v ? { href: v } : {}; } },
       name: { default: "arquivo" },
       size: { default: "" },
     };
@@ -131,7 +133,7 @@ export const AttachmentNode = Node.create({
         getAttrs: (el) => {
           const node = el as HTMLElement;
           return {
-            href: node.getAttribute("data-href"),
+            href: enderecoSeguro(node.getAttribute("data-href")),
             name: node.getAttribute("data-name") || "arquivo",
             size: node.getAttribute("data-size") || "",
           };
@@ -145,7 +147,7 @@ export const AttachmentNode = Node.create({
         getAttrs: (el) => {
           const a = el as HTMLAnchorElement;
           return {
-            href: a.getAttribute("href"),
+            href: enderecoSeguro(a.getAttribute("href")),
             name:
               a.getAttribute("data-name") ||
               a.getAttribute("download") ||
@@ -167,7 +169,7 @@ export const AttachmentNode = Node.create({
       mergeAttributes(
         {
           "data-wiki-attachment": "true",
-          "data-href": href,
+          "data-href": enderecoSeguro(href),
           "data-name": name,
           "data-size": size,
           class: "wiki-file-attachment-block",

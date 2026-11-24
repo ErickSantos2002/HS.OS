@@ -37,6 +37,10 @@ export const CHANGELOG: ChangelogVersion[] = [
         kind: "correcao",
         text: "Os agentes não ficam mais minutos em \"Iniciando…\" nos horários de pico (começo da manhã e da tarde). O servidor dos agentes ficava sem memória quando muita gente conversava ao mesmo tempo, e isso foi resolvido.",
       },
+      {
+        kind: "correcao",
+        text: "Arquivos da Base de Conhecimento ficaram mais seguros: SVG e XML agora são baixados em vez de abertos numa aba, links de arquivo que poderiam executar código são recusados, e a prévia de HTML só abre arquivos do próprio sistema.",
+      },
     ],
   },
   {

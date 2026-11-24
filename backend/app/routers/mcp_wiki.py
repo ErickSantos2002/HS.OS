@@ -34,7 +34,9 @@ parâmetros: o agente sabe os dois (o segundo sai da própria chave de sessão,
 `agent:<id>:hsos-<user_id>`, o mesmo mecanismo do Diretório).
 """
 
+import html as html_lib
 import logging
+import re
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
@@ -76,15 +78,56 @@ def _para_html(texto: str) -> str:
     """Markdown do agente → HTML que o editor da tela entende.
 
     Texto que já vem em HTML passa direto: o agente pode ter copiado um
-    documento existente, e converter de novo escaparia as tags.
+    documento existente, e converter de novo escaparia as tags. Nos dois
+    ramos, endereço que roda código sai antes de gravar (`_sem_endereco_perigoso`).
     """
     if not texto:
         return ""
     inicio = texto.lstrip()[:40].lower()
     if inicio.startswith("<") and any(f"<{t}" in inicio for t in _TAGS_TIPTAP):
-        return texto
+        return _sem_endereco_perigoso(texto)
     import markdown as _md
-    return _md.markdown(texto, extensions=_EXTENSOES_MD)
+    return _sem_endereco_perigoso(_md.markdown(texto, extensions=_EXTENSOES_MD))
+
+
+# ⚠️ PK-01 (24/11/2026): o agente escreve na wiki depois de ler e-mail e anexo
+# de terceiros. Um `data-href="javascript:…"` no anexo vira, no "Baixar" de um
+# administrador, código na origem do HS.OS com o token dele. O front recusa
+# também (`enderecoSeguro`); aqui é a segunda ponta — não chega ao banco.
+#
+# Lista do que PASSA, não do que cai: esquema novo que rode código não precisa
+# estar previsto. `mailto:`/`tel:` passam porque isto vale para todo link do
+# documento, não só anexo e vídeo.
+_ATRIBUTO_DE_ENDERECO = re.compile(
+    r"""(\s(?:href|src|data-href)\s*=\s*)("[^"]*"|'[^']*'|[^\s>]+)""", re.I)
+_ESQUEMA = re.compile(r"^([a-z][a-z0-9+.\-]*):", re.I)
+_ESQUEMAS_OK = {"http", "https", "mailto", "tel", "blob"}
+_IMAGEM_EM_DATA = re.compile(r"^data:image/(png|jpe?g|gif|webp);", re.I)
+
+
+def _endereco_ok(valor: str, atributo: str) -> bool:
+    # O navegador decodifica entidade (`&#106;`) e ignora espaço e controle no
+    # esquema (`java\tscript:`) — a conferência tem que ver o que ELE verá.
+    limpo = re.sub(r"[\x00-\x20\x7f-\x9f]+", "", html_lib.unescape(valor))
+    m = _ESQUEMA.match(limpo)
+    if not m:
+        # Sem esquema: relativo, âncora ou `//host` — que o navegador resolve
+        # como http(s). Nenhum deles roda código.
+        return True
+    if m.group(1).lower() in _ESQUEMAS_OK:
+        return True
+    return atributo == "src" and bool(_IMAGEM_EM_DATA.match(limpo))
+
+
+def _sem_endereco_perigoso(html: str) -> str:
+    """Tira o atributo de endereço que rodaria código; o resto da tag fica."""
+    def trocar(m: re.Match) -> str:
+        atributo = m.group(1).strip().split("=")[0].strip().lower()
+        valor = m.group(2)
+        if valor[:1] in "\"'":
+            valor = valor[1:-1]
+        return m.group(0) if _endereco_ok(valor, atributo) else ""
+    return _ATRIBUTO_DE_ENDERECO.sub(trocar, html)
 
 _FERRAMENTAS = [
     {

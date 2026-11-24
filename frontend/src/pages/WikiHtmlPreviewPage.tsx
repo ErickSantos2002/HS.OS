@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { chaveDaPrevia, enderecoDaPrevia } from "@/lib/previa-html";
 
 function escapeAttr(value: string): string {
   return value.replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[char] || char));
@@ -20,7 +21,10 @@ export default function WikiHtmlPreviewPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const key = params.get("key") || "";
+    // ⚠️ PK-01 (24/11/2026): só a chave de uso único que o openPreview grava.
+    // Antes `?key=` apagava QUALQUER chave do localStorage — `?key=hsos.token`
+    // deslogava quem clicasse no link, e esta rota é pública.
+    const key = chaveDaPrevia(params.get("key"));
     let stored: { url?: string; filename?: string } | null = null;
 
     try {
@@ -31,13 +35,22 @@ export default function WikiHtmlPreviewPage() {
       stored = null;
     }
 
-    const fileUrl = stored?.url || params.get("url") || "";
-    const filename = stored?.filename || params.get("name") || "Arquivo HTML";
+    const pedido = (typeof stored?.url === "string" && stored.url) || params.get("url") || "";
+    const filename = (typeof stored?.filename === "string" && stored.filename) || params.get("name") || "Arquivo HTML";
     setTitle(filename);
     document.title = filename;
 
-    if (!fileUrl) {
+    if (!pedido) {
       setError("Arquivo não encontrado.");
+      return;
+    }
+
+    // ⚠️ PK-01: só arquivo do storage da API ou da própria origem. `?url=` de
+    // qualquer site virava página em tela cheia com o endereço do HS.OS —
+    // um login falso pronto, numa rota sem login.
+    const fileUrl = enderecoDaPrevia(pedido, window.location.origin, import.meta.env.VITE_API_URL || "/api");
+    if (!fileUrl) {
+      setError("Endereço não permitido");
       return;
     }
 
