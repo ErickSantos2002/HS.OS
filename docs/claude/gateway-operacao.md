@@ -163,6 +163,29 @@ sem sentido a partir do gateway. Enquanto a URL esteve errada, `nina` e `iris` c
 que a ferramenta não aparecia — e o `SOUL.md` das duas mandava usá-la ao detectar tentativa de
 subverter os limites. **Servidor MCP fora do ar não publica ferramenta e não dá erro.**
 
+### Todo servidor MCP sobe para TODA sessão — o `deny` não impede (PK-47, 24/11/2026)
+
+⚠️ **O runtime de MCP é por sessão, e conecta todo servidor de `mcp.servers`.** Quem decide criar o
+runtime é `shouldCreateBundleMcpRuntimeForAttempt` (dist do OpenClaw 2026.7.1), que olha só o
+`toolsAllow` *da execução* — não o `tools.deny` do agente. O `deny` esconde a ferramenta **depois**
+que o processo subiu. O runtime fica vivo `mcp.sessionIdleTtlMs` parado (padrão 10 min).
+
+Com os `banco-*` em stdio (`npx -y server-postgres`), cada sessão de cada agente subia 9 pares de
+processo, ~720 MB — inclusive os 23 Guardis, que têm todos os bancos negados. Rajada de varredura e
+briefing empilhava sessões e a VPS (7,8 GB, sem swap) entrava em OOM: 30 vezes de 17 a 23/11, e o
+`erick-bot` minutos em "Iniciando…". Desde 24/11 os 9 apontam para o **`banco-mcp`**, um serviço só
+em `127.0.0.1:18790` (`vps-gateway/banco-mcp/`), com a URL do banco no cabeçalho `X-Banco-Url`.
+
+**Consequência para quem declarar servidor novo:** stdio em `mcp.servers` custa um processo **por
+sessão viva**, para todos os agentes. Servidor novo é HTTP (como os `hsos-*`) ou entra no
+`banco-mcp`. E os 78 HTTP `hsos-*` também são conectados por toda sessão — não pesam memória na VPS,
+mas são handshakes no backend a cada sessão nova.
+
+⚠️ **Na VPS do gateway, nunca rode a CLI do OpenClaw com `OPENCLAW_STATE_DIR` alternativo.** Em
+24/11, um `openclaw mcp probe` com estado numa pasta temporária (para testar uma config à parte)
+"migrou" o estado legado e **renomeou o `/root/.openclaw/exec-approvals.json` do gateway vivo** para
+`.migrated`. Desfeito no minuto seguinte. Para testar config à parte, `OPENCLAW_CONFIG_PATH` sozinho.
+
 ### Sessão: compactar é prevenção, e a `main` não tem dono
 
 Levantado em 20/08/2026, destravando a `iris` depois que o CEO recebeu "Envio

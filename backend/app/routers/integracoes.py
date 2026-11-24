@@ -1718,20 +1718,43 @@ async def testar_banco(
     }
 
 
-# O servidor MCP que transforma o banco em ferramenta do agente.
+# O servidor MCP que transforma o banco em ferramenta do agente: o `banco-mcp`,
+# serviço persistente na VPS do gateway (`vps-gateway/banco-mcp/`).
 #
-# Escolhido depois de rodar os dois candidatos contra o DataCore real em
-# 13/08/2026. Este expõe **uma** tool, `query`, e embrulha tudo em transação
-# `READ ONLY` — mandar `CREATE TABLE` volta com "cannot execute CREATE TABLE in
-# a read-only transaction". Somado ao usuário de leitura do Postgres, são duas
-# recusas independentes.
-_MCP_PACOTE_LEITURA = "@modelcontextprotocol/server-postgres"
+# ⚠️ **Até 24/11/2026 era `npx -y @modelcontextprotocol/server-postgres <url>`,
+# e isso derrubava a VPS.** O OpenClaw sobe todo servidor de `mcp.servers` para
+# CADA sessão, sem olhar o `deny` do agente — os 23 Guardis, que não usam
+# banco, subiam os 9 a cada conversa. Ver PK-47 em
+# `docs/superpowers/specs/2026-11-24-banco-mcp-persistente-design.md`.
+#
+# O `banco-mcp` devolve o mesmo texto do servidor antigo, byte a byte (mesmo
+# driver, mesmo corpo de tool, conferido pelo `comparar.mjs`): uma tool,
+# `query`, em transação `READ ONLY`. E recusa vários comandos numa string — com
+# o antigo, `COMMIT; <escrita>` saía da transação. Somado ao usuário de leitura
+# do Postgres, são duas recusas independentes.
+#
+# A URL vai no cabeçalho, não mais no argv (que era visível em `ps`), e o
+# `config.get` a devolve redigida.
+BANCO_MCP_URL = "http://127.0.0.1:18790/mcp"
 
-# ⚠️ **Este servidor recebe a URL por argv, e argv é visível em `ps`.** Não é
-# hipotético: qualquer processo do mesmo usuário na VPS enxerga a senha. Hoje
-# só o root roda lá, então o risco é contido — mas é dívida registrada, e o
-# conserto é um servidor MCP nosso que leia a URL do ambiente. Quando existir
-# escrita, essa dívida deixa de ser aceitável.
+
+def entrada_mcp_banco(url_banco: str) -> dict:
+    """A entrada `mcp.servers.banco-*` para um banco publicado.
+
+    Os `None` viram `null` no merge patch e apagam `command`/`args` de uma
+    entrada no formato antigo — sem eles, os dois sobreviveriam ao lado do
+    `url`.
+    """
+    return {
+        "transport": "streamable-http",
+        "url": BANCO_MCP_URL,
+        "headers": {"X-Banco-Url": url_banco},
+        # Só `query` sai deste servidor. Fixar a lista é o que impede uma
+        # versão futura com tool de escrita de passar a valer sozinha.
+        "toolFilter": {"include": ["query"]},
+        "command": None,
+        "args": None,
+    }
 
 
 def _nome_mcp(nome: str) -> str:
@@ -2028,14 +2051,7 @@ async def publicar_banco(
 
     parsed, base_hash = await patch_gw.config_do_gateway()
 
-    servidor = {
-        "command": "npx",
-        "args": ["-y", _MCP_PACOTE_LEITURA, url],
-        # Só `query` sai deste servidor. É o que ele tem hoje, mas fixar a lista
-        # significa que uma versão futura com tool de escrita não passa a valer
-        # sozinha num `npx -y`, que sempre pega a última.
-        "toolFilter": {"include": ["query"]},
-    }
+    servidor = entrada_mcp_banco(url)
 
     # O nome da tool que o agente vê. Sem isto no `alsoAllow`, o servidor existe
     # e nenhum agente o alcança.
@@ -2086,7 +2102,12 @@ async def publicar_banco(
                      for a in lista_agentes}
 
     def _conferir(c: dict) -> bool:
-        if apelido not in (((c.get("mcp") or {}).get("servers")) or {}):
+        entrada = (((c.get("mcp") or {}).get("servers")) or {}).get(apelido)
+        if entrada is None:
+            return False
+        # ⚠️ Existir não basta: uma entrada `npx` de antes do PK-47 também
+        # existe, e passaria como sucesso de uma troca que não pegou.
+        if entrada.get("url") != BANCO_MCP_URL or entrada.get("command"):
             return False
         vivos = {a.get("id"): (a.get("tools") or {})
                  for a in ((c.get("agents") or {}).get("list") or [])}

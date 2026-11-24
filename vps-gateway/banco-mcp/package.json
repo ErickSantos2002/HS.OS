@@ -1,0 +1,16 @@
+{
+  "name": "banco-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MCP de banco persistente da VPS do gateway (PK-47). Substitui os 9 npx do server-postgres.",
+  "type": "module",
+  "main": "server.mjs",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "pg": "8.23.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/server-postgres": "0.6.2"
+  }
+}

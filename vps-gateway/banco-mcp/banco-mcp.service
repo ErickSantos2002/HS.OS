@@ -1,0 +1,34 @@
+[Unit]
+Description=banco-mcp — MCP de banco persistente do gateway OpenClaw (PK-47)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/banco-mcp/server.mjs
+WorkingDirectory=/opt/banco-mcp
+# ⚠️ O `pg` converte date/timestamp no fuso do PROCESSO. O gateway e os npx
+# antigos rodavam em UTC (o fuso do sistema); fixar aqui impede que uma troca
+# de fuso da máquina mude a saída das consultas em silêncio.
+Environment=TZ=UTC
+Environment=NODE_ENV=production
+Environment=BANCO_MCP_HOST=127.0.0.1
+Environment=BANCO_MCP_PORTA=18790
+Restart=always
+RestartSec=2
+
+# Não precisa de nada da máquina: a URL chega por cabeçalho.
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
