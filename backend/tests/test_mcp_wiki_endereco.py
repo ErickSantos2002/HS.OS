@@ -97,3 +97,33 @@ def test_aspa_com_maior_dentro_do_valor_nao_fecha_a_tag():
     h = _para_html('<p>x</p><a title="a > b" href="javascript:x">c</a>')
     assert "javascript" not in h.lower()
     assert 'title="a > b"' in h
+
+
+# --- a conferência por tokenizador de verdade (revisão de segurança, 24/11) ---
+from app.routers.mcp_wiki import _atributos_perigosos  # noqa: E402
+
+
+def test_atributo_colado_na_aspa_cai():
+    """Pelo tokenizador do navegador, `title="x"href=…` são DOIS atributos — o
+    `href` vem colado na aspa, sem espaço. O filtro por regex exigia espaço ou
+    `/` antes do nome e deixava passar."""
+    for h in ['<p>x</p><a title="x"href="javascript:x">c</a>',
+              "<p>x</p><a title='x'onclick='alert(1)'>c</a>",
+              '<p>x</p><p a"b href=javascript:y>z</p>']:
+        saida = _para_html(h)
+        assert not _atributos_perigosos(saida), (h, saida)
+        assert "javascript" not in saida.lower() and "onclick" not in saida.lower(), saida
+
+
+def test_reescrita_mantem_o_conteudo():
+    saida = _para_html('<p>Olá &amp; até <strong>logo</strong></p><a title="x"href="javascript:x">c</a>')
+    assert "<p>Olá &amp; até <strong>logo</strong></p>" in saida
+    assert ">c</a>" in saida
+
+
+def test_nome_de_atributo_estranho_nao_sobrevive_a_reescrita():
+    """Um nome como `a"b` sairia cru e o navegador o leria de outro jeito.
+    (Só vale quando há reescrita — `href` colado na aspa força uma; sozinho,
+    `a"b` é inofensivo e o documento fica como veio.)"""
+    saida = _para_html('<p>x</p><p a"b title="t"href=javascript:y>z</p>')
+    assert 'a"b' not in saida

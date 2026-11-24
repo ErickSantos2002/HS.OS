@@ -37,6 +37,7 @@ parâmetros: o agente sabe os dois (o segundo sai da própria chave de sessão,
 import html as html_lib
 import logging
 import re
+from html.parser import HTMLParser
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
@@ -133,7 +134,103 @@ def _endereco_ok(valor: str, atributo: str) -> bool:
 
 
 def _sem_endereco_perigoso(html: str) -> str:
-    """Tira o atributo de endereço que rodaria código; o resto da tag fica."""
+    """Tira o atributo de endereço que rodaria código; o resto da tag fica.
+
+    ⚠️ **Duas passadas, e a segunda é a que garante.** A primeira (regex por
+    tag) não toca documento normal — os 338 da wiki saem byte a byte iguais. A
+    segunda tokeniza com o `html.parser`, que lê atributo como o navegador
+    (inclusive `title="x"href=…`, colado na aspa, que a primeira deixava passar
+    — revisão de segurança de 24/11/2026). Se ainda sobrar atributo perigoso,
+    o documento é REESCRITO pelo tokenizador sem ele. Só documento malicioso
+    muda de formato.
+    """
+    filtrado = _primeira_passada(html)
+    if _atributos_perigosos(filtrado):
+        filtrado = _reescrever_sem_perigo(filtrado)
+    return filtrado
+
+
+_NOME_DE_ATRIBUTO_OK = re.compile(r"^[a-zA-Z_:][a-zA-Z0-9_:.\-]*$")
+_ATRIBUTOS_DE_ENDERECO = {"href", "src", "data-href", "formaction", "xlink:href",
+                          "action", "poster", "background"}
+
+
+def _atributo_perigoso(nome: str, valor: str | None) -> bool:
+    nome = nome.lower()
+    if nome.startswith("on"):
+        return True
+    return nome in _ATRIBUTOS_DE_ENDERECO and valor is not None and not _endereco_ok(valor, nome)
+
+
+class _Olheiro(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.achados: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        self.achados += [n for n, v in attrs if _atributo_perigoso(n, v)]
+
+    handle_startendtag = handle_starttag
+
+
+def _atributos_perigosos(html: str) -> list[str]:
+    """Os atributos perigosos que um tokenizador de verdade enxerga no HTML."""
+    o = _Olheiro()
+    o.feed(html)
+    o.close()
+    return o.achados
+
+
+class _Reescrita(HTMLParser):
+    """Reemite o HTML como o tokenizador o leu, sem atributo perigoso nem nome
+    de atributo estranho (`a"b` sairia cru e o navegador o leria de outro
+    jeito). Texto e entidades saem como entraram."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=False)
+        self.saida: list[str] = []
+
+    def _tag(self, tag, attrs, fecha):
+        partes = [tag]
+        for n, v in attrs:
+            if not _NOME_DE_ATRIBUTO_OK.match(n) or _atributo_perigoso(n, v):
+                continue
+            partes.append(n if v is None else f'{n}="{html_lib.escape(v, quote=True)}"')
+        self.saida.append(f"<{' '.join(partes)}{' /' if fecha else ''}>")
+
+    def handle_starttag(self, tag, attrs):
+        self._tag(tag, attrs, False)
+
+    def handle_startendtag(self, tag, attrs):
+        self._tag(tag, attrs, True)
+
+    def handle_endtag(self, tag):
+        self.saida.append(f"</{tag}>")
+
+    def handle_data(self, data):
+        self.saida.append(data)
+
+    def handle_entityref(self, name):
+        self.saida.append(f"&{name};")
+
+    def handle_charref(self, name):
+        self.saida.append(f"&#{name};")
+
+    def handle_comment(self, data):
+        self.saida.append(f"<!--{data}-->")
+
+    def handle_decl(self, decl):
+        self.saida.append(f"<!{decl}>")
+
+
+def _reescrever_sem_perigo(html: str) -> str:
+    r = _Reescrita()
+    r.feed(html)
+    r.close()
+    return "".join(r.saida)
+
+
+def _primeira_passada(html: str) -> str:
     def trocar(m: re.Match) -> str:
         atributo = m.group(1).strip(" \t\n\r\f/").split("=")[0].strip().lower()
         valor = m.group(2)
