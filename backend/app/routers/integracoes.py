@@ -1788,7 +1788,13 @@ def _nome_mcp(nome: str) -> str:
 #   escreveu **197 documentos** dizendo "ainda pendente", e só parou porque o
 #   Erick abriu a tela e estranhou. Não havia condição de saída, teto de
 #   execuções nem prazo. Agendar é ato humano, pela tela de agendamentos.
-_DENY_NAO_MCP = ("sessions_send", "sessions_spawn", "skill_workshop", "cron")
+# - `sessions_list`/`sessions_history` (PK-05, 24/11/2026): com elas o
+#   especialista lê conversa de qualquer pessoa com qualquer agente. Nenhum
+#   dos quatro que não orquestram as chamou em 30 dias.
+# - `memory_search`: falha sempre (`No API key found for provider "openai"` —
+#   não há embeddings) e o erro manda configurar coisa no terminal.
+_DENY_NAO_MCP = ("sessions_send", "sessions_spawn", "skill_workshop", "cron",
+                 "sessions_list", "sessions_history", "memory_search")
 
 # ⚠️ O que o recálculo do deny PRESERVA é mais que a trava dos especialistas.
 # O bot pessoal roda com `tools.profile: "minimal"`, que traz a ferramenta
@@ -1807,6 +1813,14 @@ _DENY_PRESERVADO = _DENY_NAO_MCP + ("gateway",)
 # recálculo de deny as apagaria na próxima publicação de banco.
 FERRAMENTAS_WEB = ("web_search", "web_fetch", "x_search")
 _DENY_PRESERVADO = _DENY_PRESERVADO + FERRAMENTAS_WEB
+
+# ⚠️ PK-05 (24/11/2026): `exec` e escrita de arquivo negados POR AGENTE (Midas
+# e Flow, que não os usavam). Não entram na trava de especialista novo — o Atlas
+# roda script — mas têm que sobreviver ao recálculo, senão a primeira
+# publicação de banco os devolveria. `code_execution` entra junto por ser do
+# mesmo `group:runtime`, mesmo sem aparecer hoje no `tools.effective`.
+EXECUCAO_E_ESCRITA = ("exec", "process", "code_execution", "write", "edit", "apply_patch")
+_DENY_PRESERVADO = _DENY_PRESERVADO + EXECUCAO_E_ESCRITA
 
 
 # O único servidor MCP que nunca entra no deny — ver `_deny_de_mcp`.

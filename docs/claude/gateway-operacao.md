@@ -155,6 +155,20 @@ bancos com o deny "aplicado". O que vale é `banco-x__query`, que é o nome que 
 Verificação que serve: **perguntar ao agente** quais ferramentas ele enxerga. Reler o `config.get`
 não distingue um deny que funcionou de um que não casou com nada.
 
+✅ **Desde 24/11/2026 há verificação melhor, sem gastar turno: `tools.effective`.** É só leitura
+(`operator.read`), recebe `sessionKey` e devolve o inventário que a sessão de fato recebe, já com a
+política aplicada — `{groups: [{tools: [{id, source}]}]}`, o nome está em **`id`**, não em `name`.
+Não cria runtime de MCP: servidor MCP só aparece se a sessão já estiver quente. Foi como o PK-05
+conferiu o corte de `exec`/escrita/`sessions_*` nos cinco especialistas
+(`scripts/cortar-ferramentas.py --conferir`). Perguntar ao agente continua sendo a conferência de
+**texto** nos sete arquivos; para ferramenta, `tools.effective`.
+
+⚠️ **O que cada especialista tem de ferramenta nativa (PK-05, 24/11/2026):** Midas e Flow só `read`,
+`memory_get` e as de sessão/objetivo/plano — sem `exec` nem escrita. Atlas e Bruce mantêm `exec` e
+escrita (Atlas roda script; o Bruce processa a planilha do ponto do Flash por `exec` e nunca chamou o
+`relatorio_ponto`); Nina idem, mais `sessions_*` por orquestrar. `memory_search` saiu de todos:
+falha sempre por falta de embeddings. O caminho de quem ficou com `exec` é o PK-06 (fora do root).
+
 ⚠️ **`mcp__hsos-alerta__avisar_administrador` só funciona com o backend em produção.** O servidor
 aponta para o backend pela rede, e o gateway vive noutra máquina (`2.24.85.122`) — o backend está em
 `62.72.11.28`, atrás de `hsosapi.healthsafetytech.com`. Apontar para `172.18.0.1` é o engano fácil:

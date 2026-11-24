@@ -1604,7 +1604,9 @@ async def _completar_agente(
 
 # As travas que todo especialista carrega. A orquestradora não recebe: coordenar
 # o time e escrever skill é o trabalho dela.
-_TRAVAS_DE_ESPECIALISTA = ("sessions_send", "sessions_spawn", "skill_workshop")
+# `sessions_list`/`history` e `memory_search`: PK-05, ver `_DENY_NAO_MCP`.
+_TRAVAS_DE_ESPECIALISTA = ("sessions_send", "sessions_spawn", "skill_workshop",
+                           "sessions_list", "sessions_history", "memory_search")
 
 # O roster do time no `AGENTS.md` da orquestradora, entre marcadores. Mesmo
 # padrão do bloco da empresa, e pelo mesmo motivo: é dado, não redação.
