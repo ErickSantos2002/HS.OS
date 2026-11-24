@@ -9,7 +9,7 @@ snapshot diário, **cifrado** (`restic`), no R2, às 03:30 BRT.
 | entra | `/root/.openclaw` (workspaces, transcrições `.jsonl`, `openclaw.json`, `state`), cópia consistente dos 8 sqlite, units do systemd, Caddyfile |
 | fica de fora | trajetórias (1,1 GB de depuração), sessões apagadas, cache, logs, `node_modules`, `.bak*` |
 | tamanho | 124 MB lidos → **~21 MB** no 1º snapshot; incremental ~2 MB/dia |
-| custo | R2: 10 GB grátis/mês; isto fica em centenas de MB |
+| custo | a conta já passa dos 10 GB grátis do R2: US$ 0,015/GB/mês, e isto fica em centenas de MB → menos de 1 centavo de dólar/mês |
 | tempo / RAM | ~2 s, ~80 MB (medido em 24/11) |
 
 **Ligado em 24/11/2026, 15:27 BRT:** 1º snapshot no bucket `hsos-backup-gateway`,
