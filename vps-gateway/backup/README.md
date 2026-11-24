@@ -12,22 +12,26 @@ snapshot diário, **cifrado** (`restic`), no R2, às 03:30 BRT.
 | custo | R2: 10 GB grátis/mês; isto fica em centenas de MB |
 | tempo / RAM | ~2 s, ~80 MB (medido em 24/11) |
 
-Instalado e testado na VPS em 24/11 contra um repositório local: backup,
-restauração e `PRAGMA integrity_check` dos 8 sqlite. **Falta só a credencial.**
+**Ligado em 24/11/2026, 15:27 BRT:** 1º snapshot no bucket `hsos-backup-gateway`,
+`--testar` com 11 ✅. A proteção foi provada: a chave da VPS gravou
+`gateway/config-teste-bloqueio` e, ao tentar apagá-lo, recebeu `409
+ObjectLockedByBucketPolicy` (o objeto de 23 bytes fica lá até 24/12 — é o
+próprio bloqueio; o restic não o lê). Credenciais e senha no FortiPAM.
 
 ## Para ligar (uma vez, Erick)
 
 1. **Cloudflare → R2 → Create bucket**: `hsos-backup-gateway`.
-2. No bucket, **Settings → Bucket lock rules**: retenção de 30 dias para os
-   prefixos `gateway/data/`, `gateway/index/`, `gateway/snapshots/` e
-   `gateway/keys/` — **não** em `gateway/locks/` (o restic apaga os próprios
-   arquivos de trava a cada backup). É isso que impede quem invadir a VPS de
-   apagar as cópias: o token do R2 não tem modo "escreve sem apagar", o
-   bloqueio do bucket faz esse papel. *Conferir no painel se a regra aceita
-   prefixo; se não aceitar, retenção no bucket inteiro e o restic roda com
-   `--no-lock` — me chame antes.*
-3. **R2 → Manage API tokens → Create**: *Object Read & Write*, **só** esse
-   bucket. Guarde Access Key e Secret.
+2. No bucket, **Configurações → Regras de bloqueio do bucket**: 5 regras de
+   30 dias, uma por prefixo — `gateway/data/`, `gateway/index/`,
+   `gateway/snapshots/`, `gateway/keys/` e `gateway/config` (sem barra).
+   **Nenhuma** sem prefixo nem em `gateway/locks/`: o restic apaga os próprios
+   arquivos de trava a cada backup. É o bloqueio que impede quem invadir a VPS
+   de apagar as cópias — o token do R2 não tem modo "escreve sem apagar".
+   (Prefixo por regra confirmado na documentação da Cloudflare em 24/11;
+   objeto bloqueado não pode ser apagado nem sobrescrito, nem por lifecycle.)
+3. **R2 → Gerenciar tokens de API → token de CONTA**: *Leitura e gravação de
+   objeto*, **só** esse bucket, TTL para sempre. Access Key e Secret vão para
+   o FortiPAM (aparecem uma vez).
 4. Gere uma senha forte para o restic e **guarde no FortiPAM** — sem ela, o
    backup não abre.
 5. No Konsole: `bash ~/github/HS.OS/vps-gateway/backup/configurar.sh`. Ele
