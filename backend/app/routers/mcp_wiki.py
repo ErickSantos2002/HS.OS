@@ -143,18 +143,50 @@ def _sem_endereco_perigoso(html: str) -> str:
             return m.group(0)
         # Mantém o separador: `<a/href=…>` vira `<a/>`, não `<a>` colado no próximo.
         return m.group(1)[0]
-    def limpar_tag(t: re.Match) -> str:
-        sem_evento = _ATRIBUTO_DE_EVENTO.sub(lambda m: m.group(0)[0], t.group(0))
+    def limpar_tag(tag: str) -> str:
+        sem_evento = _ATRIBUTO_DE_EVENTO.sub(lambda m: m.group(0)[0], tag)
         return _ATRIBUTO_DE_ENDERECO.sub(trocar, sem_evento)
 
     # ⚠️ Só DENTRO de tag de abertura. Sobre o HTML inteiro, "veja onde = aqui"
     # no texto casava com `on*=` e perdia palavras.
-    return _TAG_DE_ABERTURA.sub(limpar_tag, html)
-
-
-# Tag de abertura com atributos. Aspas são consumidas inteiras, então um `>`
-# dentro de valor entre aspas não fecha a tag antes da hora.
-_TAG_DE_ABERTURA = re.compile(r"""<[a-zA-Z][^\s/>]*(?:"[^"]*"|'[^']*'|[^'">])*>""")
+    #
+    # ⚠️ Varredura à mão, LINEAR, e não regex de tag: a regex
+    # `<[a-z](?:"[^"]*"|'[^']*'|[^'">])*>` com aspa sem fechar repetida (`<a "`
+    # × 50 mil) varria até o fim a partir de cada `<a` — passou de 60 s no
+    # teste (revisão de segurança, 24/11/2026). Excluir `<` da classe resolveria
+    # o tempo, mas uma tag com `<` dentro de valor entre aspas deixaria de casar
+    # e passaria SEM filtro.
+    partes: list[str] = []
+    i, n = 0, len(html)
+    while i < n:
+        inicio = html.find("<", i)
+        if inicio < 0 or inicio + 1 >= n:
+            partes.append(html[i:])
+            break
+        partes.append(html[i:inicio])
+        if not html[inicio + 1].isalpha():
+            partes.append("<")
+            i = inicio + 1
+            continue
+        j, aspa = inicio + 1, ""
+        while j < n:
+            c = html[j]
+            if aspa:
+                if c == aspa:
+                    aspa = ""
+            elif c in "\"'":
+                aspa = c
+            elif c == ">":
+                break
+            j += 1
+        if j >= n:
+            # Tag que não fecha: o navegador trata o resto como dentro dela —
+            # atributo, não conteúdo. Filtra o resto como tag e acaba.
+            partes.append(limpar_tag(html[inicio:]))
+            break
+        partes.append(limpar_tag(html[inicio:j + 1]))
+        i = j + 1
+    return "".join(partes)
 
 _FERRAMENTAS = [
     {

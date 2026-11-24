@@ -80,3 +80,20 @@ def test_texto_do_documento_nao_e_tocado():
     "src=x" é conteúdo, e cortar palavra de briefing é estrago de outro tipo."""
     html = "<p>Veja onde = aqui, e o campo src=javascript:x no manual do sistema.</p>"
     assert _para_html(html) == html
+
+
+def test_entrada_maliciosa_nao_trava_o_filtro():
+    """Revisão de segurança de 24/11: aspa sem fechar repetida fazia a regex de
+    tag varrer até o fim a partir de cada `<a` — quadrático. Um agente sob
+    injeção mandando isso travaria o worker do backend."""
+    import time
+    t0 = time.perf_counter()
+    _para_html("<p>x</p>" + '<a "' * 50_000)
+    _para_html("<p>x</p>" + "<a href='" * 50_000)
+    assert time.perf_counter() - t0 < 1.0
+
+
+def test_aspa_com_maior_dentro_do_valor_nao_fecha_a_tag():
+    h = _para_html('<p>x</p><a title="a > b" href="javascript:x">c</a>')
+    assert "javascript" not in h.lower()
+    assert 'title="a > b"' in h
