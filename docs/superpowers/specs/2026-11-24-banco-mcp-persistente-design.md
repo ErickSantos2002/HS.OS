@@ -155,3 +155,19 @@ daquele banco — degradação localizada, não quebra.
 - Os bancos são acessados com `sslmode=disable` pela internet. Antigo, fora
   deste pacote.
 - Fila de 6 turnos (PK-12) só depois deste estar conferido.
+
+## Como foi (24/11/2026)
+
+- Serviço instalado às 07:25; comparador nos 9 bancos reais: idêntico.
+  `openclaw mcp probe` numa cópia da config: os 9 com 1 tool.
+- A revisão de segurança automática achou que um `sql` não-string ia direto ao
+  `pg` (escapando do `extended`) e que conexão com erro voltava ao pool. Os dois
+  corrigidos; e ganhou `statement_timeout` de 90 s (o cliente do OpenClaw
+  desiste aos 60) e espera de 30 s por conexão. Comparador de novo: idêntico.
+- **A troca foi antecipada.** O plano era esperar a rajada passar; às 07:34 ela
+  chegou a 112 `npm exec`, 148 MB livres e o swap novo cheio — o OOM era
+  questão de minutos. Aplicada às 07:35 com `--forcar`: às 07:36, **0 `npm
+  exec` e 6,1 GB livres**, nenhum OOM.
+- **A baixa:** o descarte dos runtimes derrubou um turno em voo — a varredura
+  da manhã do `rafael-bot` (`bundle-mcp runtime disposed`), que ficou
+  `sem_registro`. As outras 21 da manhã fecharam normalmente.

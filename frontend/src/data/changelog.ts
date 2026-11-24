@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.22.2",
+    date: "2026-11-24",
+    changes: [
+      {
+        kind: "correcao",
+        text: "Os agentes não ficam mais minutos em \"Iniciando…\" nos horários de pico (começo da manhã e da tarde). O servidor dos agentes ficava sem memória quando muita gente conversava ao mesmo tempo, e isso foi resolvido.",
+      },
+    ],
+  },
+  {
     version: "2.22.1",
     date: "2026-11-23",
     changes: [

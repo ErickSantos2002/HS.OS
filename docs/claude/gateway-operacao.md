@@ -175,6 +175,9 @@ processo, ~720 MB — inclusive os 23 Guardis, que têm todos os bancos negados.
 briefing empilhava sessões e a VPS (7,8 GB, sem swap) entrava em OOM: 30 vezes de 17 a 23/11, e o
 `erick-bot` minutos em "Iniciando…". Desde 24/11 os 9 apontam para o **`banco-mcp`**, um serviço só
 em `127.0.0.1:18790` (`vps-gateway/banco-mcp/`), com a URL do banco no cabeçalho `X-Banco-Url`.
+A VPS ganhou também 2 GB de swap (`/swapfile`, `vm.swappiness=10` em
+`/etc/sysctl.d/90-pk47-swap.conf`) — rede contra pico, não memória de trabalho: swap em uso
+constante é sinal de que algo voltou a crescer.
 
 **Consequência para quem declarar servidor novo:** stdio em `mcp.servers` custa um processo **por
 sessão viva**, para todos os agentes. Servidor novo é HTTP (como os `hsos-*`) ou entra no

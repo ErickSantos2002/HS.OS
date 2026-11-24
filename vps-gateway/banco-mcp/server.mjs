@@ -45,7 +45,18 @@ function rotulo(url) {
 function poolDe(url) {
     let pool = pools.get(url);
     if (!pool) {
-        pool = new pg.Pool({ connectionString: url, max: MAX_CONEXOES });
+        pool = new pg.Pool({
+            connectionString: url,
+            max: MAX_CONEXOES,
+            // ⚠️ O cliente MCP do OpenClaw desiste aos 60 s
+            // (`DEFAULT_REQUEST_TIMEOUT_MS`): consulta mais longa nunca chega
+            // ao agente, só segura uma vaga do pool que agora é de todos.
+            // 90 s não corta nada que hoje funcione. Vai nos parâmetros de
+            // partida da conexão — sem ida e volta a mais por consulta.
+            statement_timeout: 90_000,
+            // Pool cheio ou banco fora: falhar em 30 s em vez de pendurar.
+            connectionTimeoutMillis: 30_000,
+        });
         // ⚠️ Sem isto, uma conexão ociosa que o banco derruba levanta `error`
         // no pool e MATA o processo. No servidor antigo era um processo por
         // sessão e ninguém notava; aqui derrubaria os 9 bancos de todo mundo.
@@ -69,8 +80,14 @@ const TOOL_QUERY = {
 };
 
 async function executar(url, sql) {
+    // ⚠️ Só string. Um objeto (`{text, queryMode: "simple"}`) iria direto ao
+    // `pg` e escaparia da recusa de multi-comando abaixo — achado da revisão
+    // de segurança, 24/11/2026. O antigo também falhava sem string; só a
+    // mensagem muda.
+    if (typeof sql !== "string") throw new Error("sql must be a string");
     const client = await poolDe(url).connect();
     const inicio = Date.now();
+    let falhou = false;
     try {
         await client.query("BEGIN TRANSACTION READ ONLY");
         // ⚠️ `extended` é a ÚNICA diferença deliberada para o servidor antigo:
@@ -78,22 +95,26 @@ async function executar(url, sql) {
         // simples, `COMMIT; <escrita>` saía da transação somente-leitura — o
         // furo conhecido do server-postgres. Uso legítimo não perde nada: com
         // vários comandos o antigo devolvia `rows` indefinido.
-        const result = await client.query(
-            typeof sql === "string" ? { text: sql, queryMode: "extended" } : sql,
-        );
+        const result = await client.query({ text: sql, queryMode: "extended" });
         console.log(`[${rotulo(url)}] ok ${Date.now() - inicio}ms ${result.rowCount ?? 0} linhas`);
         return {
             content: [{ type: "text", text: JSON.stringify(result.rows, null, 2) }],
             isError: false,
         };
     } catch (error) {
+        falhou = true;
         console.log(`[${rotulo(url)}] erro ${Date.now() - inicio}ms: ${error.message}`);
         throw error;
     } finally {
         // O antigo não esperava o ROLLBACK. Aqui o pool é compartilhado entre
-        // sessões, então a conexão só volta limpa.
-        await client.query("ROLLBACK").catch((e) => console.warn(`[${rotulo(url)}] ROLLBACK falhou: ${e.message}`));
-        client.release();
+        // sessões, então a conexão só volta limpa — e a que deu erro nem volta:
+        // `release(true)` a destrói, para nenhum estado esquisito passar de uma
+        // consulta (de um agente) para a próxima.
+        await client.query("ROLLBACK").catch((e) => {
+            falhou = true;
+            console.warn(`[${rotulo(url)}] ROLLBACK falhou: ${e.message}`);
+        });
+        client.release(falhou);
     }
 }
 
