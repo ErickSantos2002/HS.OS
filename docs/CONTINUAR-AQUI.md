@@ -1,6 +1,40 @@
 # Continuar aqui
 
-## ▶ Retomar em 10/11/2026 (sessão de 09/11)
+## ▶ Retomar em 25/11/2026 — Onda 0 do remix do DN.OS (sessão de 24/11)
+
+A análise do remix de novembro (8 seções, 45 pacotes em ondas) mora **fora do
+repo**, em `~/projetos/analise-dnos-2026-11/` (o repo é público e ela lista
+defeitos vivos). As escolhas do Erick estão no README de lá.
+
+**Feito em 24/11, tudo em produção e marcado no TaskHS** (cartão "HS.OS — Onda 0 ·
+Segurança"). Cada um tem spec em `docs/superpowers/specs/2026-11-24-*`:
+
+| pacote | o quê |
+|---|---|
+| PK-47 | os 9 `banco-*` viraram o serviço `banco-mcp` (loopback da VPS do gateway) — o OpenClaw subia 9 `npx` **por sessão**, sem olhar o `deny`, e a VPS entrava em OOM. Swap de 2 GB. Ver `vps-gateway/banco-mcp/` e `docs/claude/gateway-operacao.md` |
+| PK-05 | Midas/Flow sem `exec`/escrita; os 4 não-orquestradores sem `sessions_list/history`; ninguém com `memory_search` (quebrado). Conferido por `tools.effective` |
+| PK-01 | prévia HTML só com chave e endereço próprios, SVG/XML baixam, `enderecoSeguro` nos nós, `_para_html` com filtro em duas passadas |
+| PK-48 | autor de mensagem de canal sai do token e do perfil |
+| PK-03 | `/uso/*` e `/gateway/agents|sessions` só admin; relatório recusa sem `solicitante`; `test_portas_fechadas.py` |
+| PK-09 | não havia anexo antigo público (só os 20 avatares); wiki com nome uuid |
+| PK-10 | backup `restic` cifrado no R2 (bucket `hsos-backup-gateway`, bloqueio de 30 dias provado) e reinício que confere runs ativos. Ver `vps-gateway/backup/` |
+
+**Conferir de manhã:** o 1º backup automático (03:39 BRT,
+`journalctl -u backup-openclaw`), a rajada das 07:30 sem OOM, e o **conteúdo**
+da varredura e do resumo das 8h do Midas (em 24/11 só se viu que rodaram).
+
+**Resta da Onda 0:** PK-08 (cifrar `integrations.credentials`), PK-02 (artefato
+vivo com a sessão do dono), PK-04 (admin só por SSO), PK-06 (exec fora do root —
+inclui decidir o Bruce: o ponto do Flash passa por `exec` dele, e o
+`relatorio_ponto` nunca foi chamado; ver com a Lidisay), PK-07 e PK-11 (dependem).
+**Pacote novo a propor:** cada sessão conecta os 78 MCP HTTP `hsos-*`; na
+rajada ~70 estouram 30 s. Não derrubou turno, mas é o próximo gargalo.
+
+**Ritmo combinado:** um pacote por vez, conferido em produção antes do
+próximo; spec → plano → execução sem pedir aprovação, dentro de três limites —
+não atrapalhar o que funciona, não piorar a eficiência, não gastar mais.
+
+## Retomar em 10/11/2026 (sessão de 09/11)
 
 No ar e publicado em 09/11: Guardi (renomeação), membros de tarefa no TaskHS,
 acrescentar itens a checklist existente, anexo e imagem no `ler_anexo`, e-mail
