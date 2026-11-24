@@ -364,8 +364,9 @@ class MensagemCanalIn(BaseModel):
     audio_url: str | None = None
     attachments: list[dict] | None = None
     thread_id: str | None = None
-    # Quem assina a mensagem. Só é aceito diferente do usuário do token quando o
-    # autor é agente — pessoa nenhuma manda mensagem no nome de outra.
+    # Aceitos por compatibilidade com o front, que os manda — mas quem assina é
+    # o token e o perfil (PK-48, `autor_da_mensagem`). `author_id` diferente do
+    # usuário, ou `author_type` de agente, é recusado.
     author_id: str | None = None
 
 
@@ -892,6 +893,38 @@ async def mensagens(
     return saida if corte is not None else list(reversed(saida))
 
 
+def nome_de_quem_envia(perfil, usuario: Usuario) -> str:
+    """O nome que assina: o do perfil, ou o e-mail — nunca o que veio no corpo."""
+    return ((perfil or {}).get("full_name") or "").strip() or usuario.email
+
+
+def autor_da_mensagem(dados: MensagemCanalIn, usuario: Usuario, perfil) -> tuple[str, str, str, str | None]:
+    """`(author_type, author_id, author_name, author_avatar)` de quem posta pela API.
+
+    ⚠️ **PK-48 (24/11/2026): o corpo não escolhe o autor.** Antes, pessoa podia
+    mandar `author_type="agent"` com `author_id`/`author_name` livres e postar
+    como a `nina`; e o `author_name` humano do corpo era honrado — escrever como
+    "Nicholson" fazia o agente do canal ler o pedido como do CEO
+    (`_montar_pedido` mostra esse nome). Mensagem de agente só nasce em
+    `_publicar_do_agente`, com `service_role`; por esta rota, só pessoa, e o
+    nome e a foto são os do perfil dela.
+    """
+    if dados.author_type not in _TIPOS_MEMBRO:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"author_type inválido. Use um de: {', '.join(sorted(_TIPOS_MEMBRO))}.",
+        )
+    if dados.author_type != "human":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Mensagem de agente não é enviada por esta rota."
+        )
+    if (dados.author_id or usuario.id) != usuario.id:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Não é possível enviar mensagem em nome de outra pessoa."
+        )
+    return "human", usuario.id, nome_de_quem_envia(perfil, usuario), (perfil or {}).get("avatar_url")
+
+
 @router.post("/{channel_id}/messages", response_model=MensagemCanalOut,
              status_code=status.HTTP_201_CREATED)
 async def enviar(
@@ -909,30 +942,14 @@ async def enviar(
     O hook fazia uma consulta extra a `profiles` no navegador só para isso, e a
     justificativa dele era evitar resposta de thread sem avatar.
     """
-    if dados.author_type not in _TIPOS_MEMBRO:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"author_type inválido. Use um de: {', '.join(sorted(_TIPOS_MEMBRO))}.",
-        )
-
-    autor = dados.author_id or usuario.id
-    if dados.author_type == "human" and autor != usuario.id:
-        # Assinar mensagem com o id de outra pessoa. O RLS provavelmente barra,
-        # mas isto é regra de negócio e merece erro claro.
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN, "Não é possível enviar mensagem em nome de outra pessoa."
-        )
-
-    nome, avatar = dados.author_name, dados.author_avatar
+    # Recusa antes de abrir sessão: tipo errado ou autor alheio não toca o banco.
+    autor_da_mensagem(dados, usuario, {})
     async with sessao(role="authenticated", user_id=usuario.id) as conn:
         await _recusar_quem_nao_escreve(conn, channel_id, usuario.id)
-        if dados.author_type == "human" and (not nome or not avatar or "@" in (nome or "")):
-            perfil = await conn.fetchrow(
-                "SELECT full_name, avatar_url FROM public.profiles WHERE id = $1::uuid", autor
-            )
-            if perfil:
-                nome = nome if (nome and "@" not in nome) else (perfil["full_name"] or nome)
-                avatar = avatar or perfil["avatar_url"]
+        perfil = await conn.fetchrow(
+            "SELECT full_name, avatar_url FROM public.profiles WHERE id = $1::uuid", usuario.id
+        )
+        tipo, autor, nome, avatar = autor_da_mensagem(dados, usuario, perfil)
 
         linha = await conn.fetchrow(
             f"""
@@ -943,7 +960,7 @@ async def enviar(
                     NULLIF($9, '')::uuid)
             RETURNING {_COLUNAS_MSG.replace('m.', '')}
             """,
-            channel_id, autor, dados.author_type, nome or autor, avatar,
+            channel_id, autor, tipo, nome, avatar,
             dados.content, dados.audio_url,
             json.dumps(dados.attachments) if dados.attachments else None,
             dados.thread_id or "",
@@ -1371,7 +1388,9 @@ async def arquivos(
 
 
 class NotificacaoIn(BaseModel):
-    author_name: str
+    # Aceito e IGNORADO (PK-48): o nome do aviso sai do perfil. Fica opcional
+    # para o front que ainda o manda não levar 422.
+    author_name: str | None = None
     content_preview: str = ""
     message_id: str | None = None
 
@@ -1393,6 +1412,11 @@ async def notificar(
         # ⚠️ `author_name` e o resumo vêm do corpo: sem isto, quem só lê o canal
         # de avisos mandaria notificação a todos assinando como quem quisesse.
         await _recusar_quem_nao_escreve(conn, channel_id, usuario.id)
+        # ⚠️ PK-48: o nome do aviso também sai do perfil. Do corpo, dava para
+        # mandar "Nova mensagem de Nicholson" a todo o canal.
+        perfil = await conn.fetchrow(
+            "SELECT full_name FROM public.profiles WHERE id = $1::uuid", usuario.id
+        )
         await conn.execute(
             """
             INSERT INTO public.notifications
@@ -1403,7 +1427,7 @@ async def notificar(
                AND m.member_type = 'human'
                AND m.user_id <> $5
             """,
-            channel_id, dados.message_id or "", dados.author_name,
+            channel_id, dados.message_id or "", nome_de_quem_envia(perfil, usuario),
             dados.content_preview[:100], usuario.id,
         )
 
