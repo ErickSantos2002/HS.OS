@@ -143,6 +143,19 @@ def _sem_endereco_perigoso(html: str) -> str:
     — revisão de segurança de 24/11/2026). Se ainda sobrar atributo perigoso,
     o documento é REESCRITO pelo tokenizador sem ele. Só documento malicioso
     muda de formato.
+
+    ⚠️ **Isto é a SEGUNDA camada, e é por isso que não é um sanitizador
+    completo.** O único lugar que renderiza o conteúdo da wiki é o editor
+    TipTap, que reconstrói o documento pelo esquema dele: conferido em
+    24/11/2026 com `title="x"href="javascript:…"`, `onerror`,
+    `<svg><script>`, `<style>` e `<math>` — saiu tudo limpo (o link cai na
+    `isAllowedUri` do próprio TipTap; tag e atributo fora do esquema não
+    sobrevivem), e os nós de anexo/vídeo passam pelo `enderecoSeguro`. A
+    revisão automática pediu `nh3` quatro vezes; o ganho não paga a
+    dependência nem o risco de cortar conteúdo legítimo. **Se um dia este
+    HTML for servido fora do TipTap** (exportação, página pública,
+    `innerHTML`), aí sim: `nh3` com a lista de tags e atributos do TipTap,
+    antes de servir.
     """
     filtrado = _primeira_passada(html)
     if _atributos_perigosos(filtrado):
