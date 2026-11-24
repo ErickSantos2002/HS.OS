@@ -94,17 +94,25 @@ case "${1:-}" in
     # ⚠️ Cada conferência FALHA o script. A primeira versão fazia `cmd && echo
     # ✅`, e uma conferência que falhasse só deixava de imprimir — teste de
     # restauração que passa em silêncio é pior que não ter teste.
+    #
+    # ⚠️ Sem `eval`, e o caminho vai como ARGUMENTO, nunca no texto do comando
+    # (revisão de segurança, 24/11/2026): Atlas, Bruce e Nina têm `exec` e
+    # escrevem nos workspaces; um arquivo chamado `x';comando;'.sqlite` viraria
+    # código rodando como root aqui dentro.
     falhou=0
-    confere() { if eval "$2" >/dev/null 2>&1; then echo "✅ $1"; else echo "❌ $1"; falhou=1; fi; }
-    confere "openclaw.json restaurado e válido" \
-      "python3 -c 'import json,sys; json.load(open(sys.argv[1]))' '$alvo$OC/openclaw.json'"
-    confere "workspace do midas restaurado" "[ -s '$alvo$OC/workspace-midas/AGENTS.md' ]"
-    n=$(find "$alvo$ESTAGIO" -name '*.sqlite' | wc -l)
-    confere "há sqlite no backup ($n)" "[ $n -gt 0 ]"
-    for db in $(find "$alvo$ESTAGIO" -name '*.sqlite'); do
-      confere "íntegro: ${db#"$alvo$ESTAGIO"/}" \
-        "python3 -c \"import sqlite3,sys; assert sqlite3.connect(sys.argv[1]).execute('PRAGMA integrity_check').fetchone()[0]=='ok'\" '$db'"
-    done
+    confere() {  # confere <rótulo> <comando> [args...]
+      local rotulo=$1; shift
+      if "$@" >/dev/null 2>&1; then echo "✅ $rotulo"; else echo "❌ $rotulo"; falhou=1; fi
+    }
+    JSON_OK='import json,sys; json.load(open(sys.argv[1]))'
+    SQLITE_OK="import sqlite3,sys; assert sqlite3.connect(sys.argv[1]).execute('PRAGMA integrity_check').fetchone()[0]=='ok'"
+    confere "openclaw.json restaurado e válido" python3 -c "$JSON_OK" "$alvo$OC/openclaw.json"
+    confere "workspace do midas restaurado" test -s "$alvo$OC/workspace-midas/AGENTS.md"
+    n=$(find "$alvo$ESTAGIO" -name '*.sqlite' -printf . | wc -c)
+    confere "há sqlite no backup ($n)" test "$n" -gt 0
+    while IFS= read -r -d '' db; do
+      confere "íntegro: ${db#"$alvo$ESTAGIO"/}" python3 -c "$SQLITE_OK" "$db"
+    done < <(find "$alvo$ESTAGIO" -name '*.sqlite' -print0)
     restic snapshots --latest 3 --compact
     exit "$falhou"
     ;;
