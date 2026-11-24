@@ -53,3 +53,30 @@ def test_markdown_com_link_javascript_tambem_cai():
     h = _para_html("Veja [aqui](javascript:alert(1)) o relatório.")
     assert "javascript" not in h.lower()
     assert "aqui" in h
+
+
+def test_barra_como_separador_nao_escapa():
+    """Revisão de segurança de 24/11: `<a/href=…>` — o navegador aceita `/`
+    entre o nome da tag e o atributo, e o primeiro filtro só olhava espaço."""
+    for h in ['<p><a/href="javascript:x">a</a></p>', "<p><img/src='javascript:x'></p>",
+              '<p><a href="#"/href="javascript:x">a</a></p>']:
+        assert "javascript" not in _para_html(h).lower(), h
+
+
+def test_atributo_de_evento_sai():
+    h = _para_html('<p>x</p><img src="https://exemplo.com/a.png" onerror="fetch(1)"><p/onmouseover=alert(1)>y</p>')
+    assert "onerror" not in h.lower() and "onmouseover" not in h.lower()
+    assert 'src="https://exemplo.com/a.png"' in h
+
+
+def test_outros_atributos_de_endereco_tambem_conferidos():
+    for attr in ["formaction", "xlink:href", "action", "poster", "background"]:
+        h = _para_html(f'<p>x</p><div {attr}="javascript:x"></div>')
+        assert "javascript" not in h.lower(), attr
+
+
+def test_texto_do_documento_nao_e_tocado():
+    """O filtro vale DENTRO das tags. Texto corrido com "onde = aqui" ou
+    "src=x" é conteúdo, e cortar palavra de briefing é estrago de outro tipo."""
+    html = "<p>Veja onde = aqui, e o campo src=javascript:x no manual do sistema.</p>"
+    assert _para_html(html) == html

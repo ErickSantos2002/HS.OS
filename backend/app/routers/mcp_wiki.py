@@ -98,8 +98,21 @@ def _para_html(texto: str) -> str:
 # Lista do que PASSA, não do que cai: esquema novo que rode código não precisa
 # estar previsto. `mailto:`/`tel:` passam porque isto vale para todo link do
 # documento, não só anexo e vídeo.
+#
+# ⚠️ O separador é `[\s/]`, não só espaço: o navegador aceita `<a/href=…>`, e a
+# primeira versão deixava esse passar (revisão de segurança, 24/11/2026). Pela
+# mesma revisão, atributos de evento (`on*`) saem inteiros e os outros
+# atributos que carregam endereço entram na conferência.
+#
+# Não é um sanitizador completo, de propósito: uma lista de tags permitidas
+# cortaria os `data-*` dos nós do TipTap (anexo, vídeo, YouTube, tabela) e
+# quebraria documento de verdade. Se um dia o HTML gravado aqui for mostrado
+# fora do editor sem passar por ele, aí é caso de `nh3` com a lista do TipTap.
 _ATRIBUTO_DE_ENDERECO = re.compile(
-    r"""(\s(?:href|src|data-href)\s*=\s*)("[^"]*"|'[^']*'|[^\s>]+)""", re.I)
+    r"""([\s/](?:href|src|data-href|formaction|xlink:href|action|poster|background)\s*=\s*)"""
+    r"""("[^"]*"|'[^']*'|[^\s>]+)""", re.I)
+_ATRIBUTO_DE_EVENTO = re.compile(
+    r"""[\s/]on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""", re.I)
 _ESQUEMA = re.compile(r"^([a-z][a-z0-9+.\-]*):", re.I)
 _ESQUEMAS_OK = {"http", "https", "mailto", "tel", "blob"}
 _IMAGEM_EM_DATA = re.compile(r"^data:image/(png|jpe?g|gif|webp);", re.I)
@@ -122,12 +135,26 @@ def _endereco_ok(valor: str, atributo: str) -> bool:
 def _sem_endereco_perigoso(html: str) -> str:
     """Tira o atributo de endereço que rodaria código; o resto da tag fica."""
     def trocar(m: re.Match) -> str:
-        atributo = m.group(1).strip().split("=")[0].strip().lower()
+        atributo = m.group(1).strip(" \t\n\r\f/").split("=")[0].strip().lower()
         valor = m.group(2)
         if valor[:1] in "\"'":
             valor = valor[1:-1]
-        return m.group(0) if _endereco_ok(valor, atributo) else ""
-    return _ATRIBUTO_DE_ENDERECO.sub(trocar, html)
+        if _endereco_ok(valor, atributo):
+            return m.group(0)
+        # Mantém o separador: `<a/href=…>` vira `<a/>`, não `<a>` colado no próximo.
+        return m.group(1)[0]
+    def limpar_tag(t: re.Match) -> str:
+        sem_evento = _ATRIBUTO_DE_EVENTO.sub(lambda m: m.group(0)[0], t.group(0))
+        return _ATRIBUTO_DE_ENDERECO.sub(trocar, sem_evento)
+
+    # ⚠️ Só DENTRO de tag de abertura. Sobre o HTML inteiro, "veja onde = aqui"
+    # no texto casava com `on*=` e perdia palavras.
+    return _TAG_DE_ABERTURA.sub(limpar_tag, html)
+
+
+# Tag de abertura com atributos. Aspas são consumidas inteiras, então um `>`
+# dentro de valor entre aspas não fecha a tag antes da hora.
+_TAG_DE_ABERTURA = re.compile(r"""<[a-zA-Z][^\s/>]*(?:"[^"]*"|'[^']*'|[^'">])*>""")
 
 _FERRAMENTAS = [
     {
