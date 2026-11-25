@@ -23,14 +23,12 @@ Segurança"). Cada um tem spec em `docs/superpowers/specs/2026-11-24-*`:
 `journalctl -u backup-openclaw`), a rajada das 07:30 sem OOM, e o **conteúdo**
 da varredura e do resumo das 8h do Midas (em 24/11 só se viu que rodaram).
 
-**PK-08 (25/11, `99b9622`, na `main`, sem deploy):** credencial de conector
-cifrada por valor (`app/credenciais.py`) e `ler_segredo` que não cacheia falha.
-Spec em `docs/superpowers/specs/2026-11-25-pk08-*`. **Depois do deploy:**
-`cd backend && PYTHONPATH=.:$HOME/projetos/bancos .venv/bin/python
-scripts/cifrar-credenciais.py --aplicar` (ensaio já rodou: 18 valores em 9
-linhas, chave local = produção) e conferir `testar-banco` de um conector e o
-relatório do HSGrowth. ⚠️ Não inverter: cifrar antes do deploy derruba os
-conectores no código velho.
+**PK-08 em produção (25/11, `c62b93e`):** as 18 senhas dos 9 conectores de
+banco cifradas por valor (`app/credenciais.py`, chave derivada da
+`EMAIL_CHAVE_CIFRA`; prefixo `cifra:v1:` vindo de fora é 400) e `ler_segredo`
+que não cacheia falha. Conferido pela API: listagem com os nomes das chaves e
+`testar-banco` ok nos 9. A senha segue em claro no `openclaw.json` da VPS
+(cabeçalho `X-Banco-Url`) — fecha com o PK-06.
 
 **Resta da Onda 0:** PK-02 (artefato
 vivo com a sessão do dono), PK-04 (admin só por SSO), PK-06 (exec fora do root —
