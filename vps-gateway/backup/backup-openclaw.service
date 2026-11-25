@@ -8,6 +8,10 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/opt/backup-openclaw/backup-openclaw.sh
+# O systemd não define $HOME, e sem ele o restic roda SEM cache: a cada noite
+# baixava o índice do R2 de novo (operação paga — a conta já passa da faixa
+# grátis). É o mesmo cache que o `--testar` pelo ssh já usa.
+Environment=RESTIC_CACHE_DIR=/root/.cache/restic
 Nice=10
 IOSchedulingClass=idle
 # Não disputa memória com o gateway: a VPS já conheceu OOM (PK-47).
