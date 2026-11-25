@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     # `/auth/sso/status` diz `ativo: false` e a tela esconde o botão. O desenho é
     # o do DataCoreHS (spec 2026-09-24 de lá); ver `app/auth/microsoft.py`.
     # Para onde a pessoa volta depois do login: a PRIMEIRA origem do FRONTEND_URL.
+    # PK-04: admin não entra por senha quando o SSO está ligado. `true` aqui é a
+    # porta de EMERGÊNCIA (SSO fora do ar, segredo do app vencido no Entra) —
+    # ligar exige o EasyPanel, e cada entrada assim fica no log.
+    LOGIN_SENHA_ADMIN_EMERGENCIA: bool = False
     MS_TENANT_ID: str = ""
     MS_CLIENT_ID: str = ""
     MS_CLIENT_SECRET: str = ""

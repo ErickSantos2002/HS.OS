@@ -22,7 +22,7 @@ from app.auth.schemas import (
 )
 from pydantic import BaseModel, Field
 
-from app.auth import microsoft, sso
+from app.auth import microsoft, sso, tentativas
 from app.auth.security import conferir_senha, emitir_token, gerar_hash
 from app.config import settings
 from app.database import sessao
@@ -84,9 +84,30 @@ async def bootstrap_admin(dados: BootstrapIn):
     return TokenOut(access_token=token, expires_in=expira)
 
 
-@router.post("/login", response_model=TokenOut)
-async def login(dados: LoginIn):
+# Hash de verdade, para e-mail inexistente custar o mesmo bcrypt que senha
+# errada: responder mais rápido entregaria quais contas existem.
+_HASH_FALSO = gerar_hash(secrets.token_urlsafe(16))
+
+
+def _ip_de(request: Request) -> str:
+    # Com `--forwarded-allow-ips` no uvicorn, `client.host` já vem do
+    # `X-Forwarded-For`. Sem cliente (teste), um valor fixo.
+    return request.client.host if request.client else "desconhecido"
+
+
+async def entrar_com_senha(dados: LoginIn, ip: str) -> TokenOut:
+    """O login por senha (PK-04): limite de tentativas e admin só pelo SSO.
+
+    ⚠️ A ordem importa: bloqueio ANTES de conferir a senha (senão o bcrypt vira
+    oráculo durante o bloqueio), e a recusa do admin DEPOIS (com senha errada a
+    resposta é o 401 de sempre, então o 403 não revela quem é admin).
+    """
     async with sessao(role="service_role") as conn:
+        if await tentativas.esta_bloqueado(conn, dados.email, ip):
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, tentativas.MENSAGEM_BLOQUEIO)
+
+        # Vale o papel mais forte, como no SSO: com duas linhas em `user_roles`
+        # o JOIN sem ordem devolvia uma qualquer.
         linha = await conn.fetchrow(
             """
             SELECT u.id::text AS id, u.email, u.password_hash, u.is_active,
@@ -94,23 +115,41 @@ async def login(dados: LoginIn):
             FROM auth.users u
             LEFT JOIN public.user_roles r ON r.user_id = u.id
             WHERE lower(u.email) = lower($1)
+            ORDER BY CASE r.role::text WHEN 'administrador' THEN 0 ELSE 1 END
+            LIMIT 1
             """,
             dados.email,
         )
 
         # Mensagem única para e-mail inexistente e senha errada: dizer qual dos
         # dois falhou entrega a existência da conta a quem está tentando adivinhar.
-        if linha is None or not conferir_senha(dados.senha, linha["password_hash"]):
+        senha_ok = conferir_senha(dados.senha, linha["password_hash"] if linha else _HASH_FALSO)
+        if linha is None or not senha_ok:
+            await tentativas.registrar_falha(conn, dados.email, ip)
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "E-mail ou senha inválidos.")
         if not linha["is_active"]:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Conta desativada.")
 
+        if linha["papel"] == "administrador":
+            emergencia = settings.LOGIN_SENHA_ADMIN_EMERGENCIA
+            if not tentativas.admin_pode_por_senha(settings.sso_ativo, emergencia):
+                raise HTTPException(status.HTTP_403_FORBIDDEN, tentativas.MENSAGEM_ADMIN)
+            if emergencia:
+                logger.warning("Admin %s entrou por SENHA (modo de emergência ligado).",
+                               linha["email"])
+
+        await tentativas.zerar(conn, dados.email)
         await conn.execute(
             "UPDATE auth.users SET last_sign_in_at = now() WHERE id = $1::uuid", linha["id"]
         )
 
     token, expira = emitir_token(linha["id"], linha["papel"], linha["email"])
     return TokenOut(access_token=token, expires_in=expira)
+
+
+@router.post("/login", response_model=TokenOut)
+async def login(dados: LoginIn, request: Request):
+    return await entrar_com_senha(dados, _ip_de(request))
 
 
 @router.get("/me", response_model=UsuarioOut)

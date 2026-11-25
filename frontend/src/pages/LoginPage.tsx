@@ -164,14 +164,19 @@ export default function LoginPage() {
       if (isTransientError(err)) {
         setServiceDown(true);
         setError("Serviço temporariamente indisponível. Tente novamente em instantes.");
-      } else if (err instanceof ErroApi && (err.status === 401 || err.status === 403)) {
+      } else if (err instanceof ErroApi && (err.status === 429 || err.status === 403)) {
+        // PK-04: o servidor é quem bloqueia (429) e quem recusa o admin por
+        // senha (403). A mensagem dele diz o que fazer — e não conta como
+        // senha errada no contador local.
+        setError(err.message);
+      } else if (err instanceof ErroApi && err.status === 401) {
         const newAttempts = attempts + 1;
         setAttempts(newAttempts);
         if (newAttempts >= MAX_ATTEMPTS) {
           setLockedUntil(Date.now() + LOCKOUT_MS);
           setError("Muitas tentativas. Conta bloqueada por 15 minutos.");
         } else {
-          setError(err.status === 403 ? err.message : "Email ou senha incorretos.");
+          setError("Email ou senha incorretos.");
         }
       } else {
         setError("Erro inesperado. Tente novamente.");

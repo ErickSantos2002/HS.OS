@@ -67,4 +67,8 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 # gateway e o seu próprio pool do Postgres. Aumentar esse número multiplica os
 # dois. Quando os jobs agendados entrarem (Lote 5), vão num serviço `worker`
 # separado — justamente para não rodarem uma vez por worker do uvicorn.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# `--forwarded-allow-ips '*'`: atrás do proxy do EasyPanel, sem isto todo
+# cliente vira o IP do proxy e o limite de login por IP (PK-04) trancaria a
+# empresa inteira de uma vez. Forjar o cabeçalho só escapa do limite por IP; o
+# por e-mail continua valendo.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--forwarded-allow-ips", "*"]

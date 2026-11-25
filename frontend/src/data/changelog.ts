@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.22.4",
+    date: "2026-11-25",
+    changes: [
+      {
+        kind: "correcao",
+        text: "Mais proteção no login: depois de 5 senhas erradas seguidas, o login por senha daquele e-mail espera 15 minutos (o \"Entrar com Microsoft\" continua funcionando). Contas de administrador entram só pelo \"Entrar com Microsoft\".",
+      },
+    ],
+  },
+  {
     version: "2.22.3",
     date: "2026-11-25",
     changes: [
