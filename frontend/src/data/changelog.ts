@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.22.3",
+    date: "2026-11-25",
+    changes: [
+      {
+        kind: "correcao",
+        text: "Painéis ao vivo só mostram dados para quem os criou. Abrir o painel de outra pessoa mostra o desenho, mas não lê as suas conversas nem usa as suas integrações — e o painel não consegue mais enviar nada para fora do HS.OS.",
+      },
+    ],
+  },
+  {
     version: "2.22.2",
     date: "2026-11-24",
     changes: [

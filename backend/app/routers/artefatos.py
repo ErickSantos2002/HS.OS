@@ -49,11 +49,37 @@ class OrdemIn(BaseModel):
 
 
 class ConsultaIn(BaseModel):
+    # ⚠️ Obrigatório (PK-02): é por ele que se sabe de quem são os dados.
+    artefato_id: str = Field(min_length=1)
     table: str
     select: str = "*"
     filters: dict = {}
     order: OrdemIn | None = None
     limit: int = Field(default=100, ge=1, le=_LIMITE_MAXIMO)
+
+
+_NAO_DONO = {
+    "ok": False,
+    "error": "Os dados deste painel só aparecem para quem o criou.",
+    "code": "not_owner",
+}
+
+
+async def dono_do_artefato(artefato_id: str, usuario_id: str) -> bool:
+    """A ponte do artefato vivo só atende o DONO dele (PK-02, 25/11/2026).
+
+    ⚠️ Até aqui ela agia com a sessão de QUEM VÊ. Qualquer logado abre artefato
+    alheio pelo id (liberado em 17/08), então uma página gerada sob injeção no
+    chat de qualquer pessoa, aberta pelo CEO, lia as conversas DELE. A consulta
+    é `service_role` porque é a pergunta "de quem é", não a leitura em si.
+    """
+    async with sessao(role="service_role") as conn:
+        dono = await conn.fetchval(
+            "SELECT user_id::text FROM public.live_artifacts "
+            " WHERE id::text = $1 AND deleted_at IS NULL",
+            artefato_id,
+        )
+    return dono is not None and dono == usuario_id
 
 
 def _colunas(select: str) -> str:
@@ -75,6 +101,9 @@ async def consultar(dados: ConsultaIn, usuario: Usuario = Depends(usuario_atual)
     como erro no console do usuário para algo que é apenas o agente pedindo
     tabela errada. O agente reage ao `code` do corpo.
     """
+    if not await dono_do_artefato(dados.artefato_id, usuario.id):
+        return _NAO_DONO
+
     if dados.table not in _TABELAS:
         return {
             "ok": False,

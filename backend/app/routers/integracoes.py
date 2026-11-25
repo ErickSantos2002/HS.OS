@@ -1022,6 +1022,8 @@ async def _conta_de_anuncio_meta(token: str) -> str | None:
 
 
 class ChamadaIn(BaseModel):
+    # ⚠️ Obrigatório (PK-02): só o dono do artefato gasta integração por ele.
+    artefato_id: str = Field(min_length=1)
     integration: str = Field(min_length=1)
     endpoint: str = Field(min_length=1)
     params: dict = {}
@@ -1039,7 +1041,14 @@ def _recusa(mensagem: str, codigo: str) -> dict:
 
 @router.post("/invocar")
 async def invocar(dados: ChamadaIn, usuario: Usuario = Depends(usuario_atual)):
-    """Chama um endpoint do playbook da integração e devolve a resposta crua."""
+    """Chama um endpoint do playbook da integração e devolve a resposta crua.
+
+    Quem chama é a ponte de um artefato vivo, e só para o dono dele (PK-02).
+    """
+    from app.routers.artefatos import _NAO_DONO, dono_do_artefato
+    if not await dono_do_artefato(dados.artefato_id, usuario.id):
+        return _NAO_DONO
+
     pedida = dados.integration.strip().lower()
 
     async with sessao(role="service_role") as conn:

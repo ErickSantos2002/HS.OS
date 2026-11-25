@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { exportArtifactAsPdf, exportArtifactAsDocx } from "@/lib/artifact-export";
+import { MENSAGEM_NAO_DONO, comCsp, podeUsarDados, quemVeParaOArtefato } from "@/lib/artefato-dono";
 
 interface LiveArtifact {
   id: string;
@@ -49,7 +50,7 @@ const FALLBACK_DATA_ENDPOINTS: Record<string, string[]> = {
 };
 
 function buildBridge(args: {
-  user: { id: string; email: string; role: string; name: string } | null;
+  user: { id: string; role: string; name: string } | null;
   refreshInterval: number;
   publicMode: boolean;
   integrations: Array<{ integration_type: string; endpoints: string[] }>;
@@ -226,7 +227,10 @@ ${integrationModules}
 
 
 function buildSrcdoc(artifact: LiveArtifact, bridge: string): string {
-  const html = artifact.html_content || "";
+  return comCsp(montarDocumento(artifact.html_content || "", bridge));
+}
+
+function montarDocumento(html: string, bridge: string): string {
   // If it's a full document, inject bridge right after <head>. Otherwise wrap.
   if (/<html[\s>]/i.test(html) || /<!doctype/i.test(html)) {
     if (/<head[^>]*>/i.test(html)) {
@@ -403,23 +407,23 @@ export default function LiveArtifactViewer({
     return () => { cancelled = true; };
   }, [publicMode]);
 
+  // PK-02: a ponte só usa dados quando quem vê é o dono, fora do link público.
+  const ehDono = podeUsarDados({ publicMode, donoId: artifact?.user_id, quemVeId: user?.id });
+
   const bridge = useMemo(() => {
     return buildBridge({
-      user: publicMode
-        ? null
-        : user
-        ? {
-            id: user.id,
-            email: user.email ?? "",
-            role: (role as any) ?? "user",
-            name: profile?.full_name ?? "",
-          }
-        : null,
+      // PK-02: só o dono é apresentado ao HTML, e sem e-mail.
+      user: quemVeParaOArtefato({
+        user,
+        nome: profile?.full_name ?? "",
+        papel: (role as any) ?? "colaborador",
+        ehDono: ehDono,
+      }),
       refreshInterval: artifact?.refresh_interval ?? 0,
       publicMode,
       integrations,
     });
-  }, [user, profile, role, artifact?.refresh_interval, publicMode, integrations]);
+  }, [user, profile, role, artifact?.refresh_interval, publicMode, integrations, ehDono]);
 
   const srcdoc = useMemo(
     () => (artifact ? buildSrcdoc(artifact, bridge) : ""),
@@ -442,6 +446,10 @@ export default function LiveArtifactViewer({
       const post = (msg: any) => target?.postMessage(msg, "*");
 
       if (data.type === "hsos_query") {
+        if (!ehDono || !artifactId) {
+          post({ type: "hsos_query_result", id: data.id, error: MENSAGEM_NAO_DONO });
+          return;
+        }
         try {
           // O substituto do `artifact-query` existe desde a portagem; esta
           // chamada tinha ficado apontando para a edge, e a mensagem que
@@ -451,7 +459,7 @@ export default function LiveArtifactViewer({
           try {
             body = await api<any>("/artefatos/consultar", {
               method: "POST",
-              body: { table: data.table, ...(data.options || {}) },
+              body: { ...(data.options || {}), table: data.table, artefato_id: artifactId },
             });
           } catch (e) {
             body = { error: (e as Error).message };
@@ -484,6 +492,10 @@ export default function LiveArtifactViewer({
           post({ type: "hsos_invoke_result", id: data.id, error: "Integrações não disponíveis no modo público." });
           return;
         }
+        if (!ehDono || !artifactId) {
+          post({ type: "hsos_invoke_result", id: data.id, error: MENSAGEM_NAO_DONO });
+          return;
+        }
         try {
           let body: any = {};
           let falhou = false;
@@ -491,6 +503,7 @@ export default function LiveArtifactViewer({
             body = await api<any>("/integracoes/invocar", {
               method: "POST",
               body: {
+                artefato_id: artifactId,
                 integration: data.integration,
                 endpoint: data.endpoint,
                 params: data.params,
@@ -550,7 +563,7 @@ export default function LiveArtifactViewer({
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [session, publicMode, artifactId]);
+  }, [session, publicMode, artifactId, ehDono]);
 
 
   // Auto-refresh timer
