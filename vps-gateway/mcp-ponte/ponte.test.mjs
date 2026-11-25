@@ -65,17 +65,38 @@ test("pedidos simultâneos esperam a mesma busca", async () => {
     assert.equal(a.chamadas.length, 1);
 });
 
-test("vencido é buscado de novo; API fora serve o vencido", async () => {
+test("vencido sai na hora e é atualizado em segundo plano", async () => {
+    // 25/11: com espera, a 1ª mensagem depois de 5 min parados levou 9,3 s.
+    let t = 0;
+    const a = api();
+    let lento = null;
+    const buscar = async (...args) => { await lento; return a.buscar(...args); };
+    const ponte = criarPonte({ origem: "https://api", buscar, agora: () => t });
+    await pedir(ponte, "/mcp/x/s", "tools/list");
+    t = TTL_MS + 1;
+    let soltar;
+    lento = new Promise((r) => { soltar = r; });
+    const r = await pedir(ponte, "/mcp/x/s", "tools/list", 5);  // não espera a API
+    assert.equal(JSON.parse(r.corpo).id, 5);
+    soltar();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(a.chamadas.length, 2);
+});
+
+test("API fora com cache vencido: continua servindo o guardado", async () => {
     let t = 0;
     const respostas = {};
     const a = api(respostas);
-    const ponte = criarPonte({ origem: "https://api", buscar: a.buscar, agora: () => t });
+    const avisos = [];
+    const ponte = criarPonte({ origem: "https://api", buscar: a.buscar, agora: () => t,
+        registrar: (m) => avisos.push(m) });
     await pedir(ponte, "/mcp/x/s", "tools/list");
     t = TTL_MS + 1;
     respostas.falhar = true;
     const r = await pedir(ponte, "/mcp/x/s", "tools/list");
+    await new Promise((r) => setTimeout(r, 0));
     assert.equal(r.status, 200);
-    assert.equal(a.chamadas.length, 2);
+    assert.equal(avisos.length, 1);
 });
 
 test("sem cache e API fora, o erro sobe", async () => {

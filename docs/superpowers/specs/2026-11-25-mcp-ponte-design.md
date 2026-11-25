@@ -30,8 +30,11 @@ com swap e timeout dos MCP").
 Um serviço local, `mcp-ponte`, em `127.0.0.1:18791`, sem dependência:
 
 - `initialize` e `tools/list` respondidos **do cache** (por caminho + cabeçalho
-  de autenticação, 5 min). Na falta, busca na API, guarda e serve — pedidos
-  iguais simultâneos esperam a mesma busca. O `id` do JSON-RPC é o do pedido.
+  de autenticação). Vencido (5 min) sai **na hora** e é atualizado em segundo
+  plano: com espera, a 1ª mensagem depois de 5 min parados levou 9,3 s (medido
+  em 25/11, e quase toda mensagem chega depois de 5 min). Sem cache nenhum,
+  busca, guarda e serve — pedidos iguais simultâneos esperam a mesma busca. O
+  `id` do JSON-RPC é o do pedido.
 - Notificação (sem `id`) → 202 local, como o backend faz.
 - `tools/call` e qualquer outro método → repassados à API, com conexão
   persistente (`keepAlive`), cabeçalhos e corpo como vieram. A API continua
@@ -54,7 +57,10 @@ a porta já é root e leria o arquivo de qualquer jeito (mesmo raciocínio do
 ## O que NÃO muda
 
 - A API continua a autoridade: assinatura por bot e token em todo `tools/call`.
-- Ferramenta nova ou removida aparece em até 5 min (ou `/esquecer`).
+- Ferramenta nova ou removida aparece na execução seguinte a uma que já passou
+  dos 5 min (ou na hora, com `/esquecer`). Reiniciar a ponte esvazia o cache: a
+  1ª execução depois paga as buscas (~9 s) — o `instalar.sh` aquece com o
+  `comparar.mjs`.
 - Os servidores de outros bots continuam sendo "conectados" — agora em
   microssegundos, sem rede.
 

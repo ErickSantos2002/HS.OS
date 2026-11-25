@@ -198,6 +198,17 @@ sessão viva**, para todos os agentes. Servidor novo é HTTP (como os `hsos-*`) 
 `banco-mcp`. E os 78 HTTP `hsos-*` também são conectados por toda sessão — não pesam memória na VPS,
 mas são handshakes no backend a cada sessão nova.
 
+⚠️ **E "por sessão" é, na prática, por EXECUÇÃO** (25/11/2026): execução embutida pede limpeza do
+runtime no fim (`configuration-reference.md` do OpenClaw), então toda mensagem reconecta os 87. Pela
+API pública, a etapa `bundle-tools` do log (`prep stages: … bundle-tools:NNNNms`) levava **~20 s em
+toda mensagem** e a rajada dava 130 `Request timed out`/dia. Desde 25/11 os 78 `hsos-*` apontam para
+a **`mcp-ponte`** (`127.0.0.1:18791`, `vps-gateway/mcp-ponte/`): `initialize` e `tools/list` saem de
+cache (vencido aos 5 min, servido na hora e atualizado em segundo plano), `tools/call` vai à API.
+**Ferramenta nova num deploy aparece com uma execução de atraso** — com pressa, `curl -X POST 127.0.0.1:18791/esquecer` na VPS. Servidor novo `hsos-*` herda a ponte porque
+os scripts de publicação copiam a base do `hsos-relatorios`; quem montar URL na mão, use a ponte.
+O OpenClaw não tem escopo de servidor por agente fora do harness do Codex (`codex.agents`) nem manda
+a identidade do agente ao servidor — por isso a ponte, e não um servidor único por família.
+
 ⚠️ **Na VPS do gateway, nunca rode a CLI do OpenClaw com `OPENCLAW_STATE_DIR` alternativo.** Em
 24/11, um `openclaw mcp probe` com estado numa pasta temporária (para testar uma config à parte)
 "migrou" o estado legado e **renomeou o `/root/.openclaw/exec-approvals.json` do gateway vivo** para

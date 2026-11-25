@@ -23,5 +23,7 @@ Trocar as entradas do gateway (idempotente; backup na VPS):
 cd backend && .venv/bin/python ../scripts/trocar-mcp-ponte.py [--aplicar | --voltar]
 ```
 
-⚠️ **Ferramenta nova ou removida num deploy aparece em até 5 min** — o
-`tools/list` está em cache. Com pressa, `/esquecer`.
+⚠️ **Ferramenta nova ou removida num deploy aparece com atraso**: o cache
+vencido (5 min) é servido na hora e atualizado em segundo plano, então a
+mudança chega na execução seguinte. Com pressa, `/esquecer`. Reiniciar a
+ponte esvazia o cache; o `instalar.sh` aquece com o `comparar.mjs`.

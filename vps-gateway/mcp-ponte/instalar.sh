@@ -28,4 +28,6 @@ for i in $(seq 1 20); do
 done
 echo "→ saúde: $(curl -sf http://127.0.0.1:18791/saude || echo 'NÃO RESPONDEU')"
 systemctl --no-pager --lines=0 status mcp-ponte | sed -n 1,5p
+# Cache vazio depois de reiniciar: aquecer, senão a 1ª execução paga ~9 s.
+node /opt/mcp-ponte/comparar.mjs | tail -1
 REMOTO

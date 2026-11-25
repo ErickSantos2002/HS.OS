@@ -50,26 +50,30 @@ export function criarPonte({ origem, buscar, agora = () => Date.now(), registrar
         return corpo.result;
     }
 
-    async function doCache(caminho, cabecalhos, pedido) {
-        const chave = chaveDe(caminho, cabecalhos, pedido.method);
-        const guardado = cache.get(chave);
-        if (guardado && agora() - guardado.em < TTL_MS) return guardado.resultado;
+    function buscarUmaVez(chave, caminho, cabecalhos, pedido) {
         if (!emVoo.has(chave)) {
             emVoo.set(chave, buscarResultado(caminho, cabecalhos, pedido)
                 .then((resultado) => { cache.set(chave, { resultado, em: agora() }); return resultado; })
                 .finally(() => emVoo.delete(chave)));
         }
-        try {
-            return await emVoo.get(chave);
-        } catch (e) {
-            // API fora com cache vencido: servir o vencido é melhor que a
-            // ferramenta sumir da execução. Sem cache, o erro dela segue.
-            if (guardado) {
-                registrar(`servindo ${pedido.method} vencido de ${caminho}: ${e.message}`);
-                return guardado.resultado;
+        return emVoo.get(chave);
+    }
+
+    async function doCache(caminho, cabecalhos, pedido) {
+        const chave = chaveDe(caminho, cabecalhos, pedido.method);
+        const guardado = cache.get(chave);
+        if (guardado) {
+            // ⚠️ Vencido sai NA HORA e a busca vai em segundo plano. Com espera,
+            // a 1ª mensagem depois de 5 min parados pagava as 78 buscas (9,3 s
+            // medidos em 25/11) — e quase toda mensagem chega depois de 5 min.
+            // O preço: ferramenta nova aparece na 2ª execução, não na 1ª.
+            if (agora() - guardado.em >= TTL_MS) {
+                buscarUmaVez(chave, caminho, cabecalhos, pedido).catch((e) =>
+                    registrar(`não atualizei ${pedido.method} de ${caminho}: ${e.message}`));
             }
-            throw e;
+            return guardado.resultado;
         }
+        return buscarUmaVez(chave, caminho, cabecalhos, pedido);
     }
 
     async function atender({ caminho, cabecalhos, corpo }) {
