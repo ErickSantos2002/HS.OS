@@ -118,7 +118,11 @@ def carimbo(nome: str | None, email: str | None, cargo: str | None,
         partes.append(f"cargo {_limpar(cargo)}")
     if _limpar(departamento):
         partes.append(f"departamento {_limpar(departamento)}")
-    partes.append(f"nome no perfil (editável) {_limpar(nome) or '—'}")
+    # O nome vai ENTRE ASPAS, escapado como JSON: o que a pessoa escreve ali fica
+    # visivelmente dentro de uma string e não imita "e-mail …" nem "cargo …"
+    # (revisão de segurança — lista de caracteres proibidos não tem fim).
+    import json as _json
+    partes.append(f"nome no perfil (editável) {_json.dumps(_limpar(nome) or '—', ensure_ascii=False)}")
     return f"{PREFIXO_CARIMBO} {' · '.join(partes)}]"
 
 
