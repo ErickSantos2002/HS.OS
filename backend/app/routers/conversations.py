@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app import voz_entrega
+from app.agentes.regras_base import carimbo, com_carimbo
 from app.anexos import Anexo, linha_de_anexo
 from app.arquivos_da_conversa import arquivos_da_conversa
 from app.database import sessao
@@ -1309,6 +1310,29 @@ class GatewayNaoConfigurado(ErroGateway):
     """
 
 
+async def _carimbo_de_quem_fala(agent_id: str, user_id: str) -> str | None:
+    """A linha "quem fala neste turno" para os especialistas (PK-07).
+
+    Guardi não recebe: atende uma pessoa só e tem os próprios limites. Melhor
+    esforço — falhar aqui não pode impedir a mensagem de sair; sem a linha, a
+    regra-base manda o agente não dar autoridade a ninguém.
+    """
+    try:
+        from app.routers.channels import _bots_pessoais_entre
+        async with sessao(role="service_role") as conn:
+            if await _bots_pessoais_entre(conn, [agent_id]):
+                return None
+            p = await conn.fetchrow(
+                "SELECT full_name, cargo, departamento FROM public.profiles WHERE id = $1::uuid",
+                user_id)
+    except Exception:
+        logger.warning("carimbo de quem fala não montado para %s/%s", agent_id, user_id, exc_info=True)
+        return None
+    if p is None:
+        return None
+    return carimbo(p["full_name"] or "", p["cargo"], p["departamento"])
+
+
 async def disparar_turno(agent_id: str, user_id: str, mensagem: str,
                          pergunta_id: str | None = None,
                          prefixo: str = "hsos-") -> str:
@@ -1335,6 +1359,9 @@ async def disparar_turno(agent_id: str, user_id: str, mensagem: str,
 
     # Antes de gravar o run deste envio: é o run anterior que marca o "desde".
     mensagem = mensagem_com_decisoes(mensagem, await _decisoes_desde_o_ultimo_envio(agent_id, user_id))
+    linha = await _carimbo_de_quem_fala(agent_id, user_id)
+    if linha:
+        mensagem = com_carimbo(mensagem, linha)
     chave = _chave_sessao(agent_id, user_id)
     cliente = obter_cliente(c.url, c.token)
     seq_antes = await _ultimo_seq(

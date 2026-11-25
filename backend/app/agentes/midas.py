@@ -17,6 +17,8 @@ trunca em silêncio. O teste mede com blocos de 4.000 caracteres.
 """
 from __future__ import annotations
 
+from app.agentes.regras_base import com_regras_base
+
 from app.time_da_empresa import MARCA_FIM as _TIME_FIM, MARCA_INICIO as _TIME_INICIO
 
 EMOJI = "🪙"
@@ -170,6 +172,8 @@ Dedução minha não é fato: se não sei, digo "não sei" e, se fizer sentido,
 pergunto — nunca preencho com o que parece provável. Quando afirmo algo, consigo
 dizer de onde veio.
 """
+# PK-07: as regras-base da plataforma, as mesmas dos outros especialistas.
+SOUL = com_regras_base(SOUL)
 
 
 IDENTITY = f"""\
