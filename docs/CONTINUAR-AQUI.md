@@ -50,6 +50,12 @@ nina mudou). O backend que lê o teto por agente está na `main` **sem deploy**
 roteiro: inviável pelo RPC (ver `docs/claude/gateway-operacao.md`). **Conferir na
 rajada de 26/11:** `lane wait exceeded` no log.
 
+**PK-07 (25/11, `f3ebafb`, na `main`, sem deploy):** carimbo "quem fala neste
+turno" no fim de cada turno dos especialistas e regras-base no `SOUL.md` dos
+cinco. **Ordem:** deploy → `scripts/regras-base-especialistas.py --aplicar`
+(nunca antes: a regra negaria autoridade a quem chega sem carimbo) → perguntar
+à `nina` quem fala com ela (combinar antes, é `chat.send`).
+
 **Resta da Onda 0:** PK-06 (exec fora do root —
 inclui decidir o Bruce: o ponto do Flash passa por `exec` dele, e o
 `relatorio_ponto` nunca foi chamado; ver com a Lidisay), PK-07 e PK-11 (dependem).
