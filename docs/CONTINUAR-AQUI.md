@@ -1,5 +1,21 @@
 # Continuar aqui
 
+## ▶ Retomar em 26/11/2026 — fechar a Onda 0
+
+1. **07:30–08:30, conferências:** rajada (`/tmp/filtro_prep.py` na VPS: zero
+   `Request timed out`, `bundle-tools` ~5 s, `lane wait exceeded` sumiu com a
+   fila de 6); resumo das 8h do Midas (caixa com o fix do DataCore); quadro da
+   Nina das 08:30.
+2. **Se o Erick deu o deploy:** `scripts/regras-base-especialistas.py --aplicar`
+   e perguntar à `nina` quem fala com ela (com ok dele) → PK-07 fechado.
+3. **PK-10:** escrever o plano de emergência do gateway (item 02-37).
+4. **PK-06:** sandbox da nina/atlas (sem Docker na VPS — ver o levantamento
+   abaixo) e o Bruce sem `exec` depois de falar com a Lidisay sobre o ponto.
+   PK-11 vem depois.
+
+TaskHS: o Erick marca PK-02, PK-04, PK-08 (Onda 0) e PK-12, PK-47 (Onda 1); o
+PK-10 está marcado sem o plano de emergência.
+
 ## ▶ Retomar em 25/11/2026 — Onda 0 do remix do DN.OS (sessão de 24/11)
 
 A análise do remix de novembro (8 seções, 45 pacotes em ondas) mora **fora do
