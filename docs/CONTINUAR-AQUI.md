@@ -30,8 +30,14 @@ que não cacheia falha. Conferido pela API: listagem com os nomes das chaves e
 `testar-banco` ok nos 9. A senha segue em claro no `openclaw.json` da VPS
 (cabeçalho `X-Banco-Url`) — fecha com o PK-06.
 
-**Resta da Onda 0:** PK-02 (artefato
-vivo com a sessão do dono), PK-04 (admin só por SSO), PK-06 (exec fora do root —
+**PK-02 (25/11, `8a40bd8`, na `main`, sem deploy):** a ponte do artefato
+vivo só atende o dono (servidor exige `artefato_id`), `hsos.user` sem e-mail e
+CSP no iframe. ⚠️ Deploy de front e backend JUNTOS: o backend novo recusa o
+front velho (sem `artefato_id`). Conferir: o "Fluxo de Responsabilidade" da
+Nina abre com dados para o dono; `/artefatos/consultar` com token de outra
+pessoa devolve `not_owner`.
+
+**Resta da Onda 0:** PK-04 (admin só por SSO), PK-06 (exec fora do root —
 inclui decidir o Bruce: o ponto do Flash passa por `exec` dele, e o
 `relatorio_ponto` nunca foi chamado; ver com a Lidisay), PK-07 e PK-11 (dependem).
 **Pacote novo a propor:** cada sessão conecta os 78 MCP HTTP `hsos-*`; na
