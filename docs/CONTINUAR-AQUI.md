@@ -46,8 +46,12 @@ MFA é configuração do Entra.
 **Resta da Onda 0:** PK-06 (exec fora do root —
 inclui decidir o Bruce: o ponto do Flash passa por `exec` dele, e o
 `relatorio_ponto` nunca foi chamado; ver com a Lidisay), PK-07 e PK-11 (dependem).
-**Pacote novo a propor:** cada sessão conecta os 78 MCP HTTP `hsos-*`; na
-rajada ~70 estouram 30 s. Não derrubou turno, mas é o próximo gargalo.
+**mcp-ponte no ar (25/11, `6e13948` + `132801e`):** os 78 MCP `hsos-*` passam
+pela ponte no loopback da VPS (`vps-gateway/mcp-ponte/`), com `initialize` e
+`tools/list` em cache. `bundle-tools` caiu de ~20 s em toda mensagem para 5,3 s;
+o resto é do próprio OpenClaw (87 clientes, ~1.350 ferramentas). **Conferir na
+rajada de 26/11 07:30:** zero `Request timed out` e nenhum bot sem a própria
+ferramenta (`python3 /tmp/filtro_prep.py <desde> < /tmp/openclaw/openclaw-2026-11-26.log`).
 
 **Ritmo combinado:** um pacote por vez, conferido em produção antes do
 próximo; spec → plano → execução sem pedir aprovação, dentro de três limites —
