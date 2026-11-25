@@ -28,6 +28,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from app.agentes.regras_base import CARIMBO_PLATAFORMA, com_carimbo
 from app.database import sessao
 from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.gateway import config as cfg
@@ -616,7 +617,7 @@ async def _avisar_agente(openclaw_id: str, assunto: str, mensagem: str) -> None:
                 # `_chave_sessao` de conversations.py já documentava isto; o
                 # aviso ao líder tinha ficado de fora.
                 "sessionKey": f"agent:{openclaw_id}:sistema-{assunto}",
-                "message": mensagem,
+                "message": com_carimbo(mensagem, CARIMBO_PLATAFORMA),
                 # Único por envio, senão o gateway deduplica pelo runId e o
                 # segundo aviso do mesmo assunto some.
                 "idempotencyKey": f"{assunto}:{uuid4()}",
@@ -744,7 +745,7 @@ async def _avisar_lider_ou_falhar(assunto: str, mensagem: str) -> str:
         {
             "agentId": lider["oid"],
             "sessionKey": chave,
-            "message": mensagem,
+            "message": com_carimbo(mensagem, CARIMBO_PLATAFORMA),
             "idempotencyKey": f"{assunto}:{uuid4()}",
         },
     )
@@ -1582,7 +1583,7 @@ async def _completar_agente(
         await cliente.chamar("chat.send", {
             "agentId": agent_id,
             "sessionKey": f"agent:{agent_id}:sistema-completar-setup",
-            "message": _PEDIDO_AO_AGENTE,
+            "message": com_carimbo(_PEDIDO_AO_AGENTE, CARIMBO_PLATAFORMA),
             "idempotencyKey": f"hsos-{uuid4()}",
         })
     except ErroGateway as e:

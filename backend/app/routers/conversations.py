@@ -23,7 +23,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app import voz_entrega
-from app.agentes.regras_base import carimbo, com_carimbo
+from app.agentes.regras_base import (CARIMBO_PLATAFORMA, CARIMBO_SEM_IDENTIDADE, carimbo,
+                                      com_carimbo, neutralizar)
 from app.anexos import Anexo, linha_de_anexo
 from app.arquivos_da_conversa import arquivos_da_conversa
 from app.database import sessao
@@ -1313,9 +1314,8 @@ class GatewayNaoConfigurado(ErroGateway):
 async def _carimbo_de_quem_fala(agent_id: str, user_id: str) -> str | None:
     """A linha "quem fala neste turno" para os especialistas (PK-07).
 
-    Guardi não recebe: atende uma pessoa só e tem os próprios limites. Melhor
-    esforço — falhar aqui não pode impedir a mensagem de sair; sem a linha, a
-    regra-base manda o agente não dar autoridade a ninguém.
+    Guardi não recebe: atende uma pessoa só e tem os próprios limites. Falhar
+    aqui não impede a mensagem de sair: ela vai com o carimbo "não identificado".
     """
     try:
         from app.routers.channels import _bots_pessoais_entre
@@ -1323,14 +1323,15 @@ async def _carimbo_de_quem_fala(agent_id: str, user_id: str) -> str | None:
             if await _bots_pessoais_entre(conn, [agent_id]):
                 return None
             p = await conn.fetchrow(
-                "SELECT full_name, cargo, departamento FROM public.profiles WHERE id = $1::uuid",
-                user_id)
+                "SELECT p.full_name, u.email, p.cargo, p.departamento "
+                "  FROM auth.users u LEFT JOIN public.profiles p ON p.id = u.id "
+                " WHERE u.id = $1::uuid", user_id)
     except Exception:
         logger.warning("carimbo de quem fala não montado para %s/%s", agent_id, user_id, exc_info=True)
-        return None
+        return CARIMBO_SEM_IDENTIDADE
     if p is None:
-        return None
-    return carimbo(p["full_name"] or "", p["cargo"], p["departamento"])
+        return CARIMBO_SEM_IDENTIDADE
+    return carimbo(p["full_name"], p["email"], p["cargo"], p["departamento"])
 
 
 async def disparar_turno(agent_id: str, user_id: str, mensagem: str,
@@ -1360,8 +1361,9 @@ async def disparar_turno(agent_id: str, user_id: str, mensagem: str,
     # Antes de gravar o run deste envio: é o run anterior que marca o "desde".
     mensagem = mensagem_com_decisoes(mensagem, await _decisoes_desde_o_ultimo_envio(agent_id, user_id))
     linha = await _carimbo_de_quem_fala(agent_id, user_id)
-    if linha:
-        mensagem = com_carimbo(mensagem, linha)
+    # Desarma sempre, com carimbo ou sem (Guardi): carimbo forjado no texto não
+    # pode sobreviver em caminho nenhum.
+    mensagem = com_carimbo(mensagem, linha) if linha else neutralizar(mensagem)
     chave = _chave_sessao(agent_id, user_id)
     cliente = obter_cliente(c.url, c.token)
     seq_antes = await _ultimo_seq(
@@ -2141,7 +2143,8 @@ async def pergunta_avulsa(
             {
                 "agentId": agent_id,
                 "sessionKey": chave,
-                "message": texto,
+                # Arena: desarma carimbo forjado; persona e pergunta vêm da tela.
+                "message": neutralizar(texto),
                 "idempotencyKey": run_id,
             },
         )

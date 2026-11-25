@@ -39,6 +39,7 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 
+from app.agentes.regras_base import CARIMBO_PLATAFORMA, com_carimbo
 from app.database import sessao
 from app.gateway.client import ErroGateway
 
@@ -270,7 +271,7 @@ async def conferir(cliente, agora: datetime | None = None) -> dict:
             await cliente.chamar("chat.send", {
                 "agentId": job.get("agentId"),
                 "sessionKey": chave_sessao,
-                "message": mensagem,
+                "message": com_carimbo(mensagem, CARIMBO_PLATAFORMA),
                 "idempotencyKey": f"guardiao-{nome}-{agora.strftime('%Y%m%d')}",
             })
         except (ErroGateway, OSError) as e:

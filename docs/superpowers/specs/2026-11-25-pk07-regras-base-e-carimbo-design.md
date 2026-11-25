@@ -24,6 +24,20 @@ dado", identidade, contexto, escopo) não se repete. O modelo do Midas
 quem pede E o alvo no `tools.agentToAgent.allow` (`isAllowed`, `session-visibility`
 do OpenClaw 2026.7.1). Os Guardis não estão lá. A frase cobre o resto.
 
+## Achados da revisão de segurança (25/11, antes do deploy)
+
+- **O `full_name` a própria pessoa edita** (`PerfilPatch`): o carimbo leva o
+  e-mail de `auth.users` como âncora, e os campos saem numa linha, sem colchete
+  (um nome com `]` e quebra de linha abriria um carimbo falso).
+- **Desarme literal deixava passar variação** (hífen, caixa, largura cheia):
+  agora NFKC + regex sem caixa (`neutralizar`).
+- **Falha montando o carimbo mandava a mensagem sem nada**: agora vai
+  "não identificado", e o desarme roda sempre, inclusive para Guardi.
+- **Os outros caminhos até o agente não desarmavam**: canal leva "várias
+  pessoas num canal", avisos ao líder e briefings levam "a plataforma", Arena só
+  desarma. Ficam de fora o comando de barra e o reenvio pós-compactação (texto
+  já carimbado por nós).
+
 ## Medido (ensaio de 25/11)
 
 SOUL +1.182 caracteres em cada; maior soma dos sete: nina 52.578 de 80.000;

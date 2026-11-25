@@ -52,6 +52,13 @@ def amb(monkeypatch):
     monkeypatch.setattr(c, "_piso_do_seq", piso)
     monkeypatch.setattr(c, "_ultimo_seq", ultimo_seq)
     monkeypatch.setattr(c, "_guardar_run", guardar)
+
+    # `erick-bot` é Guardi: sem carimbo (PK-07). Sem isto o teste, que não tem
+    # banco, veria o carimbo "não identificado" — o certo quando não dá para
+    # saber se é especialista.
+    async def sem_carimbo(agent_id, user_id):
+        return None
+    monkeypatch.setattr(c, "_carimbo_de_quem_fala", sem_carimbo)
     return estado
 
 

@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app import voz_entrega
+from app.agentes.regras_base import CARIMBO_CANAL, com_carimbo
 from app.database import sessao
 from app.dependencies import Usuario, exige_papel, normalizar_agent_id, usuario_atual
 from app.gateway import config as cfg
@@ -1214,7 +1215,7 @@ async def _responder_no_canal(channel_id: str, agent_id: str) -> None:
         try:
             await cliente.chamar("chat.send", {
                 "agentId": agent_id, "sessionKey": chave,
-                "message": pedido, "idempotencyKey": run_id,
+                "message": com_carimbo(pedido, CARIMBO_CANAL), "idempotencyKey": run_id,
             })
             r = await espera.chamar("agent.wait", {"runId": run_id, "timeoutMs": _ESPERA_CANAL_MS})
             if r.get("status") != "timeout":
