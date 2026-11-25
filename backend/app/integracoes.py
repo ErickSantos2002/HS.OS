@@ -63,6 +63,10 @@ async def ler_segredo(nome: str) -> str | None:
     _cache[nome] = (valor, agora)
     if valor:
         _ultimo_bom[nome] = valor
+    else:
+        # O banco respondeu que não há: é revogação, não falha. Sem isto o valor
+        # revogado voltaria a valer no próximo soluço do banco.
+        _ultimo_bom.pop(nome, None)
     return valor
 
 

@@ -21,7 +21,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.credenciais import abrir as abrir_credenciais, fechar as fechar_credenciais
+from app.credenciais import ValorReservado, abrir as abrir_credenciais, fechar as _fechar
 from app.database import sessao
 from app.gateway import config as cfg_gateway, patch as patch_gw
 from app.gateway.client import (ErroGateway as ErroGatewayCli, TETO_ARQUIVO_AGENTE,
@@ -29,6 +29,15 @@ from app.gateway.client import (ErroGateway as ErroGatewayCli, TETO_ARQUIVO_AGEN
 from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.integracoes import exige_segredo, ler_segredo
 from app.realtime import hub, topico_usuario
+
+
+def fechar_credenciais(estrutura):
+    """`credenciais.fechar` com a recusa do prefixo virando 400, não 500."""
+    try:
+        return _fechar(estrutura)
+    except ValorReservado as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+
 
 logger = logging.getLogger(__name__)
 

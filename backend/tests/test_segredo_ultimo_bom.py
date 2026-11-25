@@ -74,3 +74,22 @@ def test_banco_respondeu_sem_valor_continua_valendo_o_ambiente(monkeypatch):
     monkeypatch.setenv("SEGREDO_X", "do-env")
     assert asyncio.run(integracoes.ler_segredo("SEGREDO_X")) == "do-env"
     assert integracoes._cache["SEGREDO_X"][0] == "do-env"
+
+
+def test_revogacao_apaga_o_ultimo_valor_bom(monkeypatch):
+    """Achado na revisão de segurança: o valor revogado não pode voltar a valer.
+
+    Segredo apagado da tabela (banco respondeu, sem valor) e depois um soluço
+    do banco: sem limpar, o `_ultimo_bom` devolvia o segredo revogado.
+    """
+    estado = {"falha": False, "valor": "antigo"}
+    _banco(monkeypatch, estado)
+    asyncio.run(integracoes.ler_segredo("SEGREDO_X"))
+
+    _expirar()
+    estado["valor"] = None
+    assert asyncio.run(integracoes.ler_segredo("SEGREDO_X")) is None
+
+    _expirar()
+    estado["falha"] = True
+    assert asyncio.run(integracoes.ler_segredo("SEGREDO_X")) is None

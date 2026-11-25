@@ -54,10 +54,30 @@ def test_abrir_devolve_legado_em_claro_como_esta(chave):
     assert credenciais.abrir(PARES) == PARES
 
 
-def test_fechar_e_idempotente(chave):
-    """Gravar de novo o que já veio cifrado não pode cifrar duas vezes."""
-    uma = credenciais.fechar(PARES)
-    assert credenciais.fechar(uma) == uma
+def test_valor_de_fora_com_o_prefixo_e_recusado(chave):
+    """Aceitar `cifra:v1:` de quem grava seria deixar plantar texto cifrado.
+
+    Achado na revisão de segurança do próprio PK-08: com o prefixo aceito,
+    quem tem o token compartilhado gravava um refresh token da `email_contas`
+    (legível pelo usuário `leitura`) como credencial, e o `/agent-credentials`
+    o devolvia decifrado.
+    """
+    with pytest.raises(credenciais.ValorReservado):
+        credenciais.fechar(credenciais.fechar(PARES))
+
+
+def test_chave_propria_nao_abre_o_cifrado_do_email(chave):
+    """Domínios separados: o que a cifra do e-mail gerou não abre aqui."""
+    do_email = credenciais.PREFIXO + cifra.cifrar("refresh-token-de-alguem")
+    with pytest.raises(cifra.ErroCifra):
+        credenciais.abrir([{"key_name": "t", "value": do_email}])
+
+
+def test_rota_responde_400_ao_prefixo(chave):
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as e:
+        integracoes.fechar_credenciais([{"key_name": "t", "value": credenciais.PREFIXO + "x"}])
+    assert e.value.status_code == 400
 
 
 def test_formato_objeto_do_mcp(chave):

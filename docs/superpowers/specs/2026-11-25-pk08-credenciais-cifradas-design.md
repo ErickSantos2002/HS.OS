@@ -38,9 +38,13 @@ chaves — o defeito que aquela consulta foi escrita para matar.
 **Prefixo explícito**, porque permite a ordem segura: o código novo lê os dois
 formatos, então sobe antes da migração, e a migração só roda com ele no ar.
 
-**A mesma chave do e-mail**, porque ela já está no env de produção (o e-mail
-dos bots depende dela) e a ameaça é a mesma: quem tem a tabela não tem o env.
-Uma chave própria seria um passo de produção a mais sem proteger nada a mais.
+**Chave derivada da do e-mail, não a mesma.** HKDF da `EMAIL_CHAVE_CIFRA` com
+rótulo próprio: não pede variável nova no ambiente, mas separa os domínios. E
+**valor que chega de fora com o prefixo é recusado (400)**. As duas coisas
+vieram da revisão de segurança do próprio pacote: com a mesma chave e o prefixo
+aceito, quem tem o token compartilhado gravava um refresh token da
+`email_contas` (legível pelo `leitura`) como credencial e o `/agent-credentials`
+o devolvia decifrado.
 
 **Onde entra:** `abrir` em todo lugar que lê `credentials` com valor (os
 normalizadores `_pares_de_credencial` e `_token_da_integracao`, e as leituras
@@ -59,7 +63,8 @@ commit, e no fim confirma que nenhum valor sobrou sem prefixo.
 `ler_segredo` passa a separar "o banco respondeu" de "o banco falhou": na
 falha, usa o **último valor bom** daquele segredo (se houver) e **não grava no
 cache** — a próxima chamada tenta o banco de novo. Sem valor bom anterior, cai
-no env como hoje, também sem cachear.
+no env como hoje, também sem cachear. Banco que **responde** sem o segredo é
+revogação: apaga o último valor bom, senão o revogado voltaria no próximo soluço.
 
 ## O que NÃO resolve (fica registrado)
 
