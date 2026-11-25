@@ -56,6 +56,29 @@ cinco. **Ordem:** deploy → `scripts/regras-base-especialistas.py --aplicar`
 (nunca antes: a regra negaria autoridade a quem chega sem carimbo) → perguntar
 à `nina` quem fala com ela (combinar antes, é `chat.send`).
 
+**PK-07 fechado no código (25/11, até `e0fc82e`):** cinco rodadas da revisão de
+segurança aplicadas — carimbo com o e-mail primeiro, nome entre aspas JSON,
+desarme normalizado em todos os caminhos, e a defesa é a POSIÇÃO (só a última
+linha vale). Produção: deploy → `regras-base-especialistas.py --aplicar` →
+perguntar à `nina` (com ok do Erick).
+
+**PK-06 — levantamento feito em 25/11, nada mudado ainda.** Decisão do Erick
+(25/11): o Bruce também perde `exec`; quando o ponto precisar, ajustamos.
+- ⚠️ **A VPS do gateway não tem Docker** — a sandbox padrão do OpenClaw
+  (`agents.list[].sandbox`, backend `docker`) exigiria instalá-lo na máquina
+  que já teve OOM. Alternativa da doc: backend `ssh` para um usuário sem
+  privilégio. Ler `docs/gateway/sandboxing.md` do OpenClaw antes de escolher.
+- Uso real em 30 dias (sessões na VPS): **nina** 47 `exec` (python3 e awk
+  montando painel HTML a partir de TSV em `/tmp`, 2 `curl`); **atlas** 27
+  (python3 de dias úteis e geração de HTML em `/tmp`); **bruce** 43 — ⚠️ é o
+  **ponto do Flash**: lê as próprias sessões `.jsonl` e `marcacoes.tsv`/
+  `espelhos.tsv`, `/tmp/flash/calc.py`, procura o CSV com `find /`. Ou seja,
+  o ponto USOU o terminal nos últimos 30 dias (o `relatorio_ponto` é que nunca
+  foi chamado) — tirar o `exec` do Bruce quebra esse fluxo; avisar o Erick e a
+  Lidisay antes.
+- O que a sandbox da nina/atlas precisa: python3, `/tmp` gravável, workspace;
+  rede quase nada.
+
 **Resta da Onda 0:** PK-06 (exec fora do root —
 inclui decidir o Bruce: o ponto do Flash passa por `exec` dele, e o
 `relatorio_ponto` nunca foi chamado; ver com a Lidisay), PK-07 e PK-11 (dependem).
