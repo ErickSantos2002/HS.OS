@@ -35,11 +35,13 @@ o dono (servidor exige `artefato_id`), `hsos.user` sem e-mail e CSP no iframe.
 Conferido pela API: painel da Nina (dono Nicholson) pedido pelo Erick →
 `not_owner`; painel do próprio Erick → responde; sem `artefato_id` → 422.
 
-**PK-04 (25/11, `8c8830e`, na `main`, migração 041 já aplicada, sem deploy):**
-admin só pelo SSO Microsoft (senha certa → 403) e limite no login por senha
-(5 falhas/e-mail ou 30/IP em 15 min → 429). ⚠️ Antes do deploy o Erick confere
-que entra com "Entrar com Microsoft" na conta `ti@` — o único admin. Emergência:
-`LOGIN_SENHA_ADMIN_EMERGENCIA=true` no EasyPanel. MFA é configuração do Entra.
+**PK-04 em produção (25/11, `39fe5e9`, migração 041):** admin só pelo SSO
+Microsoft (senha certa → 403; o Erick entrou pelo SSO como `ti@` antes do
+deploy) e limite no login por senha (5 falhas/e-mail ou 30/IP em 15 min → 429).
+Conferido contra produção: e-mail inexistente 401 ×5 com o mesmo tempo de
+bcrypt (0,47 s), 6ª tentativa 429; 5 linhas na `login_tentativas` com o IP real
+(não o do proxy). Emergência: `LOGIN_SENHA_ADMIN_EMERGENCIA=true` no EasyPanel.
+MFA é configuração do Entra.
 
 **Resta da Onda 0:** PK-06 (exec fora do root —
 inclui decidir o Bruce: o ponto do Flash passa por `exec` dele, e o
