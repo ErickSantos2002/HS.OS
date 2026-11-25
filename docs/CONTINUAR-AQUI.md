@@ -35,7 +35,13 @@ o dono (servidor exige `artefato_id`), `hsos.user` sem e-mail e CSP no iframe.
 Conferido pela API: painel da Nina (dono Nicholson) pedido pelo Erick →
 `not_owner`; painel do próprio Erick → responde; sem `artefato_id` → 422.
 
-**Resta da Onda 0:** PK-04 (admin só por SSO), PK-06 (exec fora do root —
+**PK-04 (25/11, `8c8830e`, na `main`, migração 041 já aplicada, sem deploy):**
+admin só pelo SSO Microsoft (senha certa → 403) e limite no login por senha
+(5 falhas/e-mail ou 30/IP em 15 min → 429). ⚠️ Antes do deploy o Erick confere
+que entra com "Entrar com Microsoft" na conta `ti@` — o único admin. Emergência:
+`LOGIN_SENHA_ADMIN_EMERGENCIA=true` no EasyPanel. MFA é configuração do Entra.
+
+**Resta da Onda 0:** PK-06 (exec fora do root —
 inclui decidir o Bruce: o ponto do Flash passa por `exec` dele, e o
 `relatorio_ponto` nunca foi chamado; ver com a Lidisay), PK-07 e PK-11 (dependem).
 **Pacote novo a propor:** cada sessão conecta os 78 MCP HTTP `hsos-*`; na
