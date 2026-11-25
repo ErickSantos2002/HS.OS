@@ -208,12 +208,53 @@ def obter_cliente(url: str, token: str) -> ClienteGateway:
 # Mora aqui porque é fato do protocolo, e são três os lugares que escrevem
 # nesses arquivos: a distribuição do contexto da empresa, o roster automático e
 # o PUT da tela.
+#
+# ⚠️ **20.000 é o PADRÃO, não o teto de todo agente** (PK-12, 25/11/2026). O
+# gateway aceita `agents.list[].bootstrapMaxChars` por agente (e
+# `agents.defaults.bootstrapMaxChars` para todos); a `nina` tem o dela. Quem
+# confere tem que perguntar o teto daquele agente com `teto_do_agente` — usar a
+# constante direto recusaria o que o gateway aceita.
 TETO_ARQUIVO_AGENTE = 20_000
 
 
-def excede_o_teto(conteudo: str) -> bool:
+def excede_o_teto(conteudo: str, teto: int = TETO_ARQUIVO_AGENTE) -> bool:
     """Se este conteúdo será truncado pelo gateway ao entrar no contexto."""
-    return len(conteudo) > TETO_ARQUIVO_AGENTE
+    return len(conteudo) > teto
+
+
+def teto_na_config(parsed: dict, agent_id: str) -> int:
+    """O `bootstrapMaxChars` que vale para o agente: o dele, o padrão da config, o do gateway."""
+    agentes = (parsed.get("agents") or {})
+    proprio = next((a for a in agentes.get("list") or [] if a.get("id") == agent_id), {})
+    for v in (proprio.get("bootstrapMaxChars"), (agentes.get("defaults") or {}).get("bootstrapMaxChars")):
+        if isinstance(v, int) and not isinstance(v, bool) and v > 0:
+            return v
+    return TETO_ARQUIVO_AGENTE
+
+
+_teto_cache: dict[str, tuple[int, float]] = {}
+
+
+async def teto_do_agente(cliente, agent_id: str) -> int:
+    """O teto vivo daquele agente, lido do `config.get` (guardado por 60 s).
+
+    Gateway fora → o padrão de 20.000: não saber o teto não pode virar "sem teto",
+    e o menor é o que nunca deixa o gateway cortar em silêncio.
+    """
+    import time
+    agora = time.monotonic()
+    guardado = _teto_cache.get(agent_id)
+    if guardado and agora - guardado[1] < 60:
+        return guardado[0]
+    try:
+        r = await cliente.chamar("config.get", {})
+    except ErroGateway:
+        return TETO_ARQUIVO_AGENTE
+    payload = r.get("payload") if isinstance(r.get("payload"), dict) else r
+    parsed = payload.get("parsed") or payload.get("sourceConfig") or {}
+    teto = teto_na_config(parsed, agent_id)
+    _teto_cache[agent_id] = (teto, agora)
+    return teto
 
 
 def chave_de_sessao(agent_id: str, sufixo: str) -> str:

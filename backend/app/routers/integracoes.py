@@ -25,7 +25,8 @@ from app.credenciais import ValorReservado, abrir as abrir_credenciais, fechar a
 from app.database import sessao
 from app.gateway import config as cfg_gateway, patch as patch_gw
 from app.gateway.client import (ErroGateway as ErroGatewayCli, TETO_ARQUIVO_AGENTE,
-                                excede_o_teto, obter_cliente as obter_cliente_gw)
+                                excede_o_teto, obter_cliente as obter_cliente_gw,
+                                teto_do_agente)
 from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.integracoes import exige_segredo, ler_segredo
 from app.realtime import hub, topico_usuario
@@ -847,12 +848,13 @@ async def _distribuir_contexto(bloco: str) -> list[dict]:
             r = await cliente.chamar("agents.files.get", {"agentId": aid, "name": "AGENTS.md"})
             atual = (r.get("file") or {}).get("content") or ""
             conteudo = _com_bloco_da_empresa(atual, bloco)
-            if _excede_o_teto(conteudo):
+            teto = await teto_do_agente(cliente, aid)
+            if _excede_o_teto(conteudo, teto):
                 # Não grava: o gateway cortaria o fim do arquivo sem avisar.
                 resultado.append({
                     "agent_id": aid, "ok": False,
                     "erro": f"o AGENTS.md ficaria com {len(conteudo)} caracteres e o "
-                            f"teto é {TETO_ARQUIVO_AGENTE} — o gateway truncaria o fim do "
+                            f"teto é {teto} — o gateway truncaria o fim do "
                             f"arquivo em silêncio. Enxugue o AGENTS.md de {aid} ou o "
                             f"perfil da empresa antes de distribuir.",
                 })

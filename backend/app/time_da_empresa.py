@@ -70,7 +70,7 @@ async def atualizar(agentes: list[str], aplicar: bool = True) -> dict[str, str]:
     """Regrava o bloco no `USER.md` de cada agente. Confere o teto e relê."""
     from app.database import sessao
     from app.gateway import config as cfg
-    from app.gateway.client import excede_o_teto, obter_cliente
+    from app.gateway.client import excede_o_teto, obter_cliente, teto_do_agente
     async with sessao(role="service_role") as conn:
         bloco = montar_bloco(*await carregar(conn))
     c = await cfg.carregar()
@@ -80,8 +80,9 @@ async def atualizar(agentes: list[str], aplicar: bool = True) -> dict[str, str]:
         r = await cli.chamar("agents.files.get", {"agentId": aid, "name": "USER.md"})
         atual = ((r.get("file") or {}).get("content")) or ""
         novo = com_bloco(atual, bloco)
-        if excede_o_teto(novo):
-            out[aid] = f"NÃO: passaria do teto ({len(novo)})"
+        teto = await teto_do_agente(cli, aid)
+        if excede_o_teto(novo, teto):
+            out[aid] = f"NÃO: passaria do teto ({len(novo)} > {teto})"
         elif novo == atual:
             out[aid] = "já igual"
         elif not aplicar:

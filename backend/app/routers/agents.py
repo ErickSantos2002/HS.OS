@@ -31,7 +31,7 @@ from pydantic import BaseModel, Field
 from app.database import sessao
 from app.dependencies import Usuario, exige_papel, usuario_atual
 from app.gateway import config as cfg
-from app.gateway.client import (ErroGateway, TETO_ARQUIVO_AGENTE, excede_o_teto,
+from app.gateway.client import (ErroGateway, TETO_ARQUIVO_AGENTE, excede_o_teto, teto_do_agente,
                                 obter_cliente)
 
 logger = logging.getLogger(__name__)
@@ -1698,13 +1698,14 @@ async def _atualizar_roster_do_lider(lider_id: str | None) -> None:
         novo = atual.rstrip() + "\n\n## O time, atualizado automaticamente\n\n" + bloco + "\n"
     if novo == atual:
         return
-    if excede_o_teto(novo):
+    teto = await teto_do_agente(cli, lider_id)
+    if excede_o_teto(novo, teto):
         # Não grava: o gateway cortaria o fim do arquivo sem avisar, e o fim é
         # onde ficam as regras de como o agente responde.
         logger.warning(
             "Roster de %s NÃO atualizado: o AGENTS.md ficaria com %d caracteres "
             "e o teto é %d. Enxugue o arquivo.",
-            lider_id, len(novo), TETO_ARQUIVO_AGENTE)
+            lider_id, len(novo), teto)
         return
     await cli.chamar("agents.files.set",
                      {"agentId": lider_id, "name": "AGENTS.md", "content": novo})
@@ -2269,11 +2270,12 @@ async def gravar_arquivo(
     # ⚠️ Recusa antes de gravar: passar do teto não dá erro no gateway, ele
     # simplesmente corta o fim do arquivo ao injetar no contexto. Quem edita
     # pela tela não teria como saber.
-    if excede_o_teto(dados.content):
+    teto = await teto_do_agente(obter_cliente(c.url, c.token), agent_id)
+    if excede_o_teto(dados.content, teto):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             f"O arquivo tem {len(dados.content)} caracteres e o limite é "
-            f"{TETO_ARQUIVO_AGENTE}. Acima disso o gateway corta o fim ao carregar "
+            f"{teto}. Acima disso o gateway corta o fim ao carregar "
             f"no contexto do agente, sem avisar — e o fim é onde ficam as "
             f"instruções mais recentes. Enxugue antes de salvar.",
         )
