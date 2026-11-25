@@ -51,6 +51,7 @@ HASH = gerar_hash(SENHA)
 class _Conn:
     def __init__(self, papel, falhas=0):
         self.papel, self.falhas, self.registradas, self.apagou = papel, falhas, 0, False
+        self.travou, self.aberta = False, False
 
     async def fetchrow(self, sql, *_):
         if self.papel is None:
@@ -62,6 +63,8 @@ class _Conn:
         return self.falhas  # as duas contagens (e-mail e IP)
 
     async def execute(self, sql, *_):
+        if "pg_advisory_xact_lock" in sql:
+            self.travou = True
         if "INSERT INTO public.login_tentativas" in sql:
             self.registradas += 1
         if "DELETE FROM public.login_tentativas WHERE email_hash" in sql:
@@ -75,7 +78,16 @@ def banco(monkeypatch):
 
         @asynccontextmanager
         async def sessao(**_):
-            yield conn
+            # Como a de verdade: exceção dentro = rollback do que foi gravado.
+            conn.aberta = True
+            antes = conn.registradas
+            try:
+                yield conn
+            except BaseException:
+                conn.registradas = antes
+                raise
+            finally:
+                conn.aberta = False
         monkeypatch.setattr(auth_router, "sessao", sessao)
         monkeypatch.setattr(type(auth_router.settings), "sso_ativo", property(lambda s: sso))
         monkeypatch.setattr(auth_router.settings, "LOGIN_SENHA_ADMIN_EMERGENCIA", emergencia)
@@ -124,3 +136,20 @@ def test_email_inexistente_conta_como_falha(banco):
     with pytest.raises(HTTPException) as e:
         _login()
     assert e.value.status_code == 401 and conn.registradas == 1
+
+
+def test_a_falha_sobrevive_ao_401(banco):
+    """Achado na revisão de segurança: o 401 levantado DENTRO da transação a
+    revertia, e o registro da falha morria junto — o limite nunca contava."""
+    conn = banco("colaborador")
+    with pytest.raises(HTTPException):
+        _login("errada")
+    assert conn.registradas == 1 and not conn.aberta
+
+
+def test_tentativa_e_travada_por_email(banco):
+    """Contar e gravar em passos soltos deixava pedidos paralelos passarem."""
+    conn = banco("colaborador")
+    with pytest.raises(HTTPException):
+        _login("errada")
+    assert conn.travou

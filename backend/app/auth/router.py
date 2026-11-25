@@ -98,51 +98,69 @@ def _ip_de(request: Request) -> str:
 async def entrar_com_senha(dados: LoginIn, ip: str) -> TokenOut:
     """O login por senha (PK-04): limite de tentativas e admin só pelo SSO.
 
-    ⚠️ A ordem importa: bloqueio ANTES de conferir a senha (senão o bcrypt vira
-    oráculo durante o bloqueio), e a recusa do admin DEPOIS (com senha errada a
-    resposta é o 401 de sempre, então o 403 não revela quem é admin).
+    ⚠️ **Nenhum `raise` dentro da transação.** A `sessao` reverte na exceção, e a
+    1ª versão registrava a falha e levantava o 401 ali dentro — o registro
+    morria com o rollback e o limite nunca contava (achado na revisão de
+    segurança, antes do deploy). Aqui a transação decide e TERMINA; o erro sai
+    depois do commit.
+
+    ⚠️ **A tentativa é gravada ANTES do bcrypt, sob trava por e-mail**
+    (`pg_advisory_xact_lock`): contar e gravar depois deixava N pedidos em
+    paralelo passarem todos pela contagem. Senha certa apaga as do e-mail.
+
+    A ordem do resto importa: bloqueio antes de conferir a senha (senão o bcrypt
+    vira oráculo durante o bloqueio), e a recusa do admin depois (com senha
+    errada a resposta é o 401 de sempre, então o 403 não revela quem é admin).
     """
+    recusa: tuple[int, str] | None = None
+    linha = None
     async with sessao(role="service_role") as conn:
+        await tentativas.travar(conn, dados.email)
         if await tentativas.esta_bloqueado(conn, dados.email, ip):
-            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, tentativas.MENSAGEM_BLOQUEIO)
+            recusa = (status.HTTP_429_TOO_MANY_REQUESTS, tentativas.MENSAGEM_BLOQUEIO)
+        else:
+            await tentativas.registrar_tentativa(conn, dados.email, ip)
+            # Vale o papel mais forte, como no SSO: com duas linhas em
+            # `user_roles` o JOIN sem ordem devolvia uma qualquer.
+            linha = await conn.fetchrow(
+                """
+                SELECT u.id::text AS id, u.email, u.password_hash, u.is_active,
+                       COALESCE(r.role::text, 'sem_papel') AS papel
+                FROM auth.users u
+                LEFT JOIN public.user_roles r ON r.user_id = u.id
+                WHERE lower(u.email) = lower($1)
+                ORDER BY CASE r.role::text WHEN 'administrador' THEN 0 ELSE 1 END
+                LIMIT 1
+                """,
+                dados.email,
+            )
+            # Mensagem única para e-mail inexistente e senha errada: dizer qual
+            # dos dois falhou entrega a existência da conta.
+            senha_ok = conferir_senha(
+                dados.senha, linha["password_hash"] if linha else _HASH_FALSO
+            )
+            if linha is None or not senha_ok:
+                recusa = (status.HTTP_401_UNAUTHORIZED, "E-mail ou senha inválidos.")
+            else:
+                # Senha certa não é força bruta, mesmo que a conta seja recusada.
+                await tentativas.zerar(conn, dados.email)
+                if not linha["is_active"]:
+                    recusa = (status.HTTP_403_FORBIDDEN, "Conta desativada.")
+                elif linha["papel"] == "administrador" and not tentativas.admin_pode_por_senha(
+                    settings.sso_ativo, settings.LOGIN_SENHA_ADMIN_EMERGENCIA
+                ):
+                    recusa = (status.HTTP_403_FORBIDDEN, tentativas.MENSAGEM_ADMIN)
+                else:
+                    if linha["papel"] == "administrador" and settings.LOGIN_SENHA_ADMIN_EMERGENCIA:
+                        logger.warning("Admin %s entrou por SENHA (modo de emergência ligado).",
+                                       linha["email"])
+                    await conn.execute(
+                        "UPDATE auth.users SET last_sign_in_at = now() WHERE id = $1::uuid",
+                        linha["id"],
+                    )
 
-        # Vale o papel mais forte, como no SSO: com duas linhas em `user_roles`
-        # o JOIN sem ordem devolvia uma qualquer.
-        linha = await conn.fetchrow(
-            """
-            SELECT u.id::text AS id, u.email, u.password_hash, u.is_active,
-                   COALESCE(r.role::text, 'sem_papel') AS papel
-            FROM auth.users u
-            LEFT JOIN public.user_roles r ON r.user_id = u.id
-            WHERE lower(u.email) = lower($1)
-            ORDER BY CASE r.role::text WHEN 'administrador' THEN 0 ELSE 1 END
-            LIMIT 1
-            """,
-            dados.email,
-        )
-
-        # Mensagem única para e-mail inexistente e senha errada: dizer qual dos
-        # dois falhou entrega a existência da conta a quem está tentando adivinhar.
-        senha_ok = conferir_senha(dados.senha, linha["password_hash"] if linha else _HASH_FALSO)
-        if linha is None or not senha_ok:
-            await tentativas.registrar_falha(conn, dados.email, ip)
-            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "E-mail ou senha inválidos.")
-        if not linha["is_active"]:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Conta desativada.")
-
-        if linha["papel"] == "administrador":
-            emergencia = settings.LOGIN_SENHA_ADMIN_EMERGENCIA
-            if not tentativas.admin_pode_por_senha(settings.sso_ativo, emergencia):
-                raise HTTPException(status.HTTP_403_FORBIDDEN, tentativas.MENSAGEM_ADMIN)
-            if emergencia:
-                logger.warning("Admin %s entrou por SENHA (modo de emergência ligado).",
-                               linha["email"])
-
-        await tentativas.zerar(conn, dados.email)
-        await conn.execute(
-            "UPDATE auth.users SET last_sign_in_at = now() WHERE id = $1::uuid", linha["id"]
-        )
-
+    if recusa:
+        raise HTTPException(*recusa)
     token, expira = emitir_token(linha["id"], linha["papel"], linha["email"])
     return TokenOut(access_token=token, expires_in=expira)
 

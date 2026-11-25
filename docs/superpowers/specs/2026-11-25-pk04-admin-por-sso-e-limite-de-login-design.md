@@ -45,8 +45,13 @@ janela de 15 min:
 - Acertar a senha apaga as falhas daquele e-mail.
 - Guarda o **sha256** do e-mail e do IP, nunca o valor: o usuário `leitura`
   enxerga as tabelas.
-- O IP vem do `X-Forwarded-For` (o uvicorn passa a aceitá-lo com
-  `--forwarded-allow-ips '*'`); se ele for forjado, sobra o limite por e-mail.
+- O IP vem do `X-Forwarded-For`, confiando só nas faixas privadas (a rede do
+  proxy): o uvicorn pega o último salto antes do proxy. Com `*` ele pegaria o
+  mais à esquerda, que quem chama escreve.
+- A tentativa é gravada **antes** do bcrypt, sob `pg_advisory_xact_lock` por
+  e-mail, e a transação **termina** antes do 401/403/429 — a `sessao` reverte
+  na exceção, e a 1ª versão perdia o registro da falha junto com o 401.
+  Três achados da revisão de segurança, corrigidos antes do deploy.
 
 **Tempo igual** para e-mail inexistente: confere a senha contra um hash falso.
 
