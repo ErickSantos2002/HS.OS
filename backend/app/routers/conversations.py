@@ -2143,8 +2143,9 @@ async def pergunta_avulsa(
             {
                 "agentId": agent_id,
                 "sessionKey": chave,
-                # Arena: desarma carimbo forjado; persona e pergunta vêm da tela.
-                "message": neutralizar(texto),
+                # Arena: desarma o forjado e carimba quem pergunta, como no chat.
+                "message": com_carimbo(texto, await _carimbo_de_quem_fala(agent_id, usuario.id)
+                                       or CARIMBO_SEM_IDENTIDADE),
                 "idempotencyKey": run_id,
             },
         )

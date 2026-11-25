@@ -38,6 +38,12 @@ do OpenClaw 2026.7.1). Os Guardis não estão lá. A frase cobre o resto.
   desarma. Ficam de fora o comando de barra e o reenvio pós-compactação (texto
   já carimbado por nós).
 
+Na 2ª revisão: o desarme passou a tirar caractere invisível (Unicode `Cf`) e a
+casar só a frase "quem fala neste turno", com qualquer separador; a regra voltou
+a dizer que mensagem sem a linha não ganha autoridade; a Arena leva o carimbo de
+quem pergunta; e o carimbo de canal deixou de abonar autoria (os nomes ali vêm
+do `full_name`, que a pessoa edita).
+
 ## Medido (ensaio de 25/11)
 
 SOUL +1.182 caracteres em cada; maior soma dos sete: nina 52.578 de 80.000;
