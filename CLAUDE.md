@@ -731,8 +731,12 @@ Como o corte é no fim, o que se perde é justamente o que foi escrito por últi
 O `agents.files.set` aceita, o `agents.files.get` devolve inteiro, e a tela não
 diz nada.
 
-⚠️ **O `AGENTS.md` da `nina` vive a 500 caracteres do teto.** Qualquer parágrafo
-novo ali estoura. Antes de escrever num dos sete, **meça** — e se não couber, o
+⚠️ **Desde 25/11/2026 (PK-12) a `nina` tem teto próprio: 30.000 por arquivo e
+80.000 no total** (`agents.list[].bootstrapMaxChars`/`bootstrapTotalMaxChars`); os
+outros seguem em 20.000/60.000. O backend lê o teto vivo por agente
+(`teto_do_agente` em `app/gateway/client.py`) — nunca a constante direto. Antes do
+PK-12 o `AGENTS.md` dela estava a 87 caracteres do teto e qualquer parágrafo
+novo estourava. Antes de escrever num dos sete, **meça** — e se não couber, o
 caminho é enxugar o arquivo ou mandar o conteúdo para uma skill, não empurrar.
 
 ⚠️ **E 21% daquele arquivo é gerado, então ele pode estourar sem ninguém

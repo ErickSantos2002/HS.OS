@@ -43,6 +43,13 @@ bcrypt (0,47 s), 6ª tentativa 429; 5 linhas na `login_tentativas` com o IP real
 (não o do proxy). Emergência: `LOGIN_SENHA_ADMIN_EMERGENCIA=true` no EasyPanel.
 MFA é configuração do Entra.
 
+**PK-12 (25/11, `a3f590f`):** no gateway, fila `maxConcurrent` 6 e a `nina` com
+teto próprio (30.000/80.000) — gravado e conferido relendo (28 agentes, só a
+nina mudou). O backend que lê o teto por agente está na `main` **sem deploy**
+(até lá ele segue recusando acima de 20.000, o lado seguro). Compactação com
+roteiro: inviável pelo RPC (ver `docs/claude/gateway-operacao.md`). **Conferir na
+rajada de 26/11:** `lane wait exceeded` no log.
+
 **Resta da Onda 0:** PK-06 (exec fora do root —
 inclui decidir o Bruce: o ponto do Flash passa por `exec` dele, e o
 `relatorio_ponto` nunca foi chamado; ver com a Lidisay), PK-07 e PK-11 (dependem).

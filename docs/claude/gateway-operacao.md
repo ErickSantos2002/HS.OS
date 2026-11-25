@@ -545,3 +545,20 @@ reinicie o gateway.
 ⚠️ **Esse arquivo guarda a `apiKey` do provedor em texto puro.** Ao inspecioná-lo,
 leia os campos por script — nunca `cat`/`sed` do arquivo inteiro. Em 30/09 a
 chave da DeepSeek foi parar num transcript assim.
+
+
+### Fila única de 6 e teto por agente (PK-12, 25/11/2026)
+
+`agents.defaults.maxConcurrent: 6` (padrão do 2026.7.1: 4). A fila `main` é **uma para a empresa
+inteira**: em 25/11, com 4, foram 8 turnos esperando ~41 s (máx. 51 s) só para começar
+(`lane wait exceeded … activeAhead=4` no log). 6 foi a decisão de 23/11, condicionada ao swap
+(PK-47) e ao timeout dos MCP (mcp-ponte). **Medir de novo antes de subir mais.**
+
+A `nina` tem `bootstrapMaxChars: 30000` e `bootstrapTotalMaxChars: 80000` na entrada dela de
+`agents.list`. Script: `scripts/pk12-config-gateway.py` (manda a lista INTEIRA — com lista
+parcial o `replacePaths` do `aplicar_patch` tiraria os outros agentes). Backup:
+`/root/openclaw.json.antes-pk12`.
+
+⚠️ **Compactação com roteiro não existe pelo RPC:** `sessions.compact` aceita só `key`, `agentId`
+e `maxLines` (`additionalProperties: false`), e não há instrução configurável para a automática.
+O `/compact <instruções>` é mensagem de chat — e mensagem não compacta sessão estourada.
