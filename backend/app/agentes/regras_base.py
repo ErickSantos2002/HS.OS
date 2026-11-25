@@ -67,7 +67,13 @@ import unicodedata
 
 # Qualquer coisa parecida com o prefixo: caixa, traço, espaço e Unicode variando.
 # Sem exigir o colchete nem o "HS.OS": basta a frase, com qualquer separador.
-_PADRAO_CARIMBO = re.compile(r"quem\W*fala\W*neste\W*turno", re.IGNORECASE)
+#
+# ⚠️ **O desarme é camada extra, não a defesa.** A defesa é a POSIÇÃO: todo
+# caminho até um especialista termina com um carimbo real, escrito aqui, e a
+# regra manda valer só a ÚLTIMA linha — um forjado dentro do texto nunca é o
+# último, mesmo que escape desta regex (letra parecida de outro alfabeto, por
+# exemplo). Não transformar isto numa lista de bloqueio sem fim.
+_PADRAO_CARIMBO = re.compile(r"quem[\W_]*fala[\W_]*neste[\W_]*turno", re.IGNORECASE)
 
 
 def neutralizar(texto: str) -> str:
