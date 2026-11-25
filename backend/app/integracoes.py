@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 _TTL = 60
 _cache: dict[str, tuple[str | None, float]] = {}
+# O último valor que o banco (ou o env) deu, sem prazo: é o que vale quando a
+# leitura falha. Rotação continua aparecendo em 60 s — só a FALHA usa isto.
+_ultimo_bom: dict[str, str] = {}
 
 
 async def ler_segredo(nome: str) -> str | None:
@@ -46,12 +49,20 @@ async def ler_segredo(nome: str) -> str | None:
                 "SELECT value FROM public.integration_secrets WHERE name = $1", nome
             )
     except Exception as e:  # noqa: BLE001
+        # ⚠️ Falha de leitura NÃO é "segredo não existe" (PK-08, 25/11/2026).
+        # Até aqui o resultado ia para o cache — inclusive `None` — e um soluço
+        # do Postgres virava 60 s de 503 em todo MCP dos agentes. Agora: o
+        # último valor bom, ou o env, e nada no cache — a próxima chamada
+        # tenta o banco de novo.
         logger.warning("Não foi possível ler o segredo %s do banco: %s", nome, e)
+        return _ultimo_bom.get(nome) or os.environ.get(nome) or None
 
     if not valor:
         valor = os.environ.get(nome) or None
 
     _cache[nome] = (valor, agora)
+    if valor:
+        _ultimo_bom[nome] = valor
     return valor
 
 

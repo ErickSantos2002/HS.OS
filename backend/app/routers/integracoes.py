@@ -21,6 +21,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
+from app.credenciais import abrir as abrir_credenciais, fechar as fechar_credenciais
 from app.database import sessao
 from app.gateway import config as cfg_gateway, patch as patch_gw
 from app.gateway.client import (ErroGateway as ErroGatewayCli, TETO_ARQUIVO_AGENTE,
@@ -435,8 +436,7 @@ async def registrar_integracao(
 
         antigas = []
         if existente and existente["credentials"]:
-            bruto = existente["credentials"]
-            antigas = json.loads(bruto) if isinstance(bruto, str) else bruto
+            antigas = abrir_credenciais(existente["credentials"]) or []
 
         por_nome = {c.get("key_name"): c for c in antigas if isinstance(c, dict)}
         for nova in dados.credentials:
@@ -464,7 +464,7 @@ async def registrar_integracao(
                 existente["id"], dados.name, dados.category, dados.key_name,
                 dados.key_preview, dados.agents_using, dados.description, dados.icon,
                 dados.is_configured, dados.integration_type,
-                json.dumps(mescladas), dados.template_id,
+                json.dumps(fechar_credenciais(mescladas)), dados.template_id,
             )
             acao = "atualizada"
         else:
@@ -479,7 +479,7 @@ async def registrar_integracao(
                 dados.name, dados.category, dados.key_name, dados.key_preview,
                 dados.agents_using, dados.description, dados.icon,
                 dados.added_by_agent, dados.is_configured, dados.integration_type,
-                json.dumps(mescladas), dados.template_id,
+                json.dumps(fechar_credenciais(mescladas)), dados.template_id,
             )
             acao = "criada"
 
@@ -518,8 +518,7 @@ async def credenciais_do_agente(
     for linha in linhas:
         if alvo and alvo not in f"{linha['name']} {linha['key_name']}".lower():
             continue
-        bruto = linha["credentials"] or "[]"
-        lista = json.loads(bruto) if isinstance(bruto, str) else bruto
+        lista = abrir_credenciais(linha["credentials"]) or []
         chaves = []
         for c in lista:
             nome = str((c or {}).get("key_name") or "").strip()
@@ -644,8 +643,7 @@ async def validar_token(
                 pelo_nome = re.sub(r"[^a-z]", "", str(linha["name"] or "").lower())
                 if pelo_nome in _PROVEDORES_CONHECIDOS:
                     tipo = "meta" if pelo_nome == "facebook" else pelo_nome
-            bruto = linha["credentials"] or "[]"
-            token = _escolher_token(json.loads(bruto) if isinstance(bruto, str) else bruto)
+            token = _escolher_token(abrir_credenciais(linha["credentials"]) or [])
         else:
             c = dados.credentials
             token = str(c.get("access_token") or c.get("token") or c.get("api_key") or "").strip()
@@ -969,11 +967,7 @@ def _token_da_integracao(credenciais, key_name: str | None) -> str | None:
     longo do tempo. A variável de ambiente é o último recurso, para credencial
     que nunca foi para o banco.
     """
-    if isinstance(credenciais, str):
-        try:
-            credenciais = json.loads(credenciais)
-        except ValueError:
-            credenciais = None
+    credenciais = abrir_credenciais(credenciais)
 
     if isinstance(credenciais, list):
         def pegar(nome: str):
@@ -1362,12 +1356,8 @@ def _previa(credenciais) -> tuple[str | None, bool]:
 
 
 def _pares_de_credencial(bruto) -> list[dict] | None:
-    """Normaliza o `credentials` da tabela para lista de pares, ou `None`."""
-    if isinstance(bruto, str):
-        try:
-            bruto = json.loads(bruto)
-        except ValueError:
-            return None
+    """Normaliza o `credentials` da tabela para lista de pares EM CLARO, ou `None`."""
+    bruto = abrir_credenciais(bruto)
     return [c for c in bruto if isinstance(c, dict)] if isinstance(bruto, list) else None
 
 
@@ -1452,7 +1442,8 @@ async def criar_conector(
             """,
             dados.name, dados.category, dados.key_name, dados.integration_type,
             dados.description, dados.icon, dados.type, dados.template_id or "",
-            json.dumps(dados.credentials) if dados.credentials is not None else None,
+            json.dumps(fechar_credenciais(dados.credentials))
+            if dados.credentials is not None else None,
             previa, configurado, dados.agents_using,
             dados.db_host or "", dados.db_porta, dados.db_base or "",
             dados.db_sslmode, dados.db_somente_leitura,
@@ -1516,7 +1507,7 @@ async def editar_conector(
             conector_id, dados.name, dados.category, dados.key_name,
             dados.integration_type, dados.description, dados.icon, dados.type,
             dados.template_id or "",
-            json.dumps(mescladas) if mescladas is not None else None,
+            json.dumps(fechar_credenciais(mescladas)) if mescladas is not None else None,
             previa, configurado, dados.agents_using,
             dados.db_host or "", dados.db_porta, dados.db_base or "",
             dados.db_sslmode, dados.db_somente_leitura,
