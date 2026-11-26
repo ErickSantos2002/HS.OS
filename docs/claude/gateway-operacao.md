@@ -209,6 +209,17 @@ os scripts de publicação copiam a base do `hsos-relatorios`; quem montar URL n
 O OpenClaw não tem escopo de servidor por agente fora do harness do Codex (`codex.agents`) nem manda
 a identidade do agente ao servidor — por isso a ponte, e não um servidor único por família.
 
+⚠️ **Sem `requestTimeoutMs` na entrada, o `tools/list` de cada MCP tem 1,5 s** (26/11/2026). É o
+`BUNDLE_MCP_CATALOG_LIST_TIMEOUT_MS` do `agent-bundle-mcp-runtime-*.js`; declarando o campo, vale o
+valor dele. A ponte não bastou: na rajada de 26/11 07:30 (6 execuções juntas, 87 clientes cada) houve
+23 `Request timed out` com a ponte respondendo do cache — o log dela vazio, e o `banco-mcp`, outro
+serviço, caindo igual. Quem atrasava era o laço do próprio gateway. **Três falhas tiram o servidor
+por 60 s** (`BUNDLE_MCP_FAILURE_COOLDOWN_MS`), e foi assim que bots ficaram sem os próprios anexos e
+e-mail. Desde 26/11 as 87 entradas têm `requestTimeoutMs: 60000` (`scripts/prazo-catalogo-mcp.py`).
+**60.000 e não menos**: é o `DEFAULT_REQUEST_TIMEOUT_MS`, e o mesmo campo governa o `tools/call` —
+um número menor cortaria relatório e anexo. Entrada nova montada na mão tem que levar o campo; o
+`publicar-anexos-mcp.py` copia o modelo inteiro e herda, e o `entrada_mcp_banco` já o leva.
+
 ⚠️ **Na VPS do gateway, nunca rode a CLI do OpenClaw com `OPENCLAW_STATE_DIR` alternativo.** Em
 24/11, um `openclaw mcp probe` com estado numa pasta temporária (para testar uma config à parte)
 "migrou" o estado legado e **renomeou o `/root/.openclaw/exec-approvals.json` do gateway vivo** para

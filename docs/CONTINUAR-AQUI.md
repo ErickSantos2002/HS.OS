@@ -1,5 +1,24 @@
 # Continuar aqui
 
+## ▶ Feito na manhã de 26/11/2026
+
+- **Rajada das 07:30 reprovou e foi corrigida.** 23 `Request timed out` (lane
+  wait sumiu, sem OOM). Causa: sem `requestTimeoutMs`, o OpenClaw dá **1,5 s**
+  ao `tools/list` de cada MCP; a ponte respondia do cache (log vazio) e o
+  `banco-mcp` caía igual — o atraso era o laço do gateway. 3 falhas = 60 s fora.
+  `scripts/prazo-catalogo-mcp.py --aplicar` pôs `requestTimeoutMs: 60000` nas
+  87 entradas (backup `/root/openclaw.json.antes-prazo-catalogo`); o
+  `entrada_mcp_banco` já o leva para banco novo (**sem deploy**).
+  **Conferir na rajada de 27/11 07:30:** zero `Request timed out`.
+- **Resumo das 8h do Midas:** os dois entregues; o alerta "precisa ter R$ 78.262"
+  bate com `fluxo_acumulado_conservador` da semana 0 da `gold.caixa_semanal`. A
+  tabela de 7 dias (+R$ 524 mil) é outra régua: vai até 03/12 e não conta os
+  R$ 101.605 de a pagar em aberto da semana — certo, mas lê como contradição.
+- **Quadro da Nina 08:30:** entregue, 22 de 22.
+- **PK-07 fechado em produção:** deploy `3839428` no ar desde 07:57; regras-base
+  gravadas nos cinco `SOUL.md`; a `nina`, perguntada pela conta do Erick,
+  identificou pelo carimbo (e-mail primeiro, nome editável, última linha).
+
 ## ▶ Retomar em 26/11/2026 — fechar a Onda 0
 
 1. **07:30–08:30, conferências:** rajada (`/tmp/filtro_prep.py` na VPS: zero

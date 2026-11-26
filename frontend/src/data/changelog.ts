@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.22.5",
+    date: "2026-11-26",
+    changes: [
+      {
+        kind: "correcao",
+        text: "Nos horários de pico da manhã, alguns agentes ficavam até um minuto sem acesso a anexos, e-mail ou bancos de dados e respondiam como se a ferramenta não existisse. Agora eles esperam a ferramenta carregar.",
+      },
+    ],
+  },
+  {
     version: "2.22.4",
     date: "2026-11-25",
     changes: [

@@ -1763,6 +1763,10 @@ def entrada_mcp_banco(url_banco: str) -> dict:
         # Só `query` sai deste servidor. Fixar a lista é o que impede uma
         # versão futura com tool de escrita de passar a valer sozinha.
         "toolFilter": {"include": ["query"]},
+        # Sem prazo declarado o OpenClaw dá 1,5 s ao `tools/list`, e na rajada
+        # das 07:30 isso estoura (26/11/2026). 60 s é o padrão do `tools/call`,
+        # que usa o mesmo campo — ver `scripts/prazo-catalogo-mcp.py`.
+        "requestTimeoutMs": 60_000,
         "command": None,
         "args": None,
     }

@@ -90,3 +90,11 @@ def test_volta_restaura_o_npx_e_apaga_o_formato_novo():
     assert list(v) == ["banco-a"]
     assert v["banco-a"]["command"] == "npx" and v["banco-a"]["args"][2] == URL
     assert v["banco-a"]["url"] is None and v["banco-a"]["headers"] is None
+
+
+def test_a_entrada_declara_prazo_para_o_catalogo():
+    """Sem `requestTimeoutMs`, o OpenClaw dá 1,5 s ao `tools/list` — na rajada
+    de 26/11 o `banco-*` caiu por isso e ficou 60 s fora depois de três falhas.
+    60.000 é o padrão do `tools/call`: menos cortaria consulta que hoje termina.
+    Banco conectado pela tela depois de 26/11 nasceria sem o campo."""
+    assert entrada_mcp_banco(URL)["requestTimeoutMs"] == 60_000
