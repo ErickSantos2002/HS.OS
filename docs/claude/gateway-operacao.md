@@ -232,6 +232,13 @@ Três armadilhas, todas da documentação e conferidas ao vivo:
   (`tools.elevated.enabled: false`); o portão por agente só restringe.
 - **Backend SSH não serve aqui**: é "remote-canonical", copia o workspace uma vez e nunca volta —
   quebraria a regra dos sete. Docker monta o workspace do host, que continua o oficial.
+- **Sessão em sandbox tem trava própria de visibilidade** (`sandbox.sessionToolsVisibility`,
+  padrão `"spawned"`): só enxerga as sessões que ela mesma criou, **mesmo com
+  `tools.sessions.visibility="all"`**. Em 26/11/2026 isso cortou a delegação da nina às 09:43
+  (PK-06) e ninguém viu até 13:49 — "Session not visible from this sandboxed agent session" no
+  `sessions_send` para `agent:atlas:main`/`agent:midas:main`. A nina tem `"all"` por agente
+  (`EXTRA_POR_AGENTE` no script, `--visibilidade`); atlas e bruce seguem travados, só respondem.
+  Agente novo que ORQUESTRA e entra na sandbox precisa da mesma chave.
 Conferir: `openclaw sandbox explain --agent nina --json` e `docker inspect` do contêiner.
 Agente novo com `exec` nasce SEM sandbox — entra na lista `ALVOS` do script.
 

@@ -51,7 +51,7 @@ def test_so_os_alvos_mudam_e_o_resto_da_ferramenta_fica():
     assert lista["midas"] == CONF["agents"]["list"][3]
     assert lista["nina"]["tools"]["alsoAllow"] == ["mcp__x__y"]
     assert lista["nina"]["tools"]["deny"] == ["browser"]
-    assert lista["nina"]["sandbox"] == s.SANDBOX
+    assert lista["nina"]["sandbox"] == s.sandbox_de("nina")
     assert lista["nina"]["tools"]["elevated"] == {"enabled": False}
     assert "sandbox" in lista["atlas"] and "sandbox" in lista["bruce"]
 
@@ -83,3 +83,38 @@ def test_volta_tira_so_a_sandbox():
     # a válvula que roda `exec` fora dela.
     assert nina["tools"] == {"alsoAllow": ["mcp__x__y"], "deny": ["browser"],
                              "elevated": {"enabled": False}}
+
+
+# --- a nina orquestra: a trava de sessão da sandbox não vale para ela ----------
+#
+# 26/11/2026, 13:49: a nina parou de acionar atlas e midas ("Session not visible
+# from this sandboxed agent session"). Sessão em sandbox tem uma trava própria,
+# `sandbox.sessionToolsVisibility`, que por padrão é "spawned": só enxerga as
+# sessões que ela mesma criou, mesmo com `tools.sessions.visibility="all"`. O
+# PK-06 (09:43) pôs a nina na sandbox e cortou a delegação da Diretoria inteira.
+
+def test_nina_ve_as_sessoes_dos_especialistas_os_outros_seguem_travados():
+    """Só quem orquestra solta a trava; atlas e bruce só respondem."""
+    assert s.sandbox_de("nina")["sessionToolsVisibility"] == "all"
+    assert "sessionToolsVisibility" not in s.sandbox_de("atlas")
+    assert "sessionToolsVisibility" not in s.sandbox_de("bruce")
+    lista = {a["id"]: a for a in _patch()["agents"]["list"]}
+    assert lista["nina"]["sandbox"]["sessionToolsVisibility"] == "all"
+    assert "sessionToolsVisibility" not in lista["atlas"]["sandbox"]
+
+
+def test_visibilidade_mexe_so_na_chave_da_nina():
+    """O conserto em produção não pode recalcular o resto (o inventário de
+    agora, já com a sandbox, pode diferir do de 09:43): só acrescenta a chave."""
+    viva = {"agents": {"list": [
+        {"id": "nina", "sandbox": dict(s.SANDBOX), "tools": {"elevated": {"enabled": False}}},
+        {"id": "atlas", "sandbox": dict(s.SANDBOX)},
+        {"id": "midas", "tools": {"deny": ["exec"]}},
+    ]}}
+    p = s.montar_visibilidade(viva)
+    lista = {a["id"]: a for a in p["agents"]["list"]}
+    assert lista["nina"]["sandbox"] == {**s.SANDBOX, "sessionToolsVisibility": "all"}
+    assert lista["nina"]["tools"] == {"elevated": {"enabled": False}}
+    assert lista["atlas"] == viva["agents"]["list"][1] and lista["midas"] == viva["agents"]["list"][2]
+    assert s.conferir_visibilidade(p, viva)
+    assert not s.conferir_visibilidade(viva, viva)
