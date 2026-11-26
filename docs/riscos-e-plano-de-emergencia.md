@@ -40,7 +40,8 @@ backup. Foram **80 dias** sem cópia do banco, e nada avisou.
 Os outros casos da mesma família: chat quebrado por duas semanas (18/09,
 coluna que ninguém criou), push do alerta que nunca funcionou (26/08) e os
 timeouts dos MCP na rajada da manhã (26/11). Todos foram achados por
-investigação, nenhum por alarme. **Nenhum dos dois backups avisa quando falha.**
+investigação, nenhum por alarme. Desde 26/11 os dois backups avisam quando
+falham ou param (§4, item 1).
 
 ### R2 — Banco sem cópia fora da máquina (crítico)
 Os dumps do `hsos` ficam em `/var/backups/hsos`, **na mesma VPS do banco**.
@@ -165,10 +166,11 @@ alguém treinado nisso, a resposta honesta é "os agentes param até ele voltar"
 
 ## 4. O que fazer, em ordem
 
-1. **Alarme quando backup falha** (R1). Os dois timers (`hsos-backup` e
-   `backup-openclaw`) avisando o administrador pelo sininho em caso de falha,
-   e uma conferência diária de "o último backup tem menos de 26 h e mais de
-   50 KB". Um backup que falha calado é o que acabou de acontecer.
+1. ✅ **Alarme quando backup falha** (R1) — 26/11/2026. Cada backup grava o
+   resultado em `backups_execucao`, e o `app/guardiao_backups.py` avisa o
+   administrador (chat + sininho, uma vez por dia por origem) quando a última
+   execução falhou ou quando não há sucesso há 26 h. Ligar o lado do gateway:
+   `vps-gateway/backup/configurar-registro.sh`.
 2. **Dumps do banco para fora da máquina** (R2): mesmo bucket do gateway, outro
    prefixo, com o mesmo bloqueio de 30 dias, e teste de restauração.
 3. **PK-13 — saldo e motivo na tela** (R3): o agente que falha por saldo diz

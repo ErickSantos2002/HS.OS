@@ -37,6 +37,21 @@ próprio bloqueio; o restic não o lê). Credenciais e senha no FortiPAM.
 5. No Konsole: `bash ~/github/HS.OS/vps-gateway/backup/configurar.sh`. Ele
    cria o repositório, faz o 1º backup e roda o teste de restauração.
 
+## Registro no HS.OS (26/11/2026)
+
+Cada backup avisa o resultado em `POST /backups/registro`, e o
+`app/guardiao_backups.py` avisa o administrador (chat + sininho) quando a
+última execução falhou **ou** quando não chega sucesso há 26 h — inclusive
+nunca. O segundo caso é o que importa: foi o modo de falha dos 80 dias sem
+backup do banco (08/09 a 26/11).
+
+Ligar, uma vez, **depois do deploy** que traz a rota:
+`bash ~/github/HS.OS/vps-gateway/backup/configurar-registro.sh`. Ele gera o
+token (`BACKUP_REGISTRO_TOKEN` em `integration_secrets`), grava o cabeçalho em
+`/root/.config/backup-openclaw/registro` (0600, lido por `curl -H @arquivo`
+para o token não aparecer no `ps`), instala o script novo e confere com um
+registro de teste, que apaga em seguida. Rodar de novo troca o token.
+
 ## Operar
 
 ```bash

@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.23.0",
+    date: "2026-11-26",
+    changes: [
+      {
+        kind: "novidade",
+        text: "Administradores passam a ser avisados no chat e no sininho quando a cópia de segurança diária do sistema ou dos agentes falha ou deixa de acontecer.",
+      },
+    ],
+  },
+  {
     version: "2.22.5",
     date: "2026-11-26",
     changes: [

@@ -52,37 +52,67 @@ chmod 700 "$DESTINO"   # o dump tem hash de senha e segredos de integração
 
 echo
 echo "═══ 2. O script de backup ═══"
-cat > /usr/local/bin/hsos-backup <<UNIT
+cat > /usr/local/bin/hsos-backup <<'UNIT'
 #!/usr/bin/env bash
 set -euo pipefail
-DESTINO=$DESTINO
+DESTINO=@DESTINO@
+SERVICO_BANCO=@SERVICO_BANCO@
 # Pelo nome exato do serviço — ver o aviso no instalador (26/11/2026).
-CID=\$(docker ps -q --filter "label=com.docker.swarm.service.name=$SERVICO_BANCO")
-[ "\$(echo "\$CID" | grep -c .)" = "1" ] || { echo "esperava 1 container de $SERVICO_BANCO, achei: '\$CID'"; exit 1; }
+CID=$(docker ps -q --filter "label=com.docker.swarm.service.name=$SERVICO_BANCO")
+[ "$(echo "$CID" | grep -c .)" = "1" ] || { echo "esperava 1 container de $SERVICO_BANCO, achei: '$CID'"; exit 1; }
 
-ARQ="\$DESTINO/hsos-\$(date +%Y%m%d-%H%M%S).dump"
+ARQ="$DESTINO/hsos-$(date +%Y%m%d-%H%M%S).dump"
+ERR=$(mktemp)
+MOTIVO=""
+TAM=0
+
+# ⚠️ Toda execução grava o próprio resultado em `backups_execucao`, e o
+# `app/guardiao_backups.py` avisa o administrador quando a última falhou ou
+# quando não há sucesso há 26 h. Foi a falta disto que deixou o backup morto
+# de 08/09 a 26/11/2026 sem ninguém saber. O motivo vai como VARIÁVEL do psql
+# (`:'det'`), nunca colado no SQL: ele é texto de erro, vem de fora.
+registrar() {
+  local ok=$1 det=$2
+  printf "SET ROLE service_role; INSERT INTO public.backups_execucao (origem, ok, tamanho, detalhe) VALUES ('banco-hsos', :ok, :tam, NULLIF(:'det', ''));\n" \
+    | docker exec -i "$CID" sh -c 'psql -q -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "${POSTGRES_DB:-hsos}" -v ok="$1" -v tam="$2" -v det="$3"' _ "$ok" "$TAM" "$det" >/dev/null \
+    || echo "não consegui registrar o resultado no banco"
+}
+
 # Falhou, o arquivo sai: até 26/11 cada falha deixava um dump de 0 byte, que
 # parecia backup na listagem e nunca era podado (a poda fica depois do erro).
-trap '[ -s "\$ARQ" ] && [ "\$(stat -c%s "\$ARQ")" -ge 51200 ] || rm -f "\$ARQ"' EXIT
+fim() {
+  local cod=$?
+  if [ "$cod" -ne 0 ]; then
+    rm -f "$ARQ"
+    [ -n "$MOTIVO" ] || MOTIVO=$(tail -c 400 "$ERR" | tr '\n' ' ')
+    registrar false "${MOTIVO:-saiu com código $cod}"
+  fi
+  rm -f "$ERR"
+}
+trap fim EXIT
 
 # --format=custom: comprimido e permite restaurar tabela a tabela.
 # A senha vem do ambiente do próprio container, então não fica aqui.
-docker exec "\$CID" sh -c \\
-  'pg_dump --username="\$POSTGRES_USER" --dbname="\${POSTGRES_DB:-hsos}" --role=$PAPEL \\
-           --format=custom --no-owner --no-privileges' > "\$ARQ"
+docker exec "$CID" sh -c \
+  'pg_dump --username="$POSTGRES_USER" --dbname="${POSTGRES_DB:-hsos}" --role=@PAPEL@ \
+           --format=custom --no-owner --no-privileges' > "$ARQ" 2> "$ERR"
 
 # Dump vazio ou minúsculo é falha silenciosa — o pior tipo. 50 KB é bem abaixo
 # do tamanho real e bem acima de "o pg_dump escreveu só o cabeçalho".
-TAM=\$(stat -c%s "\$ARQ")
-if [ "\$TAM" -lt 51200 ]; then
-  echo "backup suspeito: \$ARQ tem só \$TAM bytes"
+TAM=$(stat -c%s "$ARQ")
+if [ "$TAM" -lt 51200 ]; then
+  MOTIVO="dump suspeito: só $TAM bytes"
+  echo "backup suspeito: $ARQ tem só $TAM bytes"
   exit 1
 fi
 
-chmod 600 "\$ARQ"
-find "\$DESTINO" -name 'hsos-*.dump' -mtime +$RETENCAO_DIAS -delete
-echo "ok: \$ARQ (\$TAM bytes) · \$(ls -1 "\$DESTINO"/hsos-*.dump | wc -l) cópias guardadas"
+chmod 600 "$ARQ"
+find "$DESTINO" -name 'hsos-*.dump' -mtime +@RETENCAO_DIAS@ -delete
+registrar true ""
+echo "ok: $ARQ ($TAM bytes) · $(ls -1 "$DESTINO"/hsos-*.dump | wc -l) cópias guardadas"
 UNIT
+sed -i -e "s|@DESTINO@|$DESTINO|" -e "s|@SERVICO_BANCO@|$SERVICO_BANCO|" \
+       -e "s|@PAPEL@|$PAPEL|" -e "s|@RETENCAO_DIAS@|$RETENCAO_DIAS|" /usr/local/bin/hsos-backup
 chmod 700 /usr/local/bin/hsos-backup
 echo "  /usr/local/bin/hsos-backup"
 

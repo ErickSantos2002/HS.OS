@@ -18,6 +18,7 @@ from app.escritorio.presenca import vigiar as vigiar_escritorio
 from app.coletor_metricas import rodar as rodar_metricas
 from app.coletor_respostas import rodar as rodar_coletor_respostas
 from app.disparador_lembretes import rodar as rodar_disparador_lembretes
+from app.guardiao_backups import rodar as rodar_guardiao_backups
 from app.coletor_uso import rodar as rodar_coletor
 from app.vigia_sessoes import rodar as rodar_vigia
 from app.database import close_db, init_db
@@ -47,6 +48,7 @@ from app.routers.conversations import router as conversations_router
 from app.routers.gateway import router as gateway_router
 from app.routers.llm import router as llm_router
 from app.routers.mcp_alerta import router as mcp_alerta_router
+from app.routers.backups import router as backups_router
 from app.routers.mcp_anexos import router as mcp_anexos_router
 from app.routers.mcp_wiki import router as mcp_wiki_router
 from app.routers.integracoes import router as integracoes_router
@@ -124,7 +126,17 @@ async def lifespan(app: FastAPI):
     parar_lembretes = asyncio.Event()
     lembretes = asyncio.create_task(rodar_disparador_lembretes(parar_lembretes))
 
+    # ⚠️ **O backup do banco falhou 80 dias sem ninguém saber** (08/09 a
+    # 26/11/2026). Este laço avisa o administrador quando um backup falha ou
+    # para de rodar. Ver `app/guardiao_backups.py`.
+    # Desligar: `GUARDIAO_BACKUPS_SEGUNDOS=0`.
+    parar_backups = asyncio.Event()
+    guardiao_backups = asyncio.create_task(rodar_guardiao_backups(parar_backups))
+
     yield
+
+    parar_backups.set()
+    guardiao_backups.cancel()
 
     parar_lembretes.set()
     lembretes.cancel()
@@ -288,3 +300,4 @@ app.include_router(tarefas_router)
 app.include_router(ws_router)
 app.include_router(gifs_router)
 app.include_router(conversas_marcadas_router)
+app.include_router(backups_router)

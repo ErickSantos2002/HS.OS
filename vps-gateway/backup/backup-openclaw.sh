@@ -81,6 +81,27 @@ print(f"sqlite copiados: {n}")
 PY
 }
 
+# Registro do resultado no HS.OS. O arquivo tem UMA linha, o cabeçalho
+# inteiro (`Authorization: Bearer …`), e vai ao curl por `-H @arquivo`: com o
+# token na linha de comando ele apareceria no `ps` de qualquer processo da VPS
+# — e Atlas, Bruce e Nina têm `exec` aqui. Escrito pelo `configurar-registro.sh`.
+REGISTRO=/root/.config/backup-openclaw/registro
+API_HSOS=${API_HSOS:-https://hsosapi.healthsafetytech.com}
+
+registrar() {  # registrar <true|false> <motivo>
+  if [ ! -r "$REGISTRO" ]; then
+    # Sem o token o HS.OS não recebe nada — e avisa por isso mesmo, em 26 h.
+    echo "sem $REGISTRO: resultado não registrado no HS.OS" >&2
+    return 0
+  fi
+  local corpo codigo
+  corpo=$(python3 -c 'import json,sys; print(json.dumps({"origem":"gateway","ok":sys.argv[1]=="true","detalhe":sys.argv[2] or None}))' "$1" "$2")
+  codigo=$(curl -sS -m 20 -o /dev/null -w '%{http_code}' -X POST \
+             -H @"$REGISTRO" -H 'Content-Type: application/json' \
+             --data-binary "$corpo" "$API_HSOS/backups/registro" || echo 000)
+  [ "$codigo" = 201 ] || echo "registro no HS.OS respondeu $codigo" >&2
+}
+
 case "${1:-}" in
   --iniciar)
     restic init
@@ -117,8 +138,20 @@ case "${1:-}" in
     exit "$falhou"
     ;;
   "")
-    copiar_sqlite
-    restic backup --tag diario --one-file-system "${EXCLUIR[@]}" "$OC" "$ESTAGIO" "${EXTRAS[@]}"
+    # ⚠️ O resultado vai para o HS.OS, que avisa o administrador quando o
+    # backup falha OU para de chegar (`app/guardiao_backups.py`). Foi a falta
+    # disto que deixou o backup do banco morto 80 dias (08/09 a 26/11/2026).
+    ERR=$(mktemp)
+    fim() {
+      local cod=$?
+      if [ "$cod" -eq 0 ]; then registrar true ""
+      else registrar false "$(tail -c 400 "$ERR" | tr '\n' ' ')"; fi
+      rm -f "$ERR"
+    }
+    trap fim EXIT
+    copiar_sqlite 2> >(tee -a "$ERR" >&2)
+    restic backup --tag diario --one-file-system "${EXCLUIR[@]}" "$OC" "$ESTAGIO" "${EXTRAS[@]}" \
+      2> >(tee -a "$ERR" >&2)
     rm -rf "$ESTAGIO"
     ;;
   *) echo "uso: $0 [--iniciar|--testar]"; exit 2 ;;

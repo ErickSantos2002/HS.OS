@@ -90,6 +90,10 @@ Hoje o container é o do serviço `erick_hsos-banco` pelo label do Swarm, e falh
 não deixa mais dump de 0 byte. **Confira `ls -la /var/backups/hsos`: arquivo de
 0 byte não é backup.** Ver `docs/riscos-e-plano-de-emergencia.md`.
 
+Desde 26/11 cada execução grava o resultado em `backups_execucao` (pelo
+próprio container, como `service_role`), e o administrador é avisado quando
+falha ou passa 26 h sem sucesso (`app/guardiao_backups.py`).
+
 ⚠️ **Os dumps ficam na mesma máquina do banco.** Cobrem erro humano e bug de
 aplicação; **não** cobrem perder a máquina. Cópia para fora é o passo seguinte.
 
