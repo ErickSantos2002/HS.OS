@@ -245,3 +245,123 @@ def test_criar_pendente_silencioso_marca_o_cartao():
                                      "talenths_aprovar_ausencia", {"acao": "aprovar_ausencia"}, "Aprovar"))
     _sql, args = _insert_da_conversa(conn)
     assert "silencioso" not in _json.loads(args[3])[0]
+
+
+# --- cartão em par: Recusar | Aprovar (aviso de ausência, 26/11/2026) --------
+#
+# O RH recebia dois cartões, cada um com Cancelar/Confirmar — quatro botões para
+# uma decisão, e "Cancelar" lido como "recusar". Agora são duas ações ligadas
+# por `par_id` num cartão só: escolher uma cancela a outra.
+
+class ConnPar:
+    def __init__(self, *linhas):
+        self.a = {l["id"]: l for l in linhas}
+        self.sql = []
+
+    async def fetchrow(self, sql, *args):
+        self.sql.append(sql)
+        l = self.a.get(args[0])
+        return l if l and l["user_id"] == args[1] else None
+
+    async def fetch(self, sql, *args):
+        self.sql.append(sql)
+        return [{"id": i} for i in sorted(args[0])]
+
+    async def execute(self, sql, *args):
+        self.sql.append(sql)
+        l = self.a.get(args[0])
+        for st in ("feita", "cancelada", "erro"):
+            if f"status = '{st}'" in sql and l and l["status"] == "pendente":
+                self.a[args[0]] = {**l, "status": st}
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+
+@pytest.fixture
+def par(monkeypatch):
+    aprovar = _acao(id="a-aprovar", sistema="talenths", acao="talenths_aprovar_ausencia",
+                    payload={"acao": "aprovar_ausencia", "ids": ["p1"]}, par_id="a-recusar")
+    recusar = _acao(id="a-recusar", sistema="talenths", acao="talenths_recusar_ausencia",
+                    payload={"acao": "recusar_ausencia", "ids": ["p1"]}, par_id="a-aprovar")
+    estado = {"conn": ConnPar(aprovar, recusar), "exec": []}
+    monkeypatch.setattr(rota, "sessao", lambda **k: estado["conn"])
+    for nome in ("talenths_aprovar_ausencia", "talenths_recusar_ausencia"):
+        async def executor(email, bot, payload, dono=None, _n=nome):
+            estado["exec"].append(_n)
+            return "feito"
+        monkeypatch.setitem(acoes.EXECUTORES, ("talenths", nome), executor)
+    return estado
+
+
+def test_par_confirmar_cancela_a_outra(par):
+    """Aprovou: a opção Recusar do mesmo cartão não pode continuar clicável."""
+    r = asyncio.run(rota.confirmar_acao("a-recusar", ERICK))
+    a = par["conn"].a
+    assert r["status"] == "feita" and par["exec"] == ["talenths_recusar_ausencia"]
+    assert a["a-recusar"]["status"] == "feita" and a["a-aprovar"]["status"] == "cancelada"
+
+
+def test_par_outra_ja_escolhida_409(par):
+    """Dois cliques (ou duas telas abertas): a segunda escolha não executa —
+    o TalentHS aprovaria e recusaria o mesmo pedido."""
+    asyncio.run(rota.confirmar_acao("a-aprovar", ERICK))
+    with pytest.raises(HTTPException) as e:
+        asyncio.run(rota.confirmar_acao("a-recusar", ERICK))
+    assert e.value.status_code == 409 and par["exec"] == ["talenths_aprovar_ausencia"]
+
+
+def test_par_trava_as_duas_em_ordem(par):
+    """As duas linhas travadas juntas e em ordem de id: travar cada uma na
+    ordem do clique faria dois cliques simultâneos se esperarem (deadlock)."""
+    asyncio.run(rota.confirmar_acao("a-recusar", ERICK))
+    trava = [s for s in par["conn"].sql if "ORDER BY id FOR UPDATE" in s]
+    assert len(trava) == 1
+
+
+def test_par_falha_so_a_escolhida_vira_erro(par, monkeypatch):
+    """O TalentHS recusou executar: a outra opção segue de pé — a decisão
+    ainda não foi tomada."""
+    from app.sistemas.taskhs import ErroSistema
+
+    async def falha(email, bot, payload, dono=None):
+        raise ErroSistema(502, "TalentHS fora")
+    monkeypatch.setitem(acoes.EXECUTORES, ("talenths", "talenths_aprovar_ausencia"), falha)
+    with pytest.raises(HTTPException):
+        asyncio.run(rota.confirmar_acao("a-aprovar", ERICK))
+    a = par["conn"].a
+    assert a["a-aprovar"]["status"] == "erro" and a["a-recusar"]["status"] == "pendente"
+
+
+def test_criar_par_uma_mensagem_com_os_dois(monkeypatch):
+    """Duas pendências ligadas uma à outra e UMA mensagem na conversa, com os
+    rótulos dos botões no `media` (o cartão não adivinha "Aprovar")."""
+    import json as _json
+    conn = _ConnCriar()
+    ids = iter(["id-a", "id-b", "conv-1"])
+
+    async def fetchval(sql, *args):
+        conn.chamadas.append((sql, args))
+        return next(ids)
+    conn.fetchval = fetchval
+    quando = datetime(2026, 11, 26, 12, 0, tzinfo=timezone.utc)
+    r = asyncio.run(acoes.criar_par(
+        conn, "u-lid", "lidisay-bot", "talenths",
+        ("talenths_aprovar_ausencia", {"acao": "aprovar_ausencia"}, "Aprovar ausência — Ana", "Aprovar"),
+        ("talenths_recusar_ausencia", {"acao": "recusar_ausencia"}, "Recusar ausência — Ana", "Recusar"),
+        "TalentHS · Pedido de ausência — Ana", criado_em=quando, silencioso=True))
+    assert r == ("id-a", "id-b")
+    inserts = [c for c in conn.chamadas if "INSERT INTO public.acoes_pendentes" in c[0]]
+    assert len(inserts) == 2
+    msgs = [c for c in conn.chamadas if "INSERT INTO public.conversations" in c[0]]
+    assert len(msgs) == 1
+    media = _json.loads(msgs[0][1][3])
+    assert media == [{"type": "acao_aprovacao", "id": "id-a", "name": "TalentHS · Pedido de ausência — Ana",
+                      "mimeType": "", "base64": "", "rotulo": "Aprovar",
+                      "par": {"id": "id-b", "rotulo": "Recusar"}, "silencioso": True}]
+    assert quando in msgs[0][1]
+    ligacoes = [c for c in conn.chamadas if "par_id" in c[0]]
+    assert ligacoes, "as duas pendências têm que apontar uma para a outra"

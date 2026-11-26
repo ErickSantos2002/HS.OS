@@ -870,6 +870,49 @@ EXECUTORES: dict[tuple[str, str], Executor] = {
 }
 
 
+async def criar_par(conn, dono: str, bot: str, sistema: str,
+                    principal: tuple[str, dict, str, str], outra: tuple[str, dict, str, str],
+                    titulo: str, criado_em: datetime | None = None,
+                    silencioso: bool = False) -> tuple[str, str]:
+    """Duas ações alternativas num cartão só (`(acao, payload, resumo, rótulo
+    do botão)` cada) — o RH escolhe Aprovar OU Recusar (26/11/2026).
+
+    Grava as duas pendências ligadas por `par_id` e UMA mensagem cujo `media`
+    leva os dois ids e os rótulos. Confirmar uma cancela a outra
+    (`routers/acoes.py`). Cada uma segue executando só o próprio payload
+    gravado — a escolha é QUAL clicar, nunca um argumento novo."""
+    ids = []
+    for acao, payload, resumo, _rotulo in (principal, outra):
+        if (sistema, acao) not in EXECUTORES:
+            raise ValueError(f"ação desconhecida: {sistema}/{acao}")
+        ids.append(await conn.fetchval(
+            "INSERT INTO public.acoes_pendentes (user_id, agent_id, sistema, acao, payload, resumo) "
+            "VALUES ($1::uuid, $2, $3, $4, $5::text::jsonb, $6) RETURNING id::text",
+            dono, bot, sistema, acao, json.dumps(payload, ensure_ascii=False), resumo))
+    a, b = ids
+    await conn.execute(
+        "UPDATE public.acoes_pendentes SET par_id = CASE WHEN id = $1::uuid THEN $2::uuid ELSE $1::uuid END "
+        " WHERE id IN ($1::uuid, $2::uuid)", a, b)
+    item = {"type": "acao_aprovacao", "id": a, "name": titulo, "mimeType": "", "base64": "",
+            "rotulo": principal[3], "par": {"id": b, "rotulo": outra[3]}}
+    if silencioso:
+        item["silencioso"] = True
+    conteudo, media = f"🔔 Aguardando sua decisão: {titulo}", json.dumps([item], ensure_ascii=False)
+    if criado_em is None:
+        conv = await conn.fetchval(
+            "INSERT INTO public.conversations (agent_id, user_id, role, content, media) "
+            "VALUES ($1, $2::uuid, 'agent', $3, $4::text::jsonb) RETURNING id::text",
+            bot, dono, conteudo, media)
+    else:
+        conv = await conn.fetchval(
+            "INSERT INTO public.conversations (agent_id, user_id, role, content, media, created_at) "
+            "VALUES ($1, $2::uuid, 'agent', $3, $4::text::jsonb, $5) RETURNING id::text",
+            bot, dono, conteudo, media, criado_em)
+    await conn.execute("UPDATE public.acoes_pendentes SET conversa_id = $3::uuid "
+                       " WHERE id IN ($1::uuid, $2::uuid)", a, b, conv)
+    return a, b
+
+
 async def criar_pendente(conn, dono: str, bot: str, sistema: str, acao: str, payload: dict,
                          resumo: str, criado_em: datetime | None = None,
                          silencioso: bool = False) -> str:

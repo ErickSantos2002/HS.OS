@@ -107,6 +107,12 @@ def _quando(p: dict) -> str:
     return datas
 
 
+def titulo_do_cartao(pedido: dict) -> str:
+    """Título do cartão (vai em `media.name` e no texto da mensagem — o
+    cabeçalho do cartão é React, não markdown, mas o texto da bolha é)."""
+    return f"TalentHS · Pedido de ausência — {_md(pedido.get('user_name') or 'Alguém', TETO_CAMPO)}"
+
+
 def texto_recado(pedido: dict, de_novo: bool) -> str:
     cabeca = "📅 Ainda pendente — " if de_novo else "📅 Pedido de ausência — "
     quem = _md(pedido.get("user_name") or "Alguém", TETO_CAMPO)
@@ -189,10 +195,13 @@ async def _avisar_um(sessao_fn, dest: str, bot: str, email: str, pedido: dict, d
         if travou is None:  # outro worker levou
             return False
         await conn.execute(SQL_RECADO, bot, dest, texto_recado(pedido, de_novo), agora)
-        for n, (acao, (payload, resumo, _aviso)) in enumerate(
-                (("talenths_aprovar_ausencia", aprovar), ("talenths_recusar_ausencia", recusar)), 1):
-            await acoes.criar_pendente(conn, dest, bot, "talenths", acao, payload, resumo,
-                                       criado_em=agora + _PASSO * n, silencioso=True)
+        # UM cartão com Recusar | Aprovar (eram dois, cada um com Cancelar/
+        # Confirmar — 26/11/2026). Calado: o recado acima já tocou.
+        await acoes.criar_par(
+            conn, dest, bot, "talenths",
+            ("talenths_aprovar_ausencia", aprovar[0], aprovar[1], "Aprovar"),
+            ("talenths_recusar_ausencia", recusar[0], recusar[1], "Recusar"),
+            titulo_do_cartao(pedido), criado_em=agora + _PASSO, silencioso=True)
     return True
 
 

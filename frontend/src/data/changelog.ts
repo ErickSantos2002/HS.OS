@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.25.0",
+    date: "2026-11-26",
+    changes: [
+      {
+        kind: "melhoria",
+        text: "O aviso de pedido de ausência agora vem num cartão só, com os botões Recusar e Aprovar — antes eram dois cartões, cada um com Cancelar e Confirmar.",
+      },
+    ],
+  },
+  {
     version: "2.24.1",
     date: "2026-11-26",
     changes: [

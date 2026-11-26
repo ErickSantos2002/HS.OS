@@ -4,10 +4,11 @@
 
 - **Aviso de pedido de ausência ao RH (26/11, fora da Onda):** pedido pendente
   no TalentHS → recado + cartões Aprovar/Recusar na conversa da Lidisay
-  (`lidisay-bot`), sem turno de agente. `044` aplicada e conferida. **Falta:**
-  deploy (fim do dia) → `backend/scripts/avisos-ausencia.py --ligar
-  adm01@healthsafetytech.com --aplicar` → conferir na conversa dela o aviso do
-  pedido pendente de 26/11 08:01 e a linha em `avisos_ausencia`. Ver
+  (`lidisay-bot`), sem turno de agente. `044` e `045` aplicadas e conferidas.
+  1ª ligação provou o fluxo (aviso do Welton, 26/11 10:58) e foi APAGADA a pedido
+  do Erick, chave desligada (`~/apagar-aviso-welton.py`). **Falta:** deploy do
+  cartão único → `backend/scripts/avisos-ausencia.py --ligar
+  adm01@healthsafetytech.com --aplicar` → conferir recado + 1 cartão. Ver
   `docs/claude/guardi.md` § "Aviso de pedido de ausência".
 
 **Retomar em 27/11:** (1) rajada das 07:30 sem `Request timed out`

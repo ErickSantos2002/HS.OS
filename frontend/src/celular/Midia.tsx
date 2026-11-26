@@ -14,7 +14,7 @@ import { CartaoDeArquivo, ImagemDaBolha, PlayerDeAudio } from "./Bolha";
 /** Anexo da conversa com agente (`ChatMessage.media`). */
 export function MidiaDoAgente({ att, semente, aoAmpliar }: { att: MediaAttachment; semente: string; aoAmpliar: (src: string) => void }) {
   if (att.type === "email_aprovacao" && att.id) return <CartaoAprovacaoEmail id={att.id} />;
-  if (att.type === "acao_aprovacao" && att.id) return <CartaoAcao id={att.id} />;
+  if (att.type === "acao_aprovacao" && att.id) return <CartaoAcao id={att.id} rotulo={att.rotulo} par={att.par} />;
   if (att.type === "lembrete") return <RecadoLembrete titulo={att.name} />;
   if (att.type === "varredura_pedida") return <LinhaVarredura />;
   const tipo = att.type ?? (att.mimeType?.startsWith("image/") ? "image" : att.mimeType?.startsWith("audio/") ? "audio" : "file");

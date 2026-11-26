@@ -35,7 +35,8 @@ async def _acao_do_dono(conn, acao_id: str, usuario: Usuario) -> dict:
     try:
         a = await conn.fetchrow(
             "SELECT a.id::text AS id, a.user_id::text AS user_id, a.agent_id, a.sistema, a.acao, "
-            "       a.payload, a.resumo, a.status, a.erro, a.resultado, a.criado_em, p.email "
+            "       a.payload, a.resumo, a.status, a.erro, a.resultado, a.criado_em, p.email, "
+            "       a.par_id::text AS par_id "
             "  FROM public.acoes_pendentes a JOIN public.profiles p ON p.id = a.user_id "
             " WHERE a.id = $1::uuid AND a.user_id = $2::uuid FOR UPDATE OF a",
             acao_id, usuario.id)
@@ -80,10 +81,22 @@ async def confirmar_acao(acao_id: str, usuario: Usuario = Depends(usuario_atual)
             conflito = "Ação desconhecida."
     if conflito:
         raise HTTPException(status.HTTP_409_CONFLICT, conflito)
+    par_id = a.get("par_id")
     async with sessao(role="service_role") as conn:
+        if par_id:
+            # Cartão em par (Recusar | Aprovar): as DUAS linhas travadas juntas
+            # e em ordem de id — travar na ordem do clique deixaria dois cliques
+            # simultâneos esperando um pelo outro (deadlock).
+            await conn.fetch("SELECT id FROM public.acoes_pendentes WHERE id = ANY($1::uuid[]) "
+                             " ORDER BY id FOR UPDATE", [acao_id, par_id])
         a = await _acao_do_dono(conn, acao_id, usuario)
         if a["status"] != "pendente":
             raise HTTPException(status.HTTP_409_CONFLICT, f"Esta ação já está {a['status']}.")
+        if par_id:
+            outra = await _acao_do_dono(conn, par_id, usuario)
+            if outra["status"] != "pendente":
+                raise HTTPException(status.HTTP_409_CONFLICT,
+                                    "A outra opção deste cartão já foi escolhida.")
         try:
             resultado = await executor(a["email"], a["agent_id"], a["payload"], dono=a["user_id"])
         except ErroSistema as e:
@@ -99,6 +112,9 @@ async def confirmar_acao(acao_id: str, usuario: Usuario = Depends(usuario_atual)
             await conn.execute("UPDATE public.acoes_pendentes SET status = 'feita', resultado = $2, "
                                "decidido_em = now() WHERE id = $1::uuid AND status = 'pendente'",
                                acao_id, resultado)
+            if par_id:
+                await conn.execute("UPDATE public.acoes_pendentes SET status = 'cancelada', decidido_em = now() "
+                                   " WHERE id = $1::uuid AND status = 'pendente'", par_id)
     if falha:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, falha)
     return {"status": "feita", "resultado": resultado}

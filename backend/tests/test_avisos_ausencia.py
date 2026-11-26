@@ -208,26 +208,31 @@ def _rodar(banco, pedidos, agora=AGORA, preparar=_preparar, relogio=None):
                                        relogio=relogio or _Relogio()))
 
 
-def test_aviso_grava_recado_e_dois_cartoes():
-    """O pedido vira o que a Lidisay pediu: um recado que explica e os dois
-    botões. Os cartões são as ações de sempre do Guardi — o clique executa no
-    TalentHS como ela, pelo executor que já confere `pending` de novo."""
+def test_aviso_grava_recado_e_um_cartao_com_dois_botoes():
+    """O pedido vira o que a Lidisay pediu: um recado que explica e UM cartão
+    com Recusar e Aprovar (26/11/2026 — eram dois cartões, quatro botões). Por
+    baixo, as duas ações de sempre do Guardi, ligadas em par."""
     b = Banco()
     assert _rodar(b, [_pedido()]) == 1
     assert [a["acao"] for a in b.acoes] == ["talenths_aprovar_ausencia", "talenths_recusar_ausencia"]
     assert all('"p-1"' in a["payload"] for a in b.acoes)
     assert b.conversas[0]["content"].startswith("📅 Pedido de ausência — Ana Souza")
+    cartoes = [c for c in b.conversas if c["cartao"]]
+    assert len(cartoes) == 1
+    item = cartoes[0]["media"][0]
+    assert item["rotulo"] == "Aprovar" and item["par"]["rotulo"] == "Recusar"
+    assert item["name"] == "TalentHS · Pedido de ausência — Ana Souza"
     assert list(b.avisos) == ["p-1"]
 
 
-def test_recado_vem_antes_dos_cartoes():
+def test_recado_vem_antes_do_cartao():
     """Na mesma transação `now()` é um só: sem hora explícita a conversa
-    ordenaria as três mensagens pelo id aleatório."""
+    ordenaria as mensagens pelo id aleatório."""
     b = Banco()
     _rodar(b, [_pedido()])
     horas = [c["created_at"] for c in b.conversas]
-    assert [c["cartao"] for c in b.conversas] == [False, True, True]
-    assert horas == sorted(horas) and len(set(horas)) == 3
+    assert [c["cartao"] for c in b.conversas] == [False, True]
+    assert horas[0] < horas[1]
 
 
 def test_dois_workers_um_aviso():
@@ -239,7 +244,7 @@ def test_dois_workers_um_aviso():
     av._ultima_leitura.clear()  # o "outro worker" tem o próprio relógio
     b.leitura_velha = {}        # ...e leu antes do primeiro gravar
     assert _rodar(b, [_pedido()]) == 0
-    assert len(b.conversas) == 3 and len(b.acoes) == 2
+    assert len(b.conversas) == 2 and len(b.acoes) == 2
 
 
 def test_talenths_fora_nao_marca_avisado():
@@ -264,7 +269,7 @@ def test_preparo_recusa_nao_grava_nada():
             raise ValueError("já não está pendente")
         return await _preparar(ctx, bot, args)
     assert _rodar(b, [_pedido(), _pedido(id="p-2")], preparar=recusa_o_primeiro) == 1
-    assert list(b.avisos) == ["p-2"] and len(b.conversas) == 3
+    assert list(b.avisos) == ["p-2"] and len(b.conversas) == 2
 
 
 def test_falha_no_meio_desfaz_a_transacao():
@@ -376,12 +381,12 @@ def test_passada_chama_avisos_ausencia(monkeypatch):
     assert asyncio.run(d.passada(sessao, AGORA)) == 0
 
 
-def test_cartoes_do_aviso_saem_calados():
+def test_cartao_do_aviso_sai_calado():
     """Só o recado — o que tem quem, datas e motivo — acorda o celular."""
     b = Banco()
     _rodar(b, [_pedido()])
     cartoes = [c for c in b.conversas if c["cartao"]]
-    assert len(cartoes) == 2 and all(c["media"][0].get("silencioso") is True for c in cartoes)
+    assert len(cartoes) == 1 and cartoes[0]["media"][0].get("silencioso") is True
 
 
 def test_recado_escapa_markdown():

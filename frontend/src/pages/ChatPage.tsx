@@ -552,7 +552,7 @@ export const AgentMessageList = React.memo(function AgentMessageList({
                       {Array.isArray(msg.media) && msg.media.map((att, i) => att.type === "email_aprovacao" && att.id ? (
                         <CartaoAprovacaoEmail key={i} id={att.id} />
                       ) : att.type === "acao_aprovacao" && att.id ? (
-                        <CartaoAcao key={i} id={att.id} />
+                        <CartaoAcao key={i} id={att.id} rotulo={att.rotulo} par={att.par} />
                       ) : att.type === "lembrete" ? (
                         <RecadoLembrete key={i} titulo={att.name} />
                       ) : att.type === "varredura_pedida" ? (

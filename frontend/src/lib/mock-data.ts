@@ -23,6 +23,9 @@ export interface MediaAttachment {
   url?: string; // public URL from storage
   id?: string; // anexo privado (bucket anexos) — URL resolvida por id
   extractedText?: string; // extracted text content for documents
+  /** `acao_aprovacao` em par (26/11/2026): rótulo do botão desta ação e a alternativa. */
+  rotulo?: string;
+  par?: { id: string; rotulo?: string };
 }
 
 export interface ChatMessage {

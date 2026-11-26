@@ -552,3 +552,10 @@ conversa de quem está na chave (hoje a Lidisay, `lidisay-bot`).
   rotas da lista em `auth/agente.py` de lá, e essa não está — volta 403, a mesma cara
   de "sem papel de RH". Na 1ª ligação (26/11) o aviso ficou mudo por isso; o 403 hoje
   é um warning único no log, não traceback a cada 2 min.
+- **Cartão único em par (26/11, `045`):** as duas ações (aprovar/recusar) ligadas por
+  `acoes_pendentes.par_id`, gravadas por `acoes.criar_par` numa mensagem só
+  (`media: {id, rotulo, par: {id, rotulo}}`). O `/confirmar` trava as duas em ordem de
+  id, recusa (409) se a outra já foi decidida e cancela a outra no sucesso; falha do
+  executor deixa a outra pendente. No front, `CartaoAcao` com `par` (`estadoDoPar` em
+  `lib/acoes.ts`, testado). ⚠️ Rejeitado: ação "decidir" com a escolha no clique —
+  quebraria "o clique executa só o payload gravado".

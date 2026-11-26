@@ -34,6 +34,24 @@ const STATUS: Record<string, string> = {
 };
 export const rotuloAcao = (s: string) => STATUS[s] ?? s;
 
+/**
+ * Cartão em par — Recusar | Aprovar (26/11/2026). Botões só enquanto AS DUAS
+ * estão pendentes (e carregadas); decidida, diz qual foi. Erro conta como
+ * escolhida: o clique já foi dado, não se oferece de novo.
+ */
+export function estadoDoPar(principal: Acao | null, outra: Acao | null):
+  { pendente: boolean; escolhida: "principal" | "outra" | null; status: string } {
+  const status = principal?.status ?? "pendente";
+  if (!principal || !outra) return { pendente: false, escolhida: null, status };
+  if (principal.status === "pendente" && outra.status === "pendente") {
+    return { pendente: true, escolhida: null, status: "pendente" };
+  }
+  const decidiu = (x: Acao) => x.status === "feita" || x.status === "erro";
+  if (decidiu(principal)) return { pendente: false, escolhida: "principal", status: principal.status };
+  if (decidiu(outra)) return { pendente: false, escolhida: "outra", status: outra.status };
+  return { pendente: false, escolhida: null, status };
+}
+
 const CAMPO: Record<string, string> = {
   done: "Concluída", due_date: "Prazo", priority: "Prioridade", title: "Título", due_date_completed: "Prazo cumprido",
 };
