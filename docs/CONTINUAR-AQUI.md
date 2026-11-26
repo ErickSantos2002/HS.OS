@@ -19,9 +19,9 @@
   Escrevendo, achei o **backup do banco morto desde 08/09** (último dump bom
   07/09): container errado (`pgweb`) e `service_role` sem `SELECT` em 3
   sequences. `042` aplicada e conferida; `scripts/instalar-backup.sh` corrigido
-  (container pelo label `erick_hsos-banco`, falha não deixa 0 byte). **Falta o
-  Erick reinstalar na VPS** (o comando de root foi negado à sessão) e conferir
-  o dump de 27/11. Próximo do plano: alarme de backup que falha (§4 item 1).
+  (container pelo label `erick_hsos-banco`, falha não deixa 0 byte). Reinstalado
+  pelo Erick às 08:54: dump de 10,9 MB, restore com 0 erro e contagens iguais
+  às do banco vivo. **Conferir o dump automático de 27/11** (> 50 KB). Próximo do plano: alarme de backup que falha (§4 item 1).
 - **PK-07 fechado em produção:** deploy `3839428` no ar desde 07:57; regras-base
   gravadas nos cinco `SOUL.md`; a `nina`, perguntada pela conta do Erick,
   identificou pelo carimbo (e-mail primeiro, nome editável, última linha).
