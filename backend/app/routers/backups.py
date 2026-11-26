@@ -19,9 +19,12 @@ router = APIRouter(prefix="/backups", tags=["backups"])
 
 
 class RegistroIn(BaseModel):
-    # Só as origens que o guardião confere: um nome livre gravaria linha que
-    # ninguém lê, e a `CHECK` da tabela recusaria com 500.
-    origem: Literal["banco-hsos", "gateway"]
+    # ⚠️ **Só `gateway`.** O token mora na VPS do gateway, onde Atlas, Bruce e
+    # Nina têm `exec`. Aceitar `banco-hsos` aqui deixaria quem o lesse gravar um
+    # "ok" falso para o banco e calar o alarme dele — o backup do banco grava
+    # direto pelo container e não precisa desta rota (revisão de segurança,
+    # 26/11/2026). Origem nova que precise vir por HTTP ganha token próprio.
+    origem: Literal["gateway"]
     ok: bool
     tamanho: int | None = None
     detalhe: str | None = None

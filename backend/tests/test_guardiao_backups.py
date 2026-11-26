@@ -89,4 +89,8 @@ def test_registro_recusa_origem_desconhecida():
     from app.routers.backups import RegistroIn
     with pytest.raises(ValidationError):
         RegistroIn(origem="qualquer", ok=True)
+    # O token da rota mora na VPS do gateway, onde agentes têm `exec`: com ele
+    # não pode dar para gravar "ok" pelo banco e calar o alarme do banco.
+    with pytest.raises(ValidationError):
+        RegistroIn(origem="banco-hsos", ok=True)
     assert RegistroIn(origem="gateway", ok=False, detalhe="y" * 5000).detalhe_curto() == "y" * 500
