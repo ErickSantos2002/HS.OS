@@ -500,8 +500,12 @@ FERRAMENTAS = [
     _f("taskhs_minhas", "As tarefas (cards) em que o seu dono é membro." + _DADO,
        {"abertas": {"type": "boolean", "description": "true (padrão): só as em aberto"}}),
     _f("taskhs_quadros", "Os quadros do TaskHS que o seu dono pode abrir." + _DADO),
-    _f("taskhs_quadro", "Um quadro: listas (com id) e cards de cada lista." + _DADO,
-       {"board_id": _INT}, ("board_id",)),
+    _f("taskhs_quadro", "Um quadro: listas (com id) e cards de cada lista, com as ETIQUETAS de cada "
+       "card. Com `etiqueta` (o nome dela, sem diferenciar maiúscula), só os cards que têm essa "
+       "etiqueta, com a contagem e o tempo parado de cada um pela régua do TaskHS — para contar "
+       "por etiqueta use isto, nunca o texto do título." + _DADO,
+       {"board_id": _INT, "etiqueta": {"type": "string", "description": "opcional: nome da etiqueta"}},
+       ("board_id",)),
     _f("taskhs_tarefa", "Detalhe de uma tarefa, com os checklists e os ids dos itens." + _DADO, {"list_id": _INT, "card_id": _INT},
        ("list_id", "card_id")),
     _f("taskhs_buscar", "Busca tarefas pelo texto." + _DADO, {"q": {"type": "string"}}, ("q",)),
@@ -1025,6 +1029,105 @@ def texto_parados(dash: dict, regua: str, setor: str | None = None) -> str:
     return "\n".join([cab, *linhas])
 
 
+_TETO_QUADRO = 80
+
+
+def _nomes_das_etiquetas(card: dict) -> list[str]:
+    return [str(e.get("label") or e.get("name") or "") for e in card.get("labels") or [] if isinstance(e, dict)]
+
+
+def _dia_do_card(iso) -> str:
+    try:
+        from app.fuso import BRASILIA
+        return datetime.fromisoformat(str(iso)).astimezone(BRASILIA).strftime("%d/%m/%Y")
+    except (TypeError, ValueError):
+        return "?"
+
+
+def texto_quadro(snap: dict, etiqueta: str | None = None, dash: dict | None = None) -> str:
+    """O retorno do `taskhs_quadro`, a partir do `GET /boards/{id}/snapshot`.
+
+    ⚠️ 26/11/2026: o snapshot sempre trouxe as etiquetas (`labels`) de cada
+    card, mas daqui só saíam título e prazo — o Guardi do Gustavo não tinha como
+    contar a etiqueta "SEM NOTA DE REMESSA" e recusou contar pelo título (que é
+    outra coisa). Com `etiqueta`, filtra pelo NOME da etiqueta (sem caixa nem
+    acento) e põe em cada card o tempo parado do `/dashboard` (`dash`) — a régua
+    da Qualidade, calculada pelo TaskHS, nunca aqui. `dash=None` = o dono não vê
+    as réguas.
+    """
+    s = snap or {}
+    titulo_quadro = (s.get("board") or {}).get("title") or "?"
+    por_lista = s.get("cards_by_list") or {}
+    listas = [(l, por_lista.get(str(l.get("id")), por_lista.get(l.get("id"), [])) or [])
+              for l in s.get("lists") or []]
+    if not etiqueta:
+        partes, n = [], 0
+        for l, cards in listas:
+            partes.append(f"Lista {l.get('id')} '{l.get('title')}':")
+            for c in cards:
+                if n >= _TETO_QUADRO:
+                    break
+                n += 1
+                et = _nomes_das_etiquetas(c)
+                partes.append(f"  - card {c.get('id')} | {c.get('title')} | prazo {c.get('due_date') or '—'}"
+                              + (f" | etiquetas: {', '.join(et)}" if et else ""))
+        return "\n".join(partes) or "(vazio)"
+
+    alvo = _sem_acento(etiqueta).strip()
+    do_quadro = [str(e.get("name") or e.get("label") or "") for e in s.get("labels") or [] if isinstance(e, dict)]
+    oficial = next((n for n in do_quadro if _sem_acento(n).strip() == alvo), None)
+    if oficial is None:
+        return (f"A etiqueta \"{etiqueta}\" não existe no quadro '{titulo_quadro}'. Etiquetas dele: "
+                + (", ".join(do_quadro) or "nenhuma") + ".")
+    achados = [(l, c) for l, cards in listas for c in cards
+               if any(_sem_acento(n).strip() == alvo for n in _nomes_das_etiquetas(c))]
+    cab = f"{len(achados)} card(s) com a etiqueta \"{oficial}\" no quadro '{titulo_quadro}'."
+    if dash is None:
+        cab += (" Sem o tempo de cada um (tempo parado não disponível): as réguas de parado do TaskHS só aparecem para administrador "
+                "e coordenador de lá.")
+    else:
+        cab += " Tempo parado pela régua do Dashboard do TaskHS (horas úteis, só dias de semana)."
+    criacao = {t.get("card_id"): t.get("horas_uteis") for t in (dash or {}).get("atrasados") or []}
+    na_lista = {t.get("card_id"): t.get("horas_uteis") for t in (dash or {}).get("travados_setor") or []}
+    linhas = []
+    for l, c in achados[:_TETO_QUADRO]:
+        cid = c.get("id")
+        linha = (f"- card {cid} (lista {l.get('id')} '{l.get('title')}') | {c.get('title')} | "
+                 f"criado em {_dia_do_card(c.get('created_at'))}")
+        if dash is not None:
+            parado = []
+            if cid in criacao:
+                parado.append(f"{_tempo_util(criacao[cid])} desde a criação")
+            if cid in na_lista:
+                parado.append(f"{_tempo_util(na_lista[cid])} na mesma lista")
+            linha += " | " + ("; ".join(parado) if parado else
+                              "dentro das réguas de parado (não passou de 72 horas úteis desde a criação "
+                              "nem de 24 na lista)")
+        linhas.append(linha)
+    if len(achados) > _TETO_QUADRO:
+        cab += f" Mostrando os {_TETO_QUADRO} primeiros."
+    return "\n".join([cab, *linhas])
+
+
+async def _dash_das_reguas(em: str, bot: str, ctx: dict, board_id: int) -> dict | None:
+    """As réguas de parado do quadro, ou None quando o dono não as vê (o TaskHS
+    as zera para quem não é administrador nem coordenador) ou o quadro está
+    fora do alerta. Não levanta: a contagem por etiqueta sai mesmo sem elas."""
+    try:
+        dash = await taskhs.chamar(em, bot, "GET", "/dashboard", params={"periodo": 7, "board_id": board_id},
+                                   dono=ctx["dono"]) or {}
+        if dash.get("fora_do_alerta"):
+            return None
+        vazio = not (dash.get("atrasados") or dash.get("travados_setor") or dash.get("travados_por_setor"))
+        if vazio and (dash.get("kpis") or {}).get("cards_ativos"):
+            eu = await taskhs.chamar(em, bot, "GET", "/auth/me", dono=ctx["dono"]) or {}
+            if eu.get("role") not in ("administrador", "coordenador"):
+                return None
+        return dash
+    except taskhs.ErroSistema:
+        return None
+
+
 def _marcar_itens(v, card: dict) -> list[dict]:
     """Só item que EXISTE no card relido — o cartão mostra o texto dele, e um
     id inventado viraria 404 depois do clique do dono."""
@@ -1125,23 +1228,20 @@ async def _taskhs(conn, bot: str, nome: str, args: dict, ctx: dict) -> str:
         return como_dado_externo_taskhs("\n".join(f"- quadro {q.get('id')} | {q.get('title')}"
                                            for q in (qs or []) if q.get("can_open")) or "(nenhum)")
     if nome == "taskhs_quadro":
-        s = await taskhs.chamar(em, bot, "GET", f"/boards/{_int(args, 'board_id')}/snapshot", dono=ctx["dono"])
-        por_lista = (s or {}).get("cards_by_list") or {}
-        partes, n = [], 0
-        for l in (s or {}).get("lists") or []:
-            partes.append(f"Lista {l.get('id')} '{l.get('title')}':")
-            for c in por_lista.get(str(l.get("id")), por_lista.get(l.get("id"), [])) or []:
-                if n >= 80:
-                    break
-                n += 1
-                partes.append(f"  - card {c.get('id')} | {c.get('title')} | prazo {c.get('due_date') or '—'}")
-        return como_dado_externo_taskhs("\n".join(partes) or "(vazio)")
+        board_id = _int(args, "board_id")
+        s = await taskhs.chamar(em, bot, "GET", f"/boards/{board_id}/snapshot", dono=ctx["dono"])
+        etiqueta = str(args.get("etiqueta") or "").strip()[:100] or None
+        dash = None
+        if etiqueta:
+            dash = await _dash_das_reguas(em, bot, ctx, board_id)
+        return como_dado_externo_taskhs(texto_quadro(s or {}, etiqueta, dash))
     if nome == "taskhs_tarefa":
         c = await taskhs.chamar(em, bot, "GET", f"/lists/{_int(args, 'list_id')}/cards/{_int(args, 'card_id')}",
                                 dono=ctx["dono"])
         partes = [f"{c.get('title')}\nPrazo: {c.get('due_date')}\nPrioridade: "
                   f"{c.get('priority')}\nConcluída: {c.get('done')}\n"
-                  f"Membros: {', '.join(_quem(u) for u in c.get('members') or []) or 'ninguém'}"
+                  f"Membros: {', '.join(_quem(u) for u in c.get('members') or []) or 'ninguém'}\n"
+                  f"Etiquetas: {', '.join(_nomes_das_etiquetas(c)) or 'nenhuma'}"
                   f"\n\n{c.get('description') or ''}"]
         for cl in c.get("checklists") or []:
             partes.append(f"\nChecklist {cl.get('id')} '{cl.get('title')}':")

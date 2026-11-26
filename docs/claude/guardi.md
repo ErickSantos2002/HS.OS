@@ -559,3 +559,14 @@ conversa de quem está na chave (hoje a Lidisay, `lidisay-bot`).
   executor deixa a outra pendente. No front, `CartaoAcao` com `par` (`estadoDoPar` em
   `lib/acoes.ts`, testado). ⚠️ Rejeitado: ação "decidir" com a escolha no clique —
   quebraria "o clique executa só o payload gravado".
+
+### Etiquetas do TaskHS — 26/11/2026
+
+O Guardi do Gustavo pediu: o snapshot do quadro sempre trouxe `labels` por card, mas
+o `taskhs_quadro` só repassava título e prazo. Hoje `taskhs_quadro` e `taskhs_tarefa`
+mostram as etiquetas, e `taskhs_quadro {board_id, etiqueta}` filtra pelo NOME (sem
+caixa nem acento), conta e põe o tempo parado de cada card pelo `/dashboard` do TaskHS
+(`texto_quadro`/`_dash_das_reguas` em `mcp_bot.py`, testes em
+`test_taskhs_etiquetas.py`). ⚠️ Etiqueta inexistente responde "não existe" com a
+lista do quadro — nunca "0 cards". ⚠️ Contar pelo título ("( SEM NF DE REMESSA )") é
+outra coisa: a descrição da ferramenta proíbe.

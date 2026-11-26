@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.26.0",
+    date: "2026-11-26",
+    changes: [
+      {
+        kind: "melhoria",
+        text: "O assistente pessoal passa a enxergar as etiquetas dos cards do TaskHS: mostra as etiquetas de cada card e consegue contar os cards de uma etiqueta num quadro, com há quanto tempo cada um está parado.",
+      },
+    ],
+  },
+  {
     version: "2.25.1",
     date: "2026-11-26",
     changes: [
