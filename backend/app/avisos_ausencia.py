@@ -15,8 +15,16 @@ e TalentHS.
 """
 from __future__ import annotations
 
+import json
+import logging
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+
+from app import acoes, talenths_preparo
+from app.sistemas import talenths
+
+logger = logging.getLogger(__name__)
 
 # O cartão vence em 24 h (`VALIDADE` em `routers/acoes.py`); pedido que segue
 # pendente depois disso ganha aviso novo — senão some de novo.
@@ -95,3 +103,133 @@ def texto_recado(pedido: dict, de_novo: bool) -> str:
     texto = f"{cabeca}{quem}{f' ({depto})' if depto else ''}: {tipo}, {_quando(pedido)}."
     motivo = _limpo(pedido.get("reason"), TETO_MOTIVO)
     return f"{texto} Motivo: {motivo}" if motivo else texto
+
+
+# ── a etapa (banco + TalentHS) ───────────────────────────────────────────────
+#
+# Por destinatário: lê os pendentes como ele, decide, e para cada pedido
+# PREPARA os dois cartões (só GET no TalentHS, fora de transação — não segurar
+# conexão do pool durante HTTP) e só então abre a transação que trava o aviso
+# e grava recado + cartões. Quem não ganha a trava não grava nada.
+
+CHAVE = "avisos_ausencia"
+# Espaçamento entre recado e cartões: dentro da transação `now()` é um só, e
+# a conversa ordena por `created_at`.
+_PASSO = timedelta(milliseconds=1)
+
+SQL_CONFIG = "SELECT value FROM public.app_settings WHERE key = $1"
+SQL_GUARDI = (
+    "SELECT a.agent_id, a.sistemas_ligados, p.email "
+    "  FROM public.agent_profiles a JOIN public.profiles p ON p.id = a.dono_id "
+    " WHERE a.dono_id = $1::uuid ORDER BY a.agent_id LIMIT 1")
+SQL_AVISADOS = (
+    "SELECT pedido_id, ultimo_aviso_em FROM public.avisos_ausencia "
+    " WHERE destinatario_id = $1::uuid AND pedido_id = ANY($2::text[])")
+SQL_TRAVAR_NOVO = (
+    "INSERT INTO public.avisos_ausencia (destinatario_id, pedido_id, avisado_em, ultimo_aviso_em) "
+    "VALUES ($1::uuid, $2, $3, $3) ON CONFLICT DO NOTHING RETURNING pedido_id")
+SQL_TRAVAR_REAVISO = (
+    "UPDATE public.avisos_ausencia SET ultimo_aviso_em = $3 "
+    " WHERE destinatario_id = $1::uuid AND pedido_id = $2 AND ultimo_aviso_em = $4 "
+    "RETURNING pedido_id")
+SQL_RECADO = (
+    "INSERT INTO public.conversations (agent_id, user_id, role, content, created_at) "
+    "VALUES ($1, $2::uuid, 'agent', $3, $4)")
+
+# Ritmo por destinatário, por worker (relógio monotônico).
+_ultima_leitura: dict[str, float] = {}
+# Aviso de configuração quebrada: uma vez por processo, não a cada 30 s.
+_avisou: set[str] = set()
+
+
+def _avisar_uma_vez(chave: str, msg: str, *args) -> None:
+    if chave not in _avisou:
+        _avisou.add(chave)
+        logger.warning(msg, *args)
+
+
+async def _ler_pendentes(email: str, bot: str, dono: str) -> list[dict]:
+    r = await talenths.chamar(email, bot, "/absences/team/pending", dono=dono)
+    return [x for x in (r or []) if isinstance(x, dict)] if isinstance(r, list) else []
+
+
+async def _avisar_um(sessao_fn, dest: str, bot: str, email: str, pedido: dict, de_novo: bool,
+                     visto: datetime | None, agora: datetime, preparar) -> bool:
+    ctx = {"email": email, "dono": dest}
+    pid = str(pedido["id"])
+    try:
+        aprovar = await preparar(ctx, bot, {"acao": "aprovar_ausencia", "ids": [pid]})
+        recusar = await preparar(ctx, bot, {"acao": "recusar_ausencia", "ids": [pid]})
+    except ValueError as e:  # saiu de pending entre a leitura e o preparo
+        logger.info("Aviso de ausência %s: não preparei (%s).", pid, e)
+        return False
+    async with sessao_fn(role="service_role") as conn:
+        if de_novo:
+            travou = await conn.fetchval(SQL_TRAVAR_REAVISO, dest, pid, agora, visto)
+        else:
+            travou = await conn.fetchval(SQL_TRAVAR_NOVO, dest, pid, agora)
+        if travou is None:  # outro worker levou
+            return False
+        await conn.execute(SQL_RECADO, bot, dest, texto_recado(pedido, de_novo), agora)
+        for n, (acao, (payload, resumo, _aviso)) in enumerate(
+                (("talenths_aprovar_ausencia", aprovar), ("talenths_recusar_ausencia", recusar)), 1):
+            await acoes.criar_pendente(conn, dest, bot, "talenths", acao, payload, resumo,
+                                       criado_em=agora + _PASSO * n)
+    return True
+
+
+async def _destinatario(sessao_fn, dest: str, agora: datetime, ler, preparar, relogio) -> int:
+    async with sessao_fn(role="service_role") as conn:
+        g = await conn.fetchrow(SQL_GUARDI, dest)
+    if not g:
+        _avisar_uma_vez(f"sem-guardi:{dest}", "Aviso de ausência: %s não tem Guardi; pulando.", dest)
+        return 0
+    if "talenths" not in list(g["sistemas_ligados"] or []):
+        _avisar_uma_vez(f"sem-talenths:{dest}",
+                        "Aviso de ausência: o Guardi %s não tem o TalentHS ligado; pulando.", g["agent_id"])
+        return 0
+    marca = relogio()
+    ultima = _ultima_leitura.get(dest)
+    if ultima is not None and marca - ultima < RITMO_SEGUNDOS:
+        return 0
+    _ultima_leitura[dest] = marca
+    bot, email = g["agent_id"], g["email"]
+    pendentes = await ler(email, bot, dest)
+    if not pendentes:
+        return 0
+    async with sessao_fn(role="service_role") as conn:
+        linhas = await conn.fetch(SQL_AVISADOS, dest, [str(p.get("id")) for p in pendentes])
+    avisados = {r["pedido_id"]: r["ultimo_aviso_em"] for r in linhas}
+    feitos = 0
+    for pedido, de_novo in decidir(pendentes, avisados, email, agora):
+        try:
+            if await _avisar_um(sessao_fn, dest, bot, email, pedido, de_novo,
+                                avisados.get(str(pedido["id"])), agora, preparar):
+                feitos += 1
+        except Exception:  # noqa: BLE001 — um pedido não derruba os outros
+            logger.exception("Aviso de ausência %s quebrou.", pedido.get("id"))
+    return feitos
+
+
+async def etapa_avisos(sessao_fn, agora: datetime, ler=None, preparar=None,
+                       relogio=time.monotonic) -> int:
+    """Uma passada: devolve quantos avisos gravou. Desligada, não lê nada."""
+    ler = ler or _ler_pendentes
+    preparar = preparar or talenths_preparo.preparar
+    async with sessao_fn(role="service_role") as conn:
+        valor = await conn.fetchval(SQL_CONFIG, CHAVE)
+    if isinstance(valor, str):
+        try:
+            valor = json.loads(valor)
+        except ValueError:
+            valor = None
+    cfg = config(valor)
+    if not cfg.ligado:
+        return 0
+    total = 0
+    for dest in cfg.destinatarios:
+        try:
+            total += await _destinatario(sessao_fn, dest, agora, ler, preparar, relogio)
+        except Exception:  # noqa: BLE001 — TalentHS fora não derruba a etapa
+            logger.exception("Aviso de ausência: destinatário %s falhou.", dest)
+    return total

@@ -442,10 +442,29 @@ async def passada(sessao_fn, agora: datetime, disparar=None) -> int:
             except Exception as e:  # noqa: BLE001
                 logger.warning("Lembrete %s: não limpei o re-aviso: %s", l["id"], e)
 
-    return len(lembretes) + len(reavisos) + await _varredura(sessao_fn, agora, disparar)
+    return (len(lembretes) + len(reavisos) + await _varredura(sessao_fn, agora, disparar)
+            + await _avisos_ausencia(sessao_fn, agora))
 
 
 _avisou_sem_varreduras = False
+_avisou_sem_avisos_ausencia = False
+
+
+async def _avisos_ausencia(sessao_fn, agora: datetime) -> int:
+    """O aviso de pedido de ausência ao RH (`app/avisos_ausencia.py`, spec
+    2026-11-26), por último. Mesma blindagem da `_varredura`: nada sobe para
+    a `passada`, e sem a `044` só avisa uma vez no log."""
+    global _avisou_sem_avisos_ausencia
+    from app import avisos_ausencia
+    try:
+        return await avisos_ausencia.etapa_avisos(sessao_fn, agora)
+    except (asyncpg.UndefinedTableError, asyncpg.UndefinedColumnError):
+        if not _avisou_sem_avisos_ausencia:
+            _avisou_sem_avisos_ausencia = True
+            logger.warning("Aviso de pedido de ausência parado: aplicar a migração 044.")
+    except Exception:  # noqa: BLE001 — o aviso não derruba os lembretes
+        logger.exception("Aviso de pedido de ausência: etapa falhou.")
+    return 0
 
 
 async def _varredura(sessao_fn, agora: datetime, disparar) -> int:

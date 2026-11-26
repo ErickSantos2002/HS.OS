@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from app import avisos_ausencia
 from app import disparador_lembretes as d
 from app.agenda.regras import ADIAMENTO, INSISTENCIA, TETO_TURNOS_DIA
 from app.gateway.client import ErroGateway
@@ -30,6 +31,8 @@ def _sem_varredura(monkeypatch):
     async def nada(sessao_fn, agora, disparar=None):
         return 0
     monkeypatch.setattr(varredura_disparo, "etapa_varredura", nada)
+    # Idem o aviso de ausência (trancado em `test_avisos_ausencia.py`).
+    monkeypatch.setattr(avisos_ausencia, "etapa_avisos", nada)
 
 AGORA = datetime(2026, 11, 10, 12, 0, tzinfo=timezone.utc)  # 09:00 em Brasília
 # O carimbo da reserva: a posse do item. Toda escrita final o exige.
