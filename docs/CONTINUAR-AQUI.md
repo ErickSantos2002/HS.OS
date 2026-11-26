@@ -25,11 +25,10 @@
 - **Alarme de backup (26/11, §4 item 1 do plano):** `backups_execucao`
   (`043`, aplicada e conferida) + `app/guardiao_backups.py` (avisa quando a
   última falhou ou 26 h sem sucesso, inclusive nunca; 1×/dia por origem) +
-  `POST /backups/registro`. **Ordem do Erick:** (1) reinstalar o backup do
-  banco (`instalar-backup.sh`, agora grava o resultado) → (2) deploy → (3)
-  `vps-gateway/backup/configurar-registro.sh`. Entre (2) e (3) chega 1 alerta
-  "gateway: nenhum registro" — é o alarme funcionando. Conferir em 27/11 as
-  linhas das 03:20 e 03:30 em `backups_execucao`.
+  `POST /backups/registro`. **Ligado de ponta a ponta em 26/11, 09:08:**
+  backup do banco reinstalado, deploy `4e4d61f`, `configurar-registro.sh`
+  rodado e um backup real do gateway gravou a linha. Os dois `veredito` dão
+  "tudo certo". **Conferir em 27/11** as linhas das 03:20 e 03:30.
 - **PK-07 fechado em produção:** deploy `3839428` no ar desde 07:57; regras-base
   gravadas nos cinco `SOUL.md`; a `nina`, perguntada pela conta do Erick,
   identificou pelo carimbo (e-mail primeiro, nome editável, última linha).
