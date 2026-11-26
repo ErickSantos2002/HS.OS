@@ -39,7 +39,10 @@ echo "═══ 3. Imagem (a da documentação do OpenClaw) ═══"
 docker build -q --network host -t openclaw-sandbox:bookworm-slim - <<'DOCKERFILE'
 FROM debian:bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# ⚠️ IPv4 forçado: em 26/11 o apt do build saiu por IPv6 e baixou a ~60 KB/s
+# (o mesmo espelho pelo IPv4 responde em 2 s) — o 1º build levou mais de 15 min.
+RUN printf 'Acquire::ForceIPv4 "true";\n' > /etc/apt/apt.conf.d/99ipv4 \
+  && apt-get update && apt-get install -y --no-install-recommends \
   bash ca-certificates curl git jq python3 ripgrep gawk \
   && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --shell /bin/bash sandbox
@@ -50,14 +53,16 @@ DOCKERFILE
 
 echo "═══ 4. A parede segura? (mesmas opções que a config vai usar) ═══"
 falhou=0
-confere() { local r=$1; shift; if "$@"; then echo "  ✅ $r"; else echo "  ❌ $r"; falhou=1; fi; }
+confere() { local r=$1; shift; if "$@" >/dev/null 2>&1; then echo "  ✅ $r"; else echo "  ❌ $r"; falhou=1; fi; }
 roda() {
   docker run --rm --network none --read-only --tmpfs /tmp --user 0:0 --cap-drop ALL \
     --memory 512m --pids-limit 128 -v /root/.openclaw/workspace-atlas:/workspace \
     openclaw-sandbox:bookworm-slim "$@"
 }
-confere "python3 roda" roda python3 -c 'print(1)' >/dev/null
-confere "/tmp gravável" roda sh -c 'echo x > /tmp/t && cat /tmp/t' >/dev/null
+confere "python3 roda" roda python3 -c 'print(1)'
+# ⚠️ O silêncio fica DENTRO do confere: na 1ª versão o `>/dev/null` ia na
+# chamada e engolia também o ✅/❌ — duas provas sumiram da saída (26/11).
+confere "/tmp gravável" roda sh -c 'echo x > /tmp/t && cat /tmp/t'
 confere "lê o workspace montado" roda test -s /workspace/AGENTS.md
 confere "NÃO vê o openclaw.json" roda sh -c '! test -e /root/.openclaw/openclaw.json'
 confere "NÃO tem rede" roda sh -c '! curl -s -m 5 https://1.1.1.1 >/dev/null'
