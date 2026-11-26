@@ -51,6 +51,7 @@ def test_so_os_alvos_mudam_e_o_resto_da_ferramenta_fica():
     assert lista["nina"]["tools"]["alsoAllow"] == ["mcp__x__y"]
     assert lista["nina"]["tools"]["deny"] == ["browser"]
     assert lista["nina"]["sandbox"] == s.SANDBOX
+    assert lista["nina"]["tools"]["elevated"] == {"enabled": False}
     assert "sandbox" in lista["atlas"]
 
 
@@ -64,8 +65,11 @@ def test_a_parede_e_a_combinada():
 def test_conferir_reprova_elevated_ligado_e_outro_agente_mexido():
     p = _patch()
     assert s.conferir(p, CONF)
-    com_elevated = {**p, "tools": {"elevated": {"enabled": True}}}
-    assert not s.conferir(com_elevated, CONF)
+    # O padrão do OpenClaw é elevated LIGADO: ausente no agente não é fechado.
+    sem_portao = {"agents": {"list": [
+        {**a, "tools": {k: v for k, v in a["tools"].items() if k != "elevated"}} if a["id"] == "nina" else a
+        for a in p["agents"]["list"]]}}
+    assert not s.conferir(sem_portao, CONF)
     mexido = {"agents": {"list": [a if a["id"] != "midas" else {"id": "midas"} for a in p["agents"]["list"]]}}
     assert not s.conferir(mexido, CONF)
 
@@ -74,4 +78,7 @@ def test_volta_tira_so_a_sandbox():
     depois = s.montar_volta(_patch())
     assert s.sem_sandbox(depois)
     nina = next(a for a in depois["agents"]["list"] if a["id"] == "nina")
-    assert nina["tools"] == {"alsoAllow": ["mcp__x__y"], "deny": ["browser"]}
+    # O `elevated` fechado FICA: desfazer a sandbox não é motivo para reabrir
+    # a válvula que roda `exec` fora dela.
+    assert nina["tools"] == {"alsoAllow": ["mcp__x__y"], "deny": ["browser"],
+                             "elevated": {"enabled": False}}

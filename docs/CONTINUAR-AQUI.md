@@ -29,6 +29,14 @@
   backup do banco reinstalado, deploy `4e4d61f`, `configurar-registro.sh`
   rodado e um backup real do gateway gravou a linha. Os dois `veredito` dão
   "tudo certo". **Conferir em 27/11** as linhas das 03:20 e 03:30.
+- **PK-06 no ar para nina e atlas (26/11):** Docker na VPS do gateway (sem
+  iptables), sandbox `mode: all`, `elevated` fechado por agente. Conferido:
+  `sandbox explain`, `docker inspect` do contêiner real, e a nina respondeu pela
+  MCP de dentro da sandbox (28 contas). O `exec` dela ainda não foi visto rodando
+  lá dentro — ela recusou o `ls /root` pelas regras-base do PK-07. **Conferir no
+  próximo `exec` natural** (painel HTML): `docker exec` no
+  `openclaw-sbx-agent-nina-*` deve ter o arquivo no `/tmp`. Falta o **Bruce**
+  (ponto do Flash, conversa com a Lidisay) e depois o PK-11.
 - **PK-07 fechado em produção:** deploy `3839428` no ar desde 07:57; regras-base
   gravadas nos cinco `SOUL.md`; a `nina`, perguntada pela conta do Erick,
   identificou pelo carimbo (e-mail primeiro, nome editável, última linha).

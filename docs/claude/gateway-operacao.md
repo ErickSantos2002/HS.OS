@@ -220,6 +220,21 @@ e-mail. Desde 26/11 as 87 entradas têm `requestTimeoutMs: 60000` (`scripts/praz
 um número menor cortaria relatório e anexo. Entrada nova montada na mão tem que levar o campo; o
 `publicar-anexos-mcp.py` copia o modelo inteiro e herda, e o `entrada_mcp_banco` já o leva.
 
+⚠️ **O `exec` da nina e do atlas roda em sandbox Docker desde 26/11/2026 (PK-06).**
+Contêiner `openclaw-sbx-agent-<id>-*`, sem rede, raiz só-leitura, `capDrop: ALL`, 512 MB, com
+SÓ o workspace montado em `/workspace` (o `/root/.openclaw/openclaw.json` fica fora de alcance).
+Três armadilhas, todas da documentação e conferidas ao vivo:
+- **A sandbox tem uma SEGUNDA lista de permitidas** (`tools.sandbox.tools`). O padrão só deixa
+  `exec`, arquivos e `sessions_*`: sem `alsoAllow` com `bundle-mcp` o agente perde TODAS as MCP.
+  O `scripts/sandbox-especialistas.py` usa o inventário do `tools.effective` mais `bundle-mcp`.
+- **O `elevated` (rodar `exec` FORA da sandbox) vem LIGADO por padrão**, mesmo ausente da config —
+  `openclaw sandbox explain --agent X --json` mostrou `enabled: true`. Fechado por agente
+  (`tools.elevated.enabled: false`); o portão por agente só restringe.
+- **Backend SSH não serve aqui**: é "remote-canonical", copia o workspace uma vez e nunca volta —
+  quebraria a regra dos sete. Docker monta o workspace do host, que continua o oficial.
+Conferir: `openclaw sandbox explain --agent nina --json` e `docker inspect` do contêiner.
+Agente novo com `exec` nasce SEM sandbox — entra na lista `ALVOS` do script.
+
 ⚠️ **Na VPS do gateway, nunca rode a CLI do OpenClaw com `OPENCLAW_STATE_DIR` alternativo.** Em
 24/11, um `openclaw mcp probe` com estado numa pasta temporária (para testar uma config à parte)
 "migrou" o estado legado e **renomeou o `/root/.openclaw/exec-approvals.json` do gateway vivo** para

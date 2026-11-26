@@ -69,6 +69,11 @@ def montar_patch(conf: dict, inventarios: dict[str, set[str]]) -> dict:
             a["sandbox"] = copy.deepcopy(SANDBOX)
             tools = a.setdefault("tools", {})
             tools["sandbox"] = {"tools": {"alsoAllow": lista_da_sandbox(inventarios[a["id"]])}}
+            # ⚠️ O `elevated` (rodar `exec` FORA da sandbox) vem LIGADO por
+            # padrão — `openclaw sandbox explain` mostrou `enabled: true` com a
+            # lista de remetentes vazia. Vazia hoje é sorte, não parede: o
+            # portão por agente só restringe, e fica fechado aqui.
+            tools["elevated"] = {"enabled": False}
     return {"agents": {"list": agentes}}
 
 
@@ -82,9 +87,9 @@ def montar_volta(conf: dict) -> dict:
 
 
 def _elevated_ligado(conf: dict, agente: dict) -> bool:
-    glob = ((conf.get("tools") or {}).get("elevated") or {}).get("enabled") is True
-    proprio = ((agente.get("tools") or {}).get("elevated") or {}).get("enabled")
-    return glob and proprio is not False
+    """Só o portão do próprio agente em `False` conta como fechado: o global
+    vem ligado por padrão mesmo ausente da config (26/11/2026)."""
+    return ((agente.get("tools") or {}).get("elevated") or {}).get("enabled") is not False
 
 
 def conferir(parsed: dict, antes: dict) -> bool:
