@@ -241,6 +241,11 @@ Três armadilhas, todas da documentação e conferidas ao vivo:
   IGNORA (às 13:55, depois da gravação, seguia "forbidden"). Hoje `agents.defaults.sandbox.
   sessionToolsVisibility = "all"` (`--visibilidade` no script) — vale para nina, atlas e bruce, o
   estado de antes das 09:43. A chave por agente ficou na nina, inerte: o mesmo patch não a tirou.
+  Provado às 13:59: a nina acionou o midas e trouxe o histórico da Bravo.
+  **Risco aceito (Erick, 26/11/2026):** com `"all"` no padrão, atlas e bruce também listam e leem
+  sessões alheias a partir da sandbox (como antes do PK-06). Negar `sessions_*` a eles foi
+  recusado: **os especialistas têm que conversar entre si**, e quem os usa é um grupo pequeno de
+  pessoas. Não "feche" isso sem essa conversa — o `exec` continua isolado no contêiner.
 Conferir: `openclaw sandbox explain --agent nina --json` e `docker inspect` do contêiner.
 Agente novo com `exec` nasce SEM sandbox — entra na lista `ALVOS` do script.
 
