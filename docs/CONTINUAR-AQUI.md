@@ -35,8 +35,16 @@
   MCP de dentro da sandbox (28 contas). O `exec` dela ainda não foi visto rodando
   lá dentro — ela recusou o `ls /root` pelas regras-base do PK-07. **Conferir no
   próximo `exec` natural** (painel HTML): `docker exec` no
-  `openclaw-sbx-agent-nina-*` deve ter o arquivo no `/tmp`. Falta o **Bruce**
-  (ponto do Flash, conversa com a Lidisay) e depois o PK-11.
+  `openclaw-sbx-agent-nina-*` deve ter o arquivo no `/tmp`.
+- **Bruce na sandbox (26/11)**, sem esperar a Lidisay: o único `exec` real dele
+  (espelhos do Flash, 24/11) lia a própria SESSÃO para levar o CSV ao python —
+  caminho que na sandbox não existe. `scripts/bruce-calculo-em-arquivo.py` pôs
+  no `TOOLS.md` o caminho novo (`write` em `tmp/` → conferir linhas → python).
+  Testado com CSV **fictício** de espelhos: números certos, e no 2º pedido o
+  `write`+`exec` rodou em `/workspace/tmp` dentro do contêiner. ⚠️ No 1º ele
+  contou de cabeça (6 linhas) e disse "conferido" — texto reforçado ("sempre,
+  mesmo com poucas linhas"). **Com a Lidisay:** ferramenta `relatorio_espelhos`
+  no molde da `relatorio_ponto` (a resposta de 24/11 é o rascunho). Depois, PK-11.
 - **PK-07 fechado em produção:** deploy `3839428` no ar desde 07:57; regras-base
   gravadas nos cinco `SOUL.md`; a `nina`, perguntada pela conta do Erick,
   identificou pelo carimbo (e-mail primeiro, nome editável, última linha).

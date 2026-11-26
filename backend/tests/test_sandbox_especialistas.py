@@ -23,12 +23,13 @@ INVENTARIO = {"core", "plugin", "exec", "read", "write", "create_goal", "subagen
 CONF = {"agents": {"list": [
     {"id": "nina", "tools": {"alsoAllow": ["mcp__x__y"], "deny": ["browser"]}},
     {"id": "atlas", "tools": {"alsoAllow": ["mcp__z__w"]}},
+    {"id": "bruce", "tools": {"alsoAllow": ["mcp__p__q"]}},
     {"id": "midas", "tools": {"deny": ["exec"]}},
 ]}}
 
 
 def _patch():
-    return s.montar_patch(CONF, {"nina": INVENTARIO, "atlas": INVENTARIO})
+    return s.montar_patch(CONF, {a: INVENTARIO for a in s.ALVOS})
 
 
 def test_lista_e_o_inventario_de_hoje_mais_as_mcp():
@@ -47,12 +48,12 @@ def test_inventario_sem_exec_e_recusado():
 
 def test_so_os_alvos_mudam_e_o_resto_da_ferramenta_fica():
     lista = {a["id"]: a for a in _patch()["agents"]["list"]}
-    assert lista["midas"] == CONF["agents"]["list"][2]
+    assert lista["midas"] == CONF["agents"]["list"][3]
     assert lista["nina"]["tools"]["alsoAllow"] == ["mcp__x__y"]
     assert lista["nina"]["tools"]["deny"] == ["browser"]
     assert lista["nina"]["sandbox"] == s.SANDBOX
     assert lista["nina"]["tools"]["elevated"] == {"enabled": False}
-    assert "sandbox" in lista["atlas"]
+    assert "sandbox" in lista["atlas"] and "sandbox" in lista["bruce"]
 
 
 def test_a_parede_e_a_combinada():

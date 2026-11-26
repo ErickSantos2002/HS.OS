@@ -24,7 +24,9 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend"))
 
-ALVOS = ("nina", "atlas")
+# Bruce entrou em 26/11 com o `bruce-calculo-em-arquivo.py`: o único `exec` real dele
+# (espelhos do Flash, 24/11) lia a própria sessão, que na sandbox não existe.
+ALVOS = ("nina", "atlas", "bruce")
 
 SANDBOX = {
     "mode": "all",
