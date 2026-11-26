@@ -246,3 +246,14 @@ def test_resposta_comum_continua_com_push():
     assert cala_push(None) is False
     assert cala_push([]) is False
     assert cala_push([{"type": "audio"}, {"type": "lembrete", "id": "l"}]) is False
+
+
+def test_cala_push_cartao_silencioso():
+    """Aviso de ausência (26/11/2026): recado + dois cartões saem juntos com a
+    mesma `tag`, e a notificação que sobrava na tela bloqueada era a última a
+    chegar — muitas vezes "Recusar ausência — Fulano", sem datas nem motivo,
+    e o celular vibrava três vezes. Os cartões do aviso vão calados; o recado
+    toca. Cartão comum do Guardi segue com push."""
+    from app.push_regras import cala_push
+    assert cala_push([{"type": "acao_aprovacao", "id": "a", "silencioso": True}])
+    assert not cala_push([{"type": "acao_aprovacao", "id": "a"}])

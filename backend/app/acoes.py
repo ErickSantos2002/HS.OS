@@ -871,13 +871,16 @@ EXECUTORES: dict[tuple[str, str], Executor] = {
 
 
 async def criar_pendente(conn, dono: str, bot: str, sistema: str, acao: str, payload: dict,
-                         resumo: str, criado_em: datetime | None = None) -> str:
+                         resumo: str, criado_em: datetime | None = None,
+                         silencioso: bool = False) -> str:
     """Grava a pendência e o cartão na conversa (push e tempo real vêm dos
     triggers da `conversations`).
 
     `criado_em` fixa a hora da mensagem do cartão — para quem grava várias
     mensagens na mesma transação, onde `now()` é igual para todas e a ordem
-    na conversa ficaria ao acaso (aviso de ausência, 26/11/2026)."""
+    na conversa ficaria ao acaso (aviso de ausência, 26/11/2026).
+    `silencioso` marca o cartão para o push não tocar (`cala_push`): quem já
+    mandou um recado que toca não precisa de mais duas vibrações."""
     if (sistema, acao) not in EXECUTORES:
         raise ValueError(f"ação desconhecida: {sistema}/{acao}")
     aid = await conn.fetchval(
@@ -885,8 +888,10 @@ async def criar_pendente(conn, dono: str, bot: str, sistema: str, acao: str, pay
         "VALUES ($1::uuid, $2, $3, $4, $5::text::jsonb, $6) RETURNING id::text",
         dono, bot, sistema, acao, json.dumps(payload, ensure_ascii=False), resumo)
     conteudo = f"🔔 Aguardando sua confirmação: {resumo}"
-    media = json.dumps([{"type": "acao_aprovacao", "id": aid, "name": resumo, "mimeType": "", "base64": ""}],
-                       ensure_ascii=False)
+    item = {"type": "acao_aprovacao", "id": aid, "name": resumo, "mimeType": "", "base64": ""}
+    if silencioso:
+        item["silencioso"] = True
+    media = json.dumps([item], ensure_ascii=False)
     if criado_em is None:
         conv = await conn.fetchval(
             "INSERT INTO public.conversations (agent_id, user_id, role, content, media) "

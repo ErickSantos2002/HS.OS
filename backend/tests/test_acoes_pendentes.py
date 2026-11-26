@@ -228,3 +228,20 @@ def test_criar_pendente_sem_criado_em_nao_muda():
                                      "Aprovar"))
     sql, args = _insert_da_conversa(conn)
     assert "created_at" not in sql and len(args) == 4
+
+
+def test_criar_pendente_silencioso_marca_o_cartao():
+    """O push lê a marca no `media` do cartão (`cala_push`); sem ela o aviso
+    de ausência vibraria três vezes no celular do RH."""
+    import json as _json
+    conn = _ConnCriar()
+    asyncio.run(acoes.criar_pendente(conn, "u-lid", "lidisay-bot", "talenths",
+                                     "talenths_aprovar_ausencia", {"acao": "aprovar_ausencia"},
+                                     "Aprovar", silencioso=True))
+    _sql, args = _insert_da_conversa(conn)
+    assert _json.loads(args[3])[0]["silencioso"] is True
+    conn = _ConnCriar()
+    asyncio.run(acoes.criar_pendente(conn, "u-lid", "lidisay-bot", "talenths",
+                                     "talenths_aprovar_ausencia", {"acao": "aprovar_ausencia"}, "Aprovar"))
+    _sql, args = _insert_da_conversa(conn)
+    assert "silencioso" not in _json.loads(args[3])[0]

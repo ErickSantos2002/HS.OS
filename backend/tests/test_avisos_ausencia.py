@@ -94,6 +94,7 @@ def test_recado_saneia_motivo():
 
 import asyncio  # noqa: E402
 import copy  # noqa: E402
+import json  # noqa: E402
 from contextlib import asynccontextmanager  # noqa: E402
 
 import pytest  # noqa: E402
@@ -153,7 +154,8 @@ class Conn:
             b.acoes.append({"acao": a[3], "payload": a[4]})
             return f"acao-{len(b.acoes)}"
         if "INSERT INTO public.conversations" in sql:
-            b.conversas.append({"content": a[2], "created_at": a[-1], "cartao": True})
+            b.conversas.append({"content": a[2], "created_at": a[-1], "cartao": True,
+                                "media": json.loads(a[3])})
             return f"conv-{len(b.conversas)}"
         raise AssertionError(sql)
 
@@ -372,3 +374,22 @@ def test_passada_chama_avisos_ausencia(monkeypatch):
         raise RuntimeError("qualquer")
     monkeypatch.setattr(av, "etapa_avisos", quebra)
     assert asyncio.run(d.passada(sessao, AGORA)) == 0
+
+
+def test_cartoes_do_aviso_saem_calados():
+    """Só o recado — o que tem quem, datas e motivo — acorda o celular."""
+    b = Banco()
+    _rodar(b, [_pedido()])
+    cartoes = [c for c in b.conversas if c["cartao"]]
+    assert len(cartoes) == 2 and all(c["media"][0].get("silencioso") is True for c in cartoes)
+
+
+def test_recado_escapa_markdown():
+    """O motivo é escrito por qualquer colaborador e a conversa renderiza
+    markdown: `[Clique para aprovar](https://…)` viraria um link na voz do
+    Guardi, e `![](https://…)` uma imagem externa (pixel de rastreio) na
+    conversa do RH. Nome, departamento e tipo vêm do mesmo lugar."""
+    t = av.texto_recado(_pedido(user_name="Ana *X*", reason="[Clique](https://x.io) ![](https://y.io/p.png) <b>"),
+                        False)
+    assert "[Clique](" not in t and "![](" not in t and "<b>" not in t and "*X*" not in t
+    assert r"\[Clique\]\(https://x.io\)" in t and r"Ana \*X\*" in t

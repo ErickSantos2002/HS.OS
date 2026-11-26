@@ -244,14 +244,18 @@ def item_de_lembrete(media) -> dict | None:
 
 
 def cala_push(media) -> bool:
-    """`True` para a linha "A Nina pediu um resumo" (`varredura_pedida`).
+    """`True` para a linha "A Nina pediu um resumo" (`varredura_pedida`) e
+    para o cartão marcado `silencioso` — os do aviso de ausência, que saem
+    junto de um recado que já tocou (26/11/2026).
 
     É registro na conversa, não recado: acordar o celular do dono por ela seria
     ruído. A resposta comum do Guardi (e o lembrete) seguem com push.
     """
     if not isinstance(media, list):
         return False
-    return any(isinstance(i, dict) and i.get("type") == "varredura_pedida" for i in media)
+    return any(isinstance(i, dict) and (i.get("type") == "varredura_pedida"
+                                        or (i.get("type") == "acao_aprovacao" and i.get("silencioso") is True))
+               for i in media)
 
 
 def payload_lembrete(*, lembrete_id: str, titulo: str, instrucao: str | None,

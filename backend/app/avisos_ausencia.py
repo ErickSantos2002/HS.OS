@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -71,9 +72,20 @@ def decidir(pendentes: list[dict], avisados: dict[str, datetime], email_destinat
     return saida
 
 
+# A conversa renderiza markdown, e esses campos são digitados por qualquer
+# colaborador no TalentHS: sem escape, `[texto](url)` vira link na voz do
+# Guardi e `![](url)` uma imagem externa na conversa do RH.
+_MARKDOWN = re.compile(r"([\\`*_\[\]()!<>#~|])")
+
+
 def _limpo(valor, teto: int) -> str:
     s = " ".join(str(valor or "").split())
     return s if len(s) <= teto else s[: teto - 1].rstrip() + "…"
+
+
+def _md(valor, teto: int) -> str:
+    """Limpa, corta e só então escapa — o teto conta o texto, não as barras."""
+    return _MARKDOWN.sub(r"\\\1", _limpo(valor, teto))
 
 
 def _dia(iso) -> str:
@@ -97,11 +109,11 @@ def _quando(p: dict) -> str:
 
 def texto_recado(pedido: dict, de_novo: bool) -> str:
     cabeca = "📅 Ainda pendente — " if de_novo else "📅 Pedido de ausência — "
-    quem = _limpo(pedido.get("user_name") or "Alguém", TETO_CAMPO)
-    depto = _limpo(pedido.get("department"), TETO_CAMPO)
-    tipo = _limpo(pedido.get("type_name") or "Ausência", TETO_CAMPO)
+    quem = _md(pedido.get("user_name") or "Alguém", TETO_CAMPO)
+    depto = _md(pedido.get("department"), TETO_CAMPO)
+    tipo = _md(pedido.get("type_name") or "Ausência", TETO_CAMPO)
     texto = f"{cabeca}{quem}{f' ({depto})' if depto else ''}: {tipo}, {_quando(pedido)}."
-    motivo = _limpo(pedido.get("reason"), TETO_MOTIVO)
+    motivo = _md(pedido.get("reason"), TETO_MOTIVO)
     return f"{texto} Motivo: {motivo}" if motivo else texto
 
 
@@ -174,7 +186,7 @@ async def _avisar_um(sessao_fn, dest: str, bot: str, email: str, pedido: dict, d
         for n, (acao, (payload, resumo, _aviso)) in enumerate(
                 (("talenths_aprovar_ausencia", aprovar), ("talenths_recusar_ausencia", recusar)), 1):
             await acoes.criar_pendente(conn, dest, bot, "talenths", acao, payload, resumo,
-                                       criado_em=agora + _PASSO * n)
+                                       criado_em=agora + _PASSO * n, silencioso=True)
     return True
 
 
