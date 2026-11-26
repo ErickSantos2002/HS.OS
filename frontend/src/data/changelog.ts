@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.24.0",
+    date: "2026-11-26",
+    changes: [
+      {
+        kind: "novidade",
+        text: "Pedido de ausência feito no TalentHS agora chega para o RH na conversa com o assistente pessoal, com os botões Aprovar e Recusar ali mesmo — sem precisar abrir o TalentHS para descobrir que tem pedido esperando.",
+      },
+    ],
+  },
+  {
     version: "2.23.1",
     date: "2026-11-26",
     changes: [

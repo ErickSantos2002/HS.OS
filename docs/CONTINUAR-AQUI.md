@@ -2,6 +2,14 @@
 
 ## ▶ 26/11/2026 — Onda 0 fechada (12 de 12)
 
+- **Aviso de pedido de ausência ao RH (26/11, fora da Onda):** pedido pendente
+  no TalentHS → recado + cartões Aprovar/Recusar na conversa da Lidisay
+  (`lidisay-bot`), sem turno de agente. `044` aplicada e conferida. **Falta:**
+  deploy (fim do dia) → `backend/scripts/avisos-ausencia.py --ligar
+  adm01@healthsafetytech.com --aplicar` → conferir na conversa dela o aviso do
+  pedido pendente de 26/11 08:01 e a linha em `avisos_ausencia`. Ver
+  `docs/claude/guardi.md` § "Aviso de pedido de ausência".
+
 **Retomar em 27/11:** (1) rajada das 07:30 sem `Request timed out`
 (`/tmp/filtro_prep.py` na VPS); (2) `backups_execucao` com as linhas das
 03:20 (banco) e 03:30 (gateway); (3) primeiro `exec` natural da nina no

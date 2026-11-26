@@ -523,3 +523,28 @@ remetente e assunto de e-mail) na descrição, no topo do retorno e no texto do 
   --aplicar --todos` e `ponteiro-nina-varredura.py --aplicar` → perguntar ao
   `erick-bot` e à `nina` se têm as ferramentas → `varredura-agora.py --so <Erick>
   --aplicar` → `--ligar --aplicar`.
+
+### Aviso de pedido de ausência ao RH — 26/11/2026
+
+Spec e plano: `docs/superpowers/{specs,plans}/2026-11-26-aviso-de-ausencia*`. Pedido
+**pendente** no TalentHS vira, em até ~2 min, recado + cartões **Aprovar/Recusar** na
+conversa de quem está na chave (hoje a Lidisay, `lidisay-bot`).
+
+- **Sem turno de agente e sem mexer no TalentHS:** etapa no fim da `passada` do
+  `disparador_lembretes` (`app/avisos_ausencia.py`) que lê `/absences/team/pending`
+  como o destinatário e monta os cartões pelo mesmo `talenths_preparo.preparar` do
+  Guardi. Escolha do Erick (polling + servidor) contra webhook (exigiria deploy lá e
+  perderia aviso se a chamada falhasse) e contra turno do Guardi (custo e dependência
+  de o modelo chamar a ferramenta).
+- ⚠️ **A trava contra aviso dobrado é a PK de `avisos_ausencia` (`044`)**: os dois
+  workers podem ler antes de qualquer um gravar; quem ganha o `INSERT … ON CONFLICT
+  DO NOTHING RETURNING` grava recado e cartões **na mesma transação**. Reaviso de
+  24 h (cartão vence em 24 h) por compare-and-set em `ultimo_aviso_em`.
+- ⚠️ **Recado e cartões têm `created_at` explícito** (`criar_pendente(...,
+  criado_em=)`): na transação `now()` é um só e a conversa os embaralharia.
+- O preparo (GET no TalentHS) roda **fora** da transação. Pedido do próprio
+  destinatário não é avisado. Ritmo: 1 leitura por destinatário a cada 120 s por worker.
+- **Chave** `avisos_ausencia` = `{ligado, destinatarios: [user_id]}`; ausente =
+  desligado. `backend/scripts/avisos-ausencia.py --mostrar | --ligar <email> |
+  --tirar <email> | --desligar [--aplicar]`, com `PYTHONPATH=.` e o Python do venv do
+  cadastro. O `--ligar` recusa quem não tem Guardi ou não tem `talenths` ligado.
