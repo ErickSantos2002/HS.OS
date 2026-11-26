@@ -2,6 +2,14 @@
 
 ## ▶ 26/11/2026 — Onda 0 fechada (12 de 12)
 
+**Retomar em 27/11:** (1) rajada das 07:30 sem `Request timed out`
+(`/tmp/filtro_prep.py` na VPS); (2) `backups_execucao` com as linhas das
+03:20 (banco) e 03:30 (gateway); (3) primeiro `exec` natural da nina no
+contêiner. Pendências soltas: Guardi sem o carimbo "quem fala neste turno"
+do PK-07 (o `miguel-bot` tratou o Erick como Miguel — candidato à Onda 1);
+`relatorio_espelhos` com a Lidisay; CSV fictício em `tmp/` do workspace do
+Bruce (inofensivo, apagar quando quiser).
+
 - **Rajada das 07:30 reprovou e foi corrigida.** 23 `Request timed out` (lane
   wait sumiu, sem OOM). Causa: sem `requestTimeoutMs`, o OpenClaw dá **1,5 s**
   ao `tools/list` de cada MCP; a ponte respondia do cache (log vazio) e o
