@@ -559,6 +559,14 @@ conversa de quem está na chave (hoje a Lidisay, `lidisay-bot`).
   executor deixa a outra pendente. No front, `CartaoAcao` com `par` (`estadoDoPar` em
   `lib/acoes.ts`, testado). ⚠️ Rejeitado: ação "decidir" com a escolha no clique —
   quebraria "o clique executa só o payload gravado".
+- **A resposta volta para quem pediu (26/11, tarde, `046`):** a mesma leitura de
+  `/absences/team` (agora com TODOS os status — `_ler_pedidos`) avisa no Guardi de quem
+  pediu quando o pedido vira `approved`/`rejected`, com o `review_note` ("Motivo da
+  recusa"). Só decisão com `reviewed_at` ≥ `avisos_ausencia.decisoes_desde` — ligar não
+  dispara o histórico; `--decisoes` grava a data uma vez e não a move. Aprovação
+  automática não avisa. Dono achado pelo e-mail do pedido; sem Guardi, a decisão é
+  marcada com `colaborador_id` nulo para não ser procurada de novo. PK `pedido_id` de
+  `avisos_decisao_ausencia` é a trava (dois workers, dois RH).
 
 ### Etiquetas do TaskHS — 26/11/2026
 

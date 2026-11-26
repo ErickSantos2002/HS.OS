@@ -40,6 +40,17 @@ TETO_CAMPO = 120
 class Config:
     ligado: bool
     destinatarios: tuple[str, ...]
+    # A resposta volta para quem pediu (26/11/2026, tarde): só decisão a partir
+    # daqui. None = essa parte desligada.
+    decisoes_desde: datetime | None = None
+
+
+def _instante(v) -> datetime | None:
+    try:
+        d = datetime.fromisoformat(str(v))
+    except (TypeError, ValueError):
+        return None
+    return d if d.tzinfo else None
 
 
 def config(valor) -> Config:
@@ -48,7 +59,22 @@ def config(valor) -> Config:
         return Config(ligado=False, destinatarios=())
     ids = valor.get("destinatarios")
     ids = tuple(i for i in ids if isinstance(i, str) and i) if isinstance(ids, list) else ()
-    return Config(ligado=valor.get("ligado") is True, destinatarios=ids)
+    return Config(ligado=valor.get("ligado") is True, destinatarios=ids,
+                  decisoes_desde=_instante(valor.get("decisoes_desde")))
+
+
+def decisoes_a_avisar(pedidos: list[dict], desde: datetime, ja_avisados: set[str]) -> list[dict]:
+    """Pedidos aprovados ou recusados pelo RH a partir de `desde` e ainda não
+    avisados a quem pediu. Aprovação automática não entra: a pessoa já viu."""
+    saida = []
+    for p in pedidos:
+        if p.get("status") not in ("approved", "rejected") or p.get("auto_approved"):
+            continue
+        quando = _instante(p.get("reviewed_at"))
+        if quando is None or quando < desde or str(p.get("id")) in ja_avisados:
+            continue
+        saida.append(p)
+    return saida
 
 
 def decidir(pendentes: list[dict], avisados: dict[str, datetime], email_destinatario: str,
@@ -107,6 +133,22 @@ def _quando(p: dict) -> str:
     return datas
 
 
+def texto_decisao(pedido: dict) -> str:
+    """O recado a quem pediu. O motivo da recusa é a razão de existir dele."""
+    tipo = _md(pedido.get("type_name") or "Ausência", TETO_CAMPO)
+    quem = _md(pedido.get("reviewer_name"), TETO_CAMPO)
+    nota = _md(pedido.get("review_note"), TETO_MOTIVO)
+    if pedido.get("status") == "approved":
+        texto = f"✅ Sua ausência foi aprovada — {tipo}, {_quando(pedido)}."
+    else:
+        texto = f"❌ Sua ausência foi recusada — {tipo}, {_quando(pedido)}."
+    if quem:
+        texto += f" Decidido por {quem}."
+    if nota:
+        texto += (" Observação do RH: " if pedido.get("status") == "approved" else " Motivo da recusa: ") + nota
+    return texto
+
+
 def titulo_do_cartao(pedido: dict) -> str:
     """Título do cartão (vai em `media.name` e no texto da mensagem — o
     cabeçalho do cartão é React, não markdown, mas o texto da bolha é)."""
@@ -150,6 +192,15 @@ SQL_TRAVAR_REAVISO = (
     "UPDATE public.avisos_ausencia SET ultimo_aviso_em = $3 "
     " WHERE destinatario_id = $1::uuid AND pedido_id = $2 AND ultimo_aviso_em = $4 "
     "RETURNING pedido_id")
+SQL_GUARDI_POR_EMAIL = (
+    "SELECT a.agent_id, a.dono_id::text AS dono_id "
+    "  FROM public.agent_profiles a JOIN public.profiles p ON p.id = a.dono_id "
+    " WHERE lower(p.email) = lower($1) ORDER BY a.agent_id LIMIT 1")
+SQL_DECISOES_AVISADAS = (
+    "SELECT pedido_id FROM public.avisos_decisao_ausencia WHERE pedido_id = ANY($1::text[])")
+SQL_TRAVAR_DECISAO = (
+    "INSERT INTO public.avisos_decisao_ausencia (pedido_id, colaborador_id, status, avisado_em) "
+    "VALUES ($1, $2::uuid, $3, $4) ON CONFLICT DO NOTHING RETURNING pedido_id")
 SQL_RECADO = (
     "INSERT INTO public.conversations (agent_id, user_id, role, content, created_at) "
     "VALUES ($1, $2::uuid, 'agent', $3, $4)")
@@ -166,7 +217,7 @@ def _avisar_uma_vez(chave: str, msg: str, *args) -> None:
         logger.warning(msg, *args)
 
 
-async def _ler_pendentes(email: str, bot: str, dono: str) -> list[dict]:
+async def _ler_pedidos(email: str, bot: str, dono: str) -> list[dict]:
     """⚠️ `/absences/team`, NÃO `/absences/team/pending`: o TalentHS só libera
     ao token de agente as rotas da lista dele (`auth/agente.py` de lá), e a
     `/pending` não está — volta 403, igual a login sem papel de RH. Foi o
@@ -174,7 +225,35 @@ async def _ler_pendentes(email: str, bot: str, dono: str) -> list[dict]:
     r = await talenths.chamar(email, bot, "/absences/team", dono=dono)
     if not isinstance(r, list):
         return []
-    return [x for x in r if isinstance(x, dict) and x.get("status") == "pending"]
+    return [x for x in r if isinstance(x, dict)]
+
+
+async def _avisar_decisoes(sessao_fn, pedidos: list[dict], desde: datetime, agora: datetime) -> int:
+    """A resposta do RH no Guardi de quem pediu (26/11/2026, tarde).
+
+    Quem não tem Guardi no HS.OS não recebe, mas a decisão é marcada como
+    tratada (`colaborador_id` nulo) — senão seria procurada de novo a cada
+    leitura, para sempre."""
+    ids = [str(p.get("id")) for p in pedidos if p.get("status") in ("approved", "rejected")]
+    if not ids:
+        return 0
+    async with sessao_fn(role="service_role") as conn:
+        ja = {r["pedido_id"] for r in await conn.fetch(SQL_DECISOES_AVISADAS, ids)}
+    feitos = 0
+    for p in decisoes_a_avisar(pedidos, desde, ja):
+        try:
+            async with sessao_fn(role="service_role") as conn:
+                g = await conn.fetchrow(SQL_GUARDI_POR_EMAIL, str(p.get("user_email") or ""))
+                dono = g["dono_id"] if g else None
+                if await conn.fetchval(SQL_TRAVAR_DECISAO, str(p["id"]), dono, p["status"], agora) is None:
+                    continue  # outro worker (ou outro RH) levou
+                if not g:
+                    continue
+                await conn.execute(SQL_RECADO, g["agent_id"], dono, texto_decisao(p), agora)
+            feitos += 1
+        except Exception:  # noqa: BLE001 — uma decisão não derruba as outras
+            logger.exception("Aviso de decisão de ausência %s quebrou.", p.get("id"))
+    return feitos
 
 
 async def _avisar_um(sessao_fn, dest: str, bot: str, email: str, pedido: dict, de_novo: bool,
@@ -205,7 +284,8 @@ async def _avisar_um(sessao_fn, dest: str, bot: str, email: str, pedido: dict, d
     return True
 
 
-async def _destinatario(sessao_fn, dest: str, agora: datetime, ler, preparar, relogio) -> int:
+async def _destinatario(sessao_fn, dest: str, agora: datetime, ler, preparar, relogio,
+                        decisoes_desde: datetime | None = None) -> int:
     async with sessao_fn(role="service_role") as conn:
         g = await conn.fetchrow(SQL_GUARDI, dest)
     if not g:
@@ -222,7 +302,7 @@ async def _destinatario(sessao_fn, dest: str, agora: datetime, ler, preparar, re
     _ultima_leitura[dest] = marca
     bot, email = g["agent_id"], g["email"]
     try:
-        pendentes = await ler(email, bot, dest)
+        pedidos = await ler(email, bot, dest)
     except talenths.ErroSistema as e:
         if e.status != 403:
             raise
@@ -230,12 +310,15 @@ async def _destinatario(sessao_fn, dest: str, agora: datetime, ler, preparar, re
                         "para o Guardi %s — o dono perdeu o papel de RH lá, ou a rota saiu da lista "
                         "liberada ao token de agente.", bot)
         return 0
+    feitos = 0
+    if decisoes_desde is not None:
+        feitos += await _avisar_decisoes(sessao_fn, pedidos, decisoes_desde, agora)
+    pendentes = [p for p in pedidos if p.get("status") == "pending"]
     if not pendentes:
-        return 0
+        return feitos
     async with sessao_fn(role="service_role") as conn:
         linhas = await conn.fetch(SQL_AVISADOS, dest, [str(p.get("id")) for p in pendentes])
     avisados = {r["pedido_id"]: r["ultimo_aviso_em"] for r in linhas}
-    feitos = 0
     for pedido, de_novo in decidir(pendentes, avisados, email, agora):
         try:
             if await _avisar_um(sessao_fn, dest, bot, email, pedido, de_novo,
@@ -249,7 +332,7 @@ async def _destinatario(sessao_fn, dest: str, agora: datetime, ler, preparar, re
 async def etapa_avisos(sessao_fn, agora: datetime, ler=None, preparar=None,
                        relogio=time.monotonic) -> int:
     """Uma passada: devolve quantos avisos gravou. Desligada, não lê nada."""
-    ler = ler or _ler_pendentes
+    ler = ler or _ler_pedidos
     preparar = preparar or talenths_preparo.preparar
     async with sessao_fn(role="service_role") as conn:
         valor = await conn.fetchval(SQL_CONFIG, CHAVE)
@@ -264,7 +347,7 @@ async def etapa_avisos(sessao_fn, agora: datetime, ler=None, preparar=None,
     total = 0
     for dest in cfg.destinatarios:
         try:
-            total += await _destinatario(sessao_fn, dest, agora, ler, preparar, relogio)
+            total += await _destinatario(sessao_fn, dest, agora, ler, preparar, relogio, cfg.decisoes_desde)
         except Exception:  # noqa: BLE001 — TalentHS fora não derruba a etapa
             logger.exception("Aviso de ausência: destinatário %s falhou.", dest)
     return total

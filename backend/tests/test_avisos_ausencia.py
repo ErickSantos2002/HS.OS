@@ -400,7 +400,7 @@ def test_recado_escapa_markdown():
     assert r"\[Clique\]\(https://x.io\)" in t and r"Ana \*X\*" in t
 
 
-def test_le_absences_team_e_filtra_pendentes(monkeypatch):
+def test_le_absences_team_com_todos_os_status(monkeypatch):
     """No ar em 26/11/2026 o aviso não saiu: `/absences/team/pending` NÃO está
     na lista de rotas que o TalentHS libera ao token de agente
     (`talenths/backend/app/auth/agente.py`) e voltava 403 — o mesmo que o
@@ -412,8 +412,10 @@ def test_le_absences_team_e_filtra_pendentes(monkeypatch):
         chamadas.append(caminho)
         return [_pedido(id="a", status="pending"), _pedido(id="b", status="approved"), "lixo"]
     monkeypatch.setattr(talenths, "chamar", chamar)
-    r = asyncio.run(av._ler_pendentes(EMAIL_RH, BOT, DEST))
-    assert chamadas == ["/absences/team"] and [p["id"] for p in r] == ["a"]
+    r = asyncio.run(av._ler_pedidos(EMAIL_RH, BOT, DEST))
+    # Todos os status: o pendente vira aviso ao RH, o decidido vira aviso a
+    # quem pediu (26/11/2026, tarde). Lixo que não é pedido fica de fora.
+    assert chamadas == ["/absences/team"] and [p["id"] for p in r] == ["a", "b"]
 
 
 def test_403_vira_aviso_unico(monkeypatch, caplog):
@@ -430,3 +432,140 @@ def test_403_vira_aviso_unico(monkeypatch, caplog):
         asyncio.run(av.etapa_avisos(b.sessao, AGORA, ler=proibido, preparar=_preparar, relogio=rel))
     avisos = [r for r in caplog.records if "403" in r.getMessage()]
     assert len(avisos) == 1 and avisos[0].levelname == "WARNING" and not avisos[0].exc_info
+
+
+# --- a resposta volta para quem pediu (26/11/2026, tarde) ---------------------
+#
+# Duas ausências recusadas com motivo: as pessoas só souberam porque a Lidisay
+# mandou olharem o TalentHS. Agora a decisão chega no Guardi de quem pediu.
+
+DESDE = AGORA - timedelta(hours=1)
+
+
+def _decidido(**kw):
+    base = _pedido(status="rejected", reviewed_at=(AGORA - timedelta(minutes=10)).isoformat(),
+                   reviewer_name="Lidisay Sena Vieira", review_note="Período de fechamento, remarque",
+                   auto_approved=False)
+    base.update(kw)
+    return base
+
+
+def test_config_le_decisoes_desde():
+    """Ausente = só o aviso ao RH; a parte nova só liga com a data."""
+    assert av.config({"ligado": True, "destinatarios": []}).decisoes_desde is None
+    c = av.config({"ligado": True, "destinatarios": [], "decisoes_desde": DESDE.isoformat()})
+    assert c.decisoes_desde == DESDE
+    assert av.config({"ligado": True, "decisoes_desde": "ontem"}).decisoes_desde is None
+
+
+def test_decisoes_so_as_novas_e_nao_automaticas():
+    """Ligar não pode mandar o histórico inteiro para a empresa: só decisão
+    depois de `desde`. Aprovação automática a pessoa já viu na hora de pedir."""
+    nova = _decidido(id="n")
+    velha = _decidido(id="v", reviewed_at=(DESDE - timedelta(minutes=1)).isoformat())
+    auto = _decidido(id="a", status="approved", auto_approved=True)
+    pendente = _pedido(id="p")
+    ja = _decidido(id="j")
+    sem_data = _decidido(id="s", reviewed_at=None)
+    assert [p["id"] for p in av.decisoes_a_avisar([nova, velha, auto, pendente, ja, sem_data], DESDE, {"j"})] \
+        == ["n"]
+
+
+def test_texto_da_recusa_traz_o_motivo():
+    """O motivo é a razão de existir deste aviso."""
+    t = av.texto_decisao(_decidido())
+    assert t.startswith("❌ Sua ausência foi recusada — Férias, 02/12 a 06/12 (5 dias).")
+    assert "Decidido por Lidisay Sena Vieira." in t and "Motivo da recusa: Período de fechamento, remarque" in t
+
+
+def test_texto_da_aprovacao_com_e_sem_observacao():
+    t = av.texto_decisao(_decidido(status="approved", review_note=None))
+    assert t.startswith("✅ Sua ausência foi aprovada — Férias") and "Observação" not in t
+    t = av.texto_decisao(_decidido(status="approved", review_note="Bom descanso"))
+    assert "Observação do RH: Bom descanso" in t
+
+
+def test_texto_da_decisao_escapa_markdown():
+    t = av.texto_decisao(_decidido(review_note="[clique](https://x.io)"))
+    assert "[clique](" not in t
+
+
+class BancoDecisoes(Banco):
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.config["decisoes_desde"] = DESDE.isoformat()
+        self.guardis_por_email = {"ana@x.com": {"agent_id": "ana-bot", "dono_id": "u-ana"}}
+        self.decisoes: dict[str, str] = {}
+
+    @asynccontextmanager
+    async def sessao(self, role="anon", user_id=None):
+        antes = (self._estado(), dict(self.decisoes))
+        try:
+            yield ConnDecisoes(self)
+        except BaseException:
+            (self.avisos, self.conversas, self.acoes), self.decisoes = antes
+            raise
+
+
+class ConnDecisoes(Conn):
+    async def fetchrow(self, sql, *a):
+        if sql == av.SQL_GUARDI_POR_EMAIL:
+            return self.b.guardis_por_email.get(a[0])
+        return await super().fetchrow(sql, *a)
+
+    async def fetch(self, sql, *a):
+        if sql == av.SQL_DECISOES_AVISADAS:
+            if self.b.leitura_velha is not None:  # leu antes do outro gravar
+                return []
+            return [{"pedido_id": k} for k in self.b.decisoes if k in a[0]]
+        return await super().fetch(sql, *a)
+
+    async def fetchval(self, sql, *a):
+        if sql == av.SQL_TRAVAR_DECISAO:
+            if a[0] in self.b.decisoes:
+                return None
+            self.b.decisoes[a[0]] = a[2]
+            return a[0]
+        return await super().fetchval(sql, *a)
+
+    async def execute(self, sql, *a):
+        if sql == av.SQL_RECADO:
+            self.b.conversas.append({"content": a[2], "created_at": a[3], "cartao": False,
+                                     "agent_id": a[0], "user_id": a[1]})
+            return
+        return await super().execute(sql, *a)
+
+
+def test_recusa_chega_no_guardi_de_quem_pediu():
+    """O recado vai para a conversa da Ana com o Guardi DELA — não para o RH."""
+    b = BancoDecisoes()
+    assert _rodar(b, [_decidido()]) == 1
+    assert len(b.conversas) == 1
+    c = b.conversas[0]
+    assert (c["agent_id"], c["user_id"]) == ("ana-bot", "u-ana")
+    assert c["content"].startswith("❌ Sua ausência foi recusada") and b.decisoes == {"p-1": "rejected"}
+
+
+def test_decisao_avisada_uma_vez_so():
+    """Dois workers, ou dois do RH lendo a mesma lista: um aviso só."""
+    b = BancoDecisoes()
+    _rodar(b, [_decidido()])
+    av._ultima_leitura.clear()
+    b.leitura_velha = {}  # o outro leu antes de o primeiro gravar: só a PK segura
+    assert _rodar(b, [_decidido()]) == 0 and len(b.conversas) == 1
+
+
+def test_quem_nao_tem_guardi_nao_recebe_e_nao_e_procurado_de_novo():
+    """Sem Guardi não há para onde mandar. Mas a decisão fica marcada: senão
+    seria procurada a cada 2 min, para sempre, e a fila só cresceria."""
+    b = BancoDecisoes()
+    b.guardis_por_email = {}
+    assert _rodar(b, [_decidido()]) == 0 and b.conversas == [] and b.decisoes == {"p-1": "rejected"}
+
+
+def test_sem_decisoes_desde_nao_avisa_decisao():
+    """A parte nova desligada não muda nada do aviso ao RH."""
+    b = BancoDecisoes()
+    del b.config["decisoes_desde"]
+    assert _rodar(b, [_decidido(), _pedido(id="p-2")]) == 1
+    assert b.decisoes == {} and b.conversas[0]["content"].startswith("📅 Pedido de ausência")

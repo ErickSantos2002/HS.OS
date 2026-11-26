@@ -118,3 +118,21 @@ executa só o payload gravado, sem argumento novo.
   vira `erro`.
 - `CartaoAcao` com `par`: um cabeçalho, os campos da principal, e os dois botões;
   decidido, mostra qual foi.
+
+## Revisão 26/11/2026 (tarde) — a resposta volta para quem pediu
+
+Duas ausências foram recusadas com motivo e as pessoas só souberam porque a Lidisay
+mandou olharem o TalentHS. Pedido do Erick: quando o RH aprova ou recusa, quem pediu
+recebe na hora, pelo próprio Guardi — o espelho do aviso que a Lidisay recebe.
+
+- **Mesma etapa, mesma leitura:** o `/absences/team` que a etapa já lê como o RH traz
+  todos os pedidos com `status`, `review_note`, `reviewer_name`, `reviewed_at`. Nenhuma
+  chamada nova. Pega a decisão tomada pelo cartão do HS.OS ou direto no TalentHS.
+- **Só decisões depois de ligar:** `avisos_ausencia.decisoes_desde` (ISO). Decisão com
+  `reviewed_at` anterior não sai — ligar não pode disparar o histórico para a empresa.
+  Ausente = esta parte desligada. Aprovação automática (`auto_approved`) não avisa.
+- **Para quem:** o Guardi do dono cujo e-mail é o `user_email` do pedido. Sem Guardi
+  no HS.OS, não avisa. Recado sem cartão, com push: "✅ Sua ausência foi aprovada —
+  …" / "❌ Sua ausência foi recusada — … Motivo da recusa: …".
+- **Um aviso por pedido:** `avisos_decisao_ausencia` (`046`), PK `pedido_id` —
+  dois workers e dois RH lendo a mesma lista não dobram.

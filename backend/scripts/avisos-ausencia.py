@@ -5,6 +5,11 @@
     PYTHONPATH=. ~/projetos/bancos/.venv/bin/python scripts/avisos-ausencia.py --ligar <email> [--aplicar]
     PYTHONPATH=. ~/projetos/bancos/.venv/bin/python scripts/avisos-ausencia.py --tirar <email> [--aplicar]
     PYTHONPATH=. ~/projetos/bancos/.venv/bin/python scripts/avisos-ausencia.py --desligar [--aplicar]
+    PYTHONPATH=. ~/projetos/bancos/.venv/bin/python scripts/avisos-ausencia.py --decisoes [--aplicar]
+
+`--decisoes` liga a resposta para quem pediu (26/11/2026, tarde): grava
+`decisoes_desde` = agora. Só decisão do RH a partir daí vira recado — ligar não
+manda o histórico para a empresa. Rodar de novo NÃO mexe na data já gravada.
 
 Spec: docs/superpowers/specs/2026-11-26-aviso-de-ausencia-design.md.
 
@@ -18,18 +23,24 @@ sem o deploy com `app/avisos_ausencia.py`, ligar a chave não faz nada.
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 CHAVE = "avisos_ausencia"
 
 
-def valor_novo(atual: dict | None, ligado: bool, entra: str | None = None, sai: str | None = None) -> dict:
+def valor_novo(atual: dict | None, ligado: bool, entra: str | None = None, sai: str | None = None,
+               decisoes_desde: str | None = None) -> dict:
     ids = [i for i in ((atual or {}).get("destinatarios") or []) if isinstance(i, str)]
     if entra and entra not in ids:
         ids.append(entra)
     if sai:
         ids = [i for i in ids if i != sai]
-    return {"ligado": ligado, "destinatarios": ids}
+    novo = {"ligado": ligado, "destinatarios": ids}
+    desde = (atual or {}).get("decisoes_desde") or decisoes_desde
+    if desde:
+        novo["decisoes_desde"] = desde
+    return novo
 
 
 def _ler(cur):
@@ -61,6 +72,7 @@ def main() -> int:
     g.add_argument("--ligar", metavar="EMAIL")
     g.add_argument("--tirar", metavar="EMAIL")
     g.add_argument("--desligar", action="store_true")
+    g.add_argument("--decisoes", action="store_true")
     ap.add_argument("--aplicar", action="store_true")
     a = ap.parse_args()
 
@@ -80,6 +92,10 @@ def main() -> int:
                 cur.execute("SELECT id::text FROM public.profiles WHERE lower(email) = lower(%s)", (a.tirar,))
                 r = cur.fetchone()
                 novo = valor_novo(atual, bool((atual or {}).get("ligado")), sai=r[0] if r else None)
+            elif a.decisoes:
+                if not (atual or {}).get("ligado"):
+                    sys.exit("❌ ligue primeiro o aviso ao RH (--ligar <email>): a resposta usa a mesma leitura")
+                novo = valor_novo(atual, True, decisoes_desde=datetime.now(timezone.utc).isoformat())
             else:
                 novo = valor_novo(atual, False)
             print(f"novo:  {novo}")
