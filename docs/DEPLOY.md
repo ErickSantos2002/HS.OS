@@ -83,6 +83,13 @@ docker exec -i $CID sh -c 'pg_restore -U $POSTGRES_USER -d hsos --clean --if-exi
   < /var/backups/hsos/hsos-<data>.dump
 ```
 
+⚠️ **O backup ficou 80 dias falhando em silêncio (08/09 a 26/11/2026).** O script
+escolhia o container por "tem `postgres` no nome" e pegou um `pgweb`; no
+container certo, o `service_role` não lia três sequences novas (migração `042`).
+Hoje o container é o do serviço `erick_hsos-banco` pelo label do Swarm, e falha
+não deixa mais dump de 0 byte. **Confira `ls -la /var/backups/hsos`: arquivo de
+0 byte não é backup.** Ver `docs/riscos-e-plano-de-emergencia.md`.
+
 ⚠️ **Os dumps ficam na mesma máquina do banco.** Cobrem erro humano e bug de
 aplicação; **não** cobrem perder a máquina. Cópia para fora é o passo seguinte.
 

@@ -15,6 +15,13 @@
   tabela de 7 dias (+R$ 524 mil) é outra régua: vai até 03/12 e não conta os
   R$ 101.605 de a pagar em aberto da semana — certo, mas lê como contradição.
 - **Quadro da Nina 08:30:** entregue, 22 de 22.
+- **PK-10 fechado no papel:** `docs/riscos-e-plano-de-emergencia.md` (02-37).
+  Escrevendo, achei o **backup do banco morto desde 08/09** (último dump bom
+  07/09): container errado (`pgweb`) e `service_role` sem `SELECT` em 3
+  sequences. `042` aplicada e conferida; `scripts/instalar-backup.sh` corrigido
+  (container pelo label `erick_hsos-banco`, falha não deixa 0 byte). **Falta o
+  Erick reinstalar na VPS** (o comando de root foi negado à sessão) e conferir
+  o dump de 27/11. Próximo do plano: alarme de backup que falha (§4 item 1).
 - **PK-07 fechado em produção:** deploy `3839428` no ar desde 07:57; regras-base
   gravadas nos cinco `SOUL.md`; a `nina`, perguntada pela conta do Erick,
   identificou pelo carimbo (e-mail primeiro, nome editável, última linha).

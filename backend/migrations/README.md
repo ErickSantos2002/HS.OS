@@ -22,6 +22,7 @@ Schema do Postgres próprio, extraído do Supabase e validado em Postgres puro.
 | `036_lembrete_reconhecido.sql` | Lembrete que chama atenção: `lembretes.aviso_em`, `reconhecido_em`, `reconhecido_como`, `reaviso_em`, `reavisos` (Adiar/Feito e insistência de 5 min). **Não aplicada.** ⚠️ Superusuário: `~/projetos/bancos/.venv/bin/python ~/aplicar-hsos-036.py` |
 | `037_varreduras.sql` | Varredura do Guardi: tabela `varreduras` (fila + registro das varreduras da manhã, tarde, pedidas e quadro; resumo cifrado; RLS sem policy, `hsos_agente` revogado). Aplicada em 16/11/2026 — mas sem o GRANT ao `service_role`, que vem na 038. |
 | `038_varreduras_grant.sql` | `GRANT SELECT, INSERT, UPDATE, DELETE ON public.varreduras TO service_role` — a 037 esqueceu, e sem ele o backend não lê nem grava a fila. Idempotente. **Não aplicada.** ⚠️ Superusuário: `~/projetos/bancos/.venv/bin/python ~/aplicar-hsos-038.py` |
+| `042_backup_le_tudo.sql` | `SELECT` ao `service_role` nas 3 sequences e na view `diretorio` que ele não lia, e privilégio padrão para objeto novo do `administrador` — sem isso o `pg_dump` do backup morria (80 dias sem dump, até 26/11/2026). **Aplicada e conferida em 26/11/2026.** |
 | ⚠️ `008_pessoas_talenths.sql` | **Não é deste banco** — ver abaixo. |
 | `_origem/` | Dump de origem + script de regeração + export do SQL editor |
 

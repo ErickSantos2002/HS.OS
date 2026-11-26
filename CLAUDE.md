@@ -869,6 +869,7 @@ antiga levaria alguém a procurar a resolução no lugar errado.
 | `docs/AUDITORIA-ESTABILIDADE-2026-07-16.md` | 507 linhas, 49 achados de segurança/estabilidade catalogados A1–A19, B1–B10, com sintoma → causa raiz. Referência obrigatória para o caminho do chat. |
 | `docs/RESUMO-CONSOLIDACAO-2026-07-18.md` | O que foi corrigido em cada bloco (0 remix-ready, 1 segurança, 2 estabilidade, 3 velocidade — pausado) |
 | `docs/RESUMO-TECNICO-PARA-LIA-2026-07-18.md` | Contratos técnicos acordados com o lado do gateway (formato de `sessions_list`, dedup de heartbeat, verificação de `SOUL.md` no onboarding) |
+| `docs/riscos-e-plano-de-emergencia.md` | Mapa "se X cair", riscos em ordem e roteiro por queda (agentes mudos, deploy/migração ruim, VPS perdida, SSO, saldo). Ler antes de mexer em backup, túnel ou VPS. |
 | `docs/REMIX_SECRETS.md` | Lista real das env das Edge Functions, levantada do código. Diz explicitamente que a chave do LLM dos agentes fica no VPS/OpenClaw, não aqui. |
 | `docs/PLANO-RECONCILIADOR.md` | A última edge function: o que ela faz, os dois bloqueios (um já resolvido) e por que "portar fiel" não é obviamente certo neste caso |
 | `.lovable/plan.md`, `.lovable/remix-audit.md` | Contexto da origem Lovable |

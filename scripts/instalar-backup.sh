@@ -29,15 +29,20 @@ SERVICO=hsos-backup
 # assumido evita ter que pôr a senha do superusuário num script em disco.
 PAPEL=service_role
 
+# ⚠️ O container é escolhido pelo NOME EXATO do serviço do EasyPanel, nunca
+# por "tem postgres no nome". Até 26/11/2026 era `grep postgres | head -1`, e
+# esta VPS tem 31 containers assim (pgweb, dbgate, os bancos dos outros
+# sistemas): o primeiro da lista virou um `pgweb`, sem servidor, e o backup
+# falhou todo dia desde 08/09 — 80 dias sem dump, sem ninguém saber.
+SERVICO_BANCO=${SERVICO_BANCO:-erick_hsos-banco}
+
 echo "═══ 1. Onde o Postgres roda ═══"
-CID=$(docker ps --filter "ancestor=postgres" --format '{{.ID}}' | head -1)
-if [ -z "$CID" ]; then
-  CID=$(docker ps --format '{{.ID}} {{.Names}}' | grep -iE 'postgres|hsos.*db|db.*hsos' | awk '{print $1}' | head -1)
-fi
-if [ -z "$CID" ]; then
-  echo "  ❌ Não achei o container do Postgres. Rode 'docker ps' e ajuste este script."
+CIDS=$(docker ps -q --filter "label=com.docker.swarm.service.name=$SERVICO_BANCO")
+if [ "$(echo "$CIDS" | grep -c .)" != "1" ]; then
+  echo "  ❌ Esperava 1 container do serviço $SERVICO_BANCO, achei: '${CIDS}'."
   exit 1
 fi
+CID=$CIDS
 echo "  container: $CID ($(docker inspect -f '{{.Name}}' "$CID" | tr -d /))"
 VERSAO=$(docker exec "$CID" postgres --version | grep -oE '[0-9]+' | head -1)
 echo "  Postgres $VERSAO — o pg_dump sai de dentro do container, então a versão sempre casa"
@@ -51,10 +56,14 @@ cat > /usr/local/bin/hsos-backup <<UNIT
 #!/usr/bin/env bash
 set -euo pipefail
 DESTINO=$DESTINO
-CID=\$(docker ps --format '{{.ID}} {{.Names}}' | grep -iE 'postgres|hsos.*db|db.*hsos' | awk '{print \$1}' | head -1)
-[ -z "\$CID" ] && { echo "container do Postgres não encontrado"; exit 1; }
+# Pelo nome exato do serviço — ver o aviso no instalador (26/11/2026).
+CID=\$(docker ps -q --filter "label=com.docker.swarm.service.name=$SERVICO_BANCO")
+[ "\$(echo "\$CID" | grep -c .)" = "1" ] || { echo "esperava 1 container de $SERVICO_BANCO, achei: '\$CID'"; exit 1; }
 
 ARQ="\$DESTINO/hsos-\$(date +%Y%m%d-%H%M%S).dump"
+# Falhou, o arquivo sai: até 26/11 cada falha deixava um dump de 0 byte, que
+# parecia backup na listagem e nunca era podado (a poda fica depois do erro).
+trap '[ -s "\$ARQ" ] && [ "\$(stat -c%s "\$ARQ")" -ge 51200 ] || rm -f "\$ARQ"' EXIT
 
 # --format=custom: comprimido e permite restaurar tabela a tabela.
 # A senha vem do ambiente do próprio container, então não fica aqui.
