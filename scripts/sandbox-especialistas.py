@@ -5,7 +5,7 @@
     .venv/bin/python ../scripts/sandbox-especialistas.py --aplicar  # grava, relê e confere
     .venv/bin/python ../scripts/sandbox-especialistas.py --voltar   # tira a sandbox dos dois
     .venv/bin/python ../scripts/sandbox-especialistas.py --visibilidade [--aplicar]
-                                                    # só a trava de sessão da nina (26/11, 13:49)
+                                                    # só a trava de sessão, no padrão (26/11, 13:49)
 
 Só depois do `vps-gateway/sandbox/instalar.sh` (Docker + imagem + a parede
 provada). Spec: docs/superpowers/specs/2026-11-26-pk06-sandbox-especialistas-design.md.
@@ -53,13 +53,12 @@ SANDBOX = {
 # visible from this sandboxed agent session"). Sessão em sandbox tem trava
 # própria — `sandbox.sessionToolsVisibility`, padrão "spawned": só as sessões
 # que ela criou, MESMO com `tools.sessions.visibility="all"` (docs.openclaw.ai,
-# gateway/config-tools/sessions-and-subagents). Quem orquestra precisa de "all";
-# atlas e bruce só respondem e seguem travados.
-EXTRA_POR_AGENTE = {"nina": {"sessionToolsVisibility": "all"}}
-
-
-def sandbox_de(agente: str) -> dict:
-    return {**copy.deepcopy(SANDBOX), **EXTRA_POR_AGENTE.get(agente, {})}
+# gateway/config-tools/sessions-and-subagents).
+# ⚠️ E ela só vale em `agents.defaults.sandbox`: gravada em
+# `agents.list[nina].sandbox` o schema ACEITA e o gateway IGNORA — às 13:55,
+# depois da gravação, o `sessions_send` seguia "forbidden". Vale para todo
+# agente em sandbox (nina, atlas, bruce): o estado de antes das 09:43.
+SANDBOX_PADRAO = {"sessionToolsVisibility": "all"}
 
 
 # Rótulos de origem que o `tools.effective` devolve junto dos nomes; não são
@@ -83,7 +82,7 @@ def montar_patch(conf: dict, inventarios: dict[str, set[str]]) -> dict:
         raise ValueError(f"faltam agentes na config: {set(ALVOS) - ids}")
     for a in agentes:
         if a.get("id") in ALVOS:
-            a["sandbox"] = sandbox_de(a["id"])
+            a["sandbox"] = copy.deepcopy(SANDBOX)
             tools = a.setdefault("tools", {})
             tools["sandbox"] = {"tools": {"alsoAllow": lista_da_sandbox(inventarios[a["id"]])}}
             # ⚠️ O `elevated` (rodar `exec` FORA da sandbox) vem LIGADO por
@@ -116,7 +115,7 @@ def conferir(parsed: dict, antes: dict) -> bool:
     velhos = {a.get("id"): a for a in (antes.get("agents") or {}).get("list") or []}
     for ag in ALVOS:
         a = depois.get(ag) or {}
-        if a.get("sandbox") != sandbox_de(ag) or _elevated_ligado(parsed, a):
+        if a.get("sandbox") != SANDBOX or _elevated_ligado(parsed, a):
             return False
         if "bundle-mcp" not in (((a.get("tools") or {}).get("sandbox") or {}).get("tools") or {}).get("alsoAllow", []):
             return False
@@ -124,30 +123,20 @@ def conferir(parsed: dict, antes: dict) -> bool:
 
 
 def montar_visibilidade(conf: dict) -> dict:
-    """Só acrescenta o `EXTRA_POR_AGENTE` na sandbox que já existe — sem
-    recalcular a lista de ferramentas (o inventário de agora, já dentro da
-    sandbox, não é o de antes). `agents.list` vai inteira: array substitui."""
-    agentes = copy.deepcopy((conf.get("agents") or {}).get("list") or [])
-    for a in agentes:
-        extra = EXTRA_POR_AGENTE.get(a.get("id"))
-        if extra:
-            if not a.get("sandbox"):
-                raise ValueError(f"{a.get('id')} não está na sandbox — nada a soltar")
-            a["sandbox"] = {**a["sandbox"], **extra}
-    return {"agents": {"list": agentes}}
+    """Só a trava de sessão no PADRÃO da sandbox — objeto, sem `agents.list`.
+
+    ⚠️ Tentar tirar no mesmo patch a chave por agente (ignorada) da nina NÃO
+    funcionou (26/11/2026, 13:57): o padrão gravou e a chave do item ficou.
+    Ela é inofensiva justamente por ser a que o gateway ignora."""
+    return {"agents": {"defaults": {"sandbox": dict(SANDBOX_PADRAO)}}}
 
 
 def conferir_visibilidade(parsed: dict, antes: dict) -> bool:
-    depois = {a.get("id"): a for a in (parsed.get("agents") or {}).get("list") or []}
-    velhos = {a.get("id"): a for a in (antes.get("agents") or {}).get("list") or []}
-    for ag, extra in EXTRA_POR_AGENTE.items():
-        a = depois.get(ag) or {}
-        v = velhos.get(ag) or {}
-        if a.get("sandbox") != {**(v.get("sandbox") or {}), **extra}:
-            return False
-        if {k: x for k, x in a.items() if k != "sandbox"} != {k: x for k, x in v.items() if k != "sandbox"}:
-            return False
-    return all(depois.get(i) == v for i, v in velhos.items() if i not in EXTRA_POR_AGENTE)
+    """Na config relida: o padrão com a trava solta e os agentes intocados."""
+    padrao = (((parsed.get("agents") or {}).get("defaults") or {}).get("sandbox") or {})
+    if any(padrao.get(k) != v for k, v in SANDBOX_PADRAO.items()):
+        return False
+    return ((parsed.get("agents") or {}).get("list") or []) == ((antes.get("agents") or {}).get("list") or [])
 
 
 def sem_sandbox(parsed: dict) -> bool:
@@ -176,14 +165,12 @@ async def principal(argv: list[str]) -> int:
 
     if "--visibilidade" in argv:
         patch = montar_visibilidade(parsed)
-        for a in patch["agents"]["list"]:
-            if a.get("id") in EXTRA_POR_AGENTE:
-                print(f"── {a['id']}.sandbox.sessionToolsVisibility = {a['sandbox'].get('sessionToolsVisibility')!r}")
+        print(f"── agents.defaults.sandbox = {patch['agents']['defaults']['sandbox']}")
         if "--aplicar" not in argv:
             print("\nEnsaio. Rode com --visibilidade --aplicar para gravar.")
             return 0
         await aplicar_patch(patch, base_hash, conferir=lambda p: conferir_visibilidade(p, parsed))
-        print("Gravado e conferido na config relida: só a chave da nina mudou.")
+        print("Gravado e conferido na config relida: padrão com a trava solta, agentes intactos.")
         return 0
 
     if "--voltar" in argv:

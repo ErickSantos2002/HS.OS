@@ -236,9 +236,11 @@ Três armadilhas, todas da documentação e conferidas ao vivo:
   padrão `"spawned"`): só enxerga as sessões que ela mesma criou, **mesmo com
   `tools.sessions.visibility="all"`**. Em 26/11/2026 isso cortou a delegação da nina às 09:43
   (PK-06) e ninguém viu até 13:49 — "Session not visible from this sandboxed agent session" no
-  `sessions_send` para `agent:atlas:main`/`agent:midas:main`. A nina tem `"all"` por agente
-  (`EXTRA_POR_AGENTE` no script, `--visibilidade`); atlas e bruce seguem travados, só respondem.
-  Agente novo que ORQUESTRA e entra na sandbox precisa da mesma chave.
+  `sessions_send` para `agent:atlas:main`/`agent:midas:main`. ⚠️ **Só vale em
+  `agents.defaults.sandbox`**: gravada em `agents.list[nina].sandbox` o schema ACEITA e o gateway
+  IGNORA (às 13:55, depois da gravação, seguia "forbidden"). Hoje `agents.defaults.sandbox.
+  sessionToolsVisibility = "all"` (`--visibilidade` no script) — vale para nina, atlas e bruce, o
+  estado de antes das 09:43. A chave por agente ficou na nina, inerte: o mesmo patch não a tirou.
 Conferir: `openclaw sandbox explain --agent nina --json` e `docker inspect` do contêiner.
 Agente novo com `exec` nasce SEM sandbox — entra na lista `ALVOS` do script.
 

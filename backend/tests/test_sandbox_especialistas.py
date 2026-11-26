@@ -51,7 +51,7 @@ def test_so_os_alvos_mudam_e_o_resto_da_ferramenta_fica():
     assert lista["midas"] == CONF["agents"]["list"][3]
     assert lista["nina"]["tools"]["alsoAllow"] == ["mcp__x__y"]
     assert lista["nina"]["tools"]["deny"] == ["browser"]
-    assert lista["nina"]["sandbox"] == s.sandbox_de("nina")
+    assert lista["nina"]["sandbox"] == s.SANDBOX
     assert lista["nina"]["tools"]["elevated"] == {"enabled": False}
     assert "sandbox" in lista["atlas"] and "sandbox" in lista["bruce"]
 
@@ -93,28 +93,25 @@ def test_volta_tira_so_a_sandbox():
 # sessões que ela mesma criou, mesmo com `tools.sessions.visibility="all"`. O
 # PK-06 (09:43) pôs a nina na sandbox e cortou a delegação da Diretoria inteira.
 
-def test_nina_ve_as_sessoes_dos_especialistas_os_outros_seguem_travados():
-    """Só quem orquestra solta a trava; atlas e bruce só respondem."""
-    assert s.sandbox_de("nina")["sessionToolsVisibility"] == "all"
-    assert "sessionToolsVisibility" not in s.sandbox_de("atlas")
-    assert "sessionToolsVisibility" not in s.sandbox_de("bruce")
+def test_trava_de_sessao_vai_no_padrao_nao_por_agente():
+    """Gravada só na nina (`agents.list[].sandbox`), o schema aceitou e o
+    gateway IGNOROU: às 13:55 o `sessions_send` seguia "forbidden". A chave
+    vale em `agents.defaults.sandbox`, a única forma que a documentação cita."""
+    assert s.SANDBOX_PADRAO == {"sessionToolsVisibility": "all"}
+    assert "sessionToolsVisibility" not in s.SANDBOX
     lista = {a["id"]: a for a in _patch()["agents"]["list"]}
-    assert lista["nina"]["sandbox"]["sessionToolsVisibility"] == "all"
-    assert "sessionToolsVisibility" not in lista["atlas"]["sandbox"]
+    assert all("sessionToolsVisibility" not in lista[a]["sandbox"] for a in s.ALVOS)
 
 
-def test_visibilidade_mexe_so_na_chave_da_nina():
-    """O conserto em produção não pode recalcular o resto (o inventário de
-    agora, já com a sandbox, pode diferir do de 09:43): só acrescenta a chave."""
+def test_visibilidade_grava_so_o_padrao():
+    """Objeto, sem `agents.list`: o gateway não tirou a chave do item da nina
+    no mesmo patch (13:57) — mexer na lista só arrisca o resto dos agentes."""
     viva = {"agents": {"list": [
-        {"id": "nina", "sandbox": dict(s.SANDBOX), "tools": {"elevated": {"enabled": False}}},
-        {"id": "atlas", "sandbox": dict(s.SANDBOX)},
+        {"id": "nina", "sandbox": {**s.SANDBOX, "sessionToolsVisibility": "all"}},
         {"id": "midas", "tools": {"deny": ["exec"]}},
     ]}}
     p = s.montar_visibilidade(viva)
-    lista = {a["id"]: a for a in p["agents"]["list"]}
-    assert lista["nina"]["sandbox"] == {**s.SANDBOX, "sessionToolsVisibility": "all"}
-    assert lista["nina"]["tools"] == {"elevated": {"enabled": False}}
-    assert lista["atlas"] == viva["agents"]["list"][1] and lista["midas"] == viva["agents"]["list"][2]
-    assert s.conferir_visibilidade(p, viva)
+    assert p == {"agents": {"defaults": {"sandbox": {"sessionToolsVisibility": "all"}}}}
+    depois = {"agents": {"defaults": p["agents"]["defaults"], "list": viva["agents"]["list"]}}
+    assert s.conferir_visibilidade(depois, viva)
     assert not s.conferir_visibilidade(viva, viva)
