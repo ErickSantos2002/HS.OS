@@ -531,8 +531,8 @@ Spec e plano: `docs/superpowers/{specs,plans}/2026-11-26-aviso-de-ausencia*`. Pe
 conversa de quem está na chave (hoje a Lidisay, `lidisay-bot`).
 
 - **Sem turno de agente e sem mexer no TalentHS:** etapa no fim da `passada` do
-  `disparador_lembretes` (`app/avisos_ausencia.py`) que lê `/absences/team/pending`
-  como o destinatário e monta os cartões pelo mesmo `talenths_preparo.preparar` do
+  `disparador_lembretes` (`app/avisos_ausencia.py`) que lê `/absences/team` (filtra
+  `pending` aqui) como o destinatário e monta os cartões pelo mesmo `talenths_preparo.preparar` do
   Guardi. Escolha do Erick (polling + servidor) contra webhook (exigiria deploy lá e
   perderia aviso se a chamada falhasse) e contra turno do Guardi (custo e dependência
   de o modelo chamar a ferramenta).
@@ -548,3 +548,7 @@ conversa de quem está na chave (hoje a Lidisay, `lidisay-bot`).
   desligado. `backend/scripts/avisos-ausencia.py --mostrar | --ligar <email> |
   --tirar <email> | --desligar [--aplicar]`, com `PYTHONPATH=.` e o Python do venv do
   cadastro. O `--ligar` recusa quem não tem Guardi ou não tem `talenths` ligado.
+- ⚠️ **Não é `/absences/team/pending`**: o TalentHS libera ao token de agente só as
+  rotas da lista em `auth/agente.py` de lá, e essa não está — volta 403, a mesma cara
+  de "sem papel de RH". Na 1ª ligação (26/11) o aviso ficou mudo por isso; o 403 hoje
+  é um warning único no log, não traceback a cada 2 min.

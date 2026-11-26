@@ -161,8 +161,14 @@ def _avisar_uma_vez(chave: str, msg: str, *args) -> None:
 
 
 async def _ler_pendentes(email: str, bot: str, dono: str) -> list[dict]:
-    r = await talenths.chamar(email, bot, "/absences/team/pending", dono=dono)
-    return [x for x in (r or []) if isinstance(x, dict)] if isinstance(r, list) else []
+    """⚠️ `/absences/team`, NÃO `/absences/team/pending`: o TalentHS só libera
+    ao token de agente as rotas da lista dele (`auth/agente.py` de lá), e a
+    `/pending` não está — volta 403, igual a login sem papel de RH. Foi o
+    que deixou o aviso mudo na primeira ligação (26/11/2026)."""
+    r = await talenths.chamar(email, bot, "/absences/team", dono=dono)
+    if not isinstance(r, list):
+        return []
+    return [x for x in r if isinstance(x, dict) and x.get("status") == "pending"]
 
 
 async def _avisar_um(sessao_fn, dest: str, bot: str, email: str, pedido: dict, de_novo: bool,
@@ -206,7 +212,15 @@ async def _destinatario(sessao_fn, dest: str, agora: datetime, ler, preparar, re
         return 0
     _ultima_leitura[dest] = marca
     bot, email = g["agent_id"], g["email"]
-    pendentes = await ler(email, bot, dest)
+    try:
+        pendentes = await ler(email, bot, dest)
+    except talenths.ErroSistema as e:
+        if e.status != 403:
+            raise
+        _avisar_uma_vez(f"403:{dest}", "Aviso de ausência: o TalentHS recusou (403) a leitura dos pedidos "
+                        "para o Guardi %s — o dono perdeu o papel de RH lá, ou a rota saiu da lista "
+                        "liberada ao token de agente.", bot)
+        return 0
     if not pendentes:
         return 0
     async with sessao_fn(role="service_role") as conn:

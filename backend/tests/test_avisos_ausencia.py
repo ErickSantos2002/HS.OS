@@ -393,3 +393,35 @@ def test_recado_escapa_markdown():
                         False)
     assert "[Clique](" not in t and "![](" not in t and "<b>" not in t and "*X*" not in t
     assert r"\[Clique\]\(https://x.io\)" in t and r"Ana \*X\*" in t
+
+
+def test_le_absences_team_e_filtra_pendentes(monkeypatch):
+    """No ar em 26/11/2026 o aviso não saiu: `/absences/team/pending` NÃO está
+    na lista de rotas que o TalentHS libera ao token de agente
+    (`talenths/backend/app/auth/agente.py`) e voltava 403 — o mesmo que o
+    login sem papel de RH. A rota liberada é `/absences/team` (a que o
+    preparo do cartão já lê); o filtro de pendentes é daqui."""
+    chamadas = []
+
+    async def chamar(email, bot, caminho, params=None, dono=None):
+        chamadas.append(caminho)
+        return [_pedido(id="a", status="pending"), _pedido(id="b", status="approved"), "lixo"]
+    monkeypatch.setattr(talenths, "chamar", chamar)
+    r = asyncio.run(av._ler_pendentes(EMAIL_RH, BOT, DEST))
+    assert chamadas == ["/absences/team"] and [p["id"] for p in r] == ["a"]
+
+
+def test_403_vira_aviso_unico(monkeypatch, caplog):
+    """403 a cada 2 min virava traceback no log e ninguém via — foi assim que
+    o aviso ficou mudo na primeira ligação. Agora é um warning por processo,
+    que diz o que fazer."""
+    b = Banco()
+
+    async def proibido(email, bot, dono):
+        raise talenths.ErroSistema(403, "proibido")
+    rel = _Relogio()
+    for t in (1000.0, 1200.0):
+        rel.t = t
+        asyncio.run(av.etapa_avisos(b.sessao, AGORA, ler=proibido, preparar=_preparar, relogio=rel))
+    avisos = [r for r in caplog.records if "403" in r.getMessage()]
+    assert len(avisos) == 1 and avisos[0].levelname == "WARNING" and not avisos[0].exc_info
