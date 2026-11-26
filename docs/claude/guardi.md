@@ -62,6 +62,11 @@ Spec e plano: `docs/superpowers/{specs,plans}/2026-11-05-bot-email-piloto*`. O
   `ANEXOS_MCP_SEGREDO`; **só no turno do dono** e **recusa se outra pessoa
   tiver turno aberto com o bot** (o gateway não diz de que sessão veio a
   chamada). Para terceiros só **prepara**: rascunho no Outlook + cartão
+  ⚠️ **Desde o PK-11 (26/11/2026) o gateway DIZ:** o plugin `hsos-cracha`
+  carimba `hsos-email-*`/`hsos-bot-*` com a sessão de origem, assinada
+  (`app/cracha.py`). Crachá de pessoa decide sem a dedução; sem crachá (ou
+  sessão de varredura/cron) vale a dedução de antes. Carimbar outra família
+  `hsos-*` exige que a rota dela tire o `_cracha` dos argumentos.
   (`conversations.media[{type:"email_aprovacao"}]`); sai pelo clique, que
   confere o hash do rascunho relido (cobre Cco, Responder-para e anexo).
 - Flag `agent_profiles.email_ligado` (admin). `tools_do_bot(..., email=True)`

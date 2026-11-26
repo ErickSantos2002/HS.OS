@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.23.1",
+    date: "2026-11-26",
+    changes: [
+      {
+        kind: "correcao",
+        text: "O seu assistente pessoal passa a saber com certeza quem está falando com ele: o e-mail e os sistemas não ficam mais bloqueados quando um administrador conversa com ele ao mesmo tempo, e continuam fechados para qualquer outra pessoa.",
+      },
+    ],
+  },
+  {
     version: "2.23.0",
     date: "2026-11-26",
     changes: [

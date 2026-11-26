@@ -31,6 +31,7 @@ from app.email.regras import (FERRAMENTAS_EMAIL, anexos_extras, como_dado_extern
                               validar_enderecos)
 from app.integracoes import exige_segredo, ler_segredo
 from app.routers.mcp_anexos import JANELA_TURNO_S, assinatura_do_agente, turno_em_curso
+from app.cracha import CrachaInvalido
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/mcp", tags=["mcp"])
@@ -111,7 +112,25 @@ async def outro_turno_aberto(conn, agent_id: str, dono: str) -> bool:
         agent_id, dono, float(JANELA_TURNO_S)))
 
 
-async def _contexto(conn, agent_id: str) -> dict:
+async def ler_cracha(args: dict, agent_id: str):
+    """Tira e confere o crachá do turno (PK-11). Inválido vira recusa: é forja
+    ou relógio quebrado, e nos dois casos a ferramenta não deve rodar."""
+    import time
+    from app import cracha
+    if cracha.CAMPO not in (args or {}):
+        logger.info("MCP %s: crachá ausente", agent_id)
+        return dict(args or {}), None
+    segredo = await ler_segredo(cracha.SEGREDO)
+    try:
+        limpos, cr = cracha.ler(args or {}, agent_id, segredo, time.time())
+    except CrachaInvalido as e:
+        logger.warning("Crachá recusado em %s: %s", agent_id, e)
+        raise _Recusa("Não consegui confirmar de quem é esta conversa; não uso a ferramenta.") from e
+    logger.info("MCP %s: crachá ok, pessoa=%s run=%s", agent_id, cr.pessoa or "—", cr.run)
+    return limpos, cr
+
+
+async def _contexto(conn, agent_id: str, cracha=None) -> dict:
     p = await conn.fetchrow(
         "SELECT a.dono_id::text AS dono_id, a.email_ligado, pr.full_name "
         "  FROM public.agent_profiles a LEFT JOIN public.profiles pr ON pr.id = a.dono_id "
@@ -119,11 +138,18 @@ async def _contexto(conn, agent_id: str) -> dict:
     if not p or not p["dono_id"] or not p["email_ligado"]:
         raise _Recusa("O e-mail não está liberado para mim.")
     primeiro = ((p["full_name"] or "").split() or ["seu dono"])[0]
-    if not await turno_em_curso(conn, agent_id, p["dono_id"]):
-        raise _Recusa(f"Só consigo usar o e-mail enquanto {primeiro} está conversando comigo.")
-    if await outro_turno_aberto(conn, agent_id, p["dono_id"]):
-        raise _Recusa("Outra pessoa está conversando comigo agora; por segurança o e-mail fica "
-                      "bloqueado até essa conversa terminar.")
+    if cracha is not None and cracha.pessoa:
+        # ⚠️ PK-11: com crachá de sessão de pessoa, a pessoa é SABIDA, não
+        # deduzida — e a dedução abaixo (que bloqueava o dono enquanto um admin
+        # conversava com o bot) não se aplica.
+        if cracha.pessoa != p["dono_id"]:
+            raise _Recusa(f"Só uso o e-mail na conversa com {primeiro}; esta é de outra pessoa.")
+    else:
+        if not await turno_em_curso(conn, agent_id, p["dono_id"]):
+            raise _Recusa(f"Só consigo usar o e-mail enquanto {primeiro} está conversando comigo.")
+        if await outro_turno_aberto(conn, agent_id, p["dono_id"]):
+            raise _Recusa("Outra pessoa está conversando comigo agora; por segurança o e-mail fica "
+                          "bloqueado até essa conversa terminar.")
     try:
         access, conta = await contas.access_token(conn, p["dono_id"])
     except contas.ErroConta as e:
@@ -261,8 +287,9 @@ async def executar(agent_id: str, nome: str, args: dict) -> tuple[str, bool]:
     fazem o gateway pausar o servidor MCP para o agente."""
     agent_id = normalizar_agent_id(agent_id)
     try:
+        args, cr = await ler_cracha(args, agent_id)
         async with sessao(role="service_role") as conn:
-            ctx = await _contexto(conn, agent_id)
+            ctx = await _contexto(conn, agent_id, cr)
             return em_brasilia(await _rodar(conn, agent_id, nome, args or {}, ctx)), False
     except _Recusa as e:
         return str(e), True

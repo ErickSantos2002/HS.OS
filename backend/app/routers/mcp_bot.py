@@ -41,7 +41,9 @@ from app.dependencies import normalizar_agent_id
 from app.email.regras import FERRAMENTAS_BOT, como_dado_externo
 from app.integracoes import exige_segredo, ler_segredo
 from app.routers.mcp_anexos import assinatura_do_agente, turno_em_curso
-from app.routers.mcp_email import outro_turno_aberto
+from app.routers.mcp_email import outro_turno_aberto, ler_cracha
+# A recusa do crachá nasce no e-mail; aqui ela é recusa também, não "falha interna".
+from app.routers.mcp_email import _Recusa as _RecusaDoCracha
 from app import datacore_consultas as dc
 from app import docshs_consultas as dh
 from app import talenths_consultas as th
@@ -608,7 +610,7 @@ def _preparado(ctx: dict, resumo: str, origem: str, extra: str | None = None,
     return txt
 
 
-async def _contexto(conn, agent_id: str) -> dict:
+async def _contexto(conn, agent_id: str, cracha=None) -> dict:
     p = await conn.fetchrow(
         "SELECT a.dono_id::text AS dono_id, a.sistemas_ligados, a.email_ligado, pr.email, pr.full_name, "
         "       EXISTS (SELECT 1 FROM public.email_contas ec WHERE ec.user_id = a.dono_id) AS email_conectado "
@@ -617,10 +619,15 @@ async def _contexto(conn, agent_id: str) -> dict:
     if not p or not p["dono_id"]:
         raise _Recusa("Não sou o Guardi de ninguém.")
     primeiro = ((p["full_name"] or "").split() or ["seu dono"])[0]
-    if not await turno_em_curso(conn, agent_id, p["dono_id"]):
-        raise _Recusa(f"Só uso essas ferramentas enquanto {primeiro} está conversando comigo.")
-    if await outro_turno_aberto(conn, agent_id, p["dono_id"]):
-        raise _Recusa("Outra pessoa está conversando comigo agora; por segurança espero terminar.")
+    if cracha is not None and cracha.pessoa:
+        # ⚠️ PK-11: pessoa SABIDA pelo crachá do gateway, não deduzida.
+        if cracha.pessoa != p["dono_id"]:
+            raise _Recusa(f"Só uso essas ferramentas na conversa com {primeiro}; esta é de outra pessoa.")
+    else:
+        if not await turno_em_curso(conn, agent_id, p["dono_id"]):
+            raise _Recusa(f"Só uso essas ferramentas enquanto {primeiro} está conversando comigo.")
+        if await outro_turno_aberto(conn, agent_id, p["dono_id"]):
+            raise _Recusa("Outra pessoa está conversando comigo agora; por segurança espero terminar.")
     return {"dono": p["dono_id"], "email": p["email"], "primeiro": primeiro,
             "sistemas": list(p["sistemas_ligados"] or []), "email_ligado": bool(p["email_ligado"]),
             # Flag ligada sem conta conectada não alcança caixa nenhuma: para a
@@ -2350,8 +2357,9 @@ async def executar(agent_id: str, nome: str, args: dict) -> tuple[str, bool]:
 async def _executar_cru(agent_id: str, nome: str, args: dict) -> tuple[str, bool]:
     agent_id = normalizar_agent_id(agent_id)
     try:
+        args, cr = await ler_cracha(args, agent_id)
         async with sessao(role="service_role") as conn:
-            ctx = await _contexto(conn, agent_id)
+            ctx = await _contexto(conn, agent_id, cr)
             if nome == "lembrar":
                 return await _lembrar(agent_id, str((args or {}).get("fato") or "")), False
             if nome == "varredura_registrar":
@@ -2371,7 +2379,7 @@ async def _executar_cru(agent_id: str, nome: str, args: dict) -> tuple[str, bool
             if nome.startswith("hsgrowth_"):
                 return await _hsgrowth(conn, agent_id, nome, args or {}, ctx), False
             return await _taskhs(conn, agent_id, nome, args or {}, ctx), False
-    except (_Recusa, RegraInvalida) as e:
+    except (_Recusa, _RecusaDoCracha, RegraInvalida) as e:
         return str(e), True
     except taskhs.ErroSistema as e:
         return str(e), True

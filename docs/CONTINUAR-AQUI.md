@@ -45,6 +45,12 @@
   contou de cabeça (6 linhas) e disse "conferido" — texto reforçado ("sempre,
   mesmo com poucas linhas"). **Com a Lidisay:** ferramenta `relatorio_espelhos`
   no molde da `relatorio_ponto` (a resposta de 24/11 é o rascunho). Depois, PK-11.
+- **PK-11 no código (26/11):** plugin `vps-gateway/plugin-cracha/` +
+  `app/cracha.py` + `_contexto` do e-mail e do bot. Spec
+  `docs/superpowers/specs/2026-11-26-pk11-cracha-do-turno-design.md`.
+  **Falta:** deploy → `vps-gateway/plugin-cracha/configurar.sh` (Konsole;
+  segredo antes do plugin, reinicia o gateway sem resposta em voo) → conferir
+  o log `crachá ok, pessoa=…` numa conversa do Erick com o próprio Guardi.
 - **PK-07 fechado em produção:** deploy `3839428` no ar desde 07:57; regras-base
   gravadas nos cinco `SOUL.md`; a `nina`, perguntada pela conta do Erick,
   identificou pelo carimbo (e-mail primeiro, nome editável, última linha).

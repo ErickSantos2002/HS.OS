@@ -71,7 +71,7 @@ def test_servicos_nao_e_roteado_para_vendas(chave, monkeypatch):
     _roteia(monkeypatch, {"/service-boards": {"boards": [{"id": 1}], "total": 1}})
 
     async def roda():
-        async def ctx_(conn, agent):
+        async def ctx_(conn, agent, *_):
             return dict(_CTX)
         monkeypatch.setattr(mcp_bot, "_contexto", ctx_)
 
