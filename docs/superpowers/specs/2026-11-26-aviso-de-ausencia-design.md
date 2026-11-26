@@ -1,0 +1,102 @@
+# Aviso de pedido de ausência no Guardi do RH — design
+
+Data: 26/11/2026 · pedido do Erick, para a Lidisay (RH)
+
+## Por quê
+
+A Lidisay controla os pedidos de ausência no TalentHS, mas são sistemas demais
+para ela ficar olhando cada um. Hoje um pedido pode esperar dias porque ninguém
+abriu a tela (há um pendente desde 26/11 08:01). O que ela quer: **ser avisada
+na conversa com o Guardi dela (`lidisay-bot`, Alfred-Guardi) e aprovar ou
+recusar ali mesmo, pelo cartão.**
+
+## Objetivos
+
+- Pedido de ausência **pendente** novo no TalentHS → em até ~2 min aparece na
+  conversa da Lidisay com o Guardi: um recado com quem, tipo, datas, dias e
+  motivo, e dois cartões, **Aprovar** e **Recusar**.
+- O clique executa no TalentHS como ela, pelo caminho que já existe
+  (`talenths_aprovar_ausencia` / `talenths_recusar_ausencia`).
+- Nada se perde se o HS.OS ou o TalentHS caírem: o pedido continua pendente lá
+  e é avisado quando voltar.
+
+## Não-objetivos
+
+- Mexer no TalentHS (nenhum webhook, nenhum deploy lá).
+- Avisar quem pediu sobre a decisão (o TalentHS já mostra na tela dele).
+- Pedidos auto-aprovados (tipo sem `requires_approval`) — não há o que decidir.
+- Outros fluxos de aprovação do RH (ajuste de ponto etc.) — mesmo molde, depois.
+
+## Anti-objetivos
+
+- Avisar duas vezes o mesmo pedido (são 2 workers).
+- Gastar turno de LLM por aviso.
+- Cartão que aprova algo diferente do que o recado mostrou.
+
+## Abordagens consideradas
+
+| | troca | escolha |
+|---|---|---|
+| **A. HS.OS confere a cada 2 min** (`/absences/team/pending` como o RH) | atraso de até 2 min; zero mudança no TalentHS; autocura | ✅ escolhida |
+| B. Webhook do TalentHS | instantâneo, mas exige sessão e deploy lá, e aviso perdido se a chamada falhar — precisaria do A de rede de segurança | ✗ |
+| **X. Servidor monta o recado e os cartões** (`talenths_preparo.preparar` + `acoes.criar_pendente`) | determinístico, sem token; recusa com motivo é conversando com o Guardi | ✅ escolhida |
+| Y. Turno do Guardi preparando os cartões | conversado, mas custa um turno por aviso e depende do agente chamar a ferramenta | ✗ |
+
+Escolha do Erick em 26/11/2026: **A + X**.
+
+## Desenho
+
+**Etapa nova na `passada` do `disparador_lembretes`**, igual à varredura
+(`_avisos_ausencia`, isolada: exceção não sobe, tabela ausente só avisa uma vez
+no log). Porta única preservada — nenhum laço paralelo, nenhum `chat.send`.
+
+1. **Quem recebe:** `app_settings` chave `avisos_ausencia` =
+   `{ligado: bool, destinatarios: [user_id do HS.OS]}`. Ausente = desligado.
+   Para cada destinatário: o Guardi dele (`agent_profiles.dono_id`), que precisa
+   ter `talenths` em `sistemas_ligados`; senão pula e registra no log.
+2. **Ritmo:** no máximo uma leitura a cada 120 s por worker (relógio em memória).
+3. **Leitura:** `talenths.chamar(email, bot, "/absences/team/pending", dono=…)`
+   — só GET, como o destinatário.
+4. **Deduplicação:** tabela nova `avisos_ausencia` (migração `044`):
+   `(destinatario_id, pedido_id)` único, `avisado_em`, `acao_aprovar_id`,
+   `acao_recusar_id`. Para cada pedido pendente sem linha: `INSERT … ON CONFLICT
+   DO NOTHING RETURNING` — **quem inserir é quem avisa**, na mesma transação do
+   recado e dos cartões. O outro worker não vê retorno e segue.
+5. **Recado + cartões**, na mesma transação:
+   - mensagem do agente: `📅 Pedido de ausência — Fulano (Depto): Férias,
+     02/12 a 06/12 (5 dias). Motivo: …` (campos saneados, teto de tamanho);
+   - dois cartões via `preparar(ctx, bot, {acao: "aprovar_ausencia", ids:[id]})`
+     e `{acao: "recusar_ausencia", ids:[id]}` → `criar_pendente`. O `preparar`
+     relê o pedido e confere `pending`; o executor confere de novo no clique.
+6. **Pedido do próprio destinatário** (e-mail igual ao dele): não avisa — ele
+   não aprova o próprio pedido pelo Guardi.
+
+## Decisões minhas (revisáveis)
+
+- **Primeira ativação avisa o que já está pendente** (inclusive o de 26/11):
+  é justamente o que ela não viu.
+- **Cartão vence em 24 h** (`VALIDADE` das ações). Se vencer e o pedido seguir
+  pendente, **um novo aviso por dia** (marca `reavisado_em`; até o pedido sair
+  de `pending`). Sem isso, pedido esquecido some de novo.
+- **Clicar Recusar depois de Aprovar** (ou vice-versa) falha com a mensagem que
+  já existe ("já não está pendente: está aprovado") — não cancelo o cartão
+  irmão, para não mexer no executor genérico.
+- **Sem horário de silêncio**: pedidos são raros (3 no banco inteiro).
+- **Pedido editado** enquanto pendente: o `_marca` do cartão segura (executor
+  compara datas); o aviso não se repete.
+- **Ligar** com um script `scripts/avisos-ausencia.py --ligar <email> --aplicar`
+  (ensaio sem `--aplicar`), no molde do `varredura-agora.py`.
+
+## Restrições
+
+- Migração aplicada **antes** do deploy (regra do repo); script admin com o
+  venv do cadastro, conferindo o efeito.
+- Changelog obrigatório (minor: novidade).
+- Suíte do backend verde; testes no estilo do repo (docstring com o custo).
+
+## Para o construtor
+
+Formato exato do recado, nome dos helpers, onde mora a lógica pura (sugestão:
+`app/avisos_ausencia.py` com a decisão pura testada e a etapa fina no
+disparador), e se 3 mensagens seguidas geram 3 pushes — se gerarem, juntar o
+detalhe do pedido no texto do primeiro cartão em vez de recado separado.
