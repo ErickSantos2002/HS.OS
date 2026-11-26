@@ -1,6 +1,6 @@
 # Continuar aqui
 
-## ▶ Feito na manhã de 26/11/2026
+## ▶ 26/11/2026 — Onda 0 fechada (12 de 12)
 
 - **Rajada das 07:30 reprovou e foi corrigida.** 23 `Request timed out` (lane
   wait sumiu, sem OOM). Causa: sem `requestTimeoutMs`, o OpenClaw dá **1,5 s**
@@ -48,9 +48,13 @@
 - **PK-11 no código (26/11):** plugin `vps-gateway/plugin-cracha/` +
   `app/cracha.py` + `_contexto` do e-mail e do bot. Spec
   `docs/superpowers/specs/2026-11-26-pk11-cracha-do-turno-design.md`.
-  **Falta:** deploy → `vps-gateway/plugin-cracha/configurar.sh` (Konsole;
-  segredo antes do plugin, reinicia o gateway sem resposta em voo) → conferir
-  o log `crachá ok, pessoa=…` numa conversa do Erick com o próprio Guardi.
+  **No ar (26/11, 10:10):** deploy `d6b23e1`, plugin carregado (9 plugins no
+  boot), segredo nas duas pontas. Provado: (1) a API de produção aceita o
+  crachá do plugin instalado e recusa o forjado (rodado dentro do contêiner);
+  (2) o Erick pedindo a agenda ao `miguel-bot` recebeu "esta é de outra
+  pessoa" — frase que só o caminho do crachá produz. ⚠️ O log de produção NÃO
+  mostra `INFO` da aplicação: o "crachá ok" do `ler_cracha` não aparece lá.
+  **ONDA 0 FECHADA (12/12).**
 - **PK-07 fechado em produção:** deploy `3839428` no ar desde 07:57; regras-base
   gravadas nos cinco `SOUL.md`; a `nina`, perguntada pela conta do Erick,
   identificou pelo carimbo (e-mail primeiro, nome editável, última linha).
