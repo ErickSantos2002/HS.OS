@@ -100,3 +100,21 @@ Formato exato do recado, nome dos helpers, onde mora a lógica pura (sugestão:
 `app/avisos_ausencia.py` com a decisão pura testada e a etapa fina no
 disparador). Push: as 3 mensagens saem com `tag: agente:<bot>` e o service
 worker as junta numa notificação só — conferido em `push_regras.py`.
+
+## Revisão 26/11/2026 — um cartão só, com Recusar e Aprovar
+
+O Erick viu os dois cartões (cada um com Cancelar/Confirmar: quatro botões para uma
+decisão) e pediu um só. **Escolhido:** continuam as DUAS ações preparadas, ligadas
+por `acoes_pendentes.par_id` (`045`), mostradas numa mensagem só com os botões
+**Recusar** e **Aprovar**. Confirmar uma cancela a outra na mesma transação, com as
+duas linhas travadas em ordem de id (sem deadlock com dois cliques). Rejeitado:
+uma ação "decidir" que recebe a escolha no clique — quebraria a regra de que o clique
+executa só o payload gravado, sem argumento novo.
+
+- `acoes.criar_par(...)` grava as duas pendências e UMA mensagem com
+  `media: [{type: "acao_aprovacao", id, rotulo, par: {id, rotulo}}]`.
+- `/acoes/{id}/confirmar` com par: a outra já decidida → 409 ("a outra opção já foi
+  escolhida"); sucesso → a outra vira `cancelada`. Falha do executor → só a escolhida
+  vira `erro`.
+- `CartaoAcao` com `par`: um cabeçalho, os campos da principal, e os dois botões;
+  decidido, mostra qual foi.
