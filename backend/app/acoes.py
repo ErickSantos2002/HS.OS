@@ -7,6 +7,7 @@ argumento novo. Cada executor chama o sistema COMO o dono (token de agente).
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Awaitable, Callable
 
 import httpx
@@ -870,21 +871,32 @@ EXECUTORES: dict[tuple[str, str], Executor] = {
 
 
 async def criar_pendente(conn, dono: str, bot: str, sistema: str, acao: str, payload: dict,
-                         resumo: str) -> str:
+                         resumo: str, criado_em: datetime | None = None) -> str:
     """Grava a pendência e o cartão na conversa (push e tempo real vêm dos
-    triggers da `conversations`)."""
+    triggers da `conversations`).
+
+    `criado_em` fixa a hora da mensagem do cartão — para quem grava várias
+    mensagens na mesma transação, onde `now()` é igual para todas e a ordem
+    na conversa ficaria ao acaso (aviso de ausência, 26/11/2026)."""
     if (sistema, acao) not in EXECUTORES:
         raise ValueError(f"ação desconhecida: {sistema}/{acao}")
     aid = await conn.fetchval(
         "INSERT INTO public.acoes_pendentes (user_id, agent_id, sistema, acao, payload, resumo) "
         "VALUES ($1::uuid, $2, $3, $4, $5::text::jsonb, $6) RETURNING id::text",
         dono, bot, sistema, acao, json.dumps(payload, ensure_ascii=False), resumo)
-    conv = await conn.fetchval(
-        "INSERT INTO public.conversations (agent_id, user_id, role, content, media) "
-        "VALUES ($1, $2::uuid, 'agent', $3, $4::text::jsonb) RETURNING id::text",
-        bot, dono, f"🔔 Aguardando sua confirmação: {resumo}",
-        json.dumps([{"type": "acao_aprovacao", "id": aid, "name": resumo, "mimeType": "", "base64": ""}],
-                   ensure_ascii=False))
+    conteudo = f"🔔 Aguardando sua confirmação: {resumo}"
+    media = json.dumps([{"type": "acao_aprovacao", "id": aid, "name": resumo, "mimeType": "", "base64": ""}],
+                       ensure_ascii=False)
+    if criado_em is None:
+        conv = await conn.fetchval(
+            "INSERT INTO public.conversations (agent_id, user_id, role, content, media) "
+            "VALUES ($1, $2::uuid, 'agent', $3, $4::text::jsonb) RETURNING id::text",
+            bot, dono, conteudo, media)
+    else:
+        conv = await conn.fetchval(
+            "INSERT INTO public.conversations (agent_id, user_id, role, content, media, created_at) "
+            "VALUES ($1, $2::uuid, 'agent', $3, $4::text::jsonb, $5) RETURNING id::text",
+            bot, dono, conteudo, media, criado_em)
     await conn.execute("UPDATE public.acoes_pendentes SET conversa_id = $2::uuid WHERE id = $1::uuid",
                        aid, conv)
     return aid

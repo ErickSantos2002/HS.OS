@@ -185,3 +185,46 @@ def test_atualizar_marca_item_sem_mexer_no_card(monkeypatch):
     asyncio.run(acoes._taskhs_atualizar("e", "b", {"list_id": 3, "card_id": 9, "campos": {},
                 "marcar_itens": [{"checklist_id": 5, "item_id": 50, "checked": True}]}))
     assert feitas == [("PATCH", "/lists/3/cards/9/checklists/5/items/50", {"checked": True})]
+
+
+# --- criar_pendente com hora marcada (aviso de ausência, 26/11/2026) ---------
+
+class _ConnCriar:
+    def __init__(self):
+        self.chamadas = []
+
+    async def fetchval(self, sql, *args):
+        self.chamadas.append((sql, args))
+        return "id-1"
+
+    async def execute(self, sql, *args):
+        self.chamadas.append((sql, args))
+
+
+def _insert_da_conversa(conn):
+    return next((s, a) for s, a in conn.chamadas if "INSERT INTO public.conversations" in s)
+
+
+def test_criar_pendente_com_criado_em():
+    """O aviso de ausência grava recado + dois cartões numa transação só, e
+    dentro dela `now()` é o mesmo para os três: sem hora explícita a conversa
+    os ordenaria pelo `id` aleatório e o cartão podia aparecer antes do recado
+    que o explica."""
+    conn = _ConnCriar()
+    quando = datetime(2026, 11, 26, 12, 0, 0, 1000, tzinfo=timezone.utc)
+    asyncio.run(acoes.criar_pendente(conn, "u-lid", "lidisay-bot", "talenths",
+                                     "talenths_aprovar_ausencia", {"acao": "aprovar_ausencia"},
+                                     "Aprovar", criado_em=quando))
+    sql, args = _insert_da_conversa(conn)
+    assert "created_at" in sql and quando in args
+
+
+def test_criar_pendente_sem_criado_em_nao_muda():
+    """Os chamadores de sempre (o Guardi preparando cartão) seguem com o
+    `now()` do banco — nada de hora vinda do Python no caminho antigo."""
+    conn = _ConnCriar()
+    asyncio.run(acoes.criar_pendente(conn, "u-lid", "lidisay-bot", "talenths",
+                                     "talenths_aprovar_ausencia", {"acao": "aprovar_ausencia"},
+                                     "Aprovar"))
+    sql, args = _insert_da_conversa(conn)
+    assert "created_at" not in sql and len(args) == 4
