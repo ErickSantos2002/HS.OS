@@ -259,9 +259,10 @@ def _v(acao, campos=None, **alvo):
 
 def test_ausencia_parcial_dia_inteiro_e_datas():
     p = _v("pedir_ausencia", {"type_id": TIPO_FERIAS, "start_date": "2026-11-17", "start_time": "13:00",
-                              "end_time": "18:00"})
+                              "end_time": "18:00", "reason": MOTIVO})
     assert "end_date" not in p["campos"]
-    assert _v("pedir_ausencia", {"type_id": TIPO_FERIAS, "start_date": "2026-11-17"})["campos"]["end_date"] \
+    assert _v("pedir_ausencia", {"type_id": TIPO_FERIAS, "start_date": "2026-11-17",
+                                 "reason": MOTIVO})["campos"]["end_date"] \
         == "2026-11-17"    # lá, sem end_date dá KeyError → 500
     for campos in ({"type_id": TIPO_FERIAS, "start_date": "2026-11-17", "start_time": "13:00"},
                    {"type_id": TIPO_FERIAS, "start_date": "2026-11-17", "start_time": "18:00", "end_time": "13:00"},
@@ -376,7 +377,7 @@ def test_campo_errado_nao_gasta_chamada(th):
 def test_cartao_de_ausencia_e_ida_e_volta(th):
     payload, texto = _preparar(th, "pedir_ausencia", campos={
         "type_id": TIPO_FERIAS, "start_date": "2026-11-17", "start_time": "13:00", "end_time": "18:00",
-        "reason": "visita da obra"})
+        "reason": MOTIVO})
     sistema, acao, _p, resumo = th["pendentes"][-1]
     assert (sistema, acao) == ("talenths", "talenths_pedir_ausencia")
     assert resumo == "TalentHS · Pedir ausência — Férias" and "não diga que foi feito" in texto
@@ -384,20 +385,20 @@ def test_cartao_de_ausencia_e_ida_e_volta(th):
     out = _executar(th, payload)
     assert _escritas(th) == [("POST", "/absences/request", {
         "type_id": TIPO_FERIAS, "start_date": "2026-11-17", "start_time": "13:00", "end_time": "18:00",
-        "reason": "visita da obra"})]
+        "reason": MOTIVO})]
     assert out.startswith("Feito no TalentHS")
 
 
 def test_ausencia_que_nasce_aprovada_e_retroativa_sao_avisadas(th):
     payload, texto = _preparar(th, "pedir_ausencia", campos={"type_id": TIPO_ATESTADO,
-                                                             "start_date": "2026-11-10"})
+                                                             "start_date": "2026-11-10", "reason": MOTIVO})
     avisos = " ".join(payload["_exibir"]["avisos"])
     assert "APROVADO" in avisos and "retroativo" in avisos and "APROVADO" in texto
 
 
 def test_tipo_de_ausencia_inexistente_recusa(th):
     with pytest.raises(ValueError):
-        _preparar(th, "pedir_ausencia", campos={"type_id": u(3), "start_date": "2026-11-17"})
+        _preparar(th, "pedir_ausencia", campos={"type_id": u(3), "start_date": "2026-11-17", "reason": MOTIVO})
 
 
 def test_cancelar_so_pedido_proprio_e_pendente(th):
@@ -689,3 +690,26 @@ def test_agents_md_aponta_para_a_escrita_e_cabe_no_teto():
                          "setor": "RH"})
     assert "talenths_preparar" in a["AGENTS.md"] and "talenths_acoes" in a["AGENTS.md"]
     assert len(a["AGENTS.md"]) < TETO_ARQUIVO_AGENTE
+
+
+MOTIVO = "consulta médica marcada pela manhã"  # ≥ 20 caracteres
+
+
+def test_motivo_da_ausencia_e_obrigatorio_com_20_caracteres():
+    """Desde 26/11/2026 o TalentHS recusa pedido de ausência com motivo de
+    menos de 20 caracteres (`MIN_REASON_LENGTH`, contado sem os espaços das
+    pontas). Aqui o motivo era opcional: o cartão saía, a pessoa clicava e
+    voltava "o TalentHS recusou (400)" — foi o que aconteceu com o `hyago-bot`
+    no mesmo dia. A recusa tem que vir no PREPARO, dizendo ao Guardi para
+    perguntar o motivo, não inventar."""
+    base = {"type_id": TIPO_FERIAS, "start_date": "2026-11-17"}
+    for motivo in (None, "", "   ", "visita da obra", "  " + "x" * 19 + "  "):
+        campos = dict(base) if motivo is None else {**base, "reason": motivo}
+        with pytest.raises(ValueError) as e:
+            _v("pedir_ausencia", campos)
+        assert "reason" in str(e.value)
+        if motivo is not None:
+            assert "20" in str(e.value) and "pergunte" in str(e.value)
+    assert _v("pedir_ausencia", {**base, "reason": "  " + "x" * 20 + " "})["campos"]["reason"] == "x" * 20
+    desc = te.ACOES["pedir_ausencia"].campos["reason"].desc
+    assert "20" in desc

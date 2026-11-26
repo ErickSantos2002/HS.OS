@@ -73,6 +73,7 @@ class Campo:
     obrigatorio: bool = False
     opcoes: tuple = ()
     desc: str = ""
+    minimo: int = 0           # texto: caracteres mínimos (sem os espaços das pontas)
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,7 @@ class Acao:
     lote: bool = False        # aceita `ids` (até TETO_LOTE) num cartão só
 
 
+MOTIVO_MINIMO = 20
 _NOTA = Campo("texto", desc="observação de quem decide (opcional)")
 _ACAO_PDI = {"title": Campo("titulo", True), "description": Campo("texto"), "how": Campo("texto", desc="como fazer"),
              "due_date": Campo("data", desc="prazo AAAA-MM-DD")}
@@ -98,7 +100,13 @@ ACOES: dict[str, Acao] = {
         {"type_id": Campo("id", True, desc="o tipo, de talenths_consultar tipos_de_ausencia"),
          "start_date": Campo("data", True), "end_date": Campo("data", desc="padrão: o mesmo dia"),
          "start_time": Campo("hora", desc="HH:MM — só na ausência de parte do dia, com end_time"),
-         "end_time": Campo("hora", desc="HH:MM"), "reason": Campo("texto", desc="motivo")}),
+         "end_time": Campo("hora", desc="HH:MM"),
+         # ⚠️ Desde 26/11/2026 o TalentHS recusa motivo com menos de 20 caracteres
+         # (`MIN_REASON_LENGTH` em `routers/absences.py` de lá). Opcional aqui, o
+         # cartão saía e falhava no clique (`hyago-bot`, 26/11).
+         "reason": Campo("texto", True, minimo=MOTIVO_MINIMO,
+                         desc=f"motivo, nas palavras do seu dono — mínimo {MOTIVO_MINIMO} caracteres; "
+                              "pergunte se ele não disse, nunca invente")}),
     "cancelar_ausencia": Acao("DELETE", "/absences/{id}", "todos",
                               "cancelar um pedido de ausência do seu dono que ainda está pendente",
                               alvo="o id do pedido (minhas_ausencias)"),
@@ -300,6 +308,10 @@ def _valor(nome: str, c: Campo, v):
         teto = TETO_TITULO if c.tipo == "titulo" else TETO_TEXTO
         if len(t) > teto:
             raise ValueError(f"`{nome}` passa de {teto} caracteres ({len(t)}).")
+        if len(t) < c.minimo:
+            raise ValueError(f"`{nome}` precisa de pelo menos {c.minimo} caracteres (tem {len(t)}) — o sistema "
+                             "recusa menos que isso. Não complete por conta própria: pergunte ao seu dono "
+                             "o motivo e use as palavras dele.")
         return t
     if c.tipo == "acoes_pdi":
         if not isinstance(v, list) or len(v) > TETO_ACOES_PDI:
@@ -321,6 +333,9 @@ def _campos(onde: str, especie: dict, dados) -> dict:
     for k, c in especie.items():
         v = dados.get(k)
         if v is None or (isinstance(v, str) and not v.strip()):
+            if c.obrigatorio and c.minimo:
+                raise ValueError(f"Falta `{k}` em {onde} — pelo menos {c.minimo} caracteres, que o sistema "
+                                 "exige. Não invente: pergunte ao seu dono e use as palavras dele.")
             if c.obrigatorio:
                 raise ValueError(f"Falta `{k}` em {onde}.")
             continue

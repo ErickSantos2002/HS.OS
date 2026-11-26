@@ -30,6 +30,16 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.25.1",
+    date: "2026-11-26",
+    changes: [
+      {
+        kind: "correcao",
+        text: "Ao pedir uma ausência pelo assistente pessoal, ele passa a perguntar o motivo (o TalentHS exige pelo menos 20 caracteres) antes de montar o cartão — antes o cartão saía sem motivo e dava erro ao confirmar.",
+      },
+    ],
+  },
+  {
     version: "2.25.0",
     date: "2026-11-26",
     changes: [
