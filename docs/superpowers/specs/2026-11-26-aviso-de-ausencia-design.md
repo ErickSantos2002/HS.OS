@@ -58,8 +58,8 @@ no log). Porta única preservada — nenhum laço paralelo, nenhum `chat.send`.
 3. **Leitura:** `talenths.chamar(email, bot, "/absences/team/pending", dono=…)`
    — só GET, como o destinatário.
 4. **Deduplicação:** tabela nova `avisos_ausencia` (migração `044`):
-   `(destinatario_id, pedido_id)` único, `avisado_em`, `acao_aprovar_id`,
-   `acao_recusar_id`. Para cada pedido pendente sem linha: `INSERT … ON CONFLICT
+   `(destinatario_id, pedido_id)` chave primária, `avisado_em`,
+   `ultimo_aviso_em`. Para cada pedido pendente sem linha: `INSERT … ON CONFLICT
    DO NOTHING RETURNING` — **quem inserir é quem avisa**, na mesma transação do
    recado e dos cartões. O outro worker não vê retorno e segue.
 5. **Recado + cartões**, na mesma transação:
@@ -76,7 +76,7 @@ no log). Porta única preservada — nenhum laço paralelo, nenhum `chat.send`.
 - **Primeira ativação avisa o que já está pendente** (inclusive o de 26/11):
   é justamente o que ela não viu.
 - **Cartão vence em 24 h** (`VALIDADE` das ações). Se vencer e o pedido seguir
-  pendente, **um novo aviso por dia** (marca `reavisado_em`; até o pedido sair
+  pendente, **um novo aviso por dia** (compare-and-set em `ultimo_aviso_em`; até o pedido sair
   de `pending`). Sem isso, pedido esquecido some de novo.
 - **Clicar Recusar depois de Aprovar** (ou vice-versa) falha com a mensagem que
   já existe ("já não está pendente: está aprovado") — não cancelo o cartão
@@ -98,5 +98,5 @@ no log). Porta única preservada — nenhum laço paralelo, nenhum `chat.send`.
 
 Formato exato do recado, nome dos helpers, onde mora a lógica pura (sugestão:
 `app/avisos_ausencia.py` com a decisão pura testada e a etapa fina no
-disparador), e se 3 mensagens seguidas geram 3 pushes — se gerarem, juntar o
-detalhe do pedido no texto do primeiro cartão em vez de recado separado.
+disparador). Push: as 3 mensagens saem com `tag: agente:<bot>` e o service
+worker as junta numa notificação só — conferido em `push_regras.py`.
