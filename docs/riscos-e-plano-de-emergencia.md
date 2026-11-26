@@ -89,10 +89,12 @@ exceção na rota (ver `CLAUDE.md`).
    openclaw-gateway` e `systemctl status banco-mcp mcp-ponte`.
 3. Na VPS da aplicação: `systemctl status openclaw-tunnel`. Caído → `systemctl
    restart openclaw-tunnel`.
-4. Gateway travado: reiniciar **pela tela** (`/monitoring` → aba Gateway), que
-   recusa se houver resposta em andamento e diz de quem. Pela máquina, só se a
-   tela não alcançar: `XDG_RUNTIME_DIR=/run/user/0 systemctl --user restart
-   openclaw-gateway`, sabendo que isso mata o que estiver em voo.
+4. Gateway travado: antes, ver se há resposta em andamento (consulta
+   `_SQL_RUNS_ATIVOS` em `backend/app/routers/gateway.py`, pelo cadastro de
+   bancos). Depois, na VPS: `XDG_RUNTIME_DIR=/run/user/0 systemctl --user
+   restart openclaw-gateway` — mata o que estiver em voo. ⚠️ O botão de
+   reinício em `/monitoring` responde "não disponível": a rota REST de
+   manutenção dá 404 nesta versão do gateway (2026.7.1-2).
 5. Tudo de pé e o agente mudo: o log do dia (`/tmp/openclaw/openclaw-AAAA-MM-DD.log`)
    procurando `billing`, `402`, `rate limit` — é o saldo do DeepSeek (abaixo).
 
