@@ -166,12 +166,13 @@ export function TelaThread({ canalId, raizId, ativa, aoVoltar }: { canalId: stri
 
   const acoesDe_ = acoesDe
     ? (acoesDe.id === raizId
-      ? acoesDoToque([], { texto: acoesDe.content ?? "", copiar: () => void copyToClipboard(acoesDe.content).then((ok) => (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar"))) })
+      ? acoesDoToque(acoesDaRespostaNaThread({ souAutor: false, mensagem: acoesDe.deleted_at ? undefined : acoesDe }), { texto: acoesDe.content ?? "", copiar: () => void copyToClipboard(acoesDe.content).then((ok) => (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar"))) })
       : acoesDoToque(
         acoesDaRespostaNaThread({
           souAutor: acoesDe.author_id === user?.id,
           aoEditar: () => { setResposta(null); setEditando(acoesDe); setRascunho(acoesDe.content); },
           aoApagar: () => void apagarNoCanal(canalId, acoesDe.id),
+          mensagem: acoesDe.deleted_at ? undefined : acoesDe,
         }),
         { texto: acoesDe.content ?? "", copiar: () => void copyToClipboard(acoesDe.content).then((ok) => (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar"))) },
       ))

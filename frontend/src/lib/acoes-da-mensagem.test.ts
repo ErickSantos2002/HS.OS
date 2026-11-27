@@ -62,4 +62,11 @@ describe("acoesDaRespostaNaThread", () => {
     expect(acoesDaRespostaNaThread({ souAutor: true, aoEditar: f, aoApagar: f }).map((a) => a.rotulo)).toEqual(["Editar", "Apagar"]);
     expect(acoesDaRespostaNaThread({ souAutor: false, aoEditar: f, aoApagar: f })).toEqual([]);
   });
+  it("com a mensagem, encaminha — a spec promete encaminhar de thread (revisão 27/11/2026)", () => {
+    const f = vi.fn();
+    expect(acoesDaRespostaNaThread({ souAutor: false, mensagem: msg }).map((a) => a.rotulo)).toEqual(["Encaminhar"]);
+    expect(acoesDaRespostaNaThread({ souAutor: true, aoEditar: f, aoApagar: f, mensagem: msg }).map((a) => a.rotulo))
+      .toEqual(["Encaminhar", "Editar", "Apagar"]);
+    expect(acoesDaRespostaNaThread({ souAutor: false, mensagem: { ...msg, id: "optimistic-1" } })).toEqual([]);
+  });
 });

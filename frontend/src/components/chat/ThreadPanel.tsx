@@ -214,7 +214,7 @@ function ThreadMessageCard({
   const showActions = !compact && !isDeleted && !!onToggleReaction && !message.id.startsWith("optimistic-");
   // Uma lista só (`lib/acoes-da-mensagem.ts`): a barra do desktop é
   // desenhada a partir dela e a folha do celular usa a mesma.
-  const acoesDaResposta: AcaoDaMensagem[] = acoesDaRespostaNaThread({ souAutor: isOwn, aoEditar: onEdit, aoApagar: onDelete });
+  const acoesDaResposta: AcaoDaMensagem[] = acoesDaRespostaNaThread({ souAutor: isOwn, aoEditar: onEdit, aoApagar: onDelete, mensagem: isDeleted ? undefined : message });
 
   const handleTouchStart = useCallback(() => {
     longPressTimer.current = setTimeout(() => setShowMobileMenu(true), 500);

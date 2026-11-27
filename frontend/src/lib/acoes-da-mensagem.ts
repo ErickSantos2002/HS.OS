@@ -87,9 +87,16 @@ export function acoesDaMensagemDoCanal(
 /** Resposta dentro de uma thread: o autor edita e apaga. Era o array do
  *  `ThreadMessageCard`; o celular soma o "Copiar" (`acoesDoToque`). */
 export function acoesDaRespostaNaThread(
-  ctx: { souAutor: boolean; aoEditar?: () => void; aoApagar?: () => void },
+  ctx: {
+    souAutor: boolean; aoEditar?: () => void; aoApagar?: () => void;
+    /** A resposta em si — com ela, "Encaminhar" (revisão de 27/11/2026). */
+    mensagem?: Pick<ChannelMessage, "id" | "content">;
+  },
 ): AcaoDaMensagem[] {
+  const m = ctx.mensagem;
+  if (m?.id.startsWith("optimistic-")) return [];
   return [
+    ...(m ? [{ rotulo: "Encaminhar", icone: Forward, aoEscolher: () => abrirEncaminhar({ tipo: "canal", id: m.id, previa: previa(m.content) }) }] : []),
     ...(ctx.souAutor && ctx.aoEditar ? [{ rotulo: "Editar", icone: Pencil, aoEscolher: ctx.aoEditar }] : []),
     ...(ctx.souAutor && ctx.aoApagar ? [{ rotulo: "Apagar", icone: Trash2, perigo: true, aoEscolher: ctx.aoApagar }] : []),
   ];
