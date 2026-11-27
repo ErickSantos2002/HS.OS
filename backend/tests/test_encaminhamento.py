@@ -74,3 +74,11 @@ def test_anexo_repetido_vira_uma_copia_e_ha_teto():
     mesmo id repetido mil vezes viraria mil cópias no R2 por destino."""
     assert E.ids_unicos(["a", "b", "a", "c"]) == ["a", "b", "c"]
     assert len(E.ids_unicos([f"x{i}" for i in range(50)])) == E.LIMITE_ANEXOS
+
+
+def test_resumo_em_audio_do_agente_no_canal_nao_viaja():
+    """Achado da revisão (27/11/2026): no canal, o `audio_url` da resposta do
+    agente é o resumo em áudio dela. Copiado, chegava como áudio GRAVADO por
+    quem encaminhou — o player de pessoa — e custava uma cópia por destino."""
+    assert E.audio_que_viaja("anexo:abc", "agent") is None
+    assert E.audio_que_viaja("anexo:abc", "human") == "abc"

@@ -165,7 +165,7 @@ async def _ler_origem(o: OrigemIn, usuario: Usuario) -> _Origem:
             msg = _msg_saida(linha)
             publicos, ids = E.anexos_do_canal(msg.attachments)
             publicos = publicos[:E.LIMITE_ANEXOS]
-            id_audio = E.id_do_audio(msg.audio_url)
+            id_audio = E.audio_que_viaja(msg.audio_url, msg.author_type)
             autor, texto = msg.author_name, msg.content or ""
         else:
             try:

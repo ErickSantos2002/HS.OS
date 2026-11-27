@@ -65,6 +65,15 @@ def id_do_audio(audio_url: str | None) -> str | None:
     return None
 
 
+def audio_que_viaja(audio_url: str | None, author_type: str) -> str | None:
+    """O áudio de mensagem de canal que vai junto.
+
+    O de AGENTE é o resumo em áudio da resposta (`voz_entrega`): leitura do
+    texto, que já vai. Copiado, chegaria como áudio gravado por quem encaminhou.
+    """
+    return None if author_type == "agent" else id_do_audio(audio_url)
+
+
 def conferir_destinos(pessoas: list[str], canais: list[str], guardi: bool, eu: str) -> None:
     """Recusa (ValueError com frase para a tela) antes de qualquer escrita."""
     total = len(pessoas) + len(canais) + (1 if guardi else 0)
