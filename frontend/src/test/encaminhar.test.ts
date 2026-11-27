@@ -17,13 +17,13 @@ const ctxCanal = { souAutor: false, aoEditar: () => {}, aoApagar: () => {} };
 
 describe("handoff para o Guardi", () => {
   it("consome uma vez só", () => {
-    guardarParaOGuardi({ agentId: "ana-bot", texto: "oi", anexos: [] });
+    guardarParaOGuardi({ agentId: "ana-bot", autor: "Bia", texto: "oi", anexos: [] });
     expect(consumirParaOGuardi("ana-bot")?.texto).toBe("oi");
     expect(consumirParaOGuardi("ana-bot")).toBeNull();
   });
 
   it("outro agente não consome nem estraga o do Guardi", () => {
-    guardarParaOGuardi({ agentId: "ana-bot", texto: "oi", anexos: [] });
+    guardarParaOGuardi({ agentId: "ana-bot", autor: "Bia", texto: "oi", anexos: [] });
     expect(consumirParaOGuardi("nina")).toBeNull();
     expect(consumirParaOGuardi("ana-bot")?.texto).toBe("oi");
   });

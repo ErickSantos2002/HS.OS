@@ -30,6 +30,20 @@ export interface ChangelogVersion {
 
 export const CHANGELOG: ChangelogVersion[] = [
   {
+    version: "2.28.0",
+    date: "2026-11-27",
+    changes: [
+      {
+        kind: "novidade",
+        text: "Encaminhar mensagem, como no WhatsApp: na seta da mensagem (ou segurando a bolha no celular), escolha até 10 colegas ou grupos de uma vez — os anexos vão junto e abrem para quem recebe, com o selo \"Encaminhada\". Dá para encaminhar também as respostas dos agentes.",
+      },
+      {
+        kind: "novidade",
+        text: "Encaminhar para o seu assistente pessoal abre a conversa com ele já com a mensagem e os anexos no campo: é só dizer o que você quer com aquilo e enviar.",
+      },
+    ],
+  },
+  {
     version: "2.27.0",
     date: "2026-11-26",
     changes: [

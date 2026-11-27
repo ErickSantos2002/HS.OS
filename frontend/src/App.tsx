@@ -5,6 +5,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CascaDoApp } from "@/celular/CascaDoApp";
+import EncaminharDialog from "@/components/chat/EncaminharDialog";
 import { AuthProvider } from "@/components/AuthGuard";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -283,6 +284,8 @@ const App = () => {
                   }
                 />
               </Routes>
+              {/* Seletor do "Encaminhar" — um só, para desktop e celular (spec 2026-11-27). */}
+              <EncaminharDialog />
               </FileSystemProvider>
             </AuthProvider>
           </BrowserRouter>

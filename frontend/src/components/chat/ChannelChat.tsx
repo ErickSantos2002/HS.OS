@@ -21,6 +21,7 @@ import FileAttachmentCard from "./FileAttachmentCard";
 import AudioDaMensagem from "./AudioDaMensagem";
 import MenuDaMensagem, { type AcaoDaMensagem } from "./MenuDaMensagem";
 import { acoesDaMensagemDoCanal } from "@/lib/acoes-da-mensagem";
+import SeloEncaminhada from "@/components/chat/SeloEncaminhada";
 import { ehPessoal, nomeDaConversaPessoal, PLACEHOLDER_PESSOAL } from "@/lib/conversa-pessoal";
 import { acharCitada, autorDaCitacao, montarResposta, separarCitacao, trechoParaCitar, type Citacao } from "@/lib/citacao";
 import { abrirCacheDeRespostas, consumirResposta } from "@/lib/resposta-rapida";
@@ -269,7 +270,8 @@ export const MessageBubble = memo(function MessageBubble({
   const temTexto = !!msg.content?.trim() || audioDePessoa || !temAnexos;
   const audioDeAgente = hasAudio && msg.author_type === "agent" && resumoLigado;
   const hasMention = msg.content.includes("@");
-  const mentionsEveryone = hasEveryoneMention(msg.content);
+  // Encaminhada: o `@todos` foi escrito para outra conversa e não avisou ninguém aqui.
+  const mentionsEveryone = !msg.encaminhada && hasEveryoneMention(msg.content);
   const isOwn = msg.author_id === currentUserId;
   const isDeleted = !!msg.deleted_at;
   const isEdited = !!msg.edited_at;
@@ -534,6 +536,7 @@ export const MessageBubble = memo(function MessageBubble({
           </>
         ) : (
           <div className={`relative max-w-[70%] flex flex-col ${isOwn ? "items-end" : "items-start"}`}>
+            {msg.encaminhada && <SeloEncaminhada />}
             {mentionsEveryone && (
               <div className="mt-1.5 mb-2 inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary ring-1 ring-primary/20">
                 <Users className="h-3 w-3" />

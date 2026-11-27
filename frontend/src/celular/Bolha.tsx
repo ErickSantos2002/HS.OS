@@ -43,6 +43,8 @@ interface Props {
   hora: string;
   visto?: EstadoDoVisto | null;
   editada?: boolean;
+  /** "↪ Encaminhada" acima do conteúdo (spec 2026-11-27). */
+  encaminhada?: boolean;
   erro?: boolean;
   reacoes?: ReacaoNaBolha[];
   aoReagir?: (emoji: string) => void;
@@ -54,7 +56,7 @@ interface Props {
 }
 
 export const Bolha = memo(function Bolha({
-  id, eu, inicio, grupo, avatar, autor, hora, visto, editada, erro, reacoes, aoReagir, thread,
+  id, eu, inicio, grupo, avatar, autor, hora, visto, editada, encaminhada, erro, reacoes, aoReagir, thread,
   aoSegurar, aoResponder, destaque, children,
 }: Props) {
   const bolhaRef = useRef<HTMLDivElement>(null);
@@ -144,6 +146,7 @@ export const Bolha = memo(function Bolha({
         {grupo && !eu && (inicio ? avatar : <span className="cel-vaga" />)}
         <div ref={bolhaRef} className={`cel-bolha${destaque ? " destaque" : ""}${erro ? " erro" : ""}`} {...handlers}>
           {autor && <div className="cel-autor" style={{ color: autor.cor }}>{autor.nome}</div>}
+          {encaminhada && <div style={{ fontSize: 11, fontStyle: "italic", opacity: 0.7, marginBottom: 2 }}>↪ Encaminhada</div>}
           {children}
           <span className="cel-rodape">
             {editada ? "editada · " : ""}{hora}

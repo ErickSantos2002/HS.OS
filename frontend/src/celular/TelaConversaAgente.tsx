@@ -26,6 +26,7 @@ import { useConversaAtivaNasNotificacoes } from "@/hooks/use-conversa-ativa";
 import { useMobileChatViewport } from "@/hooks/use-mobile-chat-viewport";
 import { usePersistentDraft } from "@/hooks/use-persistent-draft";
 import { acoesDaMensagemDoAgente } from "@/lib/acoes-da-mensagem";
+import { consumirParaOGuardi, textoParaOGuardi } from "@/lib/encaminhar";
 import { toCanonicalAgentId } from "@/lib/agent-id";
 import type { ArtifactType } from "@/lib/artifact-extractor";
 import { ehMeuGuardi } from "@/lib/bots-pessoais";
@@ -71,6 +72,14 @@ export function TelaConversaAgente({
   const { mensagens, temMais, loadingMore, isAgentWorking, streamingText } = conversa;
   const media = useChatMedia();
   const { value: rascunho, setValue: setRascunho, clear: limparRascunho } = usePersistentDraft(`agent:${agentId}`);
+  // Encaminhado para o Guardi (spec 2026-11-27): rascunho e anexos, nada enviado.
+  useEffect(() => {
+    const veio = consumirParaOGuardi(agentId);
+    if (!veio) return;
+    setRascunho(textoParaOGuardi(rascunho, veio.autor, veio.texto));
+    veio.anexos.forEach((a) => media.addStaged(a));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentId]);
   const [resposta, setResposta] = useState<Citacao | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [menu, setMenu] = useState(false);

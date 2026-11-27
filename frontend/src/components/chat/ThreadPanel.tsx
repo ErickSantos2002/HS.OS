@@ -3,6 +3,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { format } from "date-fns";
 import VistoDaMensagem from "./VistoDaMensagem";
 import { estadoNoCanal, type EstadoDoVisto } from "@/lib/vistos";
+import SeloEncaminhada from "@/components/chat/SeloEncaminhada";
 import { FileText, Loader2, MessageSquare, Mic, Paperclip, Pencil, Send, Smile, Trash2, Users, X, Check, Bot } from "lucide-react";
 import EmojiPickerReact, { Theme as EmojiTheme } from "emoji-picker-react";
 
@@ -267,6 +268,7 @@ function ThreadMessageCard({
             <p className={`text-sm italic ${isOwn ? "text-primary-foreground/70" : "text-muted-foreground"}`}>Mensagem apagada</p>
           ) : (
             <>
+              {message.encaminhada && <SeloEncaminhada className={isOwn ? "text-primary-foreground/70" : "text-muted-foreground"} />}
               {mentionsEveryone && (
                 <div className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${isOwn ? "bg-primary-foreground/15 text-primary-foreground ring-primary-foreground/30" : "bg-primary/10 text-primary ring-primary/20"}`}>
                   <Users className="h-3 w-3" />

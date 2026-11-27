@@ -190,6 +190,7 @@ const ItemDoCanal = memo(function ItemDoCanal({
         hora={horaCurta(m.created_at)}
         visto={visto}
         editada={!!m.edited_at && !apagada}
+        encaminhada={!!m.encaminhada && !apagada}
         reacoes={reacoesNaBolha}
         aoReagir={aoReagir}
         thread={threadNaBolha}

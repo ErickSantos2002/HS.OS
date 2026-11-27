@@ -52,7 +52,7 @@ export function useOrigemEncaminhar(): OrigemEncaminhar | null {
 
 // ── handoff para o Guardi ────────────────────────────────────────────────────
 
-interface ParaOGuardi { agentId: string; texto: string; anexos: MediaAttachment[] }
+interface ParaOGuardi { agentId: string; autor: string; texto: string; anexos: MediaAttachment[] }
 
 let pendente: ParaOGuardi | null = null;
 
@@ -61,11 +61,11 @@ export function guardarParaOGuardi(p: ParaOGuardi) {
 }
 
 /** Uso único, e só na conversa do agente para quem foi guardado. */
-export function consumirParaOGuardi(agentId: string): { texto: string; anexos: MediaAttachment[] } | null {
+export function consumirParaOGuardi(agentId: string): Omit<ParaOGuardi, "agentId"> | null {
   if (!pendente || pendente.agentId !== agentId) return null;
-  const { texto, anexos } = pendente;
+  const { autor, texto, anexos } = pendente;
   pendente = null;
-  return { texto, anexos };
+  return { autor, texto, anexos };
 }
 
 /** O que entra no campo: a mensagem inteira citada, com quem a escreveu. */
