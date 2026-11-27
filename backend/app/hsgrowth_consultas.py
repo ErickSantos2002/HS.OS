@@ -66,7 +66,13 @@ _FILTROS_DATA = ("created_at_from", "created_at_to", "entered_at_from", "entered
 _OBRIGATORIOS = {"meus_cards": ("board_id",), "buscar": ("q",)}
 # Consultas do dono → o que vai junto na query. Só `minhas_tarefas` leva o
 # `assigned_to_id`; em `meus_cards` ele cortaria o SDR (ver o topo).
-_DO_DONO = {"meus_cards": (("all", "true"), ("minimal", "true")), "minhas_tarefas": ()}
+# ⚠️ `card_aberto=true` (27/11/2026): no HSGrowth, ganhar ou perder o card não
+# conclui as tarefas dele, e o time deixa tarefa de lembrete lá. Sem isto o
+# Guardi listava como pendência o que era de negócio encerrado. Vai sempre; o
+# agente não escolhe (não está nos filtros aceitos).
+_SO_CARD_ABERTO = (("card_aberto", "true"),)
+_DO_DONO = {"meus_cards": (("all", "true"), ("minimal", "true")),
+            "minhas_tarefas": _SO_CARD_ABERTO, "tarefas_atrasadas": _SO_CARD_ABERTO}
 _EU_NA_QUERY = ("minhas_tarefas",)
 # Consultas que exigem o dono mas o filtram só aqui (sem parâmetro remoto).
 _SO_LOCAL = ("tarefas_atrasadas",)
@@ -97,10 +103,10 @@ CONSULTAS: dict[str, tuple[str, str, tuple[str, ...]]] = {
                "`limit` (até 30 por módulo)", ("q", "limit")),
     "notas": ("/card-notes/card/{card_id}", "as anotações de um card", ()),
     "minhas_tarefas": ("/card-tasks",
-                       "as tarefas do dono. `is_completed` (true/false), `task_type`, "
+                       "as tarefas do dono, só de cards abertos (ganho/perdido não entram). `is_completed` (true/false), `task_type`, "
                        "`due_date_start`/`due_date_end` (AAAA-MM-DD), `page`",
                        ("is_completed", "task_type", "due_date_start", "due_date_end", "page")),
-    "tarefas_atrasadas": ("/card-tasks/overdue", "as tarefas atrasadas", ()),
+    "tarefas_atrasadas": ("/card-tasks/overdue", "as tarefas atrasadas, só de cards abertos", ()),
     "campos": ("/fields/definitions/board/{board_id}", "os campos personalizados de um quadro", ()),
     "clientes": ("/clients", "os clientes (empresas). `search` (nome ou CNPJ)", ("search",)),
     "cliente": ("/clients/{client_id}", "um cliente pelo id", ()),
@@ -251,7 +257,7 @@ def filtrar_local(chave: str, dados, filtros_locais: dict | None, eu_id: int | N
     `etapa` (`list_id`), `tarefa` (`pending_tasks_status`) e `parado`
     (`is_stuck_3d`/`is_stuck_7d`). `tarefas_atrasadas`: só tarefas com
     `assigned_to_id` do dono. Formato inesperado ou sem `eu_id`: ValueError."""
-    if chave not in ("meus_cards", "tarefas_atrasadas"):
+    if chave not in ("meus_cards", "tarefas_atrasadas", "minhas_tarefas"):
         return dados
     erro = ValueError("resposta inesperada do HSGrowth")
     if isinstance(eu_id, bool) or not isinstance(eu_id, int):
@@ -262,8 +268,12 @@ def filtrar_local(chave: str, dados, filtros_locais: dict | None, eu_id: int | N
     f = filtros_locais or {}
     saida = []
     for c in itens:
-        if chave == "tarefas_atrasadas":
-            if c.get("assigned_to_id") != eu_id:
+        if chave in ("tarefas_atrasadas", "minhas_tarefas"):
+            if chave == "tarefas_atrasadas" and c.get("assigned_to_id") != eu_id:
+                continue
+            # Segunda trava do `card_aberto`: 1 = ganho, -1 = perdido. Sem o
+            # campo (HSGrowth antes do deploy) passa — a query já pediu.
+            if c.get("card_is_won", 0) != 0:
                 continue
         else:
             if eu_id not in (c.get("assigned_to_id"), c.get("sdr_id")):
@@ -277,6 +287,12 @@ def filtrar_local(chave: str, dados, filtros_locais: dict | None, eu_id: int | N
         saida.append(c)
     if campo is None:
         return saida
+    if chave == "minhas_tarefas":
+        # Paginada: o `total` do servidor conta todas as páginas.
+        total = dados.get("total")
+        tirados = len(itens) - len(saida)
+        return {**dados, campo: saida,
+                "total": total - tirados if isinstance(total, int) else len(saida)}
     return {**dados, campo: saida, "total": len(saida)}
 
 

@@ -291,7 +291,10 @@ Spec e plano: `docs/superpowers/specs/2026-11-05-bot-sistemas-internos-design.md
   `alterar` nunca muda `task_type` (fechava o desvio reunião→ligação→concluir).
   ⚠️ "Parado" é o `is_stuck_3d/7d` do HSGrowth, não a régua do
   `relatorios-hsgrowth`; `tarefas_atrasadas` é cortada aqui pelo dono (lá o admin
-  vê tudo). **Allowlist dos dois lados**: rota nova só chega ao Guardi no catálogo
+  vê tudo). ⚠️ **Tarefa só de card aberto** (27/11/2026): ganhar
+  ou perder o card não conclui as tarefas lá; `minhas_tarefas` e
+  `tarefas_atrasadas` mandam `card_aberto=true` sempre e cortam `card_is_won != 0`
+  aqui. O filtro na origem depende do HSGrowth (spec passada à sessão de lá). **Allowlist dos dois lados**: rota nova só chega ao Guardi no catálogo
   daqui **e** na allowlist de token de agente do HSGrowth. ⚠️ **Pré-requisito do
   lado de lá** (seção "Para o HSGrowth" da spec: token de agente, allowlist, dono
   em toda escrita, "via <bot>"): **nada é ligado antes do deploy do HSGrowth**.

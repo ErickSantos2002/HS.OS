@@ -88,7 +88,7 @@ def test_o_dono_e_injetado_pelo_servidor():
     p = hg.params_da_consulta("meus_cards", {"board_id": 2, "is_lost": False}, eu_id=9)
     assert ("all", "true") in p and ("is_lost", "false") in p
     assert "assigned_to_id" not in dict(p)   # ver test_meus_cards_nao_corta_o_sdr_no_hsgrowth
-    assert hg.params_da_consulta("minhas_tarefas", None, eu_id=9) == [("assigned_to_id", "9")]
+    assert hg.params_da_consulta("minhas_tarefas", None, eu_id=9) == [("assigned_to_id", "9"), ("card_aberto", "true")]
     assert hg.params_da_consulta("quadros", None) == [("category", "vendas")]
     with pytest.raises(ValueError):
         hg.params_da_consulta("meus_cards", {}, eu_id=9)       # board_id é obrigatório
@@ -151,7 +151,7 @@ def test_tarefas_atrasadas_so_do_dono():
         hg.filtrar_local("tarefas_atrasadas", tarefas, {}, None)
     with pytest.raises(ValueError):
         hg.params_da_consulta("tarefas_atrasadas", None, eu_id=None)
-    assert hg.params_da_consulta("tarefas_atrasadas", None, eu_id=3) == []
+    assert hg.params_da_consulta("tarefas_atrasadas", None, eu_id=3) == [("card_aberto", "true")]
 
 
 def test_link_do_card_e_montado_pelo_servidor():
@@ -390,3 +390,29 @@ def test_offset_e_limite_de_meus_cards_sao_locais():
     assert locais["offset"] == "40" and locais["limite"] == "20"
     with pytest.raises(ValueError):
         hg.params_da_consulta("meus_cards", {"board_id": 6, "limite": 0}, eu_id=16)
+
+
+def test_tarefa_de_card_ganho_ou_perdido_nao_chega_ao_guardi():
+    """27/11/2026: vendedor reclamando do Guardi. No HSGrowth, ganhar ou perder
+    o card NÃO conclui as tarefas dele — e o time deixa tarefa lá de lembrete.
+    O Guardi listava como pendência o que era de negócio encerrado.
+
+    Duas travas: `card_aberto=true` vai sempre na query (o HSGrowth corta na
+    origem) e, se a tarefa vier com `card_is_won` diferente de 0, sai aqui.
+    Sem o campo (HSGrowth antes do deploy), passa: a query já pediu."""
+    assert ("card_aberto", "true") in hg.params_da_consulta("minhas_tarefas", None, eu_id=3)
+    assert ("card_aberto", "true") in hg.params_da_consulta("tarefas_atrasadas", None, eu_id=3)
+    atrasadas = [{"id": 1, "assigned_to_id": 3, "card_is_won": 0},
+                 {"id": 2, "assigned_to_id": 3, "card_is_won": 1},
+                 {"id": 3, "assigned_to_id": 3, "card_is_won": -1},
+                 {"id": 4, "assigned_to_id": 3}]
+    assert [t["id"] for t in hg.filtrar_local("tarefas_atrasadas", atrasadas, {}, 3)] == [1, 4]
+    pagina = {"tasks": atrasadas, "total": 40, "page": 1, "page_size": 50, "total_pages": 1}
+    r = hg.filtrar_local("minhas_tarefas", pagina, {}, 3)
+    assert [t["id"] for t in r["tasks"]] == [1, 4]
+    assert r["total"] == 38   # o total é do servidor (todas as páginas): tira só o que saiu daqui
+
+
+def test_o_agente_nao_escolhe_ver_tarefa_de_card_encerrado():
+    with pytest.raises(ValueError):
+        hg.params_da_consulta("minhas_tarefas", {"card_aberto": "false"}, eu_id=3)
