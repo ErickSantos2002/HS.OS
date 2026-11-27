@@ -37,6 +37,8 @@ export interface ChannelMessage {
   edited_at: string | null;
   deleted_at: string | null;
   attachments: ChannelAttachment[] | null;
+  /** Encaminhada (047, 27/11/2026): a bolha mostra "↪ Encaminhada". */
+  encaminhada?: boolean;
 }
 
 export interface ChannelMember {

@@ -12,14 +12,14 @@ const msg = { id: "m1", content: "oi", deleted_at: null };
 describe("acoesDaMensagemDoCanal", () => {
   it("mensagem dos outros: responder, copiar, não lida e apagar para mim — sem editar nem apagar", () => {
     expect(acoesDaMensagemDoCanal(msg, ctx()).map((a) => a.rotulo)).toEqual([
-      "Responder", "Copiar", "Apagar para mim",
+      "Responder", "Copiar", "Encaminhar", "Apagar para mim",
     ]);
   });
 
   it("minha: ganha dados, editar e apagar, e o apagar é perigo", () => {
     const acoes = acoesDaMensagemDoCanal(msg, { ...ctx(), souAutor: true, aoDados: vi.fn() });
     expect(acoes.map((a) => a.rotulo)).toEqual([
-      "Responder", "Copiar", "Dados da mensagem", "Editar", "Apagar", "Apagar para mim",
+      "Responder", "Copiar", "Encaminhar", "Dados da mensagem", "Editar", "Apagar", "Apagar para mim",
     ]);
     expect(acoes.find((a) => a.rotulo === "Apagar")?.perigo).toBe(true);
   });

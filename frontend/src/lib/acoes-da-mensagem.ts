@@ -11,16 +11,25 @@
  * na lista (`lib/conversas-marcadas-store.ts`). A versão por mensagem criava uma
  * notificação, e o re-sweep de 2 s da conversa aberta a apagava na hora.
  */
-import { Copy, EyeOff, Info, Pencil, Reply, Trash2 } from "lucide-react";
+import { Copy, EyeOff, Forward, Info, Pencil, Reply, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import type { AcaoDaMensagem } from "@/components/chat/MenuDaMensagem";
 import { copyToClipboard } from "@/lib/clipboard";
+import { abrirEncaminhar } from "@/lib/encaminhar";
 import type { ChatMessage } from "@/lib/mock-data";
 import type { ChannelMessage } from "@/hooks/use-channels";
 
 function copiar(texto: string) {
   void copyToClipboard(texto).then((ok) => (ok ? toast.success("Mensagem copiada") : toast.error("Não consegui copiar")));
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Uma linha da mensagem para o topo do seletor de encaminhar. */
+function previa(texto: string | null | undefined): string {
+  const t = (texto ?? "").replace(/\s+/g, " ").trim();
+  return t.length > 120 ? `${t.slice(0, 120)}…` : t || "📎 Anexo";
 }
 
 /** Conversa com agente. O segundo argumento (agente) ficou sem uso quando o
@@ -29,6 +38,12 @@ export function acoesDaMensagemDoAgente(msg: ChatMessage, _effectiveAgentId?: st
   if (msg.id.startsWith("optimistic-") || msg.isError) return [];
   return [
     ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => copiar(msg.content) }] : []),
+    // Só a que já tem linha no banco: o servidor lê a origem pelo id
+    // (spec 2026-11-27). Bolha local sem uuid não teria o que ler.
+    ...(UUID.test(msg.id) && (msg.content || msg.media?.length) ? [{
+      rotulo: "Encaminhar", icone: Forward,
+      aoEscolher: () => abrirEncaminhar({ tipo: "agente", id: msg.id, previa: previa(msg.content) }),
+    }] : []),
   ];
 }
 
@@ -57,6 +72,7 @@ export function acoesDaMensagemDoCanal(
     // Sem `aoResponder` (canal em que a pessoa não escreve), sem a opção.
     ...(ctx.aoResponder ? [{ rotulo: "Responder", icone: Reply, aoEscolher: e(ctx.aoResponder) }] : []),
     ...(msg.content ? [{ rotulo: "Copiar", icone: Copy, aoEscolher: () => copiar(msg.content) }] : []),
+    { rotulo: "Encaminhar", icone: Forward, aoEscolher: e(() => abrirEncaminhar({ tipo: "canal", id: msg.id, previa: previa(msg.content) })) },
     ...(ctx.souAutor ? [
       ...(ctx.aoDados ? [{ rotulo: "Dados da mensagem", icone: Info, aoEscolher: e(ctx.aoDados) }] : []),
       { rotulo: "Editar", icone: Pencil, aoEscolher: e(ctx.aoEditar) },

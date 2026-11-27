@@ -208,6 +208,13 @@ export function useChatMedia() {
     await Promise.allSettled([...emProcessamento.current]);
     const finalized: MediaAttachment[] = [];
     for (const att of stagedRef.current) {
+      // Já está no servidor (anexo copiado ao encaminhar para o Guardi): passa
+      // direto. Sem isto a imagem cairia no ramo de baixo, que faz
+      // `fetch(att.base64)` com string vazia e subiria a própria página.
+      if (att.id && !att.base64) {
+        finalized.push(att);
+        continue;
+      }
       if (att.type === "file") {
         const raw = (att as any)._rawFile as File | undefined;
         if (raw) {
