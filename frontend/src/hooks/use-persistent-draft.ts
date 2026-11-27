@@ -69,6 +69,11 @@ export function usePersistentDraft(draftKey: string | null) {
   const lastSyncedRef = useRef(initialValue);
   const valueRef = useRef(initialValue);
   const dirtyDuringLoadRef = useRef(false);
+  // ⚠️ Ref, não o `loading` do estado: quem escreve no MESMO commit em que a
+  // carga começa (o handoff do encaminhar, 27/11/2026) tem um `setValue` do
+  // render anterior, com `loading` ainda `false` — e a resposta do servidor
+  // apagava o texto. O ref liga junto com a carga, de forma síncrona.
+  const loadingRef = useRef(false);
   const persistRef = useRef<() => Promise<void>>(async () => {});
   const activeKeyRef = useRef<string | null>(cacheKey);
 
@@ -91,7 +96,7 @@ export function usePersistentDraft(draftKey: string | null) {
       setValueState((previous) => {
         const resolved = typeof next === "function" ? next(previous) : next;
         valueRef.current = resolved;
-        if (loading) dirtyDuringLoadRef.current = true;
+        if (loadingRef.current) dirtyDuringLoadRef.current = true;
 
         if (cacheKey) {
           if (resolved) draftCache.set(cacheKey, resolved);
@@ -105,7 +110,7 @@ export function usePersistentDraft(draftKey: string | null) {
         return resolved;
       });
     },
-    [cacheKey, draftKey, loading, userId],
+    [cacheKey, draftKey, userId],
   );
 
   const clear = useCallback(() => {
@@ -134,6 +139,7 @@ export function usePersistentDraft(draftKey: string | null) {
       valueRef.current = "";
       lastSyncedRef.current = "";
       dirtyDuringLoadRef.current = false;
+      loadingRef.current = false;
       setLoading(false);
       return;
     }
@@ -145,6 +151,7 @@ export function usePersistentDraft(draftKey: string | null) {
     valueRef.current = cachedValue;
     lastSyncedRef.current = cachedValue;
     dirtyDuringLoadRef.current = false;
+    loadingRef.current = true;
     setLoading(true);
 
     void api<{ content: string }>(`/drafts/${encodeURIComponent(draftKey)}`)
@@ -155,6 +162,7 @@ export function usePersistentDraft(draftKey: string | null) {
 
         if (error) {
           console.error("Failed to load draft", error);
+          loadingRef.current = false;
           setLoading(false);
           return;
         }
@@ -167,6 +175,7 @@ export function usePersistentDraft(draftKey: string | null) {
           if (remoteValue) draftCache.set(cacheKey, remoteValue);
           else draftCache.delete(cacheKey);
           lastSyncedRef.current = remoteValue;
+          loadingRef.current = false;
           setLoading(false);
           return;
         }
@@ -179,6 +188,7 @@ export function usePersistentDraft(draftKey: string | null) {
         if (remoteValue) draftCache.set(cacheKey, remoteValue);
         else draftCache.delete(cacheKey);
         lastSyncedRef.current = remoteValue;
+        loadingRef.current = false;
         setLoading(false);
       });
 
@@ -229,6 +239,7 @@ export function usePersistentDraft(draftKey: string | null) {
       valueRef.current = "";
       lastSyncedRef.current = "";
       dirtyDuringLoadRef.current = false;
+      loadingRef.current = false;
       setLoading(false);
       return;
     }
@@ -240,6 +251,7 @@ export function usePersistentDraft(draftKey: string | null) {
     valueRef.current = cachedValue;
     lastSyncedRef.current = cachedValue;
     dirtyDuringLoadRef.current = false;
+    loadingRef.current = true;
     setLoading(true);
 
     void api<{ content: string }>(`/drafts/${encodeURIComponent(draftKey)}`)
@@ -250,6 +262,7 @@ export function usePersistentDraft(draftKey: string | null) {
 
         if (error) {
           console.error("Failed to load draft", error);
+          loadingRef.current = false;
           setLoading(false);
           return;
         }
@@ -262,6 +275,7 @@ export function usePersistentDraft(draftKey: string | null) {
           if (remoteValue) draftCache.set(cacheKey, remoteValue);
           else draftCache.delete(cacheKey);
           lastSyncedRef.current = remoteValue;
+          loadingRef.current = false;
           setLoading(false);
           return;
         }
@@ -274,6 +288,7 @@ export function usePersistentDraft(draftKey: string | null) {
         if (remoteValue) draftCache.set(cacheKey, remoteValue);
         else draftCache.delete(cacheKey);
         lastSyncedRef.current = remoteValue;
+        loadingRef.current = false;
         setLoading(false);
       });
 
