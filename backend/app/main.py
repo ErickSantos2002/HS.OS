@@ -49,6 +49,7 @@ from app.routers.gateway import router as gateway_router
 from app.routers.llm import router as llm_router
 from app.routers.mcp_alerta import router as mcp_alerta_router
 from app.routers.backups import router as backups_router
+from app.routers.encaminhar import router as encaminhar_router
 from app.routers.mcp_anexos import router as mcp_anexos_router
 from app.routers.mcp_wiki import router as mcp_wiki_router
 from app.routers.integracoes import router as integracoes_router
@@ -301,3 +302,4 @@ app.include_router(ws_router)
 app.include_router(gifs_router)
 app.include_router(conversas_marcadas_router)
 app.include_router(backups_router)
+app.include_router(encaminhar_router)
