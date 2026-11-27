@@ -148,15 +148,15 @@ def test_sem_vapid_loga_uma_vez_e_nao_toca_no_banco(monkeypatch, caplog):
 
 # ── processar ───────────────────────────────────────────────────────────────
 
-def _canal(recente=True, thread=None, conteudo="bom dia"):
+def _canal(recente=True, thread=None, conteudo="bom dia", encaminhada=False, silenciado=False):
     return {
         "channel_messages m": {
             "id": MSG, "channel_id": "c1", "author_id": OUTRO, "author_name": "Bia",
             "content": conteudo, "attachments": None, "audio_url": None,
-            "thread_id": thread, "recente": recente, "nome_canal": "geral",
+            "encaminhada": encaminhada, "thread_id": thread, "recente": recente, "nome_canal": "geral",
             "tipo": "public"},
         "channel_members cm": [
-            {"user_id": UID, "nome": "Ana", "silenciado": False},
+            {"user_id": UID, "nome": "Ana", "silenciado": silenciado},
             {"user_id": OUTRO, "nome": "Bia", "silenciado": False}],
         "INSERT INTO public.push_enviados": lambda _m, us: [{"user_id": u} for u in us],
     }
@@ -178,6 +178,17 @@ def test_mensagem_de_canal_vai_para_os_outros_humanos(monkeypatch):
     asyncio.run(p.processar("channel_messages", MSG))
     assert [u for u, _ in enviados] == [UID]
     assert enviados[0][1]["title"] == "Bia em #geral"
+
+
+@pytest.mark.parametrize("encaminhada,esperado", [(False, [UID]), (True, [])])
+def test_todos_em_mensagem_encaminhada_nao_fura_o_silenciar(monkeypatch, encaminhada, esperado):
+    """Encaminhar (27/11/2026): o `@todos` foi escrito para OUTRA conversa.
+    Honrá-lo no destino faria encaminhar acordar quem silenciou o grupo."""
+    conn = Conn(_canal(conteudo="@todos reunião agora", encaminhada=encaminhada, silenciado=True))
+    monkeypatch.setattr(p, "sessao", _sessao_com(conn))
+    enviados = _capturar_envios(monkeypatch)
+    asyncio.run(p.processar("channel_messages", MSG))
+    assert [u for u, _ in enviados] == esperado
 
 
 def test_so_envia_para_quem_a_reserva_devolveu(monkeypatch):

@@ -290,7 +290,7 @@ _COLUNAS_MSG = """
     COALESCE((SELECT pf.avatar_url FROM public.profiles pf
                WHERE pf.id::text = m.author_id AND m.author_type::text = 'human'),
              m.author_avatar) AS author_avatar,
-    m.content, m.thread_id::text AS thread_id, m.audio_url, m.attachments,
+    m.content, m.thread_id::text AS thread_id, m.audio_url, m.attachments, m.encaminhada,
     to_char(m.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS created_at,
     to_char(m.edited_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS edited_at,
     to_char(m.deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS') || 'Z' AS deleted_at
@@ -355,6 +355,8 @@ class MensagemCanalOut(BaseModel):
     created_at: str
     edited_at: str | None = None
     deleted_at: str | None = None
+    # Encaminhada (047, 27/11/2026): a tela mostra "↪ Encaminhada".
+    encaminhada: bool = False
 
 
 class MensagemCanalIn(BaseModel):

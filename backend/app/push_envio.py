@@ -29,6 +29,7 @@ from pywebpush import WebPushException, webpush
 from app.config import settings
 from app.database import sessao
 from app.agenda import token_acao
+from app.encaminhamento import conteudo_para_mencao
 from app.push_regras import (Membro, destinatarios_canal, endpoint_de_push_valido,
                               cala_push, item_de_lembrete, payload_agente, payload_canal,
                               payload_lembrete)
@@ -62,7 +63,7 @@ _SQL_RESPOSTA = """
 
 _SQL_MENSAGEM = """
     SELECT m.id::text AS id, m.channel_id::text AS channel_id, m.author_id,
-           m.author_name, m.content, m.attachments, m.audio_url,
+           m.author_name, m.content, m.attachments, m.audio_url, m.encaminhada,
            m.thread_id::text AS thread_id,
            m.created_at > now() - interval '30 minutes' AND m.deleted_at IS NULL AS recente,
            ch.name AS nome_canal, ch.type::text AS tipo
@@ -258,7 +259,10 @@ async def _alvos_da_mensagem(conn, ident: str):
     participantes = None
     if linha["thread_id"]:
         participantes = {r["author_id"] for r in await conn.fetch(_SQL_THREAD, linha["thread_id"])}
-    quem = destinatarios_canal(linha["author_id"], membros, linha["content"] or "", participantes)
+    # Menção de texto encaminhado não fura o silenciar (spec 2026-11-27).
+    quem = destinatarios_canal(linha["author_id"], membros,
+                               conteudo_para_mencao(linha["content"], linha["encaminhada"]),
+                               participantes)
     anexos = linha["attachments"]
     if isinstance(anexos, str):
         anexos = json.loads(anexos)
