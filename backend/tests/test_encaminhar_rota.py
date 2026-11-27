@@ -21,7 +21,10 @@ def test_item_do_canal_aponta_para_a_copia():
 
 
 def test_item_para_o_guardi_vai_como_ja_enviado():
+    """Imagem vai como `file` (revisão de 27/11/2026): sem `base64`, a prévia de
+    imagem do campo desenhava `<img src="">` quebrado. O agente lê pelo
+    `ler_anexo` do mesmo jeito."""
     assert R.media_copiada(IMG, "novo") == {
-        "type": "image", "id": "novo", "mimeType": "image/png", "base64": "",
+        "type": "file", "id": "novo", "mimeType": "image/png", "base64": "",
         "name": "f.png", "size": 5, "url": ""}
     assert R.media_copiada(PDF, "n")["type"] == "file"

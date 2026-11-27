@@ -63,8 +63,9 @@ def media_copiada(anexo: Anexo, novo_id: str) -> dict:
     `base64` vazio + `id` = já está no servidor: o `finalizeStaged` passa adiante
     sem tentar subir de novo.
     """
-    tipo = "image" if anexo.mime.startswith("image/") else "file"
-    return {"type": tipo, "id": novo_id, "mimeType": anexo.mime, "base64": "",
+    # Sempre `file`, também para imagem: sem `base64` a prévia de imagem do
+    # campo desenhava `<img src="">` quebrado (revisão de 27/11/2026).
+    return {"type": "file", "id": novo_id, "mimeType": anexo.mime, "base64": "",
             "name": anexo.nome, "size": anexo.tamanho, "url": ""}
 
 
