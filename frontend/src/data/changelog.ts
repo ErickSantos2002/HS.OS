@@ -34,6 +34,10 @@ export const CHANGELOG: ChangelogVersion[] = [
     date: "2026-11-27",
     changes: [
       {
+        kind: "correcao",
+        text: "O assistente pessoal não lista mais, entre as suas tarefas do CRM, as de negócios já ganhos ou perdidos — só as de cards em aberto.",
+      },
+      {
         kind: "novidade",
         text: "Limpar conversa: no menu da conversa (a setinha ao lado do nome, ou segurando no celular), apague de uma vez todas as mensagens de uma conversa ou grupo — só para você; quem está do outro lado continua vendo. Dá para desfazer logo em seguida.",
       },
