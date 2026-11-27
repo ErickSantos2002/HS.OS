@@ -55,9 +55,28 @@ export function useOrigemEncaminhar(): OrigemEncaminhar | null {
 interface ParaOGuardi { agentId: string; autor: string; texto: string; anexos: MediaAttachment[] }
 
 let pendente: ParaOGuardi | null = null;
+let versaoDoPendente = 0;
+const ouvintesDoGuardi = new Set<() => void>();
+
+/**
+ * Avisa quem já está na conversa do Guardi. Encaminhar uma resposta dele para
+ * ele mesmo cai na MESMA URL: o id do agente não muda, e só o id não bastava
+ * para a tela saber que havia o que consumir (achado da revisão, 27/11/2026).
+ */
+export function ouvirParaOGuardi(fn: () => void): () => void {
+  ouvintesDoGuardi.add(fn);
+  return () => { ouvintesDoGuardi.delete(fn); };
+}
+
+/** Muda a cada `guardarParaOGuardi` — entra na dependência do efeito que consome. */
+export function useVersaoParaOGuardi(): number {
+  return useSyncExternalStore(ouvirParaOGuardi, () => versaoDoPendente);
+}
 
 export function guardarParaOGuardi(p: ParaOGuardi) {
   pendente = p;
+  versaoDoPendente++;
+  ouvintesDoGuardi.forEach((f) => f());
 }
 
 /** Uso único, e só na conversa do agente para quem foi guardado. */

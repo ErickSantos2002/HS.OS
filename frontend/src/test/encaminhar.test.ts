@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import { acoesDaMensagemDoAgente, acoesDaMensagemDoCanal } from "@/lib/acoes-da-mensagem";
-import { consumirParaOGuardi, guardarParaOGuardi, textoParaOGuardi } from "@/lib/encaminhar";
+import { consumirParaOGuardi, guardarParaOGuardi, ouvirParaOGuardi, textoParaOGuardi } from "@/lib/encaminhar";
 
 const UUID = "3f2b8c1e-1d2a-4c5b-9e8f-0a1b2c3d4e5f";
 const ctxCanal = { souAutor: false, aoEditar: () => {}, aoApagar: () => {} };
@@ -26,6 +26,18 @@ describe("handoff para o Guardi", () => {
     guardarParaOGuardi({ agentId: "ana-bot", autor: "Bia", texto: "oi", anexos: [] });
     expect(consumirParaOGuardi("nina")).toBeNull();
     expect(consumirParaOGuardi("ana-bot")?.texto).toBe("oi");
+  });
+
+  it("avisa quem já está na conversa do Guardi", () => {
+    // Achado da revisão: encaminhar uma resposta do Guardi para ele mesmo cai
+    // na mesma URL — o id não muda, e a tela não sabia que havia o que consumir.
+    let avisos = 0;
+    const parar = ouvirParaOGuardi(() => { avisos++; });
+    guardarParaOGuardi({ agentId: "ana-bot", autor: "Bia", texto: "oi", anexos: [] });
+    parar();
+    guardarParaOGuardi({ agentId: "ana-bot", autor: "Bia", texto: "de novo", anexos: [] });
+    expect(avisos).toBe(1);
+    consumirParaOGuardi("ana-bot");
   });
 
   it("o texto entra citado, com quem escreveu, sem apagar o rascunho", () => {

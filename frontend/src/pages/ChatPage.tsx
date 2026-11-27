@@ -105,7 +105,7 @@ import AnexoResolvido from "@/components/chat/AnexoResolvido";
 import AudioMessagePlayer from "@/components/chat/AudioMessagePlayer";
 import MenuDaMensagem from "@/components/chat/MenuDaMensagem";
 import { acoesDaMensagemDoAgente } from "@/lib/acoes-da-mensagem";
-import { consumirParaOGuardi, textoParaOGuardi } from "@/lib/encaminhar";
+import { consumirParaOGuardi, textoParaOGuardi, useVersaoParaOGuardi } from "@/lib/encaminhar";
 import { naoLidasDoAgente } from "@/lib/nao-lidas-do-agente";
 import { indicadorDaAba, indicadorDaConversa } from "@/lib/conversa-marcada";
 import { useCanaisSilenciados } from "@/hooks/use-canais-silenciados";
@@ -1014,6 +1014,7 @@ export default function ChatPage() {
 
   // Encaminhado para o Guardi (spec 2026-11-27): texto citado no campo e os
   // anexos já copiados no servidor prontos para ir. Nada é enviado sozinho.
+  const versaoParaOGuardi = useVersaoParaOGuardi();
   useEffect(() => {
     if (!effectiveAgentId) return;
     const veio = consumirParaOGuardi(effectiveAgentId);
@@ -1021,7 +1022,7 @@ export default function ChatPage() {
     syncToDraft(textoParaOGuardi(inputLocalRef.current, veio.autor, veio.texto));
     veio.anexos.forEach((a) => media.addStaged(a));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveAgentId]);
+  }, [effectiveAgentId, versaoParaOGuardi]);
 
   // Convenience getter for reading current input value
   const getInputValue = useCallback(() => inputLocalRef.current, []);
