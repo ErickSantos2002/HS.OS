@@ -1599,6 +1599,80 @@ async def desfazer_apagar_para_mim(channel_id: str, message_id: str,
         )
 
 
+class LimparOut(BaseModel):
+    limpo_em: datetime
+    quantas: int
+
+
+class DesfazerLimparIn(BaseModel):
+    limpo_em: datetime
+
+
+@router.post("/{channel_id}/limpar", response_model=LimparOut)
+async def limpar_conversa(channel_id: str, usuario: Usuario = Depends(usuario_atual)):
+    """"Limpar conversa": esconde para quem pede TODA mensagem do canal (27/11/2026).
+
+    É o "Apagar para mim" em lote — some só para ela; o outro lado continua com
+    o histórico, como no WhatsApp. Usa a mesma `mensagens_ocultas` de propósito:
+    lista, threads, arquivos, prévias e busca já a filtram, e um filtro novo
+    seria uma leitura esquecida devolvendo a conversa limpa.
+
+    Só DM e grupo: a conversa pessoal e a com agente ficam de fora (decisão do
+    Erick). Inclui respostas de thread. O `now()` da transação é o `criado_em`
+    de todas as linhas — é ele que o "Desfazer" usa para achar o lote.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        try:
+            linha = await conn.fetchrow(
+                """
+                WITH canal AS (
+                    SELECT c.id FROM public.channels c
+                      JOIN public.channel_members m
+                        ON m.channel_id = c.id AND m.user_id = $2 AND m.member_type = 'human'
+                     WHERE c.id = $1::uuid AND c.type::text IN ('dm', 'public', 'private'))
+                , ins AS (
+                    INSERT INTO public.mensagens_ocultas (user_id, message_id)
+                    SELECT $2::uuid, msg.id
+                      FROM public.channel_messages msg JOIN canal ON canal.id = msg.channel_id
+                    ON CONFLICT DO NOTHING
+                    RETURNING 1)
+                SELECT now() AS limpo_em, (SELECT count(*) FROM ins)::int AS quantas FROM canal
+                """,
+                channel_id, usuario.id,
+            )
+        except asyncpg.DataError:
+            linha = None
+        if linha is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Conversa não encontrada.")
+        # Contador de não lidas de uma conversa vazia seria número sem mensagem.
+        await conn.execute(
+            "UPDATE public.notifications SET read = true "
+            " WHERE user_id = $1::uuid AND channel_id = $2::uuid AND NOT read",
+            usuario.id, channel_id,
+        )
+    return LimparOut(limpo_em=linha["limpo_em"], quantas=linha["quantas"])
+
+
+@router.post("/{channel_id}/limpar/desfazer", status_code=status.HTTP_204_NO_CONTENT)
+async def desfazer_limpar_conversa(channel_id: str, dados: DesfazerLimparIn,
+                                   usuario: Usuario = Depends(usuario_atual)):
+    """O "Desfazer" do aviso: tira só o lote daquele limpar (mesmo `criado_em`).
+
+    Mensagem escondida uma a uma antes continua escondida. As notificações não
+    voltam a não lidas — já tinham sido vistas como limpas.
+    """
+    async with sessao(role="authenticated", user_id=usuario.id) as conn:
+        await conn.execute(
+            """
+            DELETE FROM public.mensagens_ocultas o
+             USING public.channel_messages m
+             WHERE o.message_id = m.id AND m.channel_id = $1::uuid
+               AND o.user_id = $2::uuid AND o.criado_em = $3
+            """,
+            channel_id, usuario.id, dados.limpo_em,
+        )
+
+
 @router.delete("/{channel_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remover_membro(
     channel_id: str,
