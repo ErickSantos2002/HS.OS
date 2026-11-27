@@ -13,6 +13,7 @@ Cada teste tranca uma lição que custou caro com o agente financeiro anterior:
 - **Dado financeiro em link público**: o Midas não tem `publicar_pagina`, e os
   arquivos não podem mandá-lo usar uma ferramenta que ele não tem.
 """
+from app.pessoas_chave import ERICK_ID, NICHOLSON_ID
 from app.agentes.midas import arquivos_do_midas
 from app.gateway.client import excede_o_teto
 from app.time_da_empresa import MARCA_FIM, MARCA_INICIO
@@ -106,12 +107,13 @@ def test_sem_bloco_as_marcas_ficam_para_a_distribuicao():
 
 
 def test_dado_financeiro_vai_ao_ceo_e_ao_erick_nominalmente():
-    """O Erick (quem configura e confere) recebe dado por nome e e-mail do
-    diretório; administrador em geral não — a exceção é nominal."""
+    """O Erick (quem configura e confere) recebe dado pelo ID da sessão;
+    administrador em geral não — a exceção é nominal. Por e-mail não: o do
+    Erick mudou em 27/11/2026 e o Midas passou a recusá-lo."""
     u = arquivos_do_midas({})["USER.md"]
-    assert "Erick Santos" in u
-    assert "ti@healthsafetytech.com" in u
-    assert "não \"qualquer administrador\"" in u
+    assert "Erick Santos" in u and ERICK_ID in u and NICHOLSON_ID in u
+    assert "@healthsafetytech.com" not in u.split("<!-- hsos:time")[0]
+    assert "`administrador` não entra" in u
     assert "avisar_administrador" in u
     # nunca abrir para qualquer administrador
     assert "qualquer administrador entra" not in u

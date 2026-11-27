@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import unicodedata
 
+from app.pessoas_chave import NICHOLSON_ID
 from app.routers.integracoes import SERVIDOR_ALERTA, _deny_de_mcp, _sem_prefixo
 from app.warroom import e_do_time
 
@@ -38,7 +39,8 @@ PERFIL = "minimal"
 # Decisão do Erick, 05/11/2026: o Nicholson continua só com os cinco
 # especialistas. Vale para a rota E para o script — antes morava só no script,
 # e a rota criava o bot dele se alguém a chamasse com o id.
-FORA_POR_DECISAO = frozenset({"np@healthsafetytech.com"})
+# Pelo ID (27/11/2026): o e-mail dele vai mudar para nome.sobrenome@.
+FORA_POR_DECISAO = frozenset({NICHOLSON_ID})
 EMOJI = "🤖"
 
 

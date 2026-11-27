@@ -40,7 +40,7 @@ async def _candidatos() -> list[dict]:
             "       COALESCE(u.is_active, false) AS ativo "
             "  FROM public.profiles p LEFT JOIN auth.users u ON u.id = p.id ORDER BY p.full_name")
     return [dict(r) for r in linhas
-            if (r["email"] or "").lower() not in FORA_POR_DECISAO and motivo_inelegivel(dict(r)) is None]
+            if r["id"] not in FORA_POR_DECISAO and motivo_inelegivel(dict(r)) is None]
 
 
 async def main() -> int:

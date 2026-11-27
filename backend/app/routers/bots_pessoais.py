@@ -137,7 +137,7 @@ async def criar_bot(user_id: str, deps=None) -> dict:
     aid = await deps.bot_do_dono(user_id) or id_do_bot(perfil.get("full_name") or "")
     saida = {"user_id": user_id, "agent_id": aid, "resultado": "falhou", "motivo": None}
 
-    if (perfil.get("email") or "").strip().lower() in FORA_POR_DECISAO:
+    if str(user_id) in FORA_POR_DECISAO:
         return {**saida, "motivo": "fica só com os especialistas (decisão de 05/11/2026)"}
     motivo = motivo_inelegivel(perfil)
     if motivo:

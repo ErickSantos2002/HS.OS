@@ -12,9 +12,15 @@ ganha a pagar, custos (régua do Balancete), `calendario-financeiro` e GestorHS/
 **como dado financeiro** (flow e atlas seguem donos de operação e vendas).
 
 - ⚠️ **Quem recebe dado financeiro:** o Nicholson **e, nominalmente, o Erick Santos**
-  (`ti@healthsafetytech.com`, `administrador`; quem configura e confere o Midas) — conferido
-  pelo diretório, por nome e e-mail, **não** "qualquer administrador". Qualquer outra pessoa:
-  recusa + `avisar_administrador`. Trava em `test_midas_arquivos.py`.
+  (quem configura e confere o Midas) — conferido pelo **`id` da chave de sessão**
+  (`app/pessoas_chave.py`), **não** por e-mail nem "qualquer administrador". Qualquer outra
+  pessoa: recusa + `avisar_administrador`. Trava em `test_midas_arquivos.py`.
+- ⚠️ **E-mail muda, id não (27/11/2026).** A conta do Erick virou `erick.santos@` e o Midas,
+  que liberava "por nome e e-mail", passou a recusá-lo. `np@` e os e-mails de setor vão virar
+  `nome.sobrenome@`. Pessoa que o código conhece vive em `pessoas_chave.py` pelo id; o
+  DataCore (que autentica pelo e-mail) recebe o de HOJE via `email_atual`. O bloco
+  `hsos:time` dos `USER.md` lista e-mails de `profiles` e **só se atualiza quando é
+  regerado** (`time_da_empresa.atualizar`) — depois de cada troca de e-mail, regerar.
 - ⚠️ **Repositório público: sem valor absoluto da empresa** nas skills e docs (dívida, a
   pagar, parcelas). O arquivo traz a régua e a consulta; o agente mede na hora.
 - **Código:** `app/agentes/midas.py` (os sete arquivos, com `TOOLS.md`),

@@ -33,6 +33,14 @@ def chave(monkeypatch):
     return k
 
 
+@pytest.fixture(autouse=True)
+def email_do_nicholson(monkeypatch):
+    """O e-mail vem de `profiles` pelo id (27/11/2026) — aqui, sem banco."""
+    async def email(_uid):
+        return "np@healthsafetytech.com"
+    monkeypatch.setattr(datacore, "email_atual", email)
+
+
 def test_cliente_manda_token_do_datacore_como_o_nicholson(chave, monkeypatch):
     reqs = []
 

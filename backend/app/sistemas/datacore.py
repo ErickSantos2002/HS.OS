@@ -17,14 +17,15 @@ from typing import Any
 import httpx
 
 from app.config import settings
+from app.pessoas_chave import NICHOLSON_ID, email_atual
 from app.sistemas.taskhs import ErroSistema, chamar_sistema
 
-__all__ = ["ErroSistema", "chamar", "chamar_como_financeiro",
-           "AGENTE_FINANCEIRO", "EMAIL_DO_FINANCEIRO_NO_DATACORE"]
+__all__ = ["ErroSistema", "chamar", "chamar_como_financeiro", "AGENTE_FINANCEIRO"]
 
 AUD = "datacore"
 AGENTE_FINANCEIRO = "midas"
-EMAIL_DO_FINANCEIRO_NO_DATACORE = "np@healthsafetytech.com"
+# ⚠️ Entra como o Nicholson pelo e-mail de HOJE, lido de `profiles` pelo id
+# (27/11/2026): o `np@` fixo ia quebrar quando a conta virasse nome.sobrenome@.
 _transporte: httpx.AsyncBaseTransport | None = None   # trocável em teste
 
 _MSG = {
@@ -50,6 +51,9 @@ _MSG_GUARDI = {
 
 async def chamar_como_financeiro(metodo: str, caminho: str, params: dict | list | None = None,
                                  dono: str | None = None) -> Any:
+    email = await email_atual(NICHOLSON_ID)
+    if not email:
+        raise ErroSistema(500, "não achei o e-mail do Nicholson no HS.OS para entrar no DataCore")
     return await chamar_sistema(AUD, "DataCore", settings.DATACORE_API_URL, _transporte, _MSG,
-                                EMAIL_DO_FINANCEIRO_NO_DATACORE, AGENTE_FINANCEIRO, metodo, caminho,
+                                email, AGENTE_FINANCEIRO, metodo, caminho,
                                 params=params, dono=dono)

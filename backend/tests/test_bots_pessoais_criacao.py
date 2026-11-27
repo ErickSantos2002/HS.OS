@@ -15,6 +15,7 @@ Async com `asyncio.run`, sem plugin; gateway e banco são falsos em memória.
 import asyncio
 import copy
 
+from app.pessoas_chave import NICHOLSON_ID
 from app.bots_pessoais import ALERTA, bot_esta_fechado, tools_do_bot
 from app.routers.bots_pessoais import criar_bot
 
@@ -192,9 +193,12 @@ def test_falha_ao_refechar_nunca_apaga_bot_existente():
 def test_nicholson_fica_fora_tambem_pela_rota():
     """A exclusão é decisão (05/11/2026) e valia só no script: chamar a rota com
     o id dele criava o bot."""
-    nich = {**ANDRE, "id": "u-n", "full_name": "Nicholson Pimentel", "email": "np@healthsafetytech.com"}
-    f = Falso(perfis={"u-n": nich})
-    r = asyncio.run(criar_bot("u-n", f))
+    # Pelo id (27/11/2026): o e-mail dele vai mudar, e um e-mail novo não pode
+    # fazer o bot dele nascer.
+    nid = NICHOLSON_ID
+    nich = {**ANDRE, "id": nid, "full_name": "Nicholson Pimentel", "email": "nicholson.p@healthsafetytech.com"}
+    f = Falso(perfis={nid: nich})
+    r = asyncio.run(criar_bot(nid, f))
     assert r["resultado"] == "falhou" and "especialistas" in r["motivo"]
     assert f.log == []
 

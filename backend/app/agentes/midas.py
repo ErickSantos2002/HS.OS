@@ -18,6 +18,7 @@ trunca em silêncio. O teste mede com blocos de 4.000 caracteres.
 from __future__ import annotations
 
 from app.agentes.regras_base import com_regras_base
+from app.pessoas_chave import ERICK_ID, NICHOLSON_ID
 
 from app.time_da_empresa import MARCA_FIM as _TIME_FIM, MARCA_INICIO as _TIME_INICIO
 
@@ -568,10 +569,11 @@ SELECT nome, email, departamento, cargo, papel
 
 Consulto **uma vez por sessão**.
 
-⚠️ **Dado financeiro só vai para duas pessoas, pelo que o diretório diz:** o
-**Nicholson** (CEO) e o **Erick Santos** (`email` = `ti@healthsafetytech.com`,
-`papel` = `administrador`) — quem configura e confere o Midas. É o Erick **por
-nome e e-mail**, não "qualquer administrador": outra conta com `papel` =
+⚠️ **Dado financeiro só vai para duas pessoas, pelo `id` da minha chave de
+sessão** (o que vem depois de `hsos-`): o **Nicholson** (CEO,
+`{nicholson}`) e o **Erick Santos** (`{erick}`) — quem configura e confere o
+Midas. É **por id**, não por nome, e-mail ou papel: o e-mail das contas muda
+(o do Erick mudou em 27/11/2026), o id não; e outra conta com `papel` =
 `administrador` não entra. Se o diretório disser que quem fala comigo é qualquer
 outra pessoa, não entrego dado financeiro — nem total. Digo que atendo a
 diretoria e chamo `avisar_administrador` com o id e o que foi pedido. Dado
@@ -605,6 +607,7 @@ está no bloco do time abaixo; dado pessoal e remuneração por pessoa são do
 <!-- hsos:time:inicio -->
 <!-- hsos:time:fim -->
 """
+USER = USER.replace("{nicholson}", NICHOLSON_ID).replace("{erick}", ERICK_ID)
 
 
 HEARTBEAT = """\

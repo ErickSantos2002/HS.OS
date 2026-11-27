@@ -18,8 +18,8 @@ load_dotenv(".env")
 
 from app.database import close_db, init_db, sessao  # noqa: E402
 
-NICHOLSON = "np@healthsafetytech.com"
-LIDISAY = "adm01@healthsafetytech.com"
+# Pelo id (27/11/2026): os e-mails vão virar nome.sobrenome@.
+from app.pessoas_chave import LIDISAY_ID as LIDISAY, NICHOLSON_ID as NICHOLSON  # noqa: E402
 
 
 async def main() -> int:
@@ -29,9 +29,9 @@ async def main() -> int:
     await init_db()
     try:
         async with sessao(role="service_role") as conn:
-            ids = {r["email"]: r["id"] for r in await conn.fetch(
-                "SELECT lower(email) AS email, id::text AS id FROM public.profiles "
-                " WHERE lower(email) IN ($1, $2)", NICHOLSON, LIDISAY)}
+            ids = {r["id"]: r["id"] for r in await conn.fetch(
+                "SELECT id::text AS id FROM public.profiles "
+                " WHERE id IN ($1::uuid, $2::uuid)", NICHOLSON, LIDISAY)}
             if NICHOLSON not in ids:
                 print("❌ não achei o perfil do Nicholson")
                 return 1
