@@ -164,6 +164,7 @@ async def _ler_origem(o: OrigemIn, usuario: Usuario) -> _Origem:
                 raise nao_achei
             msg = _msg_saida(linha)
             publicos, ids = E.anexos_do_canal(msg.attachments)
+            publicos = publicos[:E.LIMITE_ANEXOS]
             id_audio = E.id_do_audio(msg.audio_url)
             autor, texto = msg.author_name, msg.content or ""
         else:
@@ -194,7 +195,7 @@ async def _ler_origem(o: OrigemIn, usuario: Usuario) -> _Origem:
                 autor = nome_de_quem_envia(perfil, usuario)
             texto = linha["content"] or ""
 
-    anexos = await _anexos_legiveis(ids + ([id_audio] if id_audio else []), usuario.id)
+    anexos = await _anexos_legiveis(E.ids_unicos(ids + ([id_audio] if id_audio else [])), usuario.id)
     audio = next((a for a in anexos if a.id == id_audio), None) if id_audio else None
     anexos = [a for a in anexos if a is not audio]
     if not texto and not anexos and not publicos and not audio:

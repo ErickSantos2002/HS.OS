@@ -67,3 +67,10 @@ def test_mencao_em_encaminhada_nao_conta():
     assert E.conteudo_para_mencao("@todos olhem", True) == ""
     assert E.conteudo_para_mencao("@todos olhem", False) == "@todos olhem"
     assert E.conteudo_para_mencao(None, False) == ""
+
+
+def test_anexo_repetido_vira_uma_copia_e_ha_teto():
+    """O `attachments` é JSON escrito por quem mandou a mensagem original: o
+    mesmo id repetido mil vezes viraria mil cópias no R2 por destino."""
+    assert E.ids_unicos(["a", "b", "a", "c"]) == ["a", "b", "c"]
+    assert len(E.ids_unicos([f"x{i}" for i in range(50)])) == E.LIMITE_ANEXOS

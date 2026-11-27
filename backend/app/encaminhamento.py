@@ -7,6 +7,8 @@ pergunta aqui. Spec: `docs/superpowers/specs/2026-11-27-encaminhar-mensagem-desi
 from __future__ import annotations
 
 LIMITE_DESTINOS = 10
+# O mesmo teto do campo de envio (`MAX_ATTACHMENTS` do `use-chat-media.ts`).
+LIMITE_ANEXOS = 10
 
 # Da conversa com agente, só arquivo de verdade viaja. Os cartões
 # (`email_aprovacao`, `acao_aprovacao`, `lembrete`) só valem na conversa onde
@@ -45,6 +47,15 @@ def anexos_da_conversa(media: list[dict] | None, role: str) -> list[str]:
             continue
         ids.append(m["id"])
     return ids
+
+
+def ids_unicos(ids: list[str]) -> list[str]:
+    """Sem repetição e com teto, na ordem.
+
+    O `attachments` é JSON escrito por quem mandou a mensagem original — um id
+    repetido mil vezes viraria mil cópias no R2 para cada destino.
+    """
+    return list(dict.fromkeys(ids))[:LIMITE_ANEXOS]
 
 
 def id_do_audio(audio_url: str | None) -> str | None:
