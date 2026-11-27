@@ -183,3 +183,13 @@ próprio Guardi. Spec e plano: `docs/superpowers/{specs,plans}/2026-11-27-encami
 - ⚠️ `usePersistentDraft` lia `loading` da closure: texto escrito no mesmo
   commit da abertura era apagado pelo GET do rascunho. Hoje é `loadingRef`.
   O arquivo tem o efeito de carga e a escuta **duplicados** desde o remix.
+
+### Limpar conversa — 27/11/2026
+
+"Apagar para mim" em lote, em DM e grupo (não em anotações nem agente). Spec:
+`docs/superpowers/specs/2026-11-27-limpar-conversa-design.md`.
+`POST /channels/{id}/limpar` grava em `mensagens_ocultas` (inclusive respostas
+de thread) e marca as notificações do canal como lidas; o "Desfazer" apaga o
+lote pelo `criado_em` (o `now()` da transação). ⚠️ A tela precisa do aviso
+`ouvirConversaLimpa`: o `reconcileMessages` funde, e só recarregar deixaria
+tudo à vista. A prévia da lista do **desktop** só se ajusta ao recarregar.
