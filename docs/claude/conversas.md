@@ -164,3 +164,22 @@ lista (segurar no celular; ⋮ ou clique direito no desktop). Spec:
   regra das duas listas). Some só ao ABRIR a conversa — efeito próprio em
   `use-conversa-ativa.ts`, nunca nos re-sweeps. Store de módulo em
   `lib/conversas-marcadas-store.ts`.
+
+### Encaminhar mensagem — 27/11/2026
+
+Estilo WhatsApp: até 10 destinos (DM, grupo em que escreve, anotações) e o
+próprio Guardi. Spec e plano: `docs/superpowers/{specs,plans}/2026-11-27-encaminhar-mensagem*`.
+
+- Tudo no servidor: `POST /encaminhar` (`app/routers/encaminhar.py`, regras
+  puras em `app/encaminhamento.py`). ⚠️ **Anexo privado é COPIADO no R2**
+  (`armazenamento.copiar`), com linha nova em `anexos` para a conversa de
+  destino — `caminho` é UNIQUE e `pessoa_pode_ler` exige ser da conversa.
+- `channel_messages.encaminhada` (047). ⚠️ O push ignora `@todos`/`@Nome` de
+  encaminhada (`conteudo_para_mencao`) e a rota **não acorda agente**.
+- Guardi: não envia; o servidor copia os anexos para `conversa_agente` e o
+  front põe texto citado + anexos no campo (`lib/encaminhar.ts`, handoff de
+  uso único, com aviso para quem já está na conversa dele). Imagem vai como
+  `file` — sem `base64`, a prévia quebrava.
+- ⚠️ `usePersistentDraft` lia `loading` da closure: texto escrito no mesmo
+  commit da abertura era apagado pelo GET do rascunho. Hoje é `loadingRef`.
+  O arquivo tem o efeito de carga e a escuta **duplicados** desde o remix.
