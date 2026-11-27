@@ -92,3 +92,17 @@ def test_sem_configuracao_responde_503_dizendo_o_que_falta(monkeypatch):
         asyncio.run(a.ler("anexos/x"))
     assert e.value.status_code == 503
     assert "R2_" in e.value.detail
+
+
+def test_copiar_duplica_o_objeto_e_o_original_fica(memoria):
+    """Encaminhar (27/11/2026) copia o anexo para a conversa de destino.
+
+    A cópia tem que ser independente: `anexos.caminho` é UNIQUE, então cada
+    conversa tem a sua linha e o seu objeto — apagar a do destino não pode
+    levar o arquivo de quem encaminhou junto.
+    """
+    asyncio.run(a.gravar("anexos/canal/a/1/x.pdf", b"%PDF-1", "application/pdf"))
+    asyncio.run(a.copiar("anexos/canal/a/1/x.pdf", "anexos/canal/b/2/x.pdf"))
+    assert asyncio.run(a.ler("anexos/canal/b/2/x.pdf")) == b"%PDF-1"
+    asyncio.run(a.apagar("anexos/canal/b/2/x.pdf"))
+    assert asyncio.run(a.ler("anexos/canal/a/1/x.pdf")) == b"%PDF-1"

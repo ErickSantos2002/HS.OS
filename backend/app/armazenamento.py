@@ -120,6 +120,11 @@ class R2:
     def apagar(self, chave: str) -> None:
         self.s3.delete_object(Bucket=self.bucket, Key=chave)
 
+    def copiar(self, origem: str, destino: str) -> None:
+        # Cópia dentro do R2: os bytes não passam pela VPS.
+        self.s3.copy_object(Bucket=self.bucket, Key=destino,
+                            CopySource={"Bucket": self.bucket, "Key": origem})
+
     def listar(self, prefixo: str, recursivo: bool) -> list[dict]:
         pag = self.s3.get_paginator("list_objects_v2")
         extra = {} if recursivo else {"Delimiter": "/"}
@@ -156,6 +161,9 @@ class Memoria:
 
     def apagar(self, chave):
         self.objetos.pop(chave, None)
+
+    def copiar(self, origem, destino):
+        self.objetos[destino] = self.objetos[origem]
 
     def listar(self, prefixo, recursivo):
         itens = []
@@ -230,6 +238,11 @@ async def url_put(chave: str, mime: str, tamanho: int, segundos: int) -> str:
 
 async def apagar(chave: str) -> None:
     await _rodar("apagar", chave)
+
+
+async def copiar(origem: str, destino: str) -> None:
+    """Duplica um objeto (chaves completas). Usado ao encaminhar anexo."""
+    await _rodar("copiar", origem, destino)
 
 
 async def listar(prefixo: str, recursivo: bool = False) -> list[dict]:
