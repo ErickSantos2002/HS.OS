@@ -4,8 +4,8 @@
  */
 import { useMemo, useState } from "react";
 import {
-  AtSign, BellDot, BellOff, Bell, Check, CheckCheck, ChevronRight, Library, LogOut, MessageCircle, Search, Smartphone, User, AudioLines,
-} from "lucide-react";
+  AtSign, BellDot, BellOff, Bell, Check, CheckCheck, ChevronRight, Library, LogOut, MessageCircle, Search, Smartphone, User, AudioLines, Eraser } from "lucide-react";
+import { pedirLimparConversa } from "@/lib/limpar-conversa";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
@@ -143,7 +143,12 @@ function ListaDeConversas({ itens, aoAbrir }: { itens: ItemCelular[]; aoAbrir: (
         aberta={!!folhaDe}
         aoFechar={() => setFolhaDe(null)}
         rotulo="Ações da conversa"
-        acoes={alvoDaFolha ? [{
+        acoes={alvoDaFolha ? [...(folhaDe && folhaDe.canalId && (folhaDe.tipo === "pessoa" || folhaDe.tipo === "canal") ? [{
+          // "Limpar conversa" (27/11/2026): DM e grupo; agente e anotações não.
+          rotulo: "Limpar conversa",
+          icone: Eraser,
+          aoEscolher: () => pedirLimparConversa({ canalId: folhaDe.canalId!, nome: folhaDe.tipo === "canal" ? `#${folhaDe.nome}` : folhaDe.nome }),
+        }] : []), {
           rotulo: folhaMarcada ? "Marcar como lida" : "Marcar como não lida",
           icone: folhaMarcada ? Check : BellDot,
           aoEscolher: () => {

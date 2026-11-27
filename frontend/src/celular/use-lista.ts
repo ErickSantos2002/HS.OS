@@ -7,6 +7,7 @@
  * A única fonte nova é `GET /channels/previas` — a última mensagem de cada DM
  * e canal, que a lateral do desktop nunca mostrou.
  */
+import { ouvirConversaLimpa } from "@/lib/limpar-conversa";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -102,6 +103,8 @@ export function useListaDoCelular() {
     }));
     return () => { if (t) window.clearTimeout(t); cancelar.forEach((c) => c()); };
   }, [idsDosCanais, qc]);
+  // "Limpar conversa" (27/11/2026): a prévia da conversa limpa some — e volta no "Desfazer".
+  useEffect(() => ouvirConversaLimpa(() => void qc.invalidateQueries({ queryKey: CHAVE_PREVIAS })), [qc]);
   // A notificação nova também pode ser de DM recém-criada que a lista não tem.
   useEffect(() => {
     void qc.invalidateQueries({ queryKey: CHAVE_PREVIAS });

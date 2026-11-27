@@ -11,10 +11,13 @@ const estado = vi.hoisted(() => ({
   marcada: false,
   marcar: vi.fn(async () => true),
   desmarcar: vi.fn(async () => true),
+  pedirLimpar: vi.fn(),
 }));
 vi.mock("@/hooks/use-conversas-marcadas", () => ({
   useConversasMarcadas: () => ({ estaMarcada: () => estado.marcada, marcar: estado.marcar, desmarcar: estado.desmarcar }),
 }));
+
+vi.mock("@/lib/limpar-conversa", () => ({ pedirLimparConversa: estado.pedirLimpar }));
 
 import { IndicadorDaConversa, MenuDaConversa } from "./MenuDaConversa";
 
@@ -34,6 +37,20 @@ describe("MenuDaConversa", () => {
     fireEvent.contextMenu(screen.getByText("Nina"));
     fireEvent.click(await screen.findByRole("menuitem", { name: "Marcar como lida" }));
     expect(estado.desmarcar).toHaveBeenCalledWith({ canalId: null, agentId: "nina" });
+  });
+
+  it("DM e grupo oferecem limpar a conversa (27/11/2026)", async () => {
+    render(<MenuDaConversa alvo={{ canalId: "c1", agentId: null }} limpar={{ nome: "Ana" }}><button>Ana</button></MenuDaConversa>);
+    fireEvent.contextMenu(screen.getByText("Ana"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Limpar conversa" }));
+    expect(estado.pedirLimpar).toHaveBeenCalledWith({ canalId: "c1", nome: "Ana" });
+  });
+
+  it("sem `limpar` (agente, anotações) não oferece", async () => {
+    render(<MenuDaConversa alvo={{ canalId: null, agentId: "nina" }}><button>Nina</button></MenuDaConversa>);
+    fireEvent.contextMenu(screen.getByText("Nina"));
+    await screen.findByRole("menuitem", { name: "Marcar como não lida" });
+    expect(screen.queryByRole("menuitem", { name: "Limpar conversa" })).toBeNull();
   });
 
   it("sem canal nem agente não há menu", () => {

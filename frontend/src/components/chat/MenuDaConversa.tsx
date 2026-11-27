@@ -11,7 +11,7 @@
  * não lidas, a bolinha sem número da marca, ou nada.
  */
 import { useState, type ReactNode } from "react";
-import { BellDot, Check, ChevronDown } from "lucide-react";
+import { BellDot, Check, ChevronDown, Eraser } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useConversasMarcadas } from "@/hooks/use-conversas-marcadas";
 import { podeMarcar, type AlvoDaMarca, type Indicador } from "@/lib/conversa-marcada";
+import { pedirLimparConversa } from "@/lib/limpar-conversa";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,8 +41,10 @@ export const CEDE_AO_MENU = "transition-opacity group-hover/conversa:opacity-0";
 const CONTEUDO = "min-w-[12rem] rounded-xl p-1 shadow-lg";
 const ITEM = "gap-2.5 rounded-lg px-2.5 py-2 text-sm cursor-pointer";
 
-export function MenuDaConversa({ alvo, children, className, posicao = "topo" }: {
+export function MenuDaConversa({ alvo, children, className, posicao = "topo", limpar }: {
   alvo: AlvoDaMarca;
+  /** DM e grupo: "Limpar conversa" (27/11/2026). Agente e anotações não passam. */
+  limpar?: { nome: string };
   children: ReactNode;
   className?: string;
   /** Onde fica o botão: na linha do nome (`topo`, junto da hora) ou no meio do item. */
@@ -57,6 +60,8 @@ export function MenuDaConversa({ alvo, children, className, posicao = "topo" }: 
     });
   };
   const Icone = marcada ? Check : BellDot;
+  const canalId = alvo.canalId;
+  const aoLimpar = limpar && canalId ? () => pedirLimparConversa({ canalId, nome: limpar.nome }) : null;
   const rotulo = marcada ? "Marcar como lida" : "Marcar como não lida";
   return (
     <ContextMenu>
@@ -84,6 +89,11 @@ export function MenuDaConversa({ alvo, children, className, posicao = "topo" }: 
               <DropdownMenuItem onSelect={alternar} className={ITEM}>
                 <Icone className="h-4 w-4" />{rotulo}
               </DropdownMenuItem>
+              {aoLimpar && (
+                <DropdownMenuItem onSelect={aoLimpar} className={ITEM}>
+                  <Eraser className="h-4 w-4" />Limpar conversa
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -93,6 +103,11 @@ export function MenuDaConversa({ alvo, children, className, posicao = "topo" }: 
         <ContextMenuItem onSelect={alternar} className={ITEM}>
           <Icone className="h-4 w-4" />{rotulo}
         </ContextMenuItem>
+        {aoLimpar && (
+          <ContextMenuItem onSelect={aoLimpar} className={ITEM}>
+            <Eraser className="h-4 w-4" />Limpar conversa
+          </ContextMenuItem>
+        )}
       </ContextMenuContent>
     </ContextMenu>
   );

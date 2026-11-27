@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { ouvirConversaLimpa } from "@/lib/limpar-conversa";
 import { api } from "@/lib/api";
 import { assinar } from "@/lib/realtime";
 import { aplicarEventoDeCanal, mudancaPedeRecarga, reconcileMessages } from "@/lib/eventos-de-canal";
@@ -223,6 +224,16 @@ export function useChannelMessages(channelId: string | null) {
     document.addEventListener("visibilitychange", resync);
     window.addEventListener("focus", resync);
 
+    // "Limpar conversa" (27/11/2026): o `reconcileMessages` funde o que chega
+    // com o que já estava, então só recarregar deixaria tudo na tela. Esvazia
+    // e recarrega — o servidor já não devolve o que foi escondido; no
+    // "Desfazer", a mesma recarga traz de volta.
+    const pararLimpeza = ouvirConversaLimpa((id) => {
+      if (id !== channelId || cancelled) return;
+      updateMessages(() => []);
+      void load();
+    });
+
     // Tempo real por WebSocket, no lugar do `postgres_changes` do Supabase.
     // A mensagem chega pronta do servidor — não precisa recarregar a página
     // para descobrir o que mudou.
@@ -252,6 +263,7 @@ export function useChannelMessages(channelId: string | null) {
 
     return () => {
       cancelled = true;
+      pararLimpeza();
       document.removeEventListener("visibilitychange", resync);
       window.removeEventListener("focus", resync);
       cancelarAssinatura();

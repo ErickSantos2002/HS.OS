@@ -2466,7 +2466,7 @@ export default function ChatPage() {
                     const lastAct = existingChannelId ? dmLastActivity[existingChannelId] : null;
                     const isHumanTyping = existingChannelId ? (typingByDmChannel[existingChannelId]?.length ?? 0) > 0 : false;
                     return (
-                      <MenuDaConversa key={`person-${person.id}`} alvo={{ canalId: existingChannelId ?? null, agentId: null }}>
+                      <MenuDaConversa key={`person-${person.id}`} alvo={{ canalId: existingChannelId ?? null, agentId: null }} limpar={{ nome: person.full_name || person.email }}>
                         <button onClick={() => { if (existingChannel) setSelection({ type: "channel", channel: existingChannel }); else handleOpenPersonDm(person); }}
                           disabled={openingDm === person.id}
                           className={`w-full max-w-full text-left px-2 py-2 rounded-xl mb-0.5 transition-all duration-200 overflow-hidden box-border disabled:opacity-50 ${isActive ? "bg-primary/12 backdrop-blur-md ring-1 ring-primary/20" : "hover:bg-card/60 hover:backdrop-blur-md"}`}>
@@ -2583,7 +2583,8 @@ function ChannelSidebarItem({ channel, active, onClick, unreadCount = 0, marcada
   const hasUnread = (unreadCount > 0 || marcada) && !active;
   const indicador = indicadorDaConversa(unreadCount, marcada);
   return (
-    <MenuDaConversa alvo={{ canalId: channel.id, agentId: null }} posicao="meio">
+    <MenuDaConversa alvo={{ canalId: channel.id, agentId: null }} posicao="meio"
+      limpar={channel.type === "public" || channel.type === "private" ? { nome: `#${channel.name}` } : undefined}>
     <button
       onClick={onClick}
       className={`relative w-full text-left pl-3 pr-3 py-2.5 transition-colors duration-150 touch-target ${

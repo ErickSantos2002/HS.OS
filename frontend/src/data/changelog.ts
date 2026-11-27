@@ -35,6 +35,10 @@ export const CHANGELOG: ChangelogVersion[] = [
     changes: [
       {
         kind: "novidade",
+        text: "Limpar conversa: no menu da conversa (a setinha ao lado do nome, ou segurando no celular), apague de uma vez todas as mensagens de uma conversa ou grupo — só para você; quem está do outro lado continua vendo. Dá para desfazer logo em seguida.",
+      },
+      {
+        kind: "novidade",
         text: "Encaminhar mensagem, como no WhatsApp: na seta da mensagem (ou segurando a bolha no celular), escolha até 10 colegas ou grupos de uma vez — os anexos vão junto e abrem para quem recebe, com o selo \"Encaminhada\". Dá para encaminhar também as respostas dos agentes.",
       },
       {
